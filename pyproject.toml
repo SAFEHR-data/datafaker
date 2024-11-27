@@ -16,10 +16,10 @@ homepage = "https://github.com/alan-turing-institute/sqlsynthgen"
 documentation = "https://sqlsynthgen.readthedocs.io/en/stable/"
 
 [tool.poetry.dependencies]
-python = "^3.9,<3.11"
+python = "^3.9,<3.13"
 pydantic = {extras = ["dotenv"], version = "^1.10.2"}
 psycopg2-binary = "^2.9.5"
-sqlalchemy-utils = "^0.38.3"
+sqlalchemy-utils = "^0.41.2"
 mimesis = "^6.1.1"
 typer = "^0.7.0"
 pyyaml = "^6.0"
@@ -30,11 +30,12 @@ smartnoise-sql = "^1"
 jinja2 = "^3.1.2"
 black = "^23.3.0"
 jsonschema = "^4.17.3"
-sqlacodegen = "^3.0.0rc3"
-asyncpg = "^0.27.0"
-greenlet = "^2.0.2"
+sqlacodegen = { git = "https://github.com/amacfie/sqlacodegen", branch = "domain_check_textclause" }
+asyncpg = "^0.30.0"
+greenlet = "^3.1.1"
 pymysql = "^1.1.0"
 pandas = "^2"
+parsy = "^2.1"
 
 [tool.poetry.group.dev.dependencies]
 isort = "^5.10.1"

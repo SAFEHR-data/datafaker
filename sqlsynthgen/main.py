@@ -25,9 +25,11 @@ from sqlsynthgen.utils import (
     read_config_file,
 )
 
+from .serialize_metadata import dict_to_metadata
+
 # pylint: disable=too-many-arguments
 
-ORM_FILENAME: Final[str] = "orm.py"
+ORM_FILENAME: Final[str] = "orm.yaml"
 SSG_FILENAME: Final[str] = "ssg.py"
 STATS_FILENAME: Final[str] = "src-stats.yaml"
 
@@ -50,6 +52,14 @@ def _require_src_db_dsn(settings: Settings) -> str:
         logger.error("Missing source database connection details.")
         sys.exit(1)
     return src_dsn
+
+
+def load_metadata(orm_file_name, config):
+    tables_config = config.get("tables", {})
+    # Remove tables_config.<table_name>.ignore
+    with open(orm_file_name) as orm_fh:
+        meta_dict = yaml.load(orm_fh, yaml.Loader)
+        return dict_to_metadata(meta_dict)
 
 
 @app.command()
@@ -79,7 +89,7 @@ def create_data(
         $ sqlsynthgen create-data
 
     Args:
-        orm_file (str): Name of Python ORM file.
+        orm_file (str): Name of YAML ORM file.
           Must be in the current working directory.
         ssg_file (str): Name of generators file.
           Must be in the current working directory.
@@ -89,11 +99,9 @@ def create_data(
     """
     conf_logger(verbose)
     logger.debug("Creating data.")
-    orm_module = import_file(orm_file)
+    orm_metadata = load_metadata(orm_file, config)
     ssg_module = import_file(ssg_file)
     config = read_config_file(config_file) if config_file is not None else {}
-    tables_config = config.get("tables", {})
-    orm_metadata = get_orm_metadata(orm_module, tables_config)
     table_generator_dict = ssg_module.table_generator_dict
     story_generator_list = ssg_module.story_generator_list
     row_counts = create_db_data(
@@ -143,7 +151,7 @@ def create_tables(
     config_file: Optional[str] = Option(None),
     verbose: bool = Option(False, "--verbose", "-v"),
 ) -> None:
-    """Create schema from a SQLAlchemy ORM file.
+    """Create schema from the ORM YAML file.
 
     This CLI command creates the destination schema using object
     relational model declared as Python tables.
@@ -160,9 +168,7 @@ def create_tables(
     conf_logger(verbose)
     logger.debug("Creating tables.")
     config = read_config_file(config_file) if config_file is not None else {}
-    tables_config = config.get("tables", {})
-    orm_module = import_file(orm_file)
-    orm_metadata = get_orm_metadata(orm_module, tables_config)
+    orm_metadata = load_metadata(orm_file, config)
     create_db_tables(orm_metadata)
     logger.debug("Tables created.")
 
@@ -203,10 +209,10 @@ def make_generators(
     # Check that src_dsn is set, even though we don't need it here.
     _require_src_db_dsn(settings)
 
-    orm_module: ModuleType = import_file(orm_file)
     generator_config = read_config_file(config_file) if config_file is not None else {}
+    orm_metadata = load_metadata(orm_file, generator_config)
     result: str = make_table_generators(
-        orm_module, generator_config, stats_file, overwrite_files=force
+        orm_metadata, generator_config, stats_file, overwrite_files=force
     )
 
     ssg_file_path.write_text(result, encoding="utf-8")
@@ -265,8 +271,8 @@ def make_tables(
 
     Args:
         config_file (str): Path to configuration file.
-        orm_file (str): Path to write the Python ORM file.
-        force (bool): Overwrite ORM file, if exists. Default to False.
+        orm_file (str): Path to write the Python YAML file.
+        force (bool): Overwrite YAML file, if exists. Default to False.
         verbose (bool): Be verbose. Default to False.
     """
     conf_logger(verbose)
@@ -317,9 +323,9 @@ def remove_data(
     if yes:
         logger.debug("Truncating non-vocabulary tables.")
         config = read_config_file(config_file) if config_file is not None else {}
-        orm_module = import_file(orm_file)
+        metadata = load_metadata(orm_file, config)
         ssg_module = import_file(ssg_file)
-        remove_db_data(orm_module, ssg_module, config)
+        remove_db_data(metadata, ssg_module, config)
         logger.debug("Non-vocabulary tables truncated.")
     else:
         logger.info("Would truncate non-vocabulary tables if called with --yes.")
@@ -338,9 +344,9 @@ def remove_vocab(
     if yes:
         logger.debug("Truncating vocabulary tables.")
         config = read_config_file(config_file) if config_file is not None else {}
-        orm_module = import_file(orm_file)
+        metadata = load_metadata(orm_file, config)
         ssg_module = import_file(ssg_file)
-        remove_db_vocab(orm_module, ssg_module, config)
+        remove_db_vocab(metadata, ssg_module)
         logger.debug("Vocabulary tables truncated.")
     else:
         logger.info("Would truncate vocabulary tables if called with --yes.")
@@ -361,8 +367,8 @@ def remove_tables(
     if yes:
         logger.debug("Dropping tables.")
         config = read_config_file(config_file) if config_file is not None else {}
-        orm_module = import_file(orm_file)
-        remove_db_tables(orm_module, config)
+        metadata = load_metadata(orm_file, config)
+        remove_db_tables(metadata)
         logger.debug("Tables dropped.")
     else:
         logger.info("Would remove tables if called with --yes.")

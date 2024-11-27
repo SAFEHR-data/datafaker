@@ -6,13 +6,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Final, Mapping, Optional, Sequence, Tuple
+import yaml
 
 import pandas as pd
 import snsql
 from black import FileMode, format_str
 from jinja2 import Environment, FileSystemLoader, Template
 from mimesis.providers.base import BaseProvider
-from sqlacodegen.generators import DeclarativeGenerator
+import sqlalchemy
 from sqlalchemy import Engine, MetaData, UniqueConstraint, text
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -24,10 +25,11 @@ from sqlsynthgen.settings import get_settings
 from sqlsynthgen.utils import (
     create_db_engine,
     download_table,
-    get_orm_metadata,
     get_sync_engine,
     logger,
 )
+
+from .serialize_metadata import metadata_to_dict
 
 PROVIDER_IMPORTS: Final[list[str]] = []
 for entry_name, entry in inspect.getmembers(providers, inspect.isclass):
@@ -154,7 +156,7 @@ def _get_row_generator(
 
 
 def _get_default_generator(
-    tables_module: ModuleType, column: Column
+    metadata: MetaData, column: Column
 ) -> RowGeneratorInfo:
     """Get default generator information, for the given column."""
     # If it's a primary key column, we presume that primary keys are populated
@@ -316,7 +318,7 @@ def _constraint_sort_key(constraint: UniqueConstraint) -> str:
 
 
 def _get_generator_for_table(
-    tables_module: ModuleType, table_config: Mapping[str, Any], table: Table
+    metadata: MetaData, table_config: Mapping[str, Any], table: Table
 ) -> TableGeneratorInfo:
     """Get generator information for the given table."""
     unique_constraints = sorted(
@@ -340,7 +342,7 @@ def _get_generator_for_table(
     for column in table.columns:
         if column.name not in columns_covered:
             # No generator for this column in the user config.
-            table_data.row_gens.append(_get_default_generator(tables_module, column))
+            table_data.row_gens.append(_get_default_generator(metadata, column))
 
     _enforce_unique_constraints(table_data)
     return table_data
@@ -366,7 +368,7 @@ def _get_story_generators(config: Mapping) -> list[StoryGeneratorInfo]:
 
 
 def make_table_generators(  # pylint: disable=too-many-locals
-    tables_module: ModuleType,
+    metadata: MetaData,
     config: Mapping,
     src_stats_filename: Optional[str],
     overwrite_files: bool = False,
@@ -391,7 +393,6 @@ def make_table_generators(  # pylint: disable=too-many-locals
     assert src_dsn != "", "Missing SRC_DSN setting."
 
     tables_config = config.get("tables", {})
-    metadata = get_orm_metadata(tables_module, tables_config)
     engine = get_sync_engine(create_db_engine(src_dsn, schema_name=settings.src_schema))
 
     tables: list[TableGeneratorInfo] = []
@@ -406,7 +407,7 @@ def make_table_generators(  # pylint: disable=too-many-locals
                 )
             )
         else:
-            tables.append(_get_generator_for_table(tables_module, table_config, table))
+            tables.append(_get_generator_for_table(metadata, table_config, table))
 
     story_generators = _get_story_generators(config)
 
@@ -486,35 +487,27 @@ def make_tables_file(
         ignore = table_config.get("ignore", False)
         return not ignore
 
+    schemae = sqlalchemy.inspect(engine).get_schema_names()
     metadata = MetaData()
     metadata.reflect(
         engine,
         only=reflect_if,
     )
+    meta_dict = metadata_to_dict(metadata, db_dsn, engine.dialect)
 
-    for table_name in metadata.tables.keys():
-        table_config = tables_config.get(table_name, {})
-        ignore = table_config.get("ignore", False)
-        if ignore:
-            logger.warning(
-                "Table %s is supposed to be ignored but there is a foreign key "
-                "reference to it. "
-                "You may need to create this table manually at the dst schema before "
-                "running create-tables.",
-                table_name,
-            )
+#    for table_name in metadata.tables.keys():
+#        table_config = tables_config.get(table_name, {})
+#        ignore = table_config.get("ignore", False)
+#        if ignore:
+#            logger.warning(
+#                "Table %s is supposed to be ignored but there is a foreign key "
+#                "reference to it. "
+#                "You may need to create this table manually at the dst schema before "
+#                "running create-tables.",
+#                table_name,
+#            )
 
-    generator = DeclarativeGenerator(metadata, engine, options=())
-    code = str(generator.generate())
-
-    # sqlacodegen falls back on Tables() for tables without PKs,
-    # but we don't explicitly support Tables and behaviour is unpredictable.
-    if " = Table(" in code:
-        logger.warning(
-            "Table without PK detected. sqlsynthgen may not be able to continue.",
-        )
-
-    return format_str(code, mode=FileMode())
+    return yaml.dump(meta_dict)
 
 
 async def make_src_stats(

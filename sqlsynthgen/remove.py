@@ -2,25 +2,23 @@
 from types import ModuleType
 from typing import Any, Mapping
 
-from sqlalchemy import delete
+from sqlalchemy import delete, MetaData
 
 from sqlsynthgen.settings import get_settings
 from sqlsynthgen.utils import (
     create_db_engine,
-    get_orm_metadata,
     get_sync_engine,
     logger,
 )
 
 
 def remove_db_data(
-    orm_module: ModuleType, ssg_module: ModuleType, config: Mapping[str, Any]
+    metadata: MetaData, ssg_module: ModuleType, config: Mapping[str, Any]
 ) -> None:
     """Truncate the synthetic data tables but not the vocabularies."""
     settings = get_settings()
     assert settings.dst_dsn, "Missing destination database settings"
     tables_config = config.get("tables", {})
-    metadata = get_orm_metadata(orm_module, tables_config)
     dst_engine = get_sync_engine(
         create_db_engine(settings.dst_dsn, schema_name=settings.dst_schema)
     )
@@ -34,14 +32,10 @@ def remove_db_data(
                 dst_conn.commit()
 
 
-def remove_db_vocab(
-    orm_module: ModuleType, ssg_module: ModuleType, config: Mapping[str, Any]
-) -> None:
+def remove_db_vocab(metadata: MetaData, ssg_module: ModuleType) -> None:
     """Truncate the vocabulary tables."""
     settings = get_settings()
     assert settings.dst_dsn, "Missing destination database settings"
-    tables_config = config.get("tables", {})
-    metadata = get_orm_metadata(orm_module, tables_config)
     dst_engine = get_sync_engine(
         create_db_engine(settings.dst_dsn, schema_name=settings.dst_schema)
     )
@@ -55,12 +49,10 @@ def remove_db_vocab(
                 dst_conn.commit()
 
 
-def remove_db_tables(orm_module: ModuleType, config: Mapping[str, Any]) -> None:
+def remove_db_tables(metadata: MetaData) -> None:
     """Drop the tables in the destination schema."""
     settings = get_settings()
     assert settings.dst_dsn, "Missing destination database settings"
-    tables_config = config.get("tables", {})
-    metadata = get_orm_metadata(orm_module, tables_config)
     dst_engine = get_sync_engine(
         create_db_engine(settings.dst_dsn, schema_name=settings.dst_schema)
     )
