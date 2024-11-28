@@ -125,7 +125,10 @@ def column_to_dict(column: Column, dialect: Dialect) -> str:
     else:
         compiled = dialect.type_compiler_instance.process(type_)
     return {
-        "type": compiled
+        "type": compiled,
+        "primary": column.primary_key,
+        "nullable": column.nullable,
+        "unique": column.unique
     }
 
 def dict_to_column(name, rep: dict) -> Column:
@@ -138,6 +141,9 @@ def dict_to_column(name, rep: dict) -> Column:
     return Column(
         name=name,
         type_=type_,
+        primary_key=rep.get("primary", False),
+        nullable=rep.get("nullable", None),
+        unique=rep.get("unique", None),
     )
 
 def table_to_dict(table: Table, dialect: Dialect) -> table_t:
