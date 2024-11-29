@@ -3,6 +3,7 @@ from mimesis import Generic
 from mimesis.locales import Locale
 from sqlsynthgen.base import FileUploader, TableGenerator
 from sqlsynthgen.unique_generator import UniqueGenerator
+from sqlsynthgen.main import load_metadata
 
 generic = Generic(locale=Locale.EN_GB)
 
@@ -11,7 +12,8 @@ from sqlsynthgen.providers import {{ provider_import }}
 generic.add_provider({{ provider_import }})
 {% endfor %}
 
-import {{ tables_module.__name__ }}
+metadata = load_metadata("{{ orm_file_name }}", {{ config_file_name }})
+
 {% if row_generator_module_name is not none %}
 import {{ row_generator_module_name }}
 {% endif %}
@@ -26,7 +28,7 @@ with open("{{ src_stats_filename }}", "r", encoding="utf-8") as f:
 {% endif %}
 
 {% for table_data in vocabulary_tables %}
-{{ table_data.variable_name }} = FileUploader({{ tables_module.__name__ }}.{{ table_data.table_name }})
+{{ table_data.variable_name }} = FileUploader(metadata.tables["{{ table_data.table_name }}"])
 {% endfor %}
 
 {% for table_data in tables %}

@@ -43,6 +43,7 @@ class TestMakeGenerators(SSGTestCase):
         self,
         mock_download: MagicMock,
         mock_create: MagicMock,
+        #... and orm_file_name and config_file
         mock_get_settings: MagicMock,
         mock_path: MagicMock,
     ) -> None:
@@ -58,7 +59,7 @@ class TestMakeGenerators(SSGTestCase):
             config = yaml.safe_load(f)
         stats_path = "example_stats.yaml"
 
-        actual = make_table_generators(example_orm, config, stats_path)
+        actual = make_table_generators(example_orm, config, stats_path) #... and orm_file_name and config_file_name
         # 5 because there are 5 vocabulary tables in the example orm.
         self.assertEqual(mock_path.call_count, 5)
         self.assertEqual(mock_download.call_count, 5)
@@ -85,7 +86,7 @@ class TestMakeGenerators(SSGTestCase):
         stats_path = "example_stats.yaml"
 
         try:
-            make_table_generators(example_orm, configuration, stats_path)
+            make_table_generators(example_orm, configuration, stats_path) #... and orm_file_name and config_file_name
         except SystemExit:
             pass
 
@@ -117,7 +118,7 @@ class TestMakeGenerators(SSGTestCase):
         stats_path: str = "example_stats.yaml"
 
         actual: str = make_table_generators(
-            example_orm, config, stats_path, overwrite_files=True
+            example_orm, config, stats_path, overwrite_files=True #... and orm_file_name and config_file_name
         )
 
         mock_create.assert_called_once()

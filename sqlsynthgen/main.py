@@ -54,9 +54,11 @@ def _require_src_db_dsn(settings: Settings) -> str:
     return src_dsn
 
 
-def load_metadata(orm_file_name, config):
-    tables_config = config.get("tables", {})
-    # Remove tables_config.<table_name>.ignore
+def load_metadata(orm_file_name, config=None):
+    if config is not None and "tables" in config:
+        tables_config = config["tables"]
+        # Remove tables_config.<table_name>.ignore
+        #...
     with open(orm_file_name) as orm_fh:
         meta_dict = yaml.load(orm_fh, yaml.Loader)
         return dict_to_metadata(meta_dict)
@@ -99,9 +101,8 @@ def create_data(
     """
     conf_logger(verbose)
     logger.debug("Creating data.")
-    orm_metadata = load_metadata(orm_file, config)
+    orm_metadata = load_metadata(orm_file, config_file)
     ssg_module = import_file(ssg_file)
-    config = read_config_file(config_file) if config_file is not None else {}
     table_generator_dict = ssg_module.table_generator_dict
     story_generator_list = ssg_module.story_generator_list
     row_counts = create_db_data(
@@ -212,7 +213,12 @@ def make_generators(
     generator_config = read_config_file(config_file) if config_file is not None else {}
     orm_metadata = load_metadata(orm_file, generator_config)
     result: str = make_table_generators(
-        orm_metadata, generator_config, stats_file, overwrite_files=force
+        orm_metadata,
+        generator_config,
+        orm_file,
+        config_file,
+        stats_file,
+        overwrite_files=force
     )
 
     ssg_file_path.write_text(result, encoding="utf-8")

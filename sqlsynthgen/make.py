@@ -87,23 +87,6 @@ class StoryGeneratorInfo:
     num_stories_per_pass: int
 
 
-def _orm_class_from_table_name(
-    tables_module: ModuleType, full_name: str
-) -> Optional[Tuple[str, str]]:
-    """Return the ORM class corresponding to a table name."""
-    # If the class in tables_module is an SQLAlchemy ORM class
-    for mapper in tables_module.Base.registry.mappers:
-        cls = mapper.class_
-        if cls.__table__.fullname == full_name:
-            return cls.__name__, cls.__name__ + ".__table__"
-
-    # If the class in tables_module is a SQLAlchemy Core Table
-    guess = "t_" + full_name
-    if guess in dir(tables_module):
-        return guess, guess
-    return None
-
-
 def _get_function_call(
     function_name: str,
     positional_arguments: Optional[Sequence[Any]] = None,
@@ -156,7 +139,7 @@ def _get_row_generator(
 
 
 def _get_default_generator(
-    metadata: MetaData, column: Column
+    column: Column
 ) -> RowGeneratorInfo:
     """Get default generator information, for the given column."""
     # If it's a primary key column, we presume that primary keys are populated
@@ -177,17 +160,12 @@ def _get_default_generator(
         target_name_parts = fkey.target_fullname.split(".")
         target_table_name = ".".join(target_name_parts[:-1])
         target_column_name = target_name_parts[-1]
-        class_and_name = _orm_class_from_table_name(tables_module, target_table_name)
-        if not class_and_name:
-            raise ValueError(f"Could not find the ORM class for {target_table_name}.")
-
-        target_orm_class, _ = class_and_name
 
         variable_names = [column.name]
         generator_function = "generic.column_value_provider.column_value"
         generator_arguments = [
             "dst_db_conn",
-            f"{tables_module.__name__}.{target_orm_class}",
+            f"metadata.tables['{target_table_name}']",
             f'"{target_column_name}"',
         ]
 
@@ -331,7 +309,7 @@ def _get_generator_for_table(
     )
     table_data: TableGeneratorInfo = TableGeneratorInfo(
         table_name=table.name,
-        class_name=table.name + "Generator",
+        class_name=table.name.title() + "Generator",
         rows_per_pass=table_config.get("num_rows_per_pass", 1),
         unique_constraints=unique_constraints,
     )
@@ -342,7 +320,7 @@ def _get_generator_for_table(
     for column in table.columns:
         if column.name not in columns_covered:
             # No generator for this column in the user config.
-            table_data.row_gens.append(_get_default_generator(metadata, column))
+            table_data.row_gens.append(_get_default_generator(column))
 
     _enforce_unique_constraints(table_data)
     return table_data
@@ -370,13 +348,14 @@ def _get_story_generators(config: Mapping) -> list[StoryGeneratorInfo]:
 def make_table_generators(  # pylint: disable=too-many-locals
     metadata: MetaData,
     config: Mapping,
+    orm_filename: str,
+    config_filename: str,
     src_stats_filename: Optional[str],
     overwrite_files: bool = False,
 ) -> str:
     """Create sqlsynthgen generator classes from a sqlacodegen-generated file.
 
     Args:
-      tables_module: A sqlacodegen-generated module.
       config: Configuration to control the generator creation.
       src_stats_filename: A filename for where to read src stats from.
         Optional, if `None` this feature will be skipped
@@ -403,7 +382,7 @@ def make_table_generators(  # pylint: disable=too-many-locals
         if table_config.get("vocabulary_table") is True:
             vocabulary_tables.append(
                 _get_generator_for_vocabulary_table(
-                    tables_module, table, engine, overwrite_files=overwrite_files
+                    table, engine, overwrite_files=overwrite_files
                 )
             )
         else:
@@ -415,7 +394,8 @@ def make_table_generators(  # pylint: disable=too-many-locals
     return generate_ssg_content(
         {
             "provider_imports": PROVIDER_IMPORTS,
-            "tables_module": tables_module,
+            "orm_file_name": orm_filename,
+            "config_file_name": repr(config_filename),
             "row_generator_module_name": row_generator_module_name,
             "story_generator_module_name": story_generator_module_name,
             "src_stats_filename": src_stats_filename,
@@ -441,20 +421,11 @@ def generate_ssg_content(template_context: Mapping[str, Any]) -> str:
 
 
 def _get_generator_for_vocabulary_table(
-    tables_module: ModuleType,
     table: Table,
     engine: Engine,
     table_file_name: Optional[str] = None,
     overwrite_files: bool = False,
 ) -> VocabularyTableGeneratorInfo:
-    class_and_name: Optional[Tuple[str, str]] = _orm_class_from_table_name(
-        tables_module, table.fullname
-    )
-    if not class_and_name:
-        raise RuntimeError(f"Couldn't find {table.fullname} in {tables_module}")
-
-    class_name, table_name = class_and_name
-
     yaml_file_name: str = table_file_name or table.fullname + ".yaml"
     if Path(yaml_file_name).exists() and not overwrite_files:
         logger.error("%s already exists. Exiting...", yaml_file_name)
@@ -468,7 +439,7 @@ def _get_generator_for_vocabulary_table(
         class_name=class_name,
         dictionary_entry=table.name,
         variable_name=f"{class_name.lower()}_vocab",
-        table_name=table_name,
+        table_name=table.name,
     )
 
 
