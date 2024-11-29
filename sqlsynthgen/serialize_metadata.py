@@ -1,10 +1,7 @@
-from enum import StrEnum
 import parsy
-import re
-from sqlalchemy import MetaData, Table, Column, Dialect
+from sqlalchemy import MetaData, Table, Column, Dialect, ForeignKey
 from sqlalchemy.dialects import oracle, postgresql
 from sqlalchemy.sql import sqltypes
-from sqlalchemy.sql.compiler import StrSQLTypeCompiler
 
 type table_component_t = dict[str, any]
 type table_t = dict[str, table_component_t]
@@ -124,12 +121,16 @@ def column_to_dict(column: Column, dialect: Dialect) -> str:
         compiled = "TEXT"
     else:
         compiled = dialect.type_compiler_instance.process(type_)
-    return {
+    result = {
         "type": compiled,
         "primary": column.primary_key,
         "nullable": column.nullable,
-        "unique": column.unique
+        "unique": column.unique,
     }
+    foreign_keys = [str(fk.target_fullname) for fk in column.foreign_keys]
+    if foreign_keys:
+        result["foreign_keys"] = foreign_keys
+    return result
 
 def dict_to_column(name, rep: dict) -> Column:
     type_sql = rep["type"]
@@ -138,7 +139,15 @@ def dict_to_column(name, rep: dict) -> Column:
     except parsy.ParseError as e:
         print(f"Failed to parse {type_sql}")
         raise e
+    if "foreign_keys" in rep:
+        args = [
+            ForeignKey(fk, ondelete='CASCADE')
+            for fk in rep["foreign_keys"]
+        ]
+    else:
+        args = []
     return Column(
+        *args,
         name=name,
         type_=type_,
         primary_key=rep.get("primary", False),
