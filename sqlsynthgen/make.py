@@ -4,8 +4,7 @@ import inspect
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from types import ModuleType
-from typing import Any, Final, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Final, Mapping, Optional, Sequence, Tuple
 import yaml
 
 import pandas as pd
@@ -18,7 +17,7 @@ from sqlalchemy import Engine, MetaData, UniqueConstraint, text
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.schema import Column, Table
-from sqlalchemy.sql import sqltypes
+from sqlalchemy.sql import sqltypes, type_api
 
 from sqlsynthgen import providers
 from sqlsynthgen.settings import get_settings
@@ -168,25 +167,101 @@ def _get_default_generator(
             f"metadata.tables['{target_table_name}']",
             f'"{target_column_name}"',
         ]
+        return RowGeneratorInfo(
+            primary_key=column.primary_key,
+            variable_names=variable_names,
+            function_call=_get_function_call(
+                function_name=generator_function, positional_arguments=generator_arguments
+            ),
+        )
 
     # Otherwise generate values based on just the datatype of the column.
-    else:
-        (
-            variable_names,
-            generator_function,
-            generator_arguments,
-        ) = _get_provider_for_column(column)
+    (
+        variable_names,
+        generator_function,
+        generator_arguments,
+    ) = _get_provider_for_column(column)
 
     return RowGeneratorInfo(
         primary_key=column.primary_key,
         variable_names=variable_names,
         function_call=_get_function_call(
-            function_name=generator_function, positional_arguments=generator_arguments
+            function_name=generator_function, keyword_arguments=generator_arguments
         ),
     )
 
 
-def _get_provider_for_column(column: Column) -> Tuple[list[str], str, list[str]]:
+def _numeric_generator(column_type: type_api.TypeEngine) -> tuple[str, dict[str, str]]:
+    """
+    Returns the name of a generator and maybe arguments
+    that limit its range to the permitted scale.
+    """
+    if column_type.scale is None:
+        return ("generic.numeric.float_number", {})
+    return ("generic.numeric.float_number", {
+        "start": 0,
+        "end": 10 ** column_type.scale - 1,
+    })
+
+
+def _string_generator(column_type: type_api.TypeEngine) -> tuple[str, dict[str, str]]:
+    """
+    Returns the name of a string generator and maybe arguments
+    that limit its length.
+    """
+    column_size: Optional[int] = getattr(column_type, "length", None)
+    if column_size is None:
+        return ("generic.text.color", {})
+    return ("generic.person.password", { "length": str(column_size) })
+
+
+_COLUMN_TYPE_TO_GENERATOR = {
+    sqltypes.Integer: "generic.numeric.integer_number",
+    sqltypes.Boolean: "generic.development.boolean",
+    sqltypes.Date: "generic.datetime.date",
+    sqltypes.DateTime: "generic.datetime.datetime",
+    sqltypes.Numeric: _numeric_generator,
+    sqltypes.LargeBinary: "generic.bytes_provider.bytes",
+    sqltypes.Uuid: "generic.cryptographic.uuid",
+    postgresql.UUID: "generic.cryptographic.uuid",
+    sqltypes.String: _string_generator,
+}
+
+def _get_generator_for_column(column_t: type) -> str | Callable[
+    [type_api.TypeEngine], tuple[str, dict[str, str]]]:
+    """
+    Gets a generator from a column type.
+
+    Returns either a string representing the callable, or a callable that,
+    given the column.type will return a tuple (string representing generator
+    callable, dict of keyword arguments to pass to the callable).
+    """
+    if column_t in _COLUMN_TYPE_TO_GENERATOR:
+        return  _COLUMN_TYPE_TO_GENERATOR.get(column_t, None)
+
+    # Search exhaustively for a superclass to the columns actual type
+    for key, value in _COLUMN_TYPE_TO_GENERATOR.items():
+        if issubclass(column_t, key):
+            return value
+
+    return None
+
+
+def _get_generator_and_arguments(column_type: type_api.TypeEngine) -> tuple[str, dict[str, str]]:
+    """
+    Gets the generator and its arguments from the column type, returning
+    a tuple of a string representing the generator callable and a dict of
+    keyword arguments to supply to it.
+    """
+    generator_function = _get_generator_for_column(type(column_type))
+
+    generator_arguments: dict[str, str] = {}
+    if callable(generator_function):
+        (generator_function, generator_arguments) = generator_function(column_type)
+    return generator_function,generator_arguments
+
+
+def _get_provider_for_column(column: Column) -> Tuple[list[str], str, dict[str, str]]:
     """
     Get a default Mimesis provider and its arguments for a SQL column type.
 
@@ -198,32 +273,8 @@ def _get_provider_for_column(column: Column) -> Tuple[list[str], str, list[str]]
         generator function and any generator arguments.
     """
     variable_names: list[str] = [column.name]
-    generator_arguments: list[str] = []
 
-    column_type = type(column.type)
-    column_size: Optional[int] = getattr(column.type, "length", None)
-
-    mapping = {
-        (sqltypes.Integer, False): "generic.numeric.integer_number",
-        (sqltypes.Boolean, False): "generic.development.boolean",
-        (sqltypes.Date, False): "generic.datetime.date",
-        (sqltypes.DateTime, False): "generic.datetime.datetime",
-        (sqltypes.Numeric, False): "generic.numeric.float_number",
-        (sqltypes.LargeBinary, False): "generic.bytes_provider.bytes",
-        (sqltypes.Uuid, False): "generic.cryptographic.uuid",
-        (postgresql.UUID, False): "generic.cryptographic.uuid",
-        (sqltypes.String, False): "generic.text.color",
-        (sqltypes.String, True): "generic.person.password",
-    }
-
-    generator_function = mapping.get((column_type, column_size is not None), None)
-
-    # Try if we know how to generate for a superclass of this type.
-    if not generator_function:
-        for key, value in mapping.items():
-            if issubclass(column_type, key[0]) and key[1] == (column_size is not None):
-                generator_function = value
-                break
+    generator_function, generator_arguments = _get_generator_and_arguments(column.type)
 
     # If we still don't have a generator, use null and warn.
     if not generator_function:
@@ -232,11 +283,9 @@ def _get_provider_for_column(column: Column) -> Tuple[list[str], str, list[str]]
             "Unsupported SQLAlchemy type %s for column %s. "
             "Setting this column to NULL always, "
             "you may want to configure a row generator for it instead.",
-            column_type,
+            column.type,
             column.name,
         )
-    elif column_size:
-        generator_arguments.append(str(column_size))
 
     return variable_names, generator_function, generator_arguments
 
@@ -436,9 +485,8 @@ def _get_generator_for_vocabulary_table(
         logger.debug("Done downloading %s", table.name)
 
     return VocabularyTableGeneratorInfo(
-        class_name=class_name,
         dictionary_entry=table.name,
-        variable_name=f"{class_name.lower()}_vocab",
+        variable_name=f"{table.name.lower()}_vocab",
         table_name=table.name,
     )
 

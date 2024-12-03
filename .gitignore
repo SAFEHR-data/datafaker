@@ -146,3 +146,4 @@ docs/temp/*
 ssg.py
 orm.yaml
 src-stats.yaml
+config.yaml

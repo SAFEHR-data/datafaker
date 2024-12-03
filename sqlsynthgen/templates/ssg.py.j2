@@ -53,11 +53,9 @@ class {{ table_data.class_name }}(TableGenerator):
     def __call__(self, dst_db_conn):
         result = {}
         {% for row_gen in table_data.row_gens %}
-        {% if not row_gen.primary_key %}
         {% for vn in row_gen.variable_names %}
         result["{{vn}}"]{%- if not loop.last %}, {% endif %}
         {% endfor %} = {{ row_gen.function_call.function_name }}({{ row_gen.function_call.argument_values| join(", ") }})
-        {% endif %}
         {% endfor %}
         return result
 {% endfor %}
