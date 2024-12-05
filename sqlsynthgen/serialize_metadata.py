@@ -1,7 +1,7 @@
 import parsy
 from sqlalchemy import MetaData, Table, Column, Dialect, ForeignKey
 from sqlalchemy.dialects import oracle, postgresql
-from sqlalchemy.sql import sqltypes
+from sqlalchemy.sql import sqltypes, schema
 
 type table_component_t = dict[str, any]
 type table_t = dict[str, table_component_t]
@@ -155,6 +155,21 @@ def dict_to_column(name, rep: dict) -> Column:
         unique=rep.get("unique", None),
     )
 
+def dict_to_unique(rep: dict) -> schema.UniqueConstraint:
+    return schema.UniqueConstraint(
+        *rep.get("columns", []),
+        name=rep.get("name", None)
+    )
+
+def unique_to_dict(constraint: schema.UniqueConstraint) -> dict:
+    return {
+        "name": constraint.name,
+        "columns": [
+            str(col.name)
+            for col in constraint.columns
+        ]
+    }
+
 def table_to_dict(table: Table, dialect: Dialect) -> table_t:
     """
     Converts a SQL Alchemy Table object into a
@@ -165,7 +180,12 @@ def table_to_dict(table: Table, dialect: Dialect) -> table_t:
             str(column.key): column_to_dict(column, dialect)
             for (k, column) in table.columns.items()
         },
-        "schema": table.schema
+        "schema": table.schema,
+        "unique": [
+            unique_to_dict(constraint)
+            for constraint in table.constraints
+            if isinstance(constraint, schema.UniqueConstraint)
+        ],
     }
 
 def dict_to_table(name: str, meta: MetaData, table_dict: table_t) -> Table:
@@ -174,6 +194,9 @@ def dict_to_table(name: str, meta: MetaData, table_dict: table_t) -> Table:
         meta,
         *[ dict_to_column(name, col)
             for (name, col) in table_dict.get("columns", {}).items()
+        ],
+        *[ dict_to_unique(constraint)
+            for constraint in table_dict.get("unique", [])
         ],
         schema=table_dict.get("schema")
     )

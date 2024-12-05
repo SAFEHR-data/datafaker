@@ -191,11 +191,12 @@ def _get_default_generator(
     )
 
 
-def _numeric_generator(column_type: type_api.TypeEngine) -> tuple[str, dict[str, str]]:
+def _numeric_generator(column: Column) -> tuple[str, dict[str, str]]:
     """
     Returns the name of a generator and maybe arguments
     that limit its range to the permitted scale.
     """
+    column_type = column.type
     if column_type.scale is None:
         return ("generic.numeric.float_number", {})
     return ("generic.numeric.float_number", {
@@ -204,22 +205,32 @@ def _numeric_generator(column_type: type_api.TypeEngine) -> tuple[str, dict[str,
     })
 
 
-def _string_generator(column_type: type_api.TypeEngine) -> tuple[str, dict[str, str]]:
+def _string_generator(column: Column) -> tuple[str, dict[str, str]]:
     """
     Returns the name of a string generator and maybe arguments
     that limit its length.
     """
-    column_size: Optional[int] = getattr(column_type, "length", None)
+    column_size: Optional[int] = getattr(column.type, "length", None)
     if column_size is None:
         return ("generic.text.color", {})
     return ("generic.person.password", { "length": str(column_size) })
 
+def _integer_generator(column: Column) -> tuple[str, dict[str, str]]:
+    """
+    Returns the name of an integer generator.
+    """
+    if not column.primary_key:
+        return ("generic.numeric.integer_number", {})
+    return ("numeric.increment", {
+        "accumulator": f'"{column.table.fullname}.{column.name}"'
+    })
 
 _COLUMN_TYPE_TO_GENERATOR = {
     sqltypes.Integer: "generic.numeric.integer_number",
     sqltypes.Boolean: "generic.development.boolean",
     sqltypes.Date: "generic.datetime.date",
     sqltypes.DateTime: "generic.datetime.datetime",
+    sqltypes.Integer: _integer_generator,  # must be before Numeric
     sqltypes.Numeric: _numeric_generator,
     sqltypes.LargeBinary: "generic.bytes_provider.bytes",
     sqltypes.Uuid: "generic.cryptographic.uuid",
@@ -237,7 +248,7 @@ def _get_generator_for_column(column_t: type) -> str | Callable[
     callable, dict of keyword arguments to pass to the callable).
     """
     if column_t in _COLUMN_TYPE_TO_GENERATOR:
-        return  _COLUMN_TYPE_TO_GENERATOR.get(column_t, None)
+        return  _COLUMN_TYPE_TO_GENERATOR[column_t]
 
     # Search exhaustively for a superclass to the columns actual type
     for key, value in _COLUMN_TYPE_TO_GENERATOR.items():
@@ -247,17 +258,17 @@ def _get_generator_for_column(column_t: type) -> str | Callable[
     return None
 
 
-def _get_generator_and_arguments(column_type: type_api.TypeEngine) -> tuple[str, dict[str, str]]:
+def _get_generator_and_arguments(column: Column) -> tuple[str, dict[str, str]]:
     """
     Gets the generator and its arguments from the column type, returning
     a tuple of a string representing the generator callable and a dict of
     keyword arguments to supply to it.
     """
-    generator_function = _get_generator_for_column(type(column_type))
+    generator_function = _get_generator_for_column(type(column.type))
 
     generator_arguments: dict[str, str] = {}
     if callable(generator_function):
-        (generator_function, generator_arguments) = generator_function(column_type)
+        (generator_function, generator_arguments) = generator_function(column)
     return generator_function,generator_arguments
 
 
@@ -274,7 +285,7 @@ def _get_provider_for_column(column: Column) -> Tuple[list[str], str, dict[str, 
     """
     variable_names: list[str] = [column.name]
 
-    generator_function, generator_arguments = _get_generator_and_arguments(column.type)
+    generator_function, generator_arguments = _get_generator_and_arguments(column)
 
     # If we still don't have a generator, use null and warn.
     if not generator_function:
@@ -344,8 +355,19 @@ def _constraint_sort_key(constraint: UniqueConstraint) -> str:
     )
 
 
+class _PrimaryConstraint:
+    """
+    Describes a Uniqueness constraint for when multiple
+    columns in a table comprise the primary key. Not a
+    real constraint, but enough to write ssg.py.
+    """
+    def __init__(self, *columns: Column, name: str):
+        self.name = name
+        self.columns = columns
+
+
 def _get_generator_for_table(
-    metadata: MetaData, table_config: Mapping[str, Any], table: Table
+    table_config: Mapping[str, Any], table: Table
 ) -> TableGeneratorInfo:
     """Get generator information for the given table."""
     unique_constraints = sorted(
@@ -356,6 +378,15 @@ def _get_generator_for_table(
         ),
         key=_constraint_sort_key,
     )
+    primary_keys = [
+        c for c in table.columns
+        if c.primary_key
+    ]
+    if 1 < len(primary_keys):
+        unique_constraints.append(_PrimaryConstraint(
+            *primary_keys,
+            name=f"{table.name}_primary_key"
+        ))
     table_data: TableGeneratorInfo = TableGeneratorInfo(
         table_name=table.name,
         class_name=table.name.title() + "Generator",
@@ -435,7 +466,7 @@ def make_table_generators(  # pylint: disable=too-many-locals
                 )
             )
         else:
-            tables.append(_get_generator_for_table(metadata, table_config, table))
+            tables.append(_get_generator_for_table(table_config, table))
 
     story_generators = _get_story_generators(config)
 
