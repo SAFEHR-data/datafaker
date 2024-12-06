@@ -59,15 +59,17 @@ def time_type(type_, pg_type):
     @parsy.generate(type_.__name__)
     def pgt_parser():
         """
-        Parses TYPE_NAME, TYPE_NAME(32), TYPE_NAME WITH TIMEZONE
-        or TYPE_NAME(32) WITH TIMEZONE
+        Parses TYPE_NAME, TYPE_NAME(32), TYPE_NAME WITH TIME ZONE
+        or TYPE_NAME(32) WITH TIME ZONE
         """
         yield parsy.string(type_.__name__)
         precision: int | None = yield (
             parsy.string("(") >> integer() << parsy.string(")")
         ).optional()
         timezone: str | None = yield (
-            parsy.string(" WITH TIME ZONE").result(True)
+            parsy.string(" WITH") >> (
+                parsy.string(" ").result(True) | parsy.string("OUT ").result(False)
+            ) << parsy.string("TIME ZONE")
         ).optional(False)
         if precision is None and not timezone:
             # normal sql type

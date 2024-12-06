@@ -266,11 +266,7 @@ def make_tables(
     force: bool = Option(False, "--force", "-f"),
     verbose: bool = Option(False, "--verbose", "-v"),
 ) -> None:
-    """Make a SQLAlchemy file of Table classes.
-
-    This CLI command deploys sqlacodegen to discover a
-    schema structure, and generates an object relational model declared
-    as Python classes.
+    """Make a YAML file representing the tables in the schema.
 
     Example:
         $ sqlsynthgen make_tables

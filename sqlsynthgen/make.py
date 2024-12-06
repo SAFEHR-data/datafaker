@@ -72,6 +72,7 @@ class TableGeneratorInfo:
 
     class_name: str
     table_name: str
+    columns: list[str]
     rows_per_pass: int
     row_gens: list[RowGeneratorInfo] = field(default_factory=list)
     unique_constraints: list[UniqueConstraint] = field(default_factory=list)
@@ -301,47 +302,6 @@ def _get_provider_for_column(column: Column) -> Tuple[list[str], str, dict[str, 
     return variable_names, generator_function, generator_arguments
 
 
-def _enforce_unique_constraints(table_data: TableGeneratorInfo) -> None:
-    """Wrap row generators of `table_data` in `UniqueGenerator`s to enforce constraints.
-
-    The given `table_data` is modified in place.
-    """
-    # For each row generator that assigns values to a column that has a unique
-    # constraint, wrap it in a UniqueGenerator that ensures the values generated are
-    # unique.
-    for row_gen in table_data.row_gens:
-        # Set of column names that this row_gen assigns to.
-        row_gen_column_set = set(row_gen.variable_names)
-        for constraint in table_data.unique_constraints:
-            # Set of column names that this constraint affects.
-            constraint_column_set = set(c.name for c in constraint.columns)
-            if not constraint_column_set & row_gen_column_set:
-                # The intersection is empty, this constraint isn't relevant for this
-                # row_gen.
-                continue
-            if not constraint_column_set.issubset(row_gen_column_set):
-                msg = (
-                    "A unique constraint (%s) isn't fully covered by one row "
-                    "generator (%s). Enforcement of the constraint may not work."
-                )
-                logger.warning(msg, constraint.name, row_gen.variable_names)
-
-            # Make a new function call that wraps the old one in a UniqueGenerator
-            old_function_call = row_gen.function_call
-            new_arguments = [
-                "dst_db_conn",
-                str(row_gen.variable_names),
-                old_function_call.function_name,
-            ] + old_function_call.argument_values
-            # The self.unique_{constraint_name} will be a UniqueGenerator, initialized
-            # in the __init__ of the table generator.
-            new_function_call = FunctionCall(
-                function_name=f"self.unique_{constraint.name}",
-                argument_values=new_arguments,
-            )
-            row_gen.function_call = new_function_call
-
-
 def _constraint_sort_key(constraint: UniqueConstraint) -> str:
     """Extract a string out of a UniqueConstraint that is unique to that constraint.
 
@@ -390,6 +350,7 @@ def _get_generator_for_table(
     table_data: TableGeneratorInfo = TableGeneratorInfo(
         table_name=table.name,
         class_name=table.name.title() + "Generator",
+        columns=[str(col.name) for col in table.columns],
         rows_per_pass=table_config.get("num_rows_per_pass", 1),
         unique_constraints=unique_constraints,
     )
@@ -402,7 +363,6 @@ def _get_generator_for_table(
             # No generator for this column in the user config.
             table_data.row_gens.append(_get_default_generator(column))
 
-    _enforce_unique_constraints(table_data)
     return table_data
 
 
@@ -433,7 +393,11 @@ def make_table_generators(  # pylint: disable=too-many-locals
     src_stats_filename: Optional[str],
     overwrite_files: bool = False,
 ) -> str:
-    """Create sqlsynthgen generator classes from a sqlacodegen-generated file.
+    """Create sqlsynthgen generator classes.
+
+    Currently the SRC_DSN environment variable is still required
+    so that vocabulary tables can be generated. This will be removed
+    into a different command.
 
     Args:
       config: Configuration to control the generator creation.
@@ -525,9 +489,8 @@ def _get_generator_for_vocabulary_table(
 def make_tables_file(
     db_dsn: str, schema_name: Optional[str], config: Mapping[str, Any]
 ) -> str:
-    """Write a file with the SQLAlchemy ORM classes.
-
-    Exits with an error if sqlacodegen is unsuccessful.
+    """
+    Construct the YAML file representing the schema.
     """
     tables_config = config.get("tables", {})
     engine = get_sync_engine(create_db_engine(db_dsn, schema_name=schema_name))
@@ -537,7 +500,6 @@ def make_tables_file(
         ignore = table_config.get("ignore", False)
         return not ignore
 
-    schemae = sqlalchemy.inspect(engine).get_schema_names()
     metadata = MetaData()
     metadata.reflect(
         engine,
