@@ -77,7 +77,10 @@ def download_table(
     """Download a Table and store it as a .yaml file."""
     stmt = select(table)
     with engine.connect() as conn:
-        result = [dict(row) for row in conn.execute(stmt).mappings()]
+        result = [
+            {str(col_name): value for (col_name, value) in row.items()}
+            for row in conn.execute(stmt).mappings()
+        ]
 
     with Path(yaml_file_name).open("w", newline="", encoding="utf-8") as yamlfile:
         yamlfile.write(yaml.dump(result))

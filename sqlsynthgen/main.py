@@ -4,7 +4,6 @@ import json
 import sys
 from importlib import metadata
 from pathlib import Path
-from types import ModuleType
 from typing import Final, Optional
 
 import yaml
@@ -13,13 +12,17 @@ from jsonschema.validators import validate
 from typer import Option, Typer
 
 from sqlsynthgen.create import create_db_data, create_db_tables, create_db_vocab
-from sqlsynthgen.make import make_src_stats, make_table_generators, make_tables_file
+from sqlsynthgen.make import (
+    make_src_stats,
+    make_table_generators,
+    make_tables_file,
+    make_vocabulary_tables,
+)
 from sqlsynthgen.remove import remove_db_data, remove_db_tables, remove_db_vocab
 from sqlsynthgen.settings import Settings, get_settings
 from sqlsynthgen.utils import (
     CONFIG_SCHEMA_PATH,
     conf_logger,
-    get_orm_metadata,
     import_file,
     logger,
     read_config_file,
@@ -175,6 +178,42 @@ def create_tables(
 
 
 @app.command()
+def make_vocab(
+    orm_file: str = Option(ORM_FILENAME),
+    config_file: Optional[str] = Option(None),
+    force: bool = Option(True, "--force", "-f"),
+    verbose: bool = Option(False, "--verbose", "-v"),
+) -> None:
+    """Make files of vocabulary tables.
+
+    Each table marked in the configuration file as "vocabulary_table: true"
+
+    Example:
+        $ sqlsynthgen make-vocab --config-file config.yml
+
+    Args:
+        orm_file (str): Name of Python ORM file.
+          Must be in the current working directory.
+        ssg_file (str): Path to write the generators file to.
+        config_file (str): Path to configuration file.
+        stats_file (str): Path to source stats file (output of make-stats).
+        force (bool): Overwrite any existing vocabulary file. Default to True.
+        verbose (bool): Be verbose. Default to False.
+    """
+    conf_logger(verbose)
+    settings = get_settings()
+    _require_src_db_dsn(settings)
+
+    generator_config = read_config_file(config_file) if config_file is not None else {}
+    orm_metadata = load_metadata(orm_file, generator_config)
+    make_vocabulary_tables(
+        orm_metadata,
+        generator_config,
+        overwrite_files=force
+    )
+
+
+@app.command()
 def make_generators(
     orm_file: str = Option(ORM_FILENAME),
     ssg_file: str = Option(SSG_FILENAME),
@@ -197,7 +236,7 @@ def make_generators(
         ssg_file (str): Path to write the generators file to.
         config_file (str): Path to configuration file.
         stats_file (str): Path to source stats file (output of make-stats).
-        force (bool): Overwrite the ORM file if exists. Default to False.
+        force (bool): Overwrite the ssg.py file if exists. Defaults to False.
         verbose (bool): Be verbose. Default to False.
     """
     conf_logger(verbose)
@@ -207,8 +246,6 @@ def make_generators(
     if not force:
         _check_file_non_existence(ssg_file_path)
     settings = get_settings()
-    # Check that src_dsn is set, even though we don't need it here.
-    _require_src_db_dsn(settings)
 
     generator_config = read_config_file(config_file) if config_file is not None else {}
     orm_metadata = load_metadata(orm_file, generator_config)
@@ -218,7 +255,6 @@ def make_generators(
         orm_file,
         config_file,
         stats_file,
-        overwrite_files=force
     )
 
     ssg_file_path.write_text(result, encoding="utf-8")

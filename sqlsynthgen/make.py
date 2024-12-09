@@ -44,7 +44,6 @@ class VocabularyTableGeneratorInfo:
     """Contains the ssg.py content related to vocabulary tables."""
 
     variable_name: str
-    class_name: str
     table_name: str
     dictionary_entry: str
 
@@ -385,19 +384,41 @@ def _get_story_generators(config: Mapping) -> list[StoryGeneratorInfo]:
     return generators
 
 
+def make_vocabulary_tables(
+    metadata: MetaData,
+    config: Mapping,
+    overwrite_files: bool,
+):
+    """
+    Extracts the data from the source database for each
+    vocabulary table.
+    """
+    settings = get_settings()
+    src_dsn: str = settings.src_dsn or ""
+    assert src_dsn != "", "Missing SRC_DSN setting."
+
+    engine = get_sync_engine(create_db_engine(src_dsn, schema_name=settings.src_schema))
+    tables_config = config.get("tables", {})
+    for table in metadata.sorted_tables:
+        table_config = tables_config.get(table.name, {})
+
+        if table_config.get("vocabulary_table", False):
+            _generate_vocabulary_table(
+                table, engine, overwrite_files=overwrite_files
+            )
+
+
 def make_table_generators(  # pylint: disable=too-many-locals
     metadata: MetaData,
     config: Mapping,
     orm_filename: str,
     config_filename: str,
     src_stats_filename: Optional[str],
-    overwrite_files: bool = False,
 ) -> str:
     """Create sqlsynthgen generator classes.
 
-    Currently the SRC_DSN environment variable is still required
-    so that vocabulary tables can be generated. This will be removed
-    into a different command.
+    The orm and vocabulary YAML files must already have been
+    generated (by make-tables and make-vocab).
 
     Args:
       config: Configuration to control the generator creation.
@@ -423,10 +444,10 @@ def make_table_generators(  # pylint: disable=too-many-locals
     for table in metadata.sorted_tables:
         table_config = tables_config.get(table.name, {})
 
-        if table_config.get("vocabulary_table") is True:
+        if table_config.get("vocabulary_table", False):
             vocabulary_tables.append(
-                _get_generator_for_vocabulary_table(
-                    table, engine, overwrite_files=overwrite_files
+                _get_generator_for_existing_vocabulary_table(
+                    table, engine
                 )
             )
         else:
@@ -464,26 +485,43 @@ def generate_ssg_content(template_context: Mapping[str, Any]) -> str:
     return format_str(template_output, mode=FileMode())
 
 
-def _get_generator_for_vocabulary_table(
+def _get_generator_for_existing_vocabulary_table(
     table: Table,
     engine: Engine,
     table_file_name: Optional[str] = None,
-    overwrite_files: bool = False,
 ) -> VocabularyTableGeneratorInfo:
+    """
+    Turns an existing vocabulary YAML file into a VocabularyTableGeneratorInfo.
+    """
     yaml_file_name: str = table_file_name or table.fullname + ".yaml"
-    if Path(yaml_file_name).exists() and not overwrite_files:
-        logger.error("%s already exists. Exiting...", yaml_file_name)
+    if not Path(yaml_file_name).exists():
+        logger.error("%s has not already been generated, please run make-vocab first", yaml_file_name)
         sys.exit(1)
-    else:
-        logger.debug("Downloading vocabulary table %s", table.name)
-        download_table(table, engine, yaml_file_name)
-        logger.debug("Done downloading %s", table.name)
+    logger.debug("Downloading vocabulary table %s", table.name)
+    download_table(table, engine, yaml_file_name)
+    logger.debug("Done downloading %s", table.name)
 
     return VocabularyTableGeneratorInfo(
         dictionary_entry=table.name,
         variable_name=f"{table.name.lower()}_vocab",
         table_name=table.name,
     )
+
+
+def _generate_vocabulary_table(
+    table: Table,
+    engine: Engine,
+    overwrite_files: bool = False,
+):
+    """
+    Pulls data out of the source database to make a vocabulary YAML file
+    """
+    yaml_file_name: str = table.fullname + ".yaml"
+    if Path(yaml_file_name).exists() and not overwrite_files:
+        logger.debug("%s already exists; not overwriting", yaml_file_name)
+        return
+    logger.debug("Downloading vocabulary table %s", table.name)
+    download_table(table, engine, yaml_file_name)
 
 
 def make_tables_file(
