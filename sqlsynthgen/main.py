@@ -9,7 +9,7 @@ from typing import Final, Optional
 import yaml
 from jsonschema.exceptions import ValidationError
 from jsonschema.validators import validate
-from typer import Option, Typer
+from typer import Argument, Option, Typer
 
 from sqlsynthgen.create import create_db_data, create_db_tables, create_db_vocab
 from sqlsynthgen.make import (
@@ -67,15 +67,27 @@ def load_metadata(orm_file_name, config=None):
         return dict_to_metadata(meta_dict)
 
 
+@app.callback()
+def main(verbose: bool = Option(
+    False,
+    "--verbose",
+    "-v",
+    help="Print more information."
+)):
+    conf_logger(verbose)
+
+
 @app.command()
 def create_data(
-    orm_file: str = Option(ORM_FILENAME),
-    ssg_file: str = Option(SSG_FILENAME),
-    config_file: Optional[str] = Option(None),
-    num_passes: int = Option(1),
-    verbose: bool = Option(False, "--verbose", "-v"),
+    orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
+    ssg_file: str = Option(
+        SSG_FILENAME,
+        help="The name of the generators file. Must be in the current working directory."
+    ),
+    config_file: Optional[str] = Option(None, help="The configuration file"),
+    num_passes: int = Option(1, help="Number of passes (rows or stories) to make"),
 ) -> None:
-    """Populate schema with synthetic data.
+    """Populate the schema in the target directory with synthetic data.
 
     This CLI command generates synthetic data for
     Python table structures, and inserts these rows
@@ -92,17 +104,7 @@ def create_data(
 
     Example:
         $ sqlsynthgen create-data
-
-    Args:
-        orm_file (str): Name of YAML ORM file.
-          Must be in the current working directory.
-        ssg_file (str): Name of generators file.
-          Must be in the current working directory.
-        config_file (str): Path to configuration file.
-        num_passes (int): Number of passes to make.
-        verbose (bool): Be verbose. Default to False.
     """
-    conf_logger(verbose)
     logger.debug("Creating data.")
     orm_metadata = load_metadata(orm_file, config_file)
     ssg_module = import_file(ssg_file)
@@ -128,20 +130,16 @@ def create_data(
 
 @app.command()
 def create_vocab(
-    ssg_file: str = Option(SSG_FILENAME),
-    verbose: bool = Option(False, "--verbose", "-v"),
+    ssg_file: str = Option(
+        SSG_FILENAME,
+        help="The name of the generators file. Must be in the current working directory."
+    ),
 ) -> None:
-    """Import vocabulary data.
+    """Import vocabulary data into the target database.
 
     Example:
         $ sqlsynthgen create-vocab
-
-    Args:
-        ssg_file (str): Name of generators file.
-          Must be in the current working directory.
-        verbose (bool): Be verbose. Default to False.
     """
-    conf_logger(verbose)
     logger.debug("Loading vocab.")
     ssg_module = import_file(ssg_file)
     create_db_vocab(ssg_module.vocab_dict)
@@ -151,9 +149,8 @@ def create_vocab(
 
 @app.command()
 def create_tables(
-    orm_file: str = Option(ORM_FILENAME),
-    config_file: Optional[str] = Option(None),
-    verbose: bool = Option(False, "--verbose", "-v"),
+    orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
+    config_file: Optional[str] = Option(None, help="The configuration file"),
 ) -> None:
     """Create schema from the ORM YAML file.
 
@@ -162,14 +159,7 @@ def create_tables(
 
     Example:
         $ sqlsynthgen create-tables
-
-    Args:
-        orm_file (str): Name of Python ORM file.
-          Must be in the current working directory.
-        config_file (str): Path to configuration file.
-        verbose (bool): Be verbose. Default to False.
     """
-    conf_logger(verbose)
     logger.debug("Creating tables.")
     config = read_config_file(config_file) if config_file is not None else {}
     orm_metadata = load_metadata(orm_file, config)
@@ -179,10 +169,9 @@ def create_tables(
 
 @app.command()
 def make_vocab(
-    orm_file: str = Option(ORM_FILENAME),
-    config_file: Optional[str] = Option(None),
-    force: bool = Option(True, "--force", "-f"),
-    verbose: bool = Option(False, "--verbose", "-v"),
+    orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
+    config_file: Optional[str] = Option(None, help="The configuration file"),
+    force: bool = Option(True, help="Overwrite any existing vocabulary file."),
 ) -> None:
     """Make files of vocabulary tables.
 
@@ -190,17 +179,7 @@ def make_vocab(
 
     Example:
         $ sqlsynthgen make-vocab --config-file config.yml
-
-    Args:
-        orm_file (str): Name of Python ORM file.
-          Must be in the current working directory.
-        ssg_file (str): Path to write the generators file to.
-        config_file (str): Path to configuration file.
-        stats_file (str): Path to source stats file (output of make-stats).
-        force (bool): Overwrite any existing vocabulary file. Default to True.
-        verbose (bool): Be verbose. Default to False.
     """
-    conf_logger(verbose)
     settings = get_settings()
     _require_src_db_dsn(settings)
 
@@ -215,12 +194,11 @@ def make_vocab(
 
 @app.command()
 def make_generators(
-    orm_file: str = Option(ORM_FILENAME),
-    ssg_file: str = Option(SSG_FILENAME),
-    config_file: Optional[str] = Option(None),
-    stats_file: Optional[str] = Option(None),
-    force: bool = Option(False, "--force", "-f"),
-    verbose: bool = Option(False, "--verbose", "-v"),
+    orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
+    ssg_file: str = Option(SSG_FILENAME, help="Path to write Python generators to."),
+    config_file: Optional[str] = Option(None, help="The configuration file"),
+    stats_file: Optional[str] = Option(None, help="Statistics file (output of make-stats)"),
+    force: bool = Option(False, help="Overwrite any existing Python generators file."),
 ) -> None:
     """Make a SQLSynthGen file of generator classes.
 
@@ -229,23 +207,12 @@ def make_generators(
 
     Example:
         $ sqlsynthgen make-generators
-
-    Args:
-        orm_file (str): Name of Python ORM file.
-          Must be in the current working directory.
-        ssg_file (str): Path to write the generators file to.
-        config_file (str): Path to configuration file.
-        stats_file (str): Path to source stats file (output of make-stats).
-        force (bool): Overwrite the ssg.py file if exists. Defaults to False.
-        verbose (bool): Be verbose. Default to False.
     """
-    conf_logger(verbose)
     logger.debug("Making %s.", ssg_file)
 
     ssg_file_path = Path(ssg_file)
     if not force:
         _check_file_non_existence(ssg_file_path)
-    settings = get_settings()
 
     generator_config = read_config_file(config_file) if config_file is not None else {}
     orm_metadata = load_metadata(orm_file, generator_config)
@@ -264,10 +231,9 @@ def make_generators(
 
 @app.command()
 def make_stats(
-    config_file: str = Option(...),
+    config_file: Optional[str] = Option(None, help="The configuration file"),
     stats_file: str = Option(STATS_FILENAME),
-    force: bool = Option(False, "--force", "-f"),
-    verbose: bool = Option(False, "--verbose", "-v"),
+    force: bool = Option(False, help="Overwrite any existing vocabulary file."),
 ) -> None:
     """Compute summary statistics from the source database.
 
@@ -276,7 +242,6 @@ def make_stats(
     Example:
         $ sqlsynthgen make_stats --config-file=example_config.yaml
     """
-    conf_logger(verbose)
     logger.debug("Creating %s.", stats_file)
 
     stats_file_path = Path(stats_file)
@@ -297,23 +262,15 @@ def make_stats(
 
 @app.command()
 def make_tables(
-    config_file: Optional[str] = Option(None),
-    orm_file: str = Option(ORM_FILENAME),
-    force: bool = Option(False, "--force", "-f"),
-    verbose: bool = Option(False, "--verbose", "-v"),
+    config_file: Optional[str] = Option(None, help="The configuration file"),
+    orm_file: str = Option(ORM_FILENAME, help="Path to write the ORM yaml file to"),
+    force: bool = Option(False, help="Overwrite any existing orm yaml file."),
 ) -> None:
     """Make a YAML file representing the tables in the schema.
 
     Example:
         $ sqlsynthgen make_tables
-
-    Args:
-        config_file (str): Path to configuration file.
-        orm_file (str): Path to write the Python YAML file.
-        force (bool): Overwrite YAML file, if exists. Default to False.
-        verbose (bool): Be verbose. Default to False.
     """
-    conf_logger(verbose)
     logger.debug("Creating %s.", orm_file)
 
     orm_file_path = Path(orm_file)
@@ -331,11 +288,9 @@ def make_tables(
 
 @app.command()
 def validate_config(
-    config_file: Path,
-    verbose: bool = Option(False, "--verbose", "-v"),
+    config_file: Path = Argument(help="The configuration file to validate"),
 ) -> None:
     """Validate the format of a config file."""
-    conf_logger(verbose)
     logger.debug("Validating config file: %s.", config_file)
 
     config = yaml.load(config_file.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader)
@@ -350,14 +305,15 @@ def validate_config(
 
 @app.command()
 def remove_data(
-    orm_file: str = Option(ORM_FILENAME),
-    ssg_file: str = Option(SSG_FILENAME),
-    config_file: Optional[str] = Option(None),
-    yes: bool = Option(False, "--yes", prompt="Are you sure?"),
-    verbose: bool = Option(False, "--verbose", "-v"),
+    orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
+    ssg_file: str = Option(
+        SSG_FILENAME,
+        help="The name of the generators file. Must be in the current working directory."
+    ),
+    config_file: Optional[str] = Option(None, help="The configuration file"),
+    yes: bool = Option(False, "--yes", prompt="Are you sure?", help="Just remove, don't ask first"),
 ) -> None:
     """Truncate non-vocabulary tables in the destination schema."""
-    conf_logger(verbose)
     if yes:
         logger.debug("Truncating non-vocabulary tables.")
         config = read_config_file(config_file) if config_file is not None else {}
@@ -371,14 +327,15 @@ def remove_data(
 
 @app.command()
 def remove_vocab(
-    orm_file: str = Option(ORM_FILENAME),
-    ssg_file: str = Option(SSG_FILENAME),
-    config_file: Optional[str] = Option(None),
-    yes: bool = Option(False, "--yes", prompt="Are you sure?"),
-    verbose: bool = Option(False, "--verbose", "-v"),
+    orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
+    ssg_file: str = Option(
+        SSG_FILENAME,
+        help="The name of the generators file. Must be in the current working directory."
+    ),
+    config_file: Optional[str] = Option(None, help="The configuration file"),
+    yes: bool = Option(False, "--yes", prompt="Are you sure?", help="Just remove, don't ask first"),
 ) -> None:
     """Truncate vocabulary tables in the destination schema."""
-    conf_logger(verbose)
     if yes:
         logger.debug("Truncating vocabulary tables.")
         config = read_config_file(config_file) if config_file is not None else {}
@@ -392,16 +349,14 @@ def remove_vocab(
 
 @app.command()
 def remove_tables(
-    orm_file: str = Option(ORM_FILENAME),
-    config_file: Optional[str] = Option(None),
-    yes: bool = Option(False, "--yes", prompt="Are you sure?"),
-    verbose: bool = Option(False, "--verbose", "-v"),
+    orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
+    config_file: Optional[str] = Option(None, help="The configuration file"),
+    yes: bool = Option(False, "--yes", prompt="Are you sure?", help="Just remove, don't ask first"),
 ) -> None:
     """Drop all tables in the destination schema.
 
     Does not drop the schema itself.
     """
-    conf_logger(verbose)
     if yes:
         logger.debug("Dropping tables.")
         config = read_config_file(config_file) if config_file is not None else {}

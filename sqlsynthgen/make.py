@@ -12,7 +12,6 @@ import snsql
 from black import FileMode, format_str
 from jinja2 import Environment, FileSystemLoader, Template
 from mimesis.providers.base import BaseProvider
-import sqlalchemy
 from sqlalchemy import Engine, MetaData, UniqueConstraint, text
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncEngine
