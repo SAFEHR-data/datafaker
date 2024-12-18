@@ -2,14 +2,11 @@
 from collections import Counter
 from typing import Any, Generator, Mapping, Sequence, Tuple
 
-from psycopg2.errors import UndefinedObject
-from sqlalchemy import Connection, ForeignKeyConstraint, insert
-from sqlalchemy.exc import IntegrityError, ProgrammingError
+from sqlalchemy import Connection, insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import (
-    AddConstraint,
     CreateSchema,
-    DropConstraint,
     MetaData,
     Table,
 )
@@ -20,7 +17,8 @@ from sqlsynthgen.utils import (
     get_sync_engine,
     get_vocabulary_table_names,
     logger,
-    make_foreign_key_name,
+    reinstate_vocab_foreign_key_constraints,
+    remove_vocab_foreign_key_constraints,
 )
 
 Story = Generator[Tuple[str, dict[str, Any]], dict[str, Any], None]
@@ -67,26 +65,10 @@ def create_db_vocab(metadata: MetaData, meta_dict: dict[str, Any], config: Mappi
 
     tables_loaded: list[str] = []
 
+    remove_vocab_foreign_key_constraints(metadata, config, dst_engine)
     vocab_tables = get_vocabulary_table_names(config)
     for vocab_table_name in vocab_tables:
         vocab_table = metadata.tables[vocab_table_name]
-        # Remove foreign key constraints from the table
-        for fk in vocab_table.foreign_key_constraints:
-            logger.debug("Dropping constraint %s from table %s", fk.name, vocab_table_name)
-            with Session(dst_engine) as session:
-                session.begin()
-                try:
-                    session.execute(DropConstraint(fk))
-                except IntegrityError:
-                    session.rollback()
-                    logger.exception("Dropping table %s key constraint %s failed:", vocab_table_name, fk.name)
-                except ProgrammingError as e:
-                    session.rollback()
-                    if type(e.orig) is UndefinedObject:
-                        logger.debug("Constraint does not exist")
-                    else:
-                        raise e
-        # Load data into the table
         try:
             logger.debug("Loading vocabulary table %s", vocab_table_name)
             uploader = FileUploader(table=vocab_table)
@@ -97,24 +79,12 @@ def create_db_vocab(metadata: MetaData, meta_dict: dict[str, Any], config: Mappi
             tables_loaded.append(vocab_table_name)
         except IntegrityError:
             logger.exception("Loading the vocabulary table %s failed:", vocab_table)
-    # Now we add the constraints back to all the tables
-    for vocab_table_name in vocab_tables:
-        try:
-            for (column_name, column_dict) in meta_dict["tables"][vocab_table_name]["columns"].items():
-                fk_targets = column_dict.get("foreign_keys", [])
-                if fk_targets:
-                    fk = ForeignKeyConstraint(
-                        columns=[column_name],
-                        name=make_foreign_key_name(vocab_table_name, column_name),
-                        refcolumns=fk_targets,
-                    )
-                    with Session(dst_engine) as session:
-                        session.begin()
-                        vocab_table.append_constraint(fk)
-                        session.execute(AddConstraint(fk))
-                        session.commit()
-        except IntegrityError:
-            logger.exception("Restoring table %s foreign keys failed:", vocab_table)
+    reinstate_vocab_foreign_key_constraints(
+        metadata,
+        meta_dict,
+        config,
+        dst_engine,
+    )
     return tables_loaded
 
 

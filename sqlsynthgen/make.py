@@ -450,8 +450,8 @@ def make_table_generators(  # pylint: disable=too-many-locals
     tables: list[TableGeneratorInfo] = []
     vocabulary_tables: list[VocabularyTableGeneratorInfo] = []
     vocab_names = get_vocabulary_table_names(config)
-    for table in metadata.sorted_tables:
-        if table.name in vocab_names:
+    for (table_name, table) in metadata.tables.items():
+        if table_name in vocab_names:
             related = _get_related_table_names(table)
             related_non_vocab = related.difference(vocab_names)
             if related_non_vocab:

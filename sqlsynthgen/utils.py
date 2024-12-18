@@ -11,10 +11,24 @@ from typing import Any, Final, Mapping, Optional, Union
 import yaml
 from jsonschema.exceptions import ValidationError
 from jsonschema.validators import validate
-from sqlalchemy import Engine, create_engine, event, select
+from psycopg2.errors import UndefinedObject
+from sqlalchemy import (
+    Engine,
+    create_engine,
+    event,
+    select,
+)
 from sqlalchemy.engine.interfaces import DBAPIConnection
+from sqlalchemy.exc import IntegrityError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
-from sqlalchemy.schema import MetaData, Table
+from sqlalchemy.orm import Session
+from sqlalchemy.schema import (
+    AddConstraint,
+    DropConstraint,
+    ForeignKeyConstraint,
+    MetaData,
+    Table,
+)
 
 # Define some types used repeatedly in the code base
 MaybeAsyncEngine = Union[Engine, AsyncEngine]
@@ -197,3 +211,48 @@ def get_vocabulary_table_names(config: Mapping) -> set[str]:
 
 def make_foreign_key_name(table_name: str, col_name: str) -> str:
     return f"{table_name}_{col_name}_fkey"
+
+
+def remove_vocab_foreign_key_constraints(metadata, config, dst_engine):
+    vocab_tables = get_vocabulary_table_names(config)
+    for vocab_table_name in vocab_tables:
+        vocab_table = metadata.tables[vocab_table_name]
+        for fk in vocab_table.foreign_key_constraints:
+            logger.debug("Dropping constraint %s from table %s", fk.name, vocab_table_name)
+            with Session(dst_engine) as session:
+                session.begin()
+                try:
+                    session.execute(DropConstraint(fk))
+                    session.commit()
+                except IntegrityError:
+                    session.rollback()
+                    logger.exception("Dropping table %s key constraint %s failed:", vocab_table_name, fk.name)
+                except ProgrammingError as e:
+                    session.rollback()
+                    if type(e.orig) is UndefinedObject:
+                        logger.debug("Constraint does not exist")
+                    else:
+                        raise e
+
+
+def reinstate_vocab_foreign_key_constraints(metadata, meta_dict, config, dst_engine):
+    vocab_tables = get_vocabulary_table_names(config)
+    for vocab_table_name in vocab_tables:
+        vocab_table = metadata.tables[vocab_table_name]
+        try:
+            for (column_name, column_dict) in meta_dict["tables"][vocab_table_name]["columns"].items():
+                fk_targets = column_dict.get("foreign_keys", [])
+                if fk_targets:
+                    fk = ForeignKeyConstraint(
+                        columns=[column_name],
+                        name=make_foreign_key_name(vocab_table_name, column_name),
+                        refcolumns=fk_targets,
+                    )
+                    logger.debug(f"Restoring foreign key constraint {fk.name}")
+                    with Session(dst_engine) as session:
+                        session.begin()
+                        vocab_table.append_constraint(fk)
+                        session.execute(AddConstraint(fk))
+                        session.commit()
+        except IntegrityError:
+            logger.exception("Restoring table %s foreign keys failed:", vocab_table)
