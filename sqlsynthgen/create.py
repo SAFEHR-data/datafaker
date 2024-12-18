@@ -2,13 +2,26 @@
 from collections import Counter
 from typing import Any, Generator, Mapping, Sequence, Tuple
 
-from sqlalchemy import Connection, insert
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.schema import CreateSchema, MetaData, Table
-
+from psycopg2.errors import UndefinedObject
+from sqlalchemy import Connection, ForeignKeyConstraint, insert
+from sqlalchemy.exc import IntegrityError, ProgrammingError
+from sqlalchemy.orm import Session
+from sqlalchemy.schema import (
+    AddConstraint,
+    CreateSchema,
+    DropConstraint,
+    MetaData,
+    Table,
+)
 from sqlsynthgen.base import FileUploader, TableGenerator
 from sqlsynthgen.settings import get_settings
-from sqlsynthgen.utils import create_db_engine, get_sync_engine, logger
+from sqlsynthgen.utils import (
+    create_db_engine,
+    get_sync_engine,
+    get_vocabulary_table_names,
+    logger,
+    make_foreign_key_name,
+)
 
 Story = Generator[Tuple[str, dict[str, Any]], dict[str, Any], None]
 RowCounts = Counter[str]
@@ -35,8 +48,15 @@ def create_db_tables(metadata: MetaData) -> None:
     metadata.create_all(engine)
 
 
-def create_db_vocab(vocab_dict: Mapping[str, FileUploader]) -> None:
-    """Load vocabulary tables from files."""
+def create_db_vocab(metadata: MetaData, meta_dict: dict[str, Any], config: Mapping) -> int:
+    """
+    Load vocabulary tables from files.
+    
+    arguments:
+    metadata: The schema of the database
+    meta_dict: The simple description of the schema from --orm-file
+    config: The configuration from --config-file
+    """
     settings = get_settings()
     dst_dsn: str = settings.dst_dsn or ""
     assert dst_dsn != "", "Missing DST_DSN setting."
@@ -45,13 +65,57 @@ def create_db_vocab(vocab_dict: Mapping[str, FileUploader]) -> None:
         create_db_engine(dst_dsn, schema_name=settings.dst_schema)
     )
 
-    with dst_engine.connect() as dst_conn:
-        for vocab_table in vocab_dict.values():
-            logger.debug("Loading vocabulary table %s", vocab_table.table.name)
-            try:
-                vocab_table.load(dst_conn)
-            except IntegrityError:
-                logger.exception("Loading the vocabulary table %s failed:", vocab_table)
+    tables_loaded: list[str] = []
+
+    vocab_tables = get_vocabulary_table_names(config)
+    for vocab_table_name in vocab_tables:
+        vocab_table = metadata.tables[vocab_table_name]
+        # Remove foreign key constraints from the table
+        for fk in vocab_table.foreign_key_constraints:
+            logger.debug("Dropping constraint %s from table %s", fk.name, vocab_table_name)
+            with Session(dst_engine) as session:
+                session.begin()
+                try:
+                    session.execute(DropConstraint(fk))
+                except IntegrityError:
+                    session.rollback()
+                    logger.exception("Dropping table %s key constraint %s failed:", vocab_table_name, fk.name)
+                except ProgrammingError as e:
+                    session.rollback()
+                    if type(e.orig) is UndefinedObject:
+                        logger.debug("Constraint does not exist")
+                    else:
+                        raise e
+        # Load data into the table
+        try:
+            logger.debug("Loading vocabulary table %s", vocab_table_name)
+            uploader = FileUploader(table=vocab_table)
+            with Session(dst_engine) as session:
+                session.begin()
+                uploader.load(session.connection())
+            session.commit()
+            tables_loaded.append(vocab_table_name)
+        except IntegrityError:
+            logger.exception("Loading the vocabulary table %s failed:", vocab_table)
+    # Now we add the constraints back to all the tables
+    for vocab_table_name in vocab_tables:
+        try:
+            for (column_name, column_dict) in meta_dict["tables"][vocab_table_name]["columns"].items():
+                fk_targets = column_dict.get("foreign_keys", [])
+                if fk_targets:
+                    fk = ForeignKeyConstraint(
+                        columns=[column_name],
+                        name=make_foreign_key_name(vocab_table_name, column_name),
+                        refcolumns=fk_targets,
+                    )
+                    with Session(dst_engine) as session:
+                        session.begin()
+                        vocab_table.append_constraint(fk)
+                        session.execute(AddConstraint(fk))
+                        session.commit()
+        except IntegrityError:
+            logger.exception("Restoring table %s foreign keys failed:", vocab_table)
+    return tables_loaded
 
 
 def create_db_data(

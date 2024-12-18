@@ -182,3 +182,18 @@ def conf_logger(verbose: bool) -> None:
 
     logger.addHandler(stdout_handler)
     logger.addHandler(stderr_handler)
+
+
+def get_vocabulary_table_names(config: Mapping) -> set[str]:
+    """
+    Extract the table names with a vocabulary_table: true property.
+    """
+    return {
+        table_name
+        for (table_name, table_config) in config.get("tables", {}).items()
+        if table_config.get("vocabulary_table", False)
+    }
+
+
+def make_foreign_key_name(table_name: str, col_name: str) -> str:
+    return f"{table_name}_{col_name}_fkey"

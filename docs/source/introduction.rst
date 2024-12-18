@@ -162,7 +162,7 @@ This will export the ``countries`` table rows to a file called ``countries.yaml`
 We need to truncate any tables in our destination database before importing the countries data with::
 
     $ sqlsynthgen remove-data --config-file config.yaml
-    $ sqlsynthgen create-vocab
+    $ sqlsynthgen create-vocab --config-file config.yaml --orm-file orm.yaml
 
 Since ``make-generators`` rewrote ``ssg.py``, we must now re-edit it to add the primary key ``VARCHAR`` workarounds for the ``users`` and ``age_gender_bkts`` tables, as we did in section above.
 Once this is done, we can generate random data for the other three tables with::

@@ -24,6 +24,7 @@ from sqlsynthgen.utils import (
     create_db_engine,
     download_table,
     get_sync_engine,
+    get_vocabulary_table_names,
     logger,
 )
 
@@ -383,6 +384,16 @@ def _get_story_generators(config: Mapping) -> list[StoryGeneratorInfo]:
     return generators
 
 
+def _get_related_table_names(table: Table) -> set[str]:
+    """
+    Get the names of all tables for which there exist foreign keys from this table.
+    """
+    return {
+        str(fk.referred_table.name)
+        for fk in table.foreign_key_constraints
+    }
+
+
 def make_vocabulary_tables(
     metadata: MetaData,
     config: Mapping,
@@ -397,14 +408,11 @@ def make_vocabulary_tables(
     assert src_dsn != "", "Missing SRC_DSN setting."
 
     engine = get_sync_engine(create_db_engine(src_dsn, schema_name=settings.src_schema))
-    tables_config = config.get("tables", {})
-    for table in metadata.sorted_tables:
-        table_config = tables_config.get(table.name, {})
-
-        if table_config.get("vocabulary_table", False):
-            _generate_vocabulary_table(
-                table, engine, overwrite_files=overwrite_files
-            )
+    vocab_names = get_vocabulary_table_names(config)
+    for table_name in vocab_names:
+        _generate_vocabulary_table(
+            metadata.tables[table_name], engine, overwrite_files=overwrite_files
+        )
 
 
 def make_table_generators(  # pylint: disable=too-many-locals
@@ -414,7 +422,8 @@ def make_table_generators(  # pylint: disable=too-many-locals
     config_filename: str,
     src_stats_filename: Optional[str],
 ) -> str:
-    """Create sqlsynthgen generator classes.
+    """
+    Create sqlsynthgen generator classes.
 
     The orm and vocabulary YAML files must already have been
     generated (by make-tables and make-vocab).
@@ -440,17 +449,28 @@ def make_table_generators(  # pylint: disable=too-many-locals
 
     tables: list[TableGeneratorInfo] = []
     vocabulary_tables: list[VocabularyTableGeneratorInfo] = []
+    vocab_names = get_vocabulary_table_names(config)
     for table in metadata.sorted_tables:
-        table_config = tables_config.get(table.name, {})
-
-        if table_config.get("vocabulary_table", False):
+        if table.name in vocab_names:
+            related = _get_related_table_names(table)
+            related_non_vocab = related.difference(vocab_names)
+            if related_non_vocab:
+                logger.warning(
+                    "Making table '%s' a vocabulary table requires that also the"
+                    " related tables (%s) be also vocabulary tables.",
+                    table.name,
+                    related_non_vocab
+                )
             vocabulary_tables.append(
                 _get_generator_for_existing_vocabulary_table(
                     table, engine
                 )
             )
         else:
-            tables.append(_get_generator_for_table(table_config, table))
+            tables.append(_get_generator_for_table(
+                tables_config.get(table.name, {}),
+                table
+            ))
 
     story_generators = _get_story_generators(config)
 

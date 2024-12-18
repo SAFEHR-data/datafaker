@@ -2,6 +2,7 @@ import parsy
 from sqlalchemy import MetaData, Table, Column, Dialect, ForeignKey
 from sqlalchemy.dialects import oracle, postgresql
 from sqlalchemy.sql import sqltypes, schema
+from sqlsynthgen.utils import make_foreign_key_name
 
 type table_component_t = dict[str, any]
 type table_t = dict[str, table_component_t]
@@ -134,7 +135,7 @@ def column_to_dict(column: Column, dialect: Dialect) -> str:
         result["foreign_keys"] = foreign_keys
     return result
 
-def dict_to_column(name, rep: dict) -> Column:
+def dict_to_column(table_name, col_name, rep: dict) -> Column:
     type_sql = rep["type"]
     try:
         type_ = type_parser.parse(type_sql)
@@ -143,14 +144,18 @@ def dict_to_column(name, rep: dict) -> Column:
         raise e
     if "foreign_keys" in rep:
         args = [
-            ForeignKey(fk, ondelete='CASCADE')
+            ForeignKey(
+                fk,
+                name=make_foreign_key_name(table_name, col_name),
+                ondelete='CASCADE',
+            )
             for fk in rep["foreign_keys"]
         ]
     else:
         args = []
     return Column(
         *args,
-        name=name,
+        name=col_name,
         type_=type_,
         primary_key=rep.get("primary", False),
         nullable=rep.get("nullable", None),
@@ -194,8 +199,8 @@ def dict_to_table(name: str, meta: MetaData, table_dict: table_t) -> Table:
     return Table(
         name,
         meta,
-        *[ dict_to_column(name, col)
-            for (name, col) in table_dict.get("columns", {}).items()
+        *[ dict_to_column(name, colname, col)
+            for (colname, col) in table_dict.get("columns", {}).items()
         ],
         *[ dict_to_unique(constraint)
             for constraint in table_dict.get("unique", [])

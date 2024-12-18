@@ -57,14 +57,21 @@ def _require_src_db_dsn(settings: Settings) -> str:
     return src_dsn
 
 
-def load_metadata(orm_file_name, config=None):
-    if config is not None and "tables" in config:
-        tables_config = config["tables"]
-        # Remove tables_config.<table_name>.ignore
-        #...
+def load_metadata_config(orm_file_name, config=None):
     with open(orm_file_name) as orm_fh:
         meta_dict = yaml.load(orm_fh, yaml.Loader)
-        return dict_to_metadata(meta_dict)
+        tables_dict = meta_dict.get("tables", {})
+        if config is not None and "tables" in config:
+            # Remove ignored tables
+            for (name, table_config) in config.get("tables", {}).items():
+                if table_config.get("ignore", False):
+                    tables_dict.pop(name, None)
+        return meta_dict
+
+
+def load_metadata(orm_file_name, config=None):
+    meta_dict = load_metadata_config(orm_file_name, config)
+    return dict_to_metadata(meta_dict)
 
 
 @app.callback()
@@ -130,10 +137,8 @@ def create_data(
 
 @app.command()
 def create_vocab(
-    ssg_file: str = Option(
-        SSG_FILENAME,
-        help="The name of the generators file. Must be in the current working directory."
-    ),
+    orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
+    config_file: str = Option(None, help="The configuration file"),
 ) -> None:
     """Import vocabulary data into the target database.
 
@@ -141,9 +146,11 @@ def create_vocab(
         $ sqlsynthgen create-vocab
     """
     logger.debug("Loading vocab.")
-    ssg_module = import_file(ssg_file)
-    create_db_vocab(ssg_module.vocab_dict)
-    num_vocabs = len(ssg_module.vocab_dict)
+    config = read_config_file(config_file) if config_file is not None else {}
+    meta_dict = load_metadata_config(orm_file, config)
+    orm_metadata = dict_to_metadata(meta_dict)
+    vocabs_loaded = create_db_vocab(orm_metadata, meta_dict, config)
+    num_vocabs = len(vocabs_loaded)
     logger.debug("%s %s loaded.", num_vocabs, "table" if num_vocabs == 1 else "tables")
 
 
