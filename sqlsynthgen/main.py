@@ -23,6 +23,7 @@ from sqlsynthgen.settings import Settings, get_settings
 from sqlsynthgen.utils import (
     CONFIG_SCHEMA_PATH,
     conf_logger,
+    get_flag,
     import_file,
     logger,
     read_config_file,
@@ -64,7 +65,7 @@ def load_metadata_config(orm_file_name, config=None):
         if config is not None and "tables" in config:
             # Remove ignored tables
             for (name, table_config) in config.get("tables", {}).items():
-                if table_config.get("ignore", False):
+                if get_flag(table_config, "ignore"):
                     tables_dict.pop(name, None)
         return meta_dict
 

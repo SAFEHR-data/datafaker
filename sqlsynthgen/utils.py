@@ -198,6 +198,16 @@ def conf_logger(verbose: bool) -> None:
     logger.addHandler(stderr_handler)
 
 
+def get_flag(maybe_dict, key):
+    """Returns maybe_dict[key] or False if that doesn't exist"""
+    return type(maybe_dict) is dict and maybe_dict.get(key, False)
+
+
+def get_property(maybe_dict, key, default):
+    """Returns maybe_dict[key] or default if that doesn't exist"""
+    return maybe_dict.get(key, default) if type(maybe_dict) is dict else default
+
+
 def get_vocabulary_table_names(config: Mapping) -> set[str]:
     """
     Extract the table names with a vocabulary_table: true property.
@@ -205,7 +215,7 @@ def get_vocabulary_table_names(config: Mapping) -> set[str]:
     return {
         table_name
         for (table_name, table_config) in config.get("tables", {}).items()
-        if table_config.get("vocabulary_table", False)
+        if get_flag(table_config, "vocabulary_table")
     }
 
 

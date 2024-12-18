@@ -23,6 +23,8 @@ from sqlsynthgen.settings import get_settings
 from sqlsynthgen.utils import (
     create_db_engine,
     download_table,
+    get_property,
+    get_flag,
     get_sync_engine,
     get_vocabulary_table_names,
     logger,
@@ -108,7 +110,7 @@ def _get_row_generator(
 ) -> tuple[list[RowGeneratorInfo], list[str]]:
     """Get the row generators information, for the given table."""
     row_gen_info: list[RowGeneratorInfo] = []
-    config: list[dict[str, Any]] = table_config.get("row_generators", {})
+    config: list[dict[str, Any]] = get_property(table_config, "row_generators", {})
     columns_covered = []
     for gen_conf in config:
         name: str = gen_conf["name"]
@@ -350,7 +352,7 @@ def _get_generator_for_table(
         table_name=table.name,
         class_name=table.name.title() + "Generator",
         columns=[str(col.name) for col in table.columns],
-        rows_per_pass=table_config.get("num_rows_per_pass", 1),
+        rows_per_pass=get_property(table_config, "num_rows_per_pass", 1),
         unique_constraints=unique_constraints,
     )
 
@@ -554,7 +556,7 @@ def make_tables_file(
 
     def reflect_if(table_name: str, _: Any) -> bool:
         table_config = tables_config.get(table_name, {})
-        ignore = table_config.get("ignore", False)
+        ignore = get_flag(table_config, "ignore")
         return not ignore
 
     metadata = MetaData()
@@ -566,7 +568,7 @@ def make_tables_file(
 
 #    for table_name in metadata.tables.keys():
 #        table_config = tables_config.get(table_name, {})
-#        ignore = table_config.get("ignore", False)
+#        ignore = get_flag(table_config, "ignore")
 #        if ignore:
 #            logger.warning(
 #                "Table %s is supposed to be ignored but there is a foreign key "
