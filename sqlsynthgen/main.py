@@ -27,6 +27,7 @@ from sqlsynthgen.utils import (
     import_file,
     logger,
     read_config_file,
+    sorted_non_vocabulary_tables,
 )
 
 from .serialize_metadata import dict_to_metadata
@@ -58,7 +59,7 @@ def _require_src_db_dsn(settings: Settings) -> str:
     return src_dsn
 
 
-def load_metadata_config(orm_file_name, config=None):
+def load_metadata_config(orm_file_name, config: dict | None=None):
     with open(orm_file_name) as orm_fh:
         meta_dict = yaml.load(orm_fh, yaml.Loader)
         tables_dict = meta_dict.get("tables", {})
@@ -70,7 +71,7 @@ def load_metadata_config(orm_file_name, config=None):
         return meta_dict
 
 
-def load_metadata(orm_file_name, config=None):
+def load_metadata(orm_file_name, config: dict | None=None):
     meta_dict = load_metadata_config(orm_file_name, config)
     return dict_to_metadata(meta_dict)
 
@@ -114,12 +115,13 @@ def create_data(
         $ sqlsynthgen create-data
     """
     logger.debug("Creating data.")
-    orm_metadata = load_metadata(orm_file, config_file)
+    config = read_config_file(config_file) if config_file is not None else {}
+    orm_metadata = load_metadata(orm_file, config)
     ssg_module = import_file(ssg_file)
     table_generator_dict = ssg_module.table_generator_dict
     story_generator_list = ssg_module.story_generator_list
     row_counts = create_db_data(
-        orm_metadata.sorted_tables,
+        sorted_non_vocabulary_tables(orm_metadata, config),
         table_generator_dict,
         story_generator_list,
         num_passes,

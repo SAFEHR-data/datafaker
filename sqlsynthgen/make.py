@@ -25,6 +25,7 @@ from sqlsynthgen.utils import (
     download_table,
     get_property,
     get_flag,
+    get_related_table_names,
     get_sync_engine,
     get_vocabulary_table_names,
     logger,
@@ -386,16 +387,6 @@ def _get_story_generators(config: Mapping) -> list[StoryGeneratorInfo]:
     return generators
 
 
-def _get_related_table_names(table: Table) -> set[str]:
-    """
-    Get the names of all tables for which there exist foreign keys from this table.
-    """
-    return {
-        str(fk.referred_table.name)
-        for fk in table.foreign_key_constraints
-    }
-
-
 def make_vocabulary_tables(
     metadata: MetaData,
     config: Mapping,
@@ -454,7 +445,7 @@ def make_table_generators(  # pylint: disable=too-many-locals
     vocab_names = get_vocabulary_table_names(config)
     for (table_name, table) in metadata.tables.items():
         if table_name in vocab_names:
-            related = _get_related_table_names(table)
+            related = get_related_table_names(table)
             related_non_vocab = related.difference(vocab_names)
             if related_non_vocab:
                 logger.warning(

@@ -9,7 +9,7 @@ from sqlalchemy import Connection, insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.schema import Table
 
-from sqlsynthgen.utils import logger
+from sqlsynthgen.utils import logger, stream_yaml
 
 
 class TableGenerator(ABC):
@@ -43,20 +43,14 @@ class FileUploader:
             logger.warning("File %s not found. Skipping...", yaml_file)
             return
         try:
-            with yaml_file.open("r", newline="", encoding="utf-8") as yamlfile:
-                rows = yaml.load(yamlfile, Loader=yaml.Loader)
+            rows = stream_yaml(yaml_file)
+            for row in rows:
+                stmt = insert(self.table).values(row)
+                connection.execute(stmt)
+                connection.commit()
         except yaml.YAMLError as e:
             logger.warning("Error reading YAML file %s: %s", yaml_file, e)
             return
-
-        if not rows:
-            logger.warning("No rows in %s. Skipping...", yaml_file)
-            return
-
-        try:
-            stmt = insert(self.table).values(list(rows))
-            connection.execute(stmt)
-            connection.commit()
         except SQLAlchemyError as e:
             logger.warning(
                 "Error inserting rows into table %s: %s", self.table.fullname, e

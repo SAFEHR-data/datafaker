@@ -192,8 +192,7 @@ def populate(
     # Generate individual rows, table by table.
     for table in tables:
         if table.name not in table_generator_dict:
-            # We don't have a generator for this table, probably because it's a
-            # vocabulary table.
+            # We don't have a generator for this table
             continue
         table_generator = table_generator_dict[table.name]
         if table_generator.num_rows_per_pass == 0:
