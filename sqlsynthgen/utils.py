@@ -13,7 +13,9 @@ import yaml
 from jsonschema.exceptions import ValidationError
 from jsonschema.validators import validate
 from psycopg2.errors import UndefinedObject
+import sqlalchemy
 from sqlalchemy import (
+    Connection,
     Engine,
     create_engine,
     event,
@@ -34,6 +36,9 @@ from sqlalchemy.schema import (
 # Define some types used repeatedly in the code base
 MaybeAsyncEngine = Union[Engine, AsyncEngine]
 
+# After every how many rows of vocab table downloading do we see a
+# progres update
+MAKE_VOCAB_PROGRESS_REPORT_EVERY = 10000
 
 CONFIG_SCHEMA_PATH: Final[Path] = (
     Path(__file__).parent / "json_schemas/config_schema.json"
@@ -94,6 +99,15 @@ def open_compressed_file(file_name):
     return gzip.GzipFile(file_name, "wb")
 
 
+def table_row_count(table: Table, conn: Connection) -> int:
+    return conn.execute(
+        select(sqlalchemy.func.count()).select_from(sqlalchemy.table(
+            table.name,
+            *[sqlalchemy.column(col.name) for col in table.primary_key.columns.values()],
+        ))
+    ).scalar_one()
+
+
 def download_table(
     table: Table,
     engine: Engine,
@@ -101,16 +115,26 @@ def download_table(
     compress: bool,
 ) -> None:
     """Download a Table and store it as a .yaml file."""
-    stmt = select(table)
     open_fn = open_compressed_file if compress else open_file
     with engine.connect() as conn:
         with open_fn(yaml_file_name) as yamlfile:
+            stmt = select(table)
+            rowcount = table_row_count(table, conn)
+            count = 0
             for row in conn.execute(stmt).mappings():
                 result = {
                     str(col_name): value
                     for (col_name, value) in row.items()
                 }
                 yamlfile.write(yaml.dump([result]).encode())
+                count += 1
+                if count % MAKE_VOCAB_PROGRESS_REPORT_EVERY == 0:
+                    logger.info(
+                        "written row %d of %d, %.1f%%",
+                        count,
+                        rowcount,
+                        100*count/rowcount,
+                    )
 
 
 def get_sync_engine(engine: MaybeAsyncEngine) -> Engine:
