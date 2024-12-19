@@ -7,6 +7,7 @@ from importlib import import_module
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Final, Mapping, Optional, Union
+import gzip
 
 import yaml
 from jsonschema.exceptions import ValidationError
@@ -85,19 +86,31 @@ def import_file(file_path: str) -> ModuleType:
     return module
 
 
+def open_file(file_name):
+    return Path(file_name).open("wb")
+
+
+def open_compressed_file(file_name):
+    return gzip.GzipFile(file_name, "wb")
+
+
 def download_table(
-    table: Table, engine: Engine, yaml_file_name: Union[str, Path]
+    table: Table,
+    engine: Engine,
+    yaml_file_name: Union[str, Path],
+    compress: bool,
 ) -> None:
     """Download a Table and store it as a .yaml file."""
     stmt = select(table)
+    open_fn = open_compressed_file if compress else open_file
     with engine.connect() as conn:
-        with Path(yaml_file_name).open("w", newline="", encoding="utf-8") as yamlfile:
+        with open_fn(yaml_file_name) as yamlfile:
             for row in conn.execute(stmt).mappings():
                 result = {
                     str(col_name): value
                     for (col_name, value) in row.items()
                 }
-                yamlfile.write(yaml.dump([result]))
+                yamlfile.write(yaml.dump([result]).encode())
 
 
 def get_sync_engine(engine: MaybeAsyncEngine) -> Engine:

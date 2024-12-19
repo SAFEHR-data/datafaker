@@ -182,6 +182,7 @@ def make_vocab(
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
     config_file: Optional[str] = Option(None, help="The configuration file"),
     force: bool = Option(True, help="Overwrite any existing vocabulary file."),
+    compress: bool = Option(False, help="Compress file to .gz"),
 ) -> None:
     """Make files of vocabulary tables.
 
@@ -198,7 +199,8 @@ def make_vocab(
     make_vocabulary_tables(
         orm_metadata,
         generator_config,
-        overwrite_files=force
+        overwrite_files=force,
+        compress=compress,
     )
 
 

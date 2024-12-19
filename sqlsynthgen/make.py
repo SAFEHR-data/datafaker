@@ -391,6 +391,7 @@ def make_vocabulary_tables(
     metadata: MetaData,
     config: Mapping,
     overwrite_files: bool,
+    compress: bool,
 ):
     """
     Extracts the data from the source database for each
@@ -404,7 +405,10 @@ def make_vocabulary_tables(
     vocab_names = get_vocabulary_table_names(config)
     for table_name in vocab_names:
         _generate_vocabulary_table(
-            metadata.tables[table_name], engine, overwrite_files=overwrite_files
+            metadata.tables[table_name],
+            engine,
+            overwrite_files=overwrite_files,
+            compress=compress,
         )
 
 
@@ -524,16 +528,19 @@ def _generate_vocabulary_table(
     table: Table,
     engine: Engine,
     overwrite_files: bool = False,
+    compress=False,
 ):
     """
     Pulls data out of the source database to make a vocabulary YAML file
     """
     yaml_file_name: str = table.fullname + ".yaml"
+    if compress:
+        yaml_file_name += ".gz"
     if Path(yaml_file_name).exists() and not overwrite_files:
         logger.debug("%s already exists; not overwriting", yaml_file_name)
         return
     logger.debug("Downloading vocabulary table %s", table.name)
-    download_table(table, engine, yaml_file_name)
+    download_table(table, engine, yaml_file_name, compress)
 
 
 def make_tables_file(
