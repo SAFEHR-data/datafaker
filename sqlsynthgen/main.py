@@ -330,8 +330,7 @@ def remove_data(
         logger.debug("Truncating non-vocabulary tables.")
         config = read_config_file(config_file) if config_file is not None else {}
         metadata = load_metadata(orm_file, config)
-        ssg_module = import_file(ssg_file)
-        remove_db_data(metadata, ssg_module, config)
+        remove_db_data(metadata, config)
         logger.debug("Non-vocabulary tables truncated.")
     else:
         logger.info("Would truncate non-vocabulary tables if called with --yes.")
@@ -340,10 +339,6 @@ def remove_data(
 @app.command()
 def remove_vocab(
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
-    ssg_file: str = Option(
-        SSG_FILENAME,
-        help="The name of the generators file. Must be in the current working directory."
-    ),
     config_file: Optional[str] = Option(None, help="The configuration file"),
     yes: bool = Option(False, "--yes", prompt="Are you sure?", help="Just remove, don't ask first"),
 ) -> None:
@@ -352,8 +347,7 @@ def remove_vocab(
         logger.debug("Truncating vocabulary tables.")
         config = read_config_file(config_file) if config_file is not None else {}
         metadata = load_metadata(orm_file, config)
-        ssg_module = import_file(ssg_file)
-        remove_db_vocab(metadata, ssg_module)
+        remove_db_vocab(metadata, config)
         logger.debug("Vocabulary tables truncated.")
     else:
         logger.info("Would truncate vocabulary tables if called with --yes.")

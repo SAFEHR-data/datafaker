@@ -315,7 +315,7 @@ def reinstate_vocab_foreign_key_constraints(metadata, meta_dict, config, dst_eng
             logger.exception("Restoring table %s foreign keys failed:", vocab_table)
 
 
-def stream_yaml(yaml_path):
+def stream_yaml(yaml_file_handle):
     """
     Stream a yaml list into an iterator.
 
@@ -324,18 +324,17 @@ def stream_yaml(yaml_path):
     be decoded in memory.
     """
     buf = ""
-    with open(yaml_path, "r", encoding="utf-8") as fh:
-        while True:
-            line = fh.readline()
-            if not line or line.startswith("-"):
-                if buf:
-                    yl = yaml.load(buf, yaml.Loader)
-                    assert type(yl) is list and len(yl) == 1
-                    yield yl[0]
-                if not line:
-                    return
-                buf = ""
-            buf += line
+    while True:
+        line = yaml_file_handle.readline()
+        if not line or line.startswith("-"):
+            if buf:
+                yl = yaml.load(buf, yaml.Loader)
+                assert type(yl) is list and len(yl) == 1
+                yield yl[0]
+            if not line:
+                return
+            buf = ""
+        buf += line
 
 
 def topological_sort(input_nodes, get_dependencies_fn):
