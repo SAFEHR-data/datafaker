@@ -243,6 +243,7 @@ def make_generators(
 
 @app.command()
 def make_stats(
+    orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
     config_file: Optional[str] = Option(None, help="The configuration file"),
     stats_file: str = Option(STATS_FILENAME),
     force: bool = Option(False, help="Overwrite any existing vocabulary file."),
@@ -261,12 +262,13 @@ def make_stats(
         _check_file_non_existence(stats_file_path)
 
     config = read_config_file(config_file) if config_file is not None else {}
+    orm_metadata = load_metadata(orm_file, config)
 
     settings = get_settings()
     src_dsn: str = _require_src_db_dsn(settings)
 
     src_stats = asyncio.get_event_loop().run_until_complete(
-        make_src_stats(src_dsn, config, settings.src_schema)
+        make_src_stats(src_dsn, config, orm_metadata, settings.src_schema)
     )
     stats_file_path.write_text(yaml.dump(src_stats), encoding="utf-8")
     logger.debug("%s created.", stats_file)

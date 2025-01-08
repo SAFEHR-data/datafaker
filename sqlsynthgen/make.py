@@ -3,6 +3,7 @@ import asyncio
 import inspect
 import sys
 from dataclasses import dataclass, field
+import math
 from pathlib import Path
 from typing import Any, Callable, Final, Mapping, Optional, Sequence, Tuple
 import yaml
@@ -228,18 +229,82 @@ def _integer_generator(column: Column) -> tuple[str, dict[str, str]]:
         "accumulator": f'"{column.table.fullname}.{column.name}"'
     })
 
-_COLUMN_TYPE_TO_GENERATOR = {
-    sqltypes.Integer: "generic.numeric.integer_number",
-    sqltypes.Boolean: "generic.development.boolean",
-    sqltypes.Date: "generic.datetime.date",
-    sqltypes.DateTime: "generic.datetime.datetime",
-    sqltypes.Integer: _integer_generator,  # must be before Numeric
-    sqltypes.Numeric: _numeric_generator,
-    sqltypes.LargeBinary: "generic.bytes_provider.bytes",
-    sqltypes.Uuid: "generic.cryptographic.uuid",
-    postgresql.UUID: "generic.cryptographic.uuid",
-    sqltypes.String: _string_generator,
+
+_YEAR_SUMMARY_QUERY = (
+    "SELECT MIN(y) AS start, MAX(y) AS end FROM "
+    "(SELECT EXTRACT(YEAR FROM {column}) AS y FROM {table})"
+)
+
+
+@dataclass
+class GeneratorInfo:
+    # Name or function to generate random objects of this type (not using summary data)
+    generator: str | Callable[[Column], str]
+    # SQL query that gets the data to supply as arguments to the generator
+    # ({column} and {table} will be interpolated)
+    summary_query: str | None = None
+    # True if we should see if we can treat this column as a choice from a finite set
+    numeric: bool = False
+    # True if we should see if we can treat this column as an amount with a distribution
+    choice: bool = False
+
+_COLUMN_TYPE_TO_GENERATOR_INFO = {
+    sqltypes.Boolean: GeneratorInfo(
+        generator="generic.development.boolean",
+        choice=True,
+    ),
+    sqltypes.Date: GeneratorInfo(
+        generator="generic.datetime.date",
+        summary_query=_YEAR_SUMMARY_QUERY,
+    ),
+    sqltypes.DateTime: GeneratorInfo(
+        generator="generic.datetime.datetime",
+        summary_query=_YEAR_SUMMARY_QUERY,
+    ),
+    sqltypes.Integer: GeneratorInfo(  # must be before Numeric
+        generator=_integer_generator,
+        numeric=True,
+        choice=True,
+    ),
+    sqltypes.Numeric: GeneratorInfo(
+        generator=_numeric_generator,
+        numeric=True,
+        choice=True,
+    ),
+    sqltypes.LargeBinary: GeneratorInfo(
+        generator="generic.bytes_provider.bytes",
+    ),
+    sqltypes.Uuid: GeneratorInfo(
+        generator="generic.cryptographic.uuid",
+    ),
+    postgresql.UUID: GeneratorInfo(
+        generator="generic.cryptographic.uuid",
+    ),
+    sqltypes.String: GeneratorInfo(
+        generator=_string_generator,
+        choice=True,
+    )
 }
+
+
+def _get_info_for_column_type(column_t: type) -> GeneratorInfo | None:
+    """
+    Gets a generator from a column type.
+
+    Returns either a string representing the callable, or a callable that,
+    given the column.type will return a tuple (string representing generator
+    callable, dict of keyword arguments to pass to the callable).
+    """
+    if column_t in _COLUMN_TYPE_TO_GENERATOR_INFO:
+        return  _COLUMN_TYPE_TO_GENERATOR_INFO[column_t]
+
+    # Search exhaustively for a superclass to the columns actual type
+    for key, value in _COLUMN_TYPE_TO_GENERATOR_INFO.items():
+        if issubclass(column_t, key):
+            return value
+
+    return None
+
 
 def _get_generator_for_column(column_t: type) -> str | Callable[
     [type_api.TypeEngine], tuple[str, dict[str, str]]]:
@@ -250,15 +315,8 @@ def _get_generator_for_column(column_t: type) -> str | Callable[
     given the column.type will return a tuple (string representing generator
     callable, dict of keyword arguments to pass to the callable).
     """
-    if column_t in _COLUMN_TYPE_TO_GENERATOR:
-        return  _COLUMN_TYPE_TO_GENERATOR[column_t]
-
-    # Search exhaustively for a superclass to the columns actual type
-    for key, value in _COLUMN_TYPE_TO_GENERATOR.items():
-        if issubclass(column_t, key):
-            return value
-
-    return None
+    info = _get_info_for_column_type(column_t)
+    return None if info is None else info.generator
 
 
 def _get_generator_and_arguments(column: Column) -> tuple[str, dict[str, str]]:
@@ -579,8 +637,42 @@ def make_tables_file(
     return yaml.dump(meta_dict)
 
 
+def zipf_distribution(total, bins):
+    basic_dist = list(map(lambda n: 1/n, range(1, bins + 1)))
+    bd_remaining = sum(basic_dist)
+    for b in basic_dist:
+        # yield b/bd_remaining of the `total` remaining
+        if bd_remaining == 0:
+            yield 0
+        else:
+            x = math.floor(0.5 + total * b / bd_remaining)
+            bd_remaining -= x * bd_remaining / total
+            total -= x
+            yield x
+
+
+def uniform_distribution(total, bins):
+    p = total // bins
+    n = total % bins
+    for i in range(0, n):
+        yield p + 1
+    for i in range(n, bins):
+        yield p
+
+
+def fit_error(test, actual):
+    return sum(map(lambda t, a: (t - a)*(t - a), test, actual))
+
+
+_CDF_BUCKETS = {
+    "normal": [0.0227, 0.0441, 0.0918, 0.1499, 0.1915, 0.1915, 0.1499, 0.0918, 0.0441, 0.0227],
+    # Uniform between -1 and 1, pdf(x) = 0.5
+    "uniform": [0, 0, 0.0918, 0.204, 0.204, 0.204, 0.204, 0.0918, 0, 0],
+}
+
+
 async def make_src_stats(
-    dsn: str, config: Mapping, schema_name: Optional[str] = None
+    dsn: str, config: Mapping, metadata: MetaData, schema_name: Optional[str] = None
 ) -> dict[str, list[dict]]:
     """Run the src-stats queries specified by the configuration.
 
@@ -598,16 +690,19 @@ async def make_src_stats(
     use_asyncio = config.get("use-asyncio", False)
     engine = create_db_engine(dsn, schema_name=schema_name, use_asyncio=use_asyncio)
 
+    async def execute_raw_query(query: str):
+        if isinstance(engine, AsyncEngine):
+            async with engine.connect() as conn:
+                return await conn.execute(query)
+        else:
+            with engine.connect() as conn:
+                return conn.execute(query)
+
     async def execute_query(query_block: Mapping[str, Any]) -> Any:
         """Execute query in query_block."""
         logger.debug("Executing query %s", query_block["name"])
         query = text(query_block["query"])
-        if isinstance(engine, AsyncEngine):
-            async with engine.connect() as conn:
-                raw_result = await conn.execute(query)
-        else:
-            with engine.connect() as conn:
-                raw_result = conn.execute(query)
+        raw_result = execute_raw_query(query)
 
         if "dp-query" in query_block:
             result_df = pd.DataFrame(raw_result.mappings())
@@ -640,4 +735,98 @@ async def make_src_stats(
     for name, result in src_stats.items():
         if not result:
             logger.warning("src-stats query %s returned no results", name)
+
+    generic = {}
+    tables_config = config.get("tables", {})
+    for table_name, table in metadata.tables.items():
+        table_config = tables_config.get(table_name, None)
+        vocab_columns = set() if table_config is None else set(table_config.get("vocabulary_columns", []))
+        for column_name, column in table.columns.items():
+            is_vocab = column_name in vocab_columns
+            info = _get_info_for_column_type(type(column.type))
+            if info is not None:
+                best_generic_generator = None
+                if info.numeric:
+                    # Find summary information; mean, standard deviation and buckets 1/2 standard deviation width around mean.
+                    results = await execute_raw_query(text(
+                        "SELECT AVG({column}) AS mean, STDDEV({column}) AS sd, COUNT({column}) AS count FROM {table}".format(
+                            column=column_name, table=table_name
+                        )
+                    ))
+                    result = results.first()
+                    count = result.count
+                    if result.sd is not None and 0 < result.sd:
+                        raw_buckets = await execute_raw_query(text(
+                            "SELECT COUNT({column}) AS f, FLOOR(({column} - {x})/{w}) as b from {table} group by b".format(
+                                column=column_name, table=table_name, x=result.mean - 2 * result.sd, w = result.sd / 2
+                            )
+                        ))
+                        buckets = [0] * 10
+                        for rb in raw_buckets:
+                            bucket = min(9, max(0, int(rb.b) + 1))
+                            buckets[bucket] += rb.f / count
+                        best_fit = None
+                        best_fit_distribution = None
+                        for dist_name, dist_buckets in _CDF_BUCKETS.items():
+                            fit = fit_error(dist_buckets, buckets)
+                            if best_fit is None or fit < best_fit:
+                                best_fit = fit
+                                best_fit_distribution = dist_name
+                        best_generic_generator = {
+                            "name": best_fit_distribution,
+                            "fit": best_fit,
+                            "mean": result.mean,
+                            "sd": result.sd,
+                        }
+                if info.choice:
+                    # Find information on how many of each example there is
+                    results = await execute_raw_query(text(
+                        "SELECT {column} AS v, COUNT({column}) AS f FROM {table} GROUP BY v ORDER BY f DESC".format(
+                            column=column_name, table=table_name
+                        )
+                    ))
+                    values = []
+                    counts = []
+                    total = 0
+                    for result in results:
+                        c = result.f
+                        if c != 0:
+                            total += c
+                            counts.append(c)
+                            values.append(result.v)
+                    if counts:
+                        # Which distribution fits best?
+                        zipf = zipf_distribution(total, len(counts))
+                        zipf_fit = fit_error(zipf, counts)
+                        unif = uniform_distribution(total, len(counts))
+                        unif_fit = fit_error(unif, counts)
+                        if best_generic_generator is None or zipf_fit < best_generic_generator["fit"]:
+                            best_generic_generator = {
+                                "name": "zipf",
+                                "fit": zipf_fit,
+                                "bucket_count": len(counts),
+                            }
+                            if is_vocab:
+                                best_generic_generator["buckets"] = values
+                        if best_generic_generator is None or unif_fit < best_generic_generator["fit"]:
+                            best_generic_generator = {
+                                "name": "uniform_choice",
+                                "fit": unif_fit,
+                                "bucket_count": len(counts),
+                            }
+                            if is_vocab:
+                                best_generic_generator["buckets"] = values
+                if info.summary_query is not None:
+                    results = await execute_raw_query(text(info.summary_query.format(
+                        column=column_name, table=table_name
+                    )))
+                    best_generic_generator = { "name": info.generator }
+                    for k, v in results.mappings().first().items():
+                        best_generic_generator[k] = v
+            if best_generic_generator is not None:
+                if table_name not in generic:
+                    generic[str(table_name)] = {}
+                generic[str(table_name)][str(column_name)] = best_generic_generator
+    if generic:
+        src_stats["_sqlsynthgen_generic"] = generic
     return src_stats
