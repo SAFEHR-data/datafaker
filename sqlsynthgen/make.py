@@ -1,5 +1,6 @@
 """Functions to make a module of generator classes."""
 import asyncio
+import decimal
 import inspect
 import sys
 from dataclasses import dataclass, field
@@ -775,8 +776,8 @@ async def make_src_stats(
                         best_generic_generator = {
                             "name": best_fit_distribution,
                             "fit": best_fit,
-                            "mean": result.mean,
-                            "sd": result.sd,
+                            "mean": float(result.mean),
+                            "sd": float(result.sd),
                         }
                 if info.choice:
                     # Find information on how many of each example there is
@@ -793,13 +794,17 @@ async def make_src_stats(
                         if c != 0:
                             total += c
                             counts.append(c)
-                            values.append(result.v)
+                            v = result.v
+                            if type(v) is decimal.Decimal:
+                                v = float(v)
+                            values.append(v)
                     if counts:
+                        total2 = total * total
                         # Which distribution fits best?
                         zipf = zipf_distribution(total, len(counts))
-                        zipf_fit = fit_error(zipf, counts)
+                        zipf_fit = fit_error(zipf, counts) / total2
                         unif = uniform_distribution(total, len(counts))
-                        unif_fit = fit_error(unif, counts)
+                        unif_fit = fit_error(unif, counts) / total2
                         if best_generic_generator is None or zipf_fit < best_generic_generator["fit"]:
                             best_generic_generator = {
                                 "name": "zipf",
@@ -822,7 +827,7 @@ async def make_src_stats(
                     )))
                     best_generic_generator = { "name": info.generator }
                     for k, v in results.mappings().first().items():
-                        best_generic_generator[k] = v
+                        best_generic_generator[k] = float(v)
             if best_generic_generator is not None:
                 if table_name not in generic:
                     generic[str(table_name)] = {}
