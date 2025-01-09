@@ -320,10 +320,6 @@ def validate_config(
 @app.command()
 def remove_data(
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
-    ssg_file: str = Option(
-        SSG_FILENAME,
-        help="The name of the generators file. Must be in the current working directory."
-    ),
     config_file: Optional[str] = Option(None, help="The configuration file"),
     yes: bool = Option(False, "--yes", prompt="Are you sure?", help="Just remove, don't ask first"),
 ) -> None:

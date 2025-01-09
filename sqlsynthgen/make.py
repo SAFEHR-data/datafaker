@@ -667,8 +667,9 @@ def fit_error(test, actual):
 
 _CDF_BUCKETS = {
     "normal": [0.0227, 0.0441, 0.0918, 0.1499, 0.1915, 0.1915, 0.1499, 0.0918, 0.0441, 0.0227],
-    # Uniform between -1 and 1, pdf(x) = 0.5
-    "uniform": [0, 0, 0.0918, 0.204, 0.204, 0.204, 0.204, 0.0918, 0, 0],
+    # Uniform wih mean 0 and sigma 1 runs between +/-sqrt(3) = +/-1.732
+    # and has height 1 / 2sqrt(3) = 0.28868.
+    "uniform": [0, 0.06698, 0.14434, 0.14434, 0.14434, 0.14434, 0.14434, 0.14434, 0.06698, 0],
 }
 
 
@@ -745,7 +746,7 @@ async def make_src_stats(
         for column_name, column in table.columns.items():
             is_vocab = column_name in vocab_columns
             info = _get_info_for_column_type(type(column.type))
-            if info is not None:
+            if not column.foreign_keys and info is not None:
                 best_generic_generator = None
                 if info.numeric:
                     # Find summary information; mean, standard deviation and buckets 1/2 standard deviation width around mean.
@@ -809,18 +810,18 @@ async def make_src_stats(
                             best_generic_generator = {
                                 "name": "zipf",
                                 "fit": zipf_fit,
-                                "bucket_count": len(counts),
+                                "value_count": len(counts),
                             }
                             if is_vocab:
-                                best_generic_generator["buckets"] = values
+                                best_generic_generator["values"] = values
                         if best_generic_generator is None or unif_fit < best_generic_generator["fit"]:
                             best_generic_generator = {
                                 "name": "uniform_choice",
                                 "fit": unif_fit,
-                                "bucket_count": len(counts),
+                                "value_count": len(counts),
                             }
                             if is_vocab:
-                                best_generic_generator["buckets"] = values
+                                best_generic_generator["values"] = values
                 if info.summary_query is not None:
                     results = await execute_raw_query(text(info.summary_query.format(
                         column=column_name, table=table_name
