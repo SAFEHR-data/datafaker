@@ -1,5 +1,4 @@
 """Functions and classes to undo the operations in create.py."""
-from types import ModuleType
 from typing import Any, Mapping
 
 from sqlalchemy import delete, MetaData
@@ -10,6 +9,8 @@ from sqlsynthgen.utils import (
     get_sync_engine,
     get_vocabulary_table_names,
     logger,
+    remove_vocab_foreign_key_constraints,
+    reinstate_vocab_foreign_key_constraints,
     sorted_non_vocabulary_tables,
 )
 
@@ -31,7 +32,7 @@ def remove_db_data(
             dst_conn.commit()
 
 
-def remove_db_vocab(metadata: MetaData, config: Mapping[str, Any]) -> None:
+def remove_db_vocab(metadata: MetaData, meta_dict: Mapping[str, Any], config: Mapping[str, Any]) -> None:
     """Truncate the vocabulary tables."""
     settings = get_settings()
     assert settings.dst_dsn, "Missing destination database settings"
@@ -40,10 +41,12 @@ def remove_db_vocab(metadata: MetaData, config: Mapping[str, Any]) -> None:
     )
 
     with dst_engine.connect() as dst_conn:
+        remove_vocab_foreign_key_constraints(metadata, config, dst_conn)
         for table in get_vocabulary_table_names(config):
             logger.debug('Truncating vocabulary table "%s".', table)
             dst_conn.execute(delete(metadata.tables[table]))
             dst_conn.commit()
+        reinstate_vocab_foreign_key_constraints(metadata, meta_dict, config, dst_conn)
 
 
 def remove_db_tables(metadata: MetaData) -> None:

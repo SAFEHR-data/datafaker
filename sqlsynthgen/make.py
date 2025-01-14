@@ -233,7 +233,7 @@ def _integer_generator(column: Column) -> tuple[str, dict[str, str]]:
 
 _YEAR_SUMMARY_QUERY = (
     "SELECT MIN(y) AS start, MAX(y) AS end FROM "
-    "(SELECT EXTRACT(YEAR FROM {column}) AS y FROM {table})"
+    "(SELECT EXTRACT(YEAR FROM {column}) AS y FROM {table}) AS years"
 )
 
 
@@ -244,6 +244,10 @@ class GeneratorInfo:
     # SQL query that gets the data to supply as arguments to the generator
     # ({column} and {table} will be interpolated)
     summary_query: str | None = None
+    # Dictionary of the names returned from the summary_query to arg types.
+    # An arg type is a callable turning the returned value into a Python type to
+    # pass as an argument to the generator.
+    arg_types: dict[str, Callable] = field(default_factory=dict)
     # True if we should see if we can treat this column as a choice from a finite set
     numeric: bool = False
     # True if we should see if we can treat this column as an amount with a distribution
@@ -257,10 +261,12 @@ _COLUMN_TYPE_TO_GENERATOR_INFO = {
     sqltypes.Date: GeneratorInfo(
         generator="generic.datetime.date",
         summary_query=_YEAR_SUMMARY_QUERY,
+        arg_types={ "start": int, "end": int }
     ),
     sqltypes.DateTime: GeneratorInfo(
         generator="generic.datetime.datetime",
         summary_query=_YEAR_SUMMARY_QUERY,
+        arg_types={ "start": int, "end": int }
     ),
     sqltypes.Integer: GeneratorInfo(  # must be before Numeric
         generator=_integer_generator,
@@ -388,7 +394,9 @@ class _PrimaryConstraint:
 
 
 def _get_generator_for_table(
-    table_config: Mapping[str, Any], table: Table
+    table_config: Mapping[str, Any],
+    table: Table,
+    src_stats: Mapping[str, Any]=None
 ) -> TableGeneratorInfo:
     """Get generator information for the given table."""
     unique_constraints = sorted(
@@ -419,10 +427,22 @@ def _get_generator_for_table(
     row_gen_info_data, columns_covered = _get_row_generator(table_config)
     table_data.row_gens.extend(row_gen_info_data)
 
+    generic_generators = get_property(src_stats, "_sqlsynthgen_generic", {}).get(table.name, {})
     for column in table.columns:
         if column.name not in columns_covered:
             # No generator for this column in the user config.
-            table_data.row_gens.append(_get_default_generator(column))
+            # Perhaps there is something for us in src-stats.yaml's
+            # _sqlsynthgen_generic?
+            if column.name in generic_generators:
+                gen = generic_generators[column.name]
+                table_data.row_gens.append(
+                    RowGeneratorInfo([column.name], FunctionCall(
+                        gen["name"],
+                        [f"{k}={v}" for (k, v) in gen.get("kwargs", {}).items()]
+                    ))
+                )
+            else:
+                table_data.row_gens.append(_get_default_generator(column))
 
     return table_data
 
@@ -503,6 +523,10 @@ def make_table_generators(  # pylint: disable=too-many-locals
     tables_config = config.get("tables", {})
     engine = get_sync_engine(create_db_engine(src_dsn, schema_name=settings.src_schema))
 
+    src_stats = {}
+    with open(src_stats_filename, "r", encoding="utf-8") as f:
+        src_stats = yaml.unsafe_load(f)
+
     tables: list[TableGeneratorInfo] = []
     vocabulary_tables: list[VocabularyTableGeneratorInfo] = []
     vocab_names = get_vocabulary_table_names(config)
@@ -525,7 +549,8 @@ def make_table_generators(  # pylint: disable=too-many-locals
         else:
             tables.append(_get_generator_for_table(
                 tables_config.get(table.name, {}),
-                table
+                table,
+                src_stats,
             ))
 
     story_generators = _get_story_generators(config)
@@ -568,14 +593,6 @@ def _get_generator_for_existing_vocabulary_table(
     """
     Turns an existing vocabulary YAML file into a VocabularyTableGeneratorInfo.
     """
-    yaml_file_name: str = table_file_name or table.fullname + ".yaml"
-    if not Path(yaml_file_name).exists():
-        logger.error("%s has not already been generated, please run make-vocab first", yaml_file_name)
-        sys.exit(1)
-    logger.debug("Downloading vocabulary table %s", table.name)
-    download_table(table, engine, yaml_file_name)
-    logger.debug("Done downloading %s", table.name)
-
     return VocabularyTableGeneratorInfo(
         dictionary_entry=table.name,
         variable_name=f"{table.name.lower()}_vocab",
@@ -623,17 +640,17 @@ def make_tables_file(
     )
     meta_dict = metadata_to_dict(metadata, db_dsn, engine.dialect)
 
-#    for table_name in metadata.tables.keys():
-#        table_config = tables_config.get(table_name, {})
-#        ignore = get_flag(table_config, "ignore")
-#        if ignore:
-#            logger.warning(
-#                "Table %s is supposed to be ignored but there is a foreign key "
-#                "reference to it. "
-#                "You may need to create this table manually at the dst schema before "
-#                "running create-tables.",
-#                table_name,
-#            )
+    for table_name in metadata.tables.keys():
+        table_config = tables_config.get(table_name, {})
+        ignore = get_flag(table_config, "ignore")
+        if ignore:
+            logger.warning(
+                "Table %s is supposed to be ignored but there is a foreign key "
+                "reference to it. "
+                "You may need to create this table manually at the dst schema before "
+                "running create-tables.",
+                table_name,
+            )
 
     return yaml.dump(meta_dict)
 
@@ -666,10 +683,16 @@ def fit_error(test, actual):
 
 
 _CDF_BUCKETS = {
-    "normal": [0.0227, 0.0441, 0.0918, 0.1499, 0.1915, 0.1915, 0.1499, 0.0918, 0.0441, 0.0227],
+    "dist_gen.normal": {
+        "buckets": [0.0227, 0.0441, 0.0918, 0.1499, 0.1915, 0.1915, 0.1499, 0.0918, 0.0441, 0.0227],
+        "kwarg_fn": lambda mean, sd: {"mean": mean, "sd": sd},
+    },
     # Uniform wih mean 0 and sigma 1 runs between +/-sqrt(3) = +/-1.732
     # and has height 1 / 2sqrt(3) = 0.28868.
-    "uniform": [0, 0.06698, 0.14434, 0.14434, 0.14434, 0.14434, 0.14434, 0.14434, 0.06698, 0],
+    "dist_gen.uniform": {
+        "buckets": [0, 0.06698, 0.14434, 0.14434, 0.14434, 0.14434, 0.14434, 0.14434, 0.06698, 0],
+        "kwarg_fn": lambda mean, sd: {"low": mean - sd * math.sqrt(3), "high": mean + sd * math.sqrt(3)},
+    },
 }
 
 
@@ -746,8 +769,8 @@ async def make_src_stats(
         for column_name, column in table.columns.items():
             is_vocab = column_name in vocab_columns
             info = _get_info_for_column_type(type(column.type))
-            if not column.foreign_keys and info is not None:
-                best_generic_generator = None
+            best_generic_generator = None
+            if not column.foreign_keys and not column.primary_key and info is not None:
                 if info.numeric:
                     # Find summary information; mean, standard deviation and buckets 1/2 standard deviation width around mean.
                     results = await execute_raw_query(text(
@@ -769,18 +792,19 @@ async def make_src_stats(
                             buckets[bucket] += rb.f / count
                         best_fit = None
                         best_fit_distribution = None
-                        for dist_name, dist_buckets in _CDF_BUCKETS.items():
-                            fit = fit_error(dist_buckets, buckets)
+                        best_fit_info = None
+                        for dist_name, dist_info in _CDF_BUCKETS.items():
+                            fit = fit_error(dist_info["buckets"], buckets)
                             if best_fit is None or fit < best_fit:
                                 best_fit = fit
                                 best_fit_distribution = dist_name
+                                best_fit_info = dist_info
                         best_generic_generator = {
                             "name": best_fit_distribution,
                             "fit": best_fit,
-                            "mean": float(result.mean),
-                            "sd": float(result.sd),
+                            "kwargs": best_fit_info["kwarg_fn"](float(result.mean), float(result.sd)),
                         }
-                if info.choice:
+                if info.choice and is_vocab:  # For now let's not try to generate choices of unknowable stuff, just generate unknowable stuff.
                     # Find information on how many of each example there is
                     results = await execute_raw_query(text(
                         "SELECT {column} AS v, COUNT({column}) AS f FROM {table} GROUP BY v ORDER BY f DESC".format(
@@ -808,27 +832,29 @@ async def make_src_stats(
                         unif_fit = fit_error(unif, counts) / total2
                         if best_generic_generator is None or zipf_fit < best_generic_generator["fit"]:
                             best_generic_generator = {
-                                "name": "zipf",
+                                "name": "dist_gen.zipf_choice",
                                 "fit": zipf_fit,
-                                "value_count": len(counts),
+                                "kwargs": {
+                                    "a": values,
+                                    "n": f"{len(counts)}",
+                                }
                             }
-                            if is_vocab:
-                                best_generic_generator["values"] = values
                         if best_generic_generator is None or unif_fit < best_generic_generator["fit"]:
                             best_generic_generator = {
-                                "name": "uniform_choice",
+                                "name": "dist_gen.choice",
                                 "fit": unif_fit,
-                                "value_count": len(counts),
+                                "kwargs": {
+                                    "a": values,
+                                }
                             }
-                            if is_vocab:
-                                best_generic_generator["values"] = values
                 if info.summary_query is not None:
                     results = await execute_raw_query(text(info.summary_query.format(
                         column=column_name, table=table_name
                     )))
-                    best_generic_generator = { "name": info.generator }
+                    best_generic_generator = { "name": info.generator, "kwargs": {} }
                     for k, v in results.mappings().first().items():
-                        best_generic_generator[k] = float(v)
+                        conv_fn = info.arg_types.get(k, float)
+                        best_generic_generator["kwargs"][k] = conv_fn(v)
             if best_generic_generator is not None:
                 if table_name not in generic:
                     generic[str(table_name)] = {}

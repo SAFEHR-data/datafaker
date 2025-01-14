@@ -344,8 +344,9 @@ def remove_vocab(
     if yes:
         logger.debug("Truncating vocabulary tables.")
         config = read_config_file(config_file) if config_file is not None else {}
-        metadata = load_metadata(orm_file, config)
-        remove_db_vocab(metadata, config)
+        meta_dict = load_metadata_config(orm_file, config)
+        orm_metadata = dict_to_metadata(meta_dict)
+        remove_db_vocab(orm_metadata, meta_dict, config)
         logger.debug("Vocabulary tables truncated.")
     else:
         logger.info("Would truncate vocabulary tables if called with --yes.")

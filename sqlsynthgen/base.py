@@ -1,6 +1,7 @@
 """Base table generator classes."""
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+import numpy
 import os
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,30 @@ from sqlsynthgen.utils import (
     stream_yaml,
     MAKE_VOCAB_PROGRESS_REPORT_EVERY,
 )
+
+def zipf_weights(size):
+    total = sum(map(lambda n: 1/n, range(1, size + 1)))
+    return [
+        1 / (n * total)
+        for n in range(1, size + 1)
+    ]
+
+
+class DistributionGenerator:
+    def __init__(self):
+        self.rng = numpy.random.default_rng()
+
+    def uniform(self, low: float, high: float) -> float:
+        return self.rng.uniform(low=low, high=high)
+
+    def normal(self, mean: float, sd: float) -> float:
+        return self.rng.normal(loc=mean, scale=sd)
+
+    def choice(self, a):
+        return self.rng.choice(a).item()
+
+    def zipf_choice(self, a, n):
+        return self.rng.choice(a, p = zipf_weights(n)).item()
 
 
 class TableGenerator(ABC):
