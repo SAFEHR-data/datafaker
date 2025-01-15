@@ -538,8 +538,9 @@ def make_table_generators(  # pylint: disable=too-many-locals
     engine = get_sync_engine(create_db_engine(src_dsn, schema_name=settings.src_schema))
 
     src_stats = {}
-    with open(src_stats_filename, "r", encoding="utf-8") as f:
-        src_stats = yaml.unsafe_load(f)
+    if src_stats_filename:
+        with open(src_stats_filename, "r", encoding="utf-8") as f:
+            src_stats = yaml.unsafe_load(f)
 
     tables: list[TableGeneratorInfo] = []
     vocabulary_tables: list[VocabularyTableGeneratorInfo] = []
