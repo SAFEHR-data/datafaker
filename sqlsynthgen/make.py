@@ -797,14 +797,15 @@ async def make_src_stats(
                     count = result.count
                     if result.sd is not None and 0 < result.sd:
                         raw_buckets = await execute_raw_query(text(
-                            "SELECT COUNT({column}) AS f, FLOOR(({column} - {x})/{w}) as b from {table} group by b".format(
+                            "SELECT COUNT({column}) AS f, FLOOR(({column} - {x})/{w}) AS b FROM {table} GROUP BY b".format(
                                 column=column_name, table=table_name, x=result.mean - 2 * result.sd, w = result.sd / 2
                             )
                         ))
                         buckets = [0] * 10
                         for rb in raw_buckets:
-                            bucket = min(9, max(0, int(rb.b) + 1))
-                            buckets[bucket] += rb.f / count
+                            if rb.b is not None:
+                                bucket = min(9, max(0, int(rb.b) + 1))
+                                buckets[bucket] += rb.f / count
                         best_fit = None
                         best_fit_distribution = None
                         best_fit_info = None
