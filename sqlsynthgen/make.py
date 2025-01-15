@@ -2,7 +2,6 @@
 import asyncio
 import decimal
 import inspect
-import sys
 from dataclasses import dataclass, field
 import math
 from pathlib import Path
@@ -795,7 +794,7 @@ async def make_src_stats(
                     ))
                     result = results.first()
                     count = result.count
-                    if result.sd is not None and 0 < result.sd:
+                    if result.sd is not None and not math.isnan(result.sd) and 0 < result.sd:
                         raw_buckets = await execute_raw_query(text(
                             "SELECT COUNT({column}) AS f, FLOOR(({column} - {x})/{w}) AS b FROM {table} GROUP BY b".format(
                                 column=column_name, table=table_name, x=result.mean - 2 * result.sd, w = result.sd / 2
