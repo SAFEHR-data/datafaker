@@ -253,6 +253,21 @@ class GeneratorInfo:
     # True if we should see if we can treat this column as an amount with a distribution
     choice: bool = False
 
+
+def get_result_mappings(info: GeneratorInfo, results) -> dict[str, Any]:
+    """
+    Gets a mapping from the results of a database query as a Python
+    dictionary converted according to the GeneratorInfo provided.
+    """
+    kw = {}
+    for k, v in results.mappings().first().items():
+        if v is None:
+            return None
+        conv_fn = info.arg_types.get(k, float)
+        kw[k] = conv_fn(v)
+    return kw
+
+
 _COLUMN_TYPE_TO_GENERATOR_INFO = {
     sqltypes.Boolean: GeneratorInfo(
         generator="generic.development.boolean",
@@ -804,7 +819,7 @@ async def make_src_stats(
                             "fit": best_fit,
                             "kwargs": best_fit_info["kwarg_fn"](float(result.mean), float(result.sd)),
                         }
-                if info.choice and is_vocab:  # For now let's not try to generate choices of unknowable stuff, just generate unknowable stuff.
+                if info.choice and is_vocab:  # If it's not a vocabulary column then it's less useful to work out the choice distribution
                     # Find information on how many of each example there is
                     results = await execute_raw_query(text(
                         "SELECT {column} AS v, COUNT({column}) AS f FROM {table} GROUP BY v ORDER BY f DESC".format(
@@ -851,10 +866,9 @@ async def make_src_stats(
                     results = await execute_raw_query(text(info.summary_query.format(
                         column=column_name, table=table_name
                     )))
-                    best_generic_generator = { "name": info.generator, "kwargs": {} }
-                    for k, v in results.mappings().first().items():
-                        conv_fn = info.arg_types.get(k, float)
-                        best_generic_generator["kwargs"][k] = conv_fn(v)
+                    kw = get_result_mappings(info, results)
+                    if kw is not None:
+                        best_generic_generator = { "name": info.generator, "kwargs": kw }
             if best_generic_generator is not None:
                 if table_name not in generic:
                     generic[str(table_name)] = {}
