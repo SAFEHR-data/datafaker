@@ -1,5 +1,6 @@
 """Functions and classes to create and populate the target database."""
 from collections import Counter
+import random
 from typing import Any, Generator, Mapping, Sequence, Tuple
 
 from sqlalchemy import Connection, insert
@@ -133,7 +134,7 @@ def _populate_story(
             table = table_dict[table_name]
             if table.name in table_generator_dict:
                 table_generator = table_generator_dict[table.name]
-                default_values = table_generator(dst_conn)
+                default_values = table_generator(dst_conn, random.random)
             else:
                 default_values = {}
             insert_values = {**default_values, **provided_values}
@@ -201,7 +202,7 @@ def populate(
         # Run all the inserts for one table in a transaction
         with dst_conn.begin():
             for _ in range(table_generator.num_rows_per_pass):
-                stmt = insert(table).values(table_generator(dst_conn))
+                stmt = insert(table).values(table_generator(dst_conn, random.random))
                 dst_conn.execute(stmt)
                 row_counts[table.name] = row_counts.get(table.name, 0) + 1
     return row_counts

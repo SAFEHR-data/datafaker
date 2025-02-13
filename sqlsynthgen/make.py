@@ -5,7 +5,9 @@ import inspect
 from dataclasses import dataclass, field
 import math
 from pathlib import Path
-from typing import Any, Callable, Final, Mapping, Optional, Sequence, Tuple
+from typing import (
+    Any, Callable, Iterable, Final, Mapping, Optional, Self, Sequence, Tuple
+)
 import yaml
 
 import pandas as pd
@@ -70,12 +72,136 @@ class RowGeneratorInfo:
 
 
 @dataclass
+class ColumnChoice:
+    """ Chooses columns based on a random number in [0,1) """
+    options: list[tuple[float, set[str]]]
+
+    def all_columns(self) -> set[str]:
+        """ Returns the set of all columns known """
+        cols: set[str] = set()
+        for (_, cs) in self.options:
+            cols.update(cs)
+        return cols
+
+    def choose(self, p: float) -> set[str]:
+        """
+        Returns a set of columns that should have non-null values set.
+
+        p is a random number 0 <= p < 1 upon which this choice is made.
+        """
+        for (cumulative_probability, values) in self.options:
+            if p < cumulative_probability:
+                return values
+        return []
+
+    @classmethod
+    def make(
+        _cls,
+        cols: Iterable[str],
+        dependent_columns: dict[str, Iterable[str]],
+        row_count: int | None,
+        value_count: dict[str, int],
+    ) -> Self:
+        """
+        Makes a ColumnChoice out of a union
+
+        cols: the columns in the union
+        dependent_columns: a dict whose keys are a subset of cols, and
+        whose values are the names of the columns (including the key!)
+        that share row generators with this column (if any).
+        row_count: The total number of rows in the table, if known.
+        value_count: A dict whose keys are a subset of cols, and whose
+        values are the number of nonnull values in this column.
+        Columns for which this number is not known are not in the
+        keys of this dict.
+        """
+        total_value_count = 0
+        counted_column_count = 0
+        for col in cols:
+            vc = value_count[col]
+            if vc is not None:
+                counted_column_count += 1
+                total_value_count += vc
+            # work out what proportion to assign to uncounted columns
+        if row_count is None:
+            if counted_column_count == 0:
+                default_count = 1
+                row_count = len(cols)
+            else:
+                default_count = total_value_count / counted_column_count
+                row_count = default_count * len(cols)
+        elif counted_column_count == len(cols):
+            default_count = 0
+        else:
+            default_count = row_count / (len(cols) - counted_column_count)
+        cumulative_count = 0
+        choice = ColumnChoice(options=[])
+        for col in cols:
+            cumulative_count += value_count.get(col, default_count)
+            proportion = cumulative_count / row_count
+            if col in dependent_columns:
+                choice.options.append((proportion, dependent_columns[col]))
+            else:
+                choice.options.append((proportion, {col}))
+        return choice
+
+
+def make_column_choices(
+    table_name: str,
+    table_config: Mapping[str, Any],
+    src_stats: Mapping[str, Any],
+) -> list[ColumnChoice]:
+    # each union is a dict of union names to a list of its columns
+    unions: dict[str, list[str]] = get_property(table_config, "unions", {})
+    generic = src_stats.get("_sqlsynthgen_generic", {})
+    table_stats = generic.get(table_name, {})
+    column_generators = table_stats.get("column_generators", {})
+    # Set of all columns that are part of a union
+    columns_in_union: set[str] = set()
+    for (union_name, cols) in unions.items():
+        for col in cols:
+            if col in columns_in_union:
+                logger.warning("union %s overlaps with another union in table %s", union_name, table_name)
+            columns_in_union.add(col)
+    # Now we find row_generators that overlap (by one only!) with unions:
+    # the columns in these generators must be null (or not null) together.
+    dependent_columns: dict[str, set[str]] = {}
+    for row_gen in get_property(table_config, "row_generators", []):
+        assigned = row_gen["columns_assigned"]
+        if type(assigned) is list:
+            assigned_set = set(assigned)
+            intersection = assigned_set.intersection(columns_in_union)
+            n = len(intersection)
+            if 1 < n:
+                logger.warning(
+                    "row generator %s in table %s supplies columns for multiple unions",
+                    row_gen["name"],
+                    table_name,
+                )
+            elif 1 == n:
+                u = intersection.pop()
+                dependent_columns[u] = assigned_set
+    # table row count:
+    row_count: int | None = table_stats.get("row_count", None)
+    # some columns have counts of nonnull values:
+    value_count = { col: vs.get("count", None) for (col, vs) in column_generators.items() }
+    # Now we can convert unions to ColumnChoices
+    choices: list[ColumnChoice] = []
+    for cols in unions.values():
+        choices.append(
+            ColumnChoice.make(cols, dependent_columns, row_count, value_count)
+        )
+    return choices
+
+
+@dataclass
 class TableGeneratorInfo:
     """Contains the ssg.py content related to regular tables."""
 
     class_name: str
     table_name: str
-    columns: list[str]
+    nonnull_columns: set[str]
+    column_choices: list[ColumnChoice]
     rows_per_pass: int
     row_gens: list[RowGeneratorInfo] = field(default_factory=list)
     unique_constraints: list[UniqueConstraint] = field(default_factory=list)
@@ -112,7 +238,7 @@ def _get_row_generator(
 ) -> tuple[list[RowGeneratorInfo], list[str]]:
     """Get the row generators information, for the given table."""
     row_gen_info: list[RowGeneratorInfo] = []
-    config: list[dict[str, Any]] = get_property(table_config, "row_generators", {})
+    config: list[dict[str, Any]] = get_property(table_config, "row_generators", [])
     columns_covered = []
     for gen_conf in config:
         name: str = gen_conf["name"]
@@ -430,10 +556,15 @@ def _get_generator_for_table(
             *primary_keys,
             name=f"{table.name}_primary_key"
         ))
+    column_choices = make_column_choices(table.name, table_config, src_stats)
+    nonnull_columns={str(col.name) for col in table.columns}
+    for cc in column_choices:
+        nonnull_columns.difference_update(cc.all_columns())
     table_data: TableGeneratorInfo = TableGeneratorInfo(
         table_name=table.name,
         class_name=table.name.title() + "Generator",
-        columns=[str(col.name) for col in table.columns],
+        nonnull_columns=nonnull_columns,
+        column_choices=column_choices,
         rows_per_pass=get_property(table_config, "num_rows_per_pass", 1),
         unique_constraints=unique_constraints,
     )
@@ -441,7 +572,8 @@ def _get_generator_for_table(
     row_gen_info_data, columns_covered = _get_row_generator(table_config)
     table_data.row_gens.extend(row_gen_info_data)
 
-    generic_generators = get_property(src_stats, "_sqlsynthgen_generic", {}).get(table.name, {})
+    generic_generators = get_property(src_stats, "_sqlsynthgen_generic", {}
+    ).get(table.name, {}).get("column_generators", {})
     for column in table.columns:
         if column.name not in columns_covered:
             # No generator for this column in the user config.
@@ -711,38 +843,40 @@ _CDF_BUCKETS = {
 }
 
 
-async def make_src_stats(
-    dsn: str, config: Mapping, metadata: MetaData, schema_name: Optional[str] = None
-) -> dict[str, list[dict]]:
-    """Run the src-stats queries specified by the configuration.
+class DbConnection:
+    def __init__(self, engine):
+        self._engine = engine
 
-    Query the src database with the queries in the src-stats block of the `config`
-    dictionary, using the differential privacy parameters set in the `smartnoise-sql`
-    block of `config`. Record the results in a dictionary and returns it.
-    Args:
-        dsn: database connection string
-        config: a dictionary with the necessary configuration
-        schema_name: name of the database schema
-
-    Returns:
-        The dictionary of src-stats.
-    """
-    use_asyncio = config.get("use-asyncio", False)
-    engine = create_db_engine(dsn, schema_name=schema_name, use_asyncio=use_asyncio)
-
-    async def execute_raw_query(query: str):
-        if isinstance(engine, AsyncEngine):
-            async with engine.connect() as conn:
-                return await conn.execute(query)
+    async def __aenter__(self):
+        if isinstance(self._engine, AsyncEngine):
+            self._connection = await self._engine.connect()
         else:
-            with engine.connect() as conn:
-                return conn.execute(query)
+            self._connection = self._engine.connect()
+        return self
 
-    async def execute_query(query_block: Mapping[str, Any]) -> Any:
+    async def __aexit__(self, _type, _value, _tb):
+        if isinstance(self._engine, AsyncEngine):
+            await self._connection.close()
+        else:
+            self._connection.close()
+
+    async def execute_raw_query(self, query):
+        if isinstance(self._engine, AsyncEngine):
+            return await self._connection.execute(query)
+        else:
+            return self._connection.execute(query)
+
+    async def table_row_count(self, table_name: str):
+        with await self.execute_raw_query(
+            text(f"SELECT COUNT(*) FROM {table_name}")
+        ) as result:
+            return result.scalar_one()
+
+    async def execute_query(self, query_block: Mapping[str, Any]) -> Any:
         """Execute query in query_block."""
         logger.debug("Executing query %s", query_block["name"])
         query = text(query_block["query"])
-        raw_result = execute_raw_query(query)
+        raw_result = self.execute_raw_query(query)
 
         if "dp-query" in query_block:
             result_df = pd.DataFrame(raw_result.mappings())
@@ -763,9 +897,32 @@ async def make_src_stats(
             ]
         return final_result
 
+
+async def make_src_stats(
+    dsn: str, config: Mapping, metadata: MetaData, schema_name: Optional[str] = None
+) -> dict[str, list[dict]]:
+    """Run the src-stats queries specified by the configuration.
+
+    Query the src database with the queries in the src-stats block of the `config`
+    dictionary, using the differential privacy parameters set in the `smartnoise-sql`
+    block of `config`. Record the results in a dictionary and return it.
+    Args:
+        dsn: database connection string
+        config: a dictionary with the necessary configuration
+        schema_name: name of the database schema
+
+    Returns:
+        The dictionary of src-stats.
+    """
+    use_asyncio = config.get("use-asyncio", False)
+    engine = create_db_engine(dsn, schema_name=schema_name, use_asyncio=use_asyncio)
+    async with DbConnection(engine) as db_conn:
+        return await make_src_stats_connection(config, db_conn, metadata)
+
+async def make_src_stats_connection(config: Mapping, db_conn: DbConnection, metadata: MetaData):
     query_blocks = config.get("src-stats", [])
     results = await asyncio.gather(
-        *[execute_query(query_block) for query_block in query_blocks]
+        *[db_conn.execute_query(query_block) for query_block in query_blocks]
     )
     src_stats = {
         query_block["name"]: result
@@ -778,7 +935,13 @@ async def make_src_stats(
 
     generic = {}
     tables_config = config.get("tables", {})
-    for table_name, table in metadata.tables.items():
+    for table_name0, table in metadata.tables.items():
+        table_name = str(table_name0)
+        row_count = await db_conn.table_row_count(table_name)
+        generic[table_name] = {
+            "row_count": row_count,
+            "column_generators": {},
+        }
         table_config = tables_config.get(table_name, None)
         vocab_columns = set() if table_config is None else set(table_config.get("vocabulary_columns", []))
         for column_name, column in table.columns.items():
@@ -788,92 +951,116 @@ async def make_src_stats(
             if not column.foreign_keys and not column.primary_key and info is not None:
                 if info.numeric:
                     # Find summary information; mean, standard deviation and buckets 1/2 standard deviation width around mean.
-                    results = await execute_raw_query(text(
-                        "SELECT AVG({column}) AS mean, STDDEV({column}) AS sd, COUNT({column}) AS count FROM {table}".format(
-                            column=column_name, table=table_name
-                        )
-                    ))
-                    result = results.first()
-                    count = result.count
-                    if result.sd is not None and not math.isnan(result.sd) and 0 < result.sd:
-                        raw_buckets = await execute_raw_query(text(
-                            "SELECT COUNT({column}) AS f, FLOOR(({column} - {x})/{w}) AS b FROM {table} GROUP BY b".format(
-                                column=column_name, table=table_name, x=result.mean - 2 * result.sd, w = result.sd / 2
-                            )
-                        ))
-                        buckets = [0] * 10
-                        for rb in raw_buckets:
-                            if rb.b is not None:
-                                bucket = min(9, max(0, int(rb.b) + 1))
-                                buckets[bucket] += rb.f / count
-                        best_fit = None
-                        best_fit_distribution = None
-                        best_fit_info = None
-                        for dist_name, dist_info in _CDF_BUCKETS.items():
-                            fit = fit_error(dist_info["buckets"], buckets)
-                            if best_fit is None or fit < best_fit:
-                                best_fit = fit
-                                best_fit_distribution = dist_name
-                                best_fit_info = dist_info
-                        best_generic_generator = {
-                            "name": best_fit_distribution,
-                            "fit": best_fit,
-                            "kwargs": best_fit_info["kwarg_fn"](float(result.mean), float(result.sd)),
-                        }
+                    best_generic_generator = await _get_generic_numeric_generator(
+                        db_conn,
+                        column_name,
+                        table_name,
+                    )
                 if info.choice and is_vocab:  # If it's not a vocabulary column then it's less useful to work out the choice distribution
                     # Find information on how many of each example there is
-                    results = await execute_raw_query(text(
-                        "SELECT {column} AS v, COUNT({column}) AS f FROM {table} GROUP BY v ORDER BY f DESC".format(
-                            column=column_name, table=table_name
-                        )
-                    ))
-                    values = []
-                    counts = []
-                    total = 0
-                    for result in results:
-                        c = result.f
-                        if c != 0:
-                            total += c
-                            counts.append(c)
-                            v = result.v
-                            if type(v) is decimal.Decimal:
-                                v = float(v)
-                            values.append(v)
-                    if counts:
-                        total2 = total * total
-                        # Which distribution fits best?
-                        zipf = zipf_distribution(total, len(counts))
-                        zipf_fit = fit_error(zipf, counts) / total2
-                        unif = uniform_distribution(total, len(counts))
-                        unif_fit = fit_error(unif, counts) / total2
-                        if best_generic_generator is None or zipf_fit < best_generic_generator["fit"]:
-                            best_generic_generator = {
-                                "name": "dist_gen.zipf_choice",
-                                "fit": zipf_fit,
-                                "kwargs": {
-                                    "a": values,
-                                    "n": f"{len(counts)}",
-                                }
-                            }
-                        if best_generic_generator is None or unif_fit < best_generic_generator["fit"]:
-                            best_generic_generator = {
-                                "name": "dist_gen.choice",
-                                "fit": unif_fit,
-                                "kwargs": {
-                                    "a": values,
-                                }
-                            }
+                    gg = await _get_generic_choice_generator(
+                        db_conn,
+                        column_name,
+                        table_name,
+                    )
+                    if best_generic_generator is None or (
+                        gg is not None and gg["fit"] < best_generic_generator["fit"]
+                    ):
+                        best_generic_generator = gg
                 if info.summary_query is not None:
-                    results = await execute_raw_query(text(info.summary_query.format(
+                    # Run specified query
+                    results = await db_conn.execute_raw_query(text(info.summary_query.format(
                         column=column_name, table=table_name
                     )))
                     kw = get_result_mappings(info, results)
                     if kw is not None:
                         best_generic_generator = { "name": info.generator, "kwargs": kw }
             if best_generic_generator is not None:
-                if table_name not in generic:
-                    generic[str(table_name)] = {}
-                generic[str(table_name)][str(column_name)] = best_generic_generator
+                generic[table_name]["column_generators"][str(column_name)] = best_generic_generator
     if generic:
         src_stats["_sqlsynthgen_generic"] = generic
     return src_stats
+
+
+async def _get_generic_choice_generator(db_conn, column_name, table_name):
+    results = await db_conn.execute_raw_query(text(
+        "SELECT {column} AS v, COUNT({column}) AS f FROM {table} GROUP BY v ORDER BY f DESC".format(
+            column=column_name, table=table_name
+        )
+    ))
+    values = []  # The values found
+    counts = []  # The number or each value
+    total = 0  # total number of non-NULL results
+    for result in results:
+        c = result.f
+        if c != 0:
+            total += c
+            counts.append(c)
+            v = result.v
+            if type(v) is decimal.Decimal:
+                v = float(v)
+            values.append(v)
+    if not counts:
+        return None
+    total2 = total * total
+    # Which distribution fits best?
+    zipf = zipf_distribution(total, len(counts))
+    zipf_fit = fit_error(zipf, counts) / total2
+    unif = uniform_distribution(total, len(counts))
+    unif_fit = fit_error(unif, counts) / total2
+    if zipf_fit < unif_fit:
+        return {
+            "name": "dist_gen.zipf_choice",
+            "fit": zipf_fit,
+            "count": total,
+            "kwargs": {
+                "a": values,
+                "n": f"{len(counts)}",
+            }
+        }
+    return {
+        "name": "dist_gen.choice",
+        "fit": unif_fit,
+        "count": total,
+        "kwargs": {
+            "a": values,
+        }
+    }
+
+
+async def _get_generic_numeric_generator(db_conn, column_name, table_name):
+    # Find summary information; mean, standard deviation and buckets 1/2 standard deviation width around mean.
+    results = await db_conn.execute_raw_query(text(
+        "SELECT AVG({column}) AS mean, STDDEV({column}) AS sd, COUNT({column}) AS count FROM {table}".format(
+            column=column_name, table=table_name
+        )
+    ))
+    result = results.first()
+    count = result.count
+    if result.sd is not None and not math.isnan(result.sd) and 0 < result.sd:
+        raw_buckets = await db_conn.execute_raw_query(text(
+            "SELECT COUNT({column}) AS f, FLOOR(({column} - {x})/{w}) AS b FROM {table} GROUP BY b".format(
+                column=column_name, table=table_name, x=result.mean - 2 * result.sd, w = result.sd / 2
+            )
+        ))
+        buckets = [0] * 10
+        for rb in raw_buckets:
+            if rb.b is not None:
+                bucket = min(9, max(0, int(rb.b) + 1))
+                buckets[bucket] += rb.f / count
+        best_fit = None
+        best_fit_distribution = None
+        best_fit_info = None
+        for dist_name, dist_info in _CDF_BUCKETS.items():
+            fit = fit_error(dist_info["buckets"], buckets)
+            if best_fit is None or fit < best_fit:
+                best_fit = fit
+                best_fit_distribution = dist_name
+                best_fit_info = dist_info
+        best_generic_generator = {
+            "name": best_fit_distribution,
+            "fit": best_fit,
+            "count": count,
+            "kwargs": best_fit_info["kwarg_fn"](float(result.mean), float(result.sd)),
+        }
+    return best_generic_generator
