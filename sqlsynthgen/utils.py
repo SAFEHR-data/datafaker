@@ -306,7 +306,7 @@ def reinstate_vocab_foreign_key_constraints(metadata, meta_dict, config, dst_eng
                         session.execute(AddConstraint(fk))
                         session.commit()
         except IntegrityError:
-            logger.exception("Restoring table %s foreign keys failed:", vocab_table)
+            logger.exception("Restoring table %s foreign keys failed:", vocab_table_name)
 
 
 def stream_yaml(yaml_file_handle):

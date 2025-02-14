@@ -118,7 +118,7 @@ class ColumnChoice:
         total_value_count = 0
         counted_column_count = 0
         for col in cols:
-            vc = value_count[col]
+            vc = value_count.get(col, None)
             if vc is not None:
                 counted_column_count += 1
                 total_value_count += vc
@@ -351,8 +351,9 @@ def _integer_generator(column: Column) -> tuple[str, dict[str, str]]:
     """
     if not column.primary_key:
         return ("generic.numeric.integer_number", {})
-    return ("numeric.increment", {
-        "accumulator": f'"{column.table.fullname}.{column.name}"'
+    return ("generic.column_value_provider.increment", {
+        "db_connection": "dst_db_conn",
+        "column": f'metadata.tables["{column.table.name}"].columns["{column.name}"]',
     })
 
 
@@ -661,13 +662,7 @@ def make_table_generators(  # pylint: disable=too-many-locals
     """
     row_generator_module_name: str = config.get("row_generators_module", None)
     story_generator_module_name = config.get("story_generators_module", None)
-
-    settings = get_settings()
-    src_dsn: str = settings.src_dsn or ""
-    assert src_dsn != "", "Missing SRC_DSN setting."
-
     tables_config = config.get("tables", {})
-    engine = get_sync_engine(create_db_engine(src_dsn, schema_name=settings.src_schema))
 
     src_stats = {}
     if src_stats_filename:
@@ -689,9 +684,7 @@ def make_table_generators(  # pylint: disable=too-many-locals
                     related_non_vocab
                 )
             vocabulary_tables.append(
-                _get_generator_for_existing_vocabulary_table(
-                    table, engine
-                )
+                _get_generator_for_existing_vocabulary_table(table)
             )
         else:
             tables.append(_get_generator_for_table(
@@ -728,14 +721,11 @@ def generate_ssg_content(template_context: Mapping[str, Any]) -> str:
     )
     ssg_template: Template = environment.get_template(SSG_TEMPLATE_FILENAME)
     template_output: str = ssg_template.render(template_context)
-
     return format_str(template_output, mode=FileMode())
 
 
 def _get_generator_for_existing_vocabulary_table(
     table: Table,
-    engine: Engine,
-    table_file_name: Optional[str] = None,
 ) -> VocabularyTableGeneratorInfo:
     """
     Turns an existing vocabulary YAML file into a VocabularyTableGeneratorInfo.
@@ -1037,6 +1027,7 @@ async def _get_generic_numeric_generator(db_conn, column_name, table_name):
     ))
     result = results.first()
     count = result.count
+    generator = None
     if result.sd is not None and not math.isnan(result.sd) and 0 < result.sd:
         raw_buckets = await db_conn.execute_raw_query(text(
             "SELECT COUNT({column}) AS f, FLOOR(({column} - {x})/{w}) AS b FROM {table} GROUP BY b".format(
@@ -1057,10 +1048,10 @@ async def _get_generic_numeric_generator(db_conn, column_name, table_name):
                 best_fit = fit
                 best_fit_distribution = dist_name
                 best_fit_info = dist_info
-        best_generic_generator = {
+        generator = {
             "name": best_fit_distribution,
             "fit": best_fit,
             "count": count,
             "kwargs": best_fit_info["kwarg_fn"](float(result.mean), float(result.sd)),
         }
-    return best_generic_generator
+    return generator
