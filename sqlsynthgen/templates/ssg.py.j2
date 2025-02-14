@@ -65,7 +65,7 @@ class {{ table_data.class_name }}(TableGenerator):
         {% for choice in table_data.column_choices %}
         p = get_random()
         {% for probability, columns in choice.options %}
-        {%- if not loop.first %}el{%- endif %}if p < {{ probability }}:
+        {%+ if not loop.first %}el{%+ endif %}if p < {{ probability }}:
             columns_to_generate.update(set({{ columns }}))
         {% endfor %}
         {% endfor %}
