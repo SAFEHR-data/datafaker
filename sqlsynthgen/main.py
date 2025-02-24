@@ -17,6 +17,7 @@ from sqlsynthgen.make import (
     make_table_generators,
     make_tables_file,
     make_vocabulary_tables,
+    generate_config_file,
 )
 from sqlsynthgen.remove import remove_db_data, remove_db_tables, remove_db_vocab
 from sqlsynthgen.settings import Settings, get_settings
@@ -35,6 +36,7 @@ from .serialize_metadata import dict_to_metadata
 # pylint: disable=too-many-arguments
 
 ORM_FILENAME: Final[str] = "orm.yaml"
+CONFIG_FILENAME: Final[str] = "config.yaml"
 SSG_FILENAME: Final[str] = "ssg.py"
 STATS_FILENAME: Final[str] = "src-stats.yaml"
 
@@ -93,7 +95,7 @@ def create_data(
         SSG_FILENAME,
         help="The name of the generators file. Must be in the current working directory."
     ),
-    config_file: Optional[str] = Option(None, help="The configuration file"),
+    config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
     num_passes: int = Option(1, help="Number of passes (rows or stories) to make"),
 ) -> None:
     """Populate the schema in the target directory with synthetic data.
@@ -141,7 +143,7 @@ def create_data(
 @app.command()
 def create_vocab(
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
-    config_file: str = Option(None, help="The configuration file"),
+    config_file: str = Option(CONFIG_FILENAME, help="The configuration file"),
 ) -> None:
     """Import vocabulary data into the target database.
 
@@ -160,7 +162,7 @@ def create_vocab(
 @app.command()
 def create_tables(
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
-    config_file: Optional[str] = Option(None, help="The configuration file"),
+    config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
 ) -> None:
     """Create schema from the ORM YAML file.
 
@@ -180,7 +182,7 @@ def create_tables(
 @app.command()
 def make_vocab(
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
-    config_file: Optional[str] = Option(None, help="The configuration file"),
+    config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
     force: bool = Option(True, help="Overwrite any existing vocabulary file."),
     compress: bool = Option(False, help="Compress file to .gz"),
 ) -> None:
@@ -208,7 +210,7 @@ def make_vocab(
 def make_generators(
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
     ssg_file: str = Option(SSG_FILENAME, help="Path to write Python generators to."),
-    config_file: Optional[str] = Option(None, help="The configuration file"),
+    config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
     stats_file: Optional[str] = Option(None, help="Statistics file (output of make-stats)"),
     force: bool = Option(False, help="Overwrite any existing Python generators file."),
 ) -> None:
@@ -244,7 +246,7 @@ def make_generators(
 @app.command()
 def make_stats(
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
-    config_file: Optional[str] = Option(None, help="The configuration file"),
+    config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
     stats_file: str = Option(STATS_FILENAME),
     force: bool = Option(False, help="Overwrite any existing vocabulary file."),
 ) -> None:
@@ -276,7 +278,7 @@ def make_stats(
 
 @app.command()
 def make_tables(
-    config_file: Optional[str] = Option(None, help="The configuration file"),
+    config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
     orm_file: str = Option(ORM_FILENAME, help="Path to write the ORM yaml file to"),
     force: bool = Option(False, help="Overwrite any existing orm yaml file."),
 ) -> None:
@@ -301,6 +303,31 @@ def make_tables(
 
 
 @app.command()
+def generate_config(
+    config_file: Optional[str] = Option(CONFIG_FILENAME, help="Path to write the configuration file to"),
+    force: bool = Option(False, help="Overwrite any existing configuration yaml file"),
+) -> None:
+    """
+    Generate a basic configuration file.
+    
+    The configuration produced just includes default configuration for the
+    existing source database tables.
+    """
+    logger.debug("Creating %s.", config_file)
+
+    config_file_path = Path(config_file)
+    if not force:
+        _check_file_non_existence(config_file_path)
+
+    settings = get_settings()
+    src_dsn: str = _require_src_db_dsn(settings)
+
+    content = generate_config_file(src_dsn, settings.src_schema)
+    config_file_path.write_text(content, encoding="utf-8")
+    logger.debug("%s created.", config_file)
+
+
+@app.command()
 def validate_config(
     config_file: Path = Argument(help="The configuration file to validate"),
 ) -> None:
@@ -320,7 +347,7 @@ def validate_config(
 @app.command()
 def remove_data(
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
-    config_file: Optional[str] = Option(None, help="The configuration file"),
+    config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
     yes: bool = Option(False, "--yes", prompt="Are you sure?", help="Just remove, don't ask first"),
 ) -> None:
     """Truncate non-vocabulary tables in the destination schema."""
@@ -337,7 +364,7 @@ def remove_data(
 @app.command()
 def remove_vocab(
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
-    config_file: Optional[str] = Option(None, help="The configuration file"),
+    config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
     yes: bool = Option(False, "--yes", prompt="Are you sure?", help="Just remove, don't ask first"),
 ) -> None:
     """Truncate vocabulary tables in the destination schema."""
@@ -355,7 +382,7 @@ def remove_vocab(
 @app.command()
 def remove_tables(
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
-    config_file: Optional[str] = Option(None, help="The configuration file"),
+    config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
     yes: bool = Option(False, "--yes", prompt="Are you sure?", help="Just remove, don't ask first"),
 ) -> None:
     """Drop all tables in the destination schema.

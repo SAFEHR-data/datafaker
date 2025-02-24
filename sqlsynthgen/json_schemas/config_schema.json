@@ -185,6 +185,27 @@
                   }
                 }
               }
+            },
+            "unions": {
+              "description": "Groups of columns that represent different representations of the same value.",
+              "type": "object",
+              "patternProperties": {
+                ".*": {
+                  "type": "array",
+                  "items": {
+                    "description": "Column name.",
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "vocabulary_columns": {
+              "description": "Columns whose set of possible values is not considered private and so can be reproduced in the output database.",
+              "type": "array",
+              "items": {
+                "description": "Column name.",
+                "type": "string"
+              }
             }
           }
         }

@@ -756,6 +756,26 @@ def _generate_vocabulary_table(
     download_table(table, engine, yaml_file_name, compress)
 
 
+def generate_config_file(
+    db_dsn: str, schema_name: Optional[str]
+) -> str:
+    engine = get_sync_engine(create_db_engine(db_dsn, schema_name=schema_name))
+    metadata = MetaData()
+    metadata.reflect(engine)
+    tables = {}
+    for table_name in metadata.tables.keys():
+        table = {
+            "ignore": False,
+            "vocabulary_table": False,
+            "unions": {},
+            "num_rows_per_pass": 1,
+            "row_generators": [],
+            "vocabulary_columns": [],
+        }
+        tables[table_name] = table
+    return yaml.dump({"tables": tables})
+
+
 def make_tables_file(
     db_dsn: str, schema_name: Optional[str], config: Mapping[str, Any]
 ) -> str:
