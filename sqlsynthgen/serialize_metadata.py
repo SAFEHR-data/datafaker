@@ -94,8 +94,11 @@ SIMPLE_TYPE_PARSER = parsy.alt(
     simple(sqltypes.BOOLEAN),
     simple(postgresql.TSVECTOR),
     simple(postgresql.BYTEA),
+    simple(postgresql.CIDR),
     numeric_type(sqltypes.NUMERIC),
     numeric_type(sqltypes.DECIMAL),
+    numeric_type(postgresql.BIT),
+    numeric_type(postgresql.REAL),
     string_type(sqltypes.CHAR),
     string_type(sqltypes.NCHAR),
     string_type(sqltypes.VARCHAR),
@@ -128,7 +131,6 @@ def column_to_dict(column: Column, dialect: Dialect) -> str:
         "type": compiled,
         "primary": column.primary_key,
         "nullable": column.nullable,
-        "unique": column.unique,
     }
     foreign_keys = [str(fk.target_fullname) for fk in column.foreign_keys]
     if foreign_keys:
@@ -159,7 +161,6 @@ def dict_to_column(table_name, col_name, rep: dict) -> Column:
         type_=type_,
         primary_key=rep.get("primary", False),
         nullable=rep.get("nullable", None),
-        unique=rep.get("unique", None),
     )
 
 def dict_to_unique(rep: dict) -> schema.UniqueConstraint:
