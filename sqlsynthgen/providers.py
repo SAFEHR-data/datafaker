@@ -39,7 +39,7 @@ class ColumnValueProvider(BaseProvider):
         result = self.accumulators.get(name, None)
         if result == None:
             row = db_connection.execute(select(func.max(column))).first()
-            result = 1 if row is None else row[0]
+            result = 0 if row is None or row[0] is None else row[0]
         value = result + 1
         self.accumulators[name] = value
         return value

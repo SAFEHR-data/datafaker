@@ -652,7 +652,10 @@ def make_table_generators(  # pylint: disable=too-many-locals
     generated (by make-tables and make-vocab).
 
     Args:
+      metadata: database ORM
       config: Configuration to control the generator creation.
+      orm_filename: "orm.yaml" file path so that the generator file can load the MetaData object
+      config_filename: "config.yaml" file path so that the generator file can load the MetaData object
       src_stats_filename: A filename for where to read src stats from.
         Optional, if `None` this feature will be skipped
       overwrite_files: Whether to overwrite pre-existing vocabulary files
@@ -700,7 +703,7 @@ def make_table_generators(  # pylint: disable=too-many-locals
         {
             "provider_imports": PROVIDER_IMPORTS,
             "orm_file_name": orm_filename,
-            "config_file_name": repr(config_filename),
+            "config_file_name": config_filename,
             "row_generator_module_name": row_generator_module_name,
             "story_generator_module_name": story_generator_module_name,
             "src_stats_filename": src_stats_filename,
@@ -919,6 +922,7 @@ async def make_src_stats(
     Args:
         dsn: database connection string
         config: a dictionary with the necessary configuration
+        metadata: the database ORM
         schema_name: name of the database schema
 
     Returns:

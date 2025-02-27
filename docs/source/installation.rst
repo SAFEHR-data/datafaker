@@ -7,7 +7,7 @@ To use SqlSynthGen, first install it:
 
 .. code-block:: console
 
-   $ pip install sqlsynthgen
+   $ pipx install git+https://github.com/tim-band/sqlsynthgen
 
 Check that you can view the help message with:
 

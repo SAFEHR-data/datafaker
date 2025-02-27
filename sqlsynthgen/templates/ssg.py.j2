@@ -19,7 +19,7 @@ from sqlsynthgen.providers import (
 generic.add_provider({{ provider_import }})
 {% endfor %}
 
-metadata = load_metadata("{{ orm_file_name }}", {{ config_file_name }})
+metadata = load_metadata("{{ orm_file_name }}", "{{ config_file_name }}")
 
 {% if row_generator_module_name is not none %}
 import {{ row_generator_module_name }}

@@ -3,6 +3,212 @@
 Introductory Tutorial
 ==============================
 
+Let us begin with a simple movie rental database called `Pagila <https://github.com/devrimgunduz/pagila>`_. Follow the instructions there to create a PostgreSQL database if you want to follow this tutorial along.
+Pagila is already fake data, but we shall pretend that it has sensitive data in it, and we are attempting to keep this data secure.
+We will imagine we have a strict protocol to follow to keep the data safe, and that the source database is only accessible from a private network.
+
+You can give access to this database to a different user (I'm using ``tim``) like this:
+
+.. code-block:: console
+
+  $ sudo -u postgres psql pagila
+  pagila=# grand pg_read_all_data to tim;
+  pagila=# \q
+
+Minimal example
+---------------
+
+Let us begin in the private network that this sensitive data resides in (well, let us pretend anyway).
+
+We being by setting the database connection information
+(you don't need to set ``SRC_SCHEMA`` if the schema is the default, but for explicitness we do here),
+and creating the configuration, ORM and initial statistics files
+(here we are imagining the username is ``postgres`` and the password is ``password`` -- change ``postgres:password`` to the username and password you used to set up the database):
+
+.. code-block:: shell
+
+    export SRC_DSN='postgresql://postgres:password@localhost/pagila'
+    export SRC_SCHEMA='public'
+    sqlsynthgen generate-config
+    sqlsynthgen make-tables
+    sqlsynthgen make-stats
+
+This generates the files ``config.yaml``, ``orm.yaml`` and ``src-stats.yaml``.
+
+Now we examine these files for evidence of sensitive information.
+There should be none, but any lines that are considered sensitive can be removed
+(as long as the file remains a YAML file!) before taking these files out of the private network.
+
+Now outside of the private network we have these three files, and we can generate a new database.
+Let us first create a new database within PostgreSQL.
+Here we are using user ``tim`` and the default schema ``public``:
+
+.. code-block:: console
+
+    $ sudo -u postgres psql
+    postgres=# create database fake_pagila;
+    CREATE DATABASE
+    postgres=# grant all privileges on database fake_pagila to tim;
+    GRANT
+    postgres=# exit
+    $ sudo -u postgres psql fake_pagila
+    fake_pagila=# grant all privileges on schema public to tim;
+    GRANT
+    fake_pagila=# exit
+
+And let's populate it with the fake data:
+
+.. code-block:: shell
+
+    export DST_DSN='postgresql://tim:password@localhost/fake_pagila'
+    export DST_SCHEMA='public'
+    sqlsynthgen make-generators
+    sqlsynthgen create-tables
+    sqlsynthgen create-data
+
+``make-generators`` creates a Python file called ``ssg.py``.
+You can edit this file if you want, but it is much easier to edit ``config.yaml`` and call ``sqlsynthgen make-generators --force`` to regenerate this file.
+
+You will notice that ``create-tables`` produces a couple of warnings, and PostgreSQL complains when ``sqlsynthgen`` tries to create the data.
+The warnings are that ``sqlsynthgen`` doesn't understand the special PostgresSQL types ``TSVECTOR`` and ``ARRAY``, so it doesn't know how to generate data for those columns.
+Because it doesn't know how to generate data for those columns it will just use NULLs, and the ``film.fulltext`` column cannot be NULL, so creating the data fails.
+
+Fixing the errors with the minimal example
+------------------------------------------
+
+Now let us add text to the ``film.fulltext`` column. Find the ``film`` section and alter it like so:
+
+.. code-block:: yaml
+
+    film:
+      row_generators:
+      - name: generic.text.text
+        columns_assigned: fulltext
+
+Also, while we are at it let's give the actors sensible names:
+
+.. code-block:: yaml
+
+    actor:
+      row_generators:
+      - name: generic.person.first_name
+        columns_assigned: first_name
+      - name: generic.person.last_name
+        columns_assigned: last_name
+
+We can see that we are setting the column we want changed with the ``columns_assigned`` property, but what does this ``name`` property mean?
+This is a Python function that generates the random data for us.
+``generic.`` refers to the Mimesis `Generic provider <https://mimesis.name/master/api.html#generic>`_ that combines all the other Mimesis providers.
+These all use the ``EN_GB`` locale, which currently cannot be changed.
+Some examples of useful providers you can use are:
+- `generic.text. <https://mimesis.name/master/api.html#text>`_ generates words, sentences, colours and more.
+- `generic.datetime. <https://mimesis.name/master/api.html#datetime>`_ generates dates, day names, times and so on.
+- `generic.person. <https://mimesis.name/master/api.html#person>`_ generates first and last names, genders, heights, occupations and so on.
+
+Some of these functions take arguments, that we can assign like this:
+
+.. code-block:: yaml
+
+    customer:
+      row_generators:
+      - name: generic.person.email
+        kwargs:
+          domains:
+          - gmail.com
+          - ucl.ac.uk
+          unique: true
+        columns_assigned: email
+
+(but only static booleans, strings or numbers)
+
+Anyway, we now need to remake the generators (``make-generators``) and re-run them (``create-data``):
+
+.. code-block:: console
+  $ sqlsynthgen make-generators --force
+  $ sqlsynthgen create-data --num-passes 15
+
+Now you can use ``psql --username tim fake_pagila`` to explore the data.
+
+You will see that almost all of the columns have correctly-typed data in it.
+All the foreign keys point to existing rows in the correct table without our having to do anything,
+but also our nice new generators are working:
+Our ``actor`` table has nice names in it, and our ``film`` table has text in the ``fulltext`` column
+(albeit text that does not seem to describe films).
+
+Problems with the minimal example
+---------------------------------
+
+But here is a non-exhaustive list of issues with the data produced:
+
+- all text fields are just colours, for example:
+  - staff names (we can deal with this the same way we dealt with actors names above).
+  - address lines.
+  - movie categories.
+  - city, country and language names.
+- there are a lot of payment tables that are partitions of the
+  main payment table in the source database, but these are
+  just different tables in the generated table.
+
+Fixing the problems with the minimal example #1: ignoring unwanted tables
+-------------------------------------------------------------------------
+
+We fix these problems by adjusting the ``config.yaml`` file.
+We do not need to go back to the private network.
+First, let us remove all the ``payment_`` tables.
+This lowers the fidelity of the generated database, but ``sqlsynthgen`` cannot cope with partitioned tables
+so the best that we can do is pretend that ``payment`` is not a partitioned table.
+If we think that our users will not be interested in this implementation detail then this will be acceptable.
+So we edit the appropriate parts of the ``config.yaml`` file. You will see seven sections that look like this:
+
+.. code-block:: yaml
+
+    payment_p2022_01:
+      ignore: false
+      num_rows_per_pass: 1
+      row_generators: []
+      unions: {}
+      vocabulary_columns: []
+      vocabulary_table: false
+
+We need to change ``ignore: false`` to ``ignore: true``, and we can delete the other lines in these blocks if we like:
+
+.. code-block:: yaml
+
+    payment_p2022_01:
+      ignore: true
+    payment_p2022_02:
+      ignore: true
+    payment_p2022_03:
+      ignore: true
+    payment_p2022_04:
+      ignore: true
+    payment_p2022_05:
+      ignore: true
+    payment_p2022_06:
+      ignore: true
+    payment_p2022_07:
+      ignore: true
+
+Now we can destroy the existing database and try again:
+
+.. code-block:: shell
+
+  sqlsynthgen remove-tables --yes
+  sqlsynthgen create-tables
+  sqlsynthgen create-data
+
+We don't need to regenerate the generators this time as we have not changed anything in the ``config.yaml`` file that affects generators.
+
+Fixing the problems with the minimal example #2: generate vocabularies
+----------------------------------------------------------------------
+
+While we could try to generate random plausible language, country, city and film category names, there is a better way.
+As these tables hold no sensitive data, we can just copy them.
+To do this, we need to change the ``config.yaml`` file and go back to the private network.
+...
+
+More In-Depth Tutorial
+======================
 
 `SqlSynthGen <https://github.com/alan-turing-institute/sqlsynthgen/>`_, or SSG for short, is a software package for synthetic data generation, focussed on relational data.
 When pointed to an existing relational database, SSG creates another database with the same database schema, and populates it with synthetic data.
