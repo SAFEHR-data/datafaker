@@ -402,8 +402,11 @@ def remove_tables(
 @app.command()
 def version() -> None:
     """Display version information."""
-    conf_logger(True)
-    logger.info("sqlsynthgen version %s", metadata.version(__package__))
+    logger.info(
+        "%s version %s",
+        __package__,
+        metadata.version(__package__),
+    )
 
 
 if __name__ == "__main__":

@@ -205,7 +205,48 @@ Fixing the problems with the minimal example #2: generate vocabularies
 While we could try to generate random plausible language, country, city and film category names, there is a better way.
 As these tables hold no sensitive data, we can just copy them.
 To do this, we need to change the ``config.yaml`` file and go back to the private network.
-...
+
+So let us find these sections in ``config.yaml`` and change ``vocabulary_table: false`` to ``vocabulary_table:true``
+(deleting the other properties if you like):
+
+.. code-block:: yaml
+    category:
+      vocabulary_table: true
+    city:
+      vocabulary_table: true
+    country:
+      vocabulary_table: true
+
+and later (although it doesn't matter if you re-arrange the table blocks):
+
+.. code-block:: yaml
+    language:
+      vocabulary_table: true
+
+and now we take this file into the private network (or pretend to) and run (in the private network with ``SRC_DSN`` and ``SRC_SCHEMA`` set as above):
+
+.. code-block:: console
+
+  $ sqlsynthgen make-vocab --compress
+
+This will produce four files: ``category.yaml.gz``, ``city.yaml.gz``, ``country.yaml.gz`` and ``language.yaml.gz``.
+If the ``--compress`` option is not passed it will produce ``.yaml`` files instead of ``.yaml.gz`` and this would be fine in this case.
+Certain databases have very large vocabulary tables, for example the ``concept`` table in OMOP databases.
+Such huge YAML files can cause problems, but they compress very well, so the ``--compress`` option can be very useful for overcoming such limitations.
+Generating these huge vocabulary files can nevertheless take a very long time! Not in Pagila's case, though.
+
+Now your data privacy protocols will either require you to unzip and examine these files before taking them out of the private network
+or it will trust ``sqlsynthgen`` to produce only non-private output given certain inputs.
+In either case we take these files out of the private network.
+
+Using the same ``config.yaml`` file outside the private network (and with ``DST_DSN`` set as above) we delete the existing data in these vocabulary tables,
+and fill them with the new data from the ``yaml.gz`` (or unzipped ``.yaml``) files:
+
+.. code-block:: console
+
+  $ sqlsynthgen remove-vocab
+  Are you sure? [y/N]: y
+  $ sqlsynthgen create-vocab
 
 More In-Depth Tutorial
 ======================
