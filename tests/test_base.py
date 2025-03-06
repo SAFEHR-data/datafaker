@@ -2,11 +2,11 @@
 import os
 from pathlib import Path
 
-from sqlalchemy import Column, Integer, create_engine, select
+from sqlalchemy import Column, Integer, select
 from sqlalchemy.orm import declarative_base
 
 from sqlsynthgen.base import FileUploader
-from tests.utils import RequiresDBTestCase, run_psql
+from tests.utils import RequiresDBTestCase
 
 # pylint: disable=invalid-name
 Base = declarative_base()
@@ -32,17 +32,15 @@ class VocabTests(RequiresDBTestCase):
 
     def setUp(self) -> None:
         """Pre-test setup."""
+        super().setUp()
+        self.run_psql(Path("tests/examples/providers.dump"))
 
-        run_psql(Path("tests/examples/providers.dump"))
-
-        self.engine = create_engine(
-            "postgresql://postgres:password@localhost:5432/providers"
-        )
         metadata.create_all(self.engine)
         os.chdir(self.test_dir)
 
     def tearDown(self) -> None:
         os.chdir(self.start_dir)
+        super().tearDown()
 
     def test_load(self) -> None:
         """Test the load method."""

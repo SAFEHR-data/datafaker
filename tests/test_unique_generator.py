@@ -14,7 +14,7 @@ from sqlalchemy import (
 from sqlalchemy.ext.declarative import declarative_base
 
 from sqlsynthgen.unique_generator import UniqueGenerator
-from tests.utils import RequiresDBTestCase, run_psql
+from tests.utils import RequiresDBTestCase
 
 # pylint: disable=invalid-name
 Base = declarative_base()
@@ -43,10 +43,8 @@ class UniqueGeneratorTestCase(RequiresDBTestCase):
 
     def setUp(self) -> None:
         """Pre-test setup."""
-        run_psql(Path("tests/examples/unique_generator.dump"))
-        self.engine = create_engine(
-            "postgresql://postgres:password@localhost:5432/unique_generator_test",
-        )
+        super().setUp()
+        self.run_psql(Path("tests/examples/unique_generator.dump"))
         metadata.create_all(self.engine)
 
     def test_unique_generator_empty_table(self) -> None:

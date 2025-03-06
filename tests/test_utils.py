@@ -15,7 +15,7 @@ from sqlsynthgen.utils import (
     import_file,
     read_config_file,
 )
-from tests.utils import RequiresDBTestCase, SSGTestCase, run_psql
+from tests.utils import RequiresDBTestCase, SSGTestCase
 
 # pylint: disable=invalid-name
 Base = declarative_base()
@@ -66,13 +66,9 @@ class TestDownload(RequiresDBTestCase):
 
     def setUp(self) -> None:
         """Pre-test setup."""
+        super().setUp()
 
-        run_psql(Path("tests/examples/providers.dump"))
-
-        self.engine = create_engine(
-            "postgresql://postgres:password@localhost:5432/providers",
-            connect_args={"connect_timeout": 10},
-        )
+        self.run_psql(Path("tests/examples/providers.dump"))
         metadata.create_all(self.engine)
 
         os.chdir(self.test_dir)
@@ -81,6 +77,7 @@ class TestDownload(RequiresDBTestCase):
     def tearDown(self) -> None:
         """Post-test cleanup."""
         os.chdir(self.start_dir)
+        super().tearDown()
 
     def test_download_table(self) -> None:
         """Test the download_table function."""
@@ -90,7 +87,7 @@ class TestDownload(RequiresDBTestCase):
             conn.execute(insert(MyTable).values({"id": 1}))
             conn.commit()
 
-        download_table(MyTable.__table__, self.engine, self.mytable_file_path)
+        download_table(MyTable.__table__, self.engine, self.mytable_file_path, compress=False)
 
         # The .strip() gets rid of any possible empty lines at the end of the file.
         with Path("../examples/expected.yaml").open(encoding="utf-8") as yamlfile:

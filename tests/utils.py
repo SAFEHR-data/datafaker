@@ -2,7 +2,9 @@
 import os
 from functools import lru_cache
 from pathlib import Path
+from sqlalchemy import create_engine
 from subprocess import run
+import testing.postgresql
 from typing import Any
 from unittest import TestCase, skipUnless
 
@@ -26,7 +28,7 @@ def get_test_settings() -> settings.Settings:
     )
 
 
-def run_psql(dump_file: Path) -> None:
+def run_psql(dump_file: Path, dsn: str="host=localhost port=5432 user=postgres") -> None:
     """Run psql and pass dump_file_name as the --file option."""
 
     # If you need to update a .dump file, use
@@ -46,7 +48,7 @@ def run_psql(dump_file: Path) -> None:
 
     # Clear and re-create the test database
     completed_process = run(
-        ["psql", "--host=localhost", "--username=postgres", f"--file={dump_file}"],
+        ["psql", "-d", dsn, f"--file={dump_file}"],
         capture_output=True,
         env=env,
         check=True,
@@ -85,3 +87,16 @@ class SSGTestCase(TestCase):
 @skipUnless(os.environ.get("REQUIRES_DB") == "1", "Set 'REQUIRES_DB=1' to enable.")
 class RequiresDBTestCase(SSGTestCase):
     """A test case that only runs if REQUIRES_DB has been set to 1."""
+    def setUp(self) -> None:
+        super().setUp()
+        self.postgresql = testing.postgresql.Postgresql()
+        self.engine = create_engine(
+            self.postgresql.url(),
+        )
+
+    def tearDown(self) -> None:
+        self.postgresql.stop()
+        super().tearDown()
+
+    def run_psql(self, file_path: Path) -> None:
+        run_psql(file_path, self.postgresql.url())

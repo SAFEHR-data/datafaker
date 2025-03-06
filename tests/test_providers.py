@@ -7,7 +7,7 @@ from sqlalchemy import Column, Integer, Text, create_engine, insert
 from sqlalchemy.ext.declarative import declarative_base
 
 from sqlsynthgen import providers
-from tests.utils import RequiresDBTestCase, SSGTestCase, run_psql
+from tests.utils import RequiresDBTestCase, SSGTestCase
 
 # pylint: disable=invalid-name
 Base = declarative_base()
@@ -40,12 +40,8 @@ class ColumnValueProviderTestCase(RequiresDBTestCase):
 
     def setUp(self) -> None:
         """Pre-test setup."""
-
-        run_psql(Path("tests/examples/providers.dump"))
-
-        self.engine = create_engine(
-            "postgresql://postgres:password@localhost:5432/providers",
-        )
+        super().setUp()
+        self.run_psql(Path("tests/examples/providers.dump"))
         metadata.create_all(self.engine)
 
     def test_column_value_present(self) -> None:

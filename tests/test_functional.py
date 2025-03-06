@@ -6,7 +6,7 @@ from subprocess import run
 
 from sqlalchemy import create_engine, inspect
 
-from tests.utils import RequiresDBTestCase, run_psql
+from tests.utils import RequiresDBTestCase
 
 # pylint: disable=subprocess-run-check
 
@@ -62,8 +62,9 @@ class DBFunctionalTestCase(RequiresDBTestCase):
 
     def setUp(self) -> None:
         """Pre-test setup."""
+        super().setUp()
         # Create a mostly-blank destination database
-        run_psql(self.examples_dir / self.dump_file_path)
+        self.run_psql(self.examples_dir / self.dump_file_path)
 
         # Copy some of the example files over to the workspace.
         for file in self.generator_file_paths + (self.config_file_path,):
@@ -79,6 +80,7 @@ class DBFunctionalTestCase(RequiresDBTestCase):
 
     def tearDown(self) -> None:
         os.chdir(self.start_dir)
+        super().tearDown()
 
     def test_workflow_minimal_args(self) -> None:
         """Test the recommended CLI workflow runs without errors."""

@@ -256,8 +256,8 @@ class TestMakeStats(RequiresDBTestCase):
 
     def setUp(self) -> None:
         """Pre-test setup."""
+        super().setUp()
         os.chdir(self.test_dir)
-        self.connection_string = "postgresql://postgres:password@localhost:5432/src"
         conf_path = Path("example_config.yaml")
         with open(conf_path, "r", encoding="utf8") as f:
             self.config = yaml.safe_load(f)
@@ -265,6 +265,7 @@ class TestMakeStats(RequiresDBTestCase):
     def tearDown(self) -> None:
         """Post-test cleanup."""
         os.chdir(self.start_dir)
+        super().tearDown()
 
     def check_make_stats_output(self, src_stats: dict) -> None:
         """Check that the output of make_src_stats is as expected."""
@@ -294,14 +295,14 @@ class TestMakeStats(RequiresDBTestCase):
     def test_make_stats_no_asyncio_schema(self) -> None:
         """Test that make_src_stats works when explicitly naming a schema."""
         src_stats = asyncio.get_event_loop().run_until_complete(
-            make_src_stats(self.connection_string, self.config, "public")
+            make_src_stats(self.postgresql.url(), self.config, "public")
         )
         self.check_make_stats_output(src_stats)
 
     def test_make_stats_no_asyncio(self) -> None:
         """Test that make_src_stats works using the example configuration."""
         src_stats = asyncio.get_event_loop().run_until_complete(
-            make_src_stats(self.connection_string, self.config)
+            make_src_stats(self.postgresql.url(), self.config)
         )
         self.check_make_stats_output(src_stats)
 
@@ -311,7 +312,7 @@ class TestMakeStats(RequiresDBTestCase):
         """
         config_asyncio = {**self.config, "use-asyncio": True}
         src_stats = asyncio.get_event_loop().run_until_complete(
-            make_src_stats(self.connection_string, config_asyncio)
+            make_src_stats(self.postgresql.url(), config_asyncio)
         )
         self.check_make_stats_output(src_stats)
 
@@ -342,7 +343,7 @@ class TestMakeStats(RequiresDBTestCase):
             ]
         }
         src_stats = asyncio.get_event_loop().run_until_complete(
-            make_src_stats(self.connection_string, config, "public")
+            make_src_stats(self.postgresql.url(), config, "public")
         )
         self.assertEqual(src_stats[query_name1], [])
         self.assertEqual(src_stats[query_name2], [])
