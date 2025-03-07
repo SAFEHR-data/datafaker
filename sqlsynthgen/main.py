@@ -12,6 +12,7 @@ from jsonschema.validators import validate
 from typer import Argument, Option, Typer
 
 from sqlsynthgen.create import create_db_data, create_db_tables, create_db_vocab
+from sqlsynthgen.interactive import update_config_tables
 from sqlsynthgen.make import (
     make_src_stats,
     make_table_generators,
@@ -325,6 +326,32 @@ def generate_config(
     content = generate_config_file(src_dsn, settings.src_schema)
     config_file_path.write_text(content, encoding="utf-8")
     logger.debug("%s created.", config_file)
+
+
+@app.command()
+def configure_tables(
+    config_file: Optional[str] = Option(CONFIG_FILENAME, help="Path to write the configuration file to"),
+    orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
+):
+    """
+    Interactively set tables to ignored or vocabulary.
+    """
+    logger.debug("Configuring tables in %s.", config_file)
+    settings = get_settings()
+    src_dsn: str = _require_src_db_dsn(settings)
+    config_file_path = Path(config_file)
+    config = {}
+    if config_file_path.exists():
+        config = yaml.load(config_file_path.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader)
+    # we don't pass config here so that no tables are ignored
+    metadata = load_metadata(orm_file)
+    config_updated = update_config_tables(src_dsn, settings.src_schema, metadata, config)
+    if config_updated is None:
+        logger.debug("Cancelled")
+        return
+    content = yaml.dump(config_updated)
+    config_file_path.write_text(content, encoding="utf-8")
+    logger.debug("Tables configured in %s.", config_file)
 
 
 @app.command()

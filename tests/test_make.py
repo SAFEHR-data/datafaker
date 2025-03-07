@@ -295,14 +295,14 @@ class TestMakeStats(RequiresDBTestCase):
     def test_make_stats_no_asyncio_schema(self) -> None:
         """Test that make_src_stats works when explicitly naming a schema."""
         src_stats = asyncio.get_event_loop().run_until_complete(
-            make_src_stats(self.postgresql.url(), self.config, "public")
+            make_src_stats(self.dsn, self.config, "public")
         )
         self.check_make_stats_output(src_stats)
 
     def test_make_stats_no_asyncio(self) -> None:
         """Test that make_src_stats works using the example configuration."""
         src_stats = asyncio.get_event_loop().run_until_complete(
-            make_src_stats(self.postgresql.url(), self.config)
+            make_src_stats(self.dsn, self.config)
         )
         self.check_make_stats_output(src_stats)
 
@@ -312,7 +312,7 @@ class TestMakeStats(RequiresDBTestCase):
         """
         config_asyncio = {**self.config, "use-asyncio": True}
         src_stats = asyncio.get_event_loop().run_until_complete(
-            make_src_stats(self.postgresql.url(), config_asyncio)
+            make_src_stats(self.dsn, config_asyncio)
         )
         self.check_make_stats_output(src_stats)
 
@@ -343,7 +343,7 @@ class TestMakeStats(RequiresDBTestCase):
             ]
         }
         src_stats = asyncio.get_event_loop().run_until_complete(
-            make_src_stats(self.postgresql.url(), config, "public")
+            make_src_stats(self.dsn, config, "public")
         )
         self.assertEqual(src_stats[query_name1], [])
         self.assertEqual(src_stats[query_name2], [])

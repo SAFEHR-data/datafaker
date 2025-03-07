@@ -62,21 +62,28 @@ class RequiresDBTestCase(SSGTestCase):
     use_asyncio = False
     examples_dir = "tests/examples"
     dump_file_path = None
+    database_name = None
 
     def setUp(self) -> None:
         super().setUp()
         self.postgresql = testing.postgresql.Postgresql()
+        if self.dump_file_path is not None:
+            self.run_psql(Path(self.examples_dir) / Path(self.dump_file_path))
         self.engine = create_db_engine(
-            self.postgresql.url(),
+            self.dsn,
             schema_name=self.schema_name,
             use_asyncio=self.use_asyncio,
         )
-        if self.dump_file_path is not None:
-            self.run_psql(Path(self.examples_dir) / Path(self.dump_file_path))
 
     def tearDown(self) -> None:
         self.postgresql.stop()
         super().tearDown()
+
+    @property
+    def dsn(self):
+        if self.database_name:
+            return self.postgresql.url(database=self.database_name)
+        return self.postgresql.url()
 
     def run_psql(self, dump_file: Path) -> None:
         """Run psql and pass dump_file_name as the --file option."""
