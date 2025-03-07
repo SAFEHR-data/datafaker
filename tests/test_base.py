@@ -27,13 +27,13 @@ class BaseTable(Base):  # type: ignore
 class VocabTests(RequiresDBTestCase):
     """Module test case."""
 
+    dump_file_path = "providers.dump"
     test_dir = Path("tests/examples")
     start_dir = os.getcwd()
 
     def setUp(self) -> None:
         """Pre-test setup."""
         super().setUp()
-        self.run_psql(Path("tests/examples/providers.dump"))
 
         metadata.create_all(self.engine)
         os.chdir(self.test_dir)

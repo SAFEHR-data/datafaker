@@ -40,11 +40,11 @@ class UniqueGeneratorTestCase(RequiresDBTestCase):
     and b which are boolean, and c which is a text column. There is a joint unique
     constraint on a and b, and a separate unique constraint on c.
     """
+    dump_file_path = "unique_generator.dump"
 
     def setUp(self) -> None:
         """Pre-test setup."""
         super().setUp()
-        self.run_psql(Path("tests/examples/unique_generator.dump"))
         metadata.create_all(self.engine)
 
     def test_unique_generator_empty_table(self) -> None:

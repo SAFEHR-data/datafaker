@@ -63,8 +63,6 @@ class DBFunctionalTestCase(RequiresDBTestCase):
     def setUp(self) -> None:
         """Pre-test setup."""
         super().setUp()
-        # Create a mostly-blank destination database
-        self.run_psql(self.examples_dir / self.dump_file_path)
 
         # Copy some of the example files over to the workspace.
         for file in self.generator_file_paths + (self.config_file_path,):

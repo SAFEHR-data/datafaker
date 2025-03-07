@@ -98,7 +98,7 @@ Also, while we are at it let's give the actors sensible names:
 
 We can see that we are setting the column we want changed with the ``columns_assigned`` property, but what does this ``name`` property mean?
 This is a Python function that generates the random data for us.
-``generic.`` refers to the Mimesis `Generic provider <https://mimesis.name/master/api.html#generic>`_ that combines all the other Mimesis providers.
+``generic.`` refers to the `Mimesis generic provider <https://mimesis.name/master/api.html#generic>`_ that combines all the other Mimesis providers.
 These all use the ``EN_GB`` locale, which currently cannot be changed.
 Some examples of useful providers you can use are:
 - `generic.text. <https://mimesis.name/master/api.html#text>`_ generates words, sentences, colours and more.

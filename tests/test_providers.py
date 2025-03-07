@@ -37,11 +37,11 @@ class BinaryProviderTestCase(SSGTestCase):
 
 class ColumnValueProviderTestCase(RequiresDBTestCase):
     """Tests for the ColumnValueProvider class."""
+    dump_file_path = "providers.dump"
 
     def setUp(self) -> None:
         """Pre-test setup."""
         super().setUp()
-        self.run_psql(Path("tests/examples/providers.dump"))
         metadata.create_all(self.engine)
 
     def test_column_value_present(self) -> None:

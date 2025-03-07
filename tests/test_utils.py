@@ -59,6 +59,7 @@ class TestImport(SSGTestCase):
 class TestDownload(RequiresDBTestCase):
     """Tests for the download_table function."""
 
+    dump_file_path = "providers.dump"
     mytable_file_path = Path("mytable.yaml")
 
     test_dir = Path("tests/workspace")
@@ -68,7 +69,6 @@ class TestDownload(RequiresDBTestCase):
         """Pre-test setup."""
         super().setUp()
 
-        self.run_psql(Path("tests/examples/providers.dump"))
         metadata.create_all(self.engine)
 
         os.chdir(self.test_dir)
@@ -97,28 +97,6 @@ class TestDownload(RequiresDBTestCase):
             actual = yamlfile.read().strip()
 
         self.assertEqual(expected, actual)
-
-
-class TestCreateDBEngine(RequiresDBTestCase):
-    """Tests for the create_db_engine function."""
-
-    dsn = parse_obj_as(PostgresDsn, "postgresql://postgres:password@localhost")
-
-    def test_connect_sync(self) -> None:
-        """Check that we can create a synchronous engine."""
-        # All default params
-        create_db_engine(self.dsn)
-
-        # With schema
-        create_db_engine(self.dsn, schema_name="public")
-
-    def test_connect_async(self) -> None:
-        """Check that we can create an asynchronous engine."""
-        # All default params
-        create_db_engine(self.dsn, use_asyncio=True)
-
-        # With schema
-        create_db_engine(self.dsn, schema_name="public", use_asyncio=True)
 
 
 class TestReadConfig(SSGTestCase):

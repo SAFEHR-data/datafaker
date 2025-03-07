@@ -2,14 +2,14 @@
 import os
 from functools import lru_cache
 from pathlib import Path
-from sqlalchemy import create_engine
+import shutil
 from subprocess import run
 import testing.postgresql
 from typing import Any
 from unittest import TestCase, skipUnless
 
 from sqlsynthgen import settings
-
+from sqlsynthgen.utils import create_db_engine
 
 class SysExit(Exception):
     """To force the function to exit as sys.exit() would."""
@@ -26,35 +26,6 @@ def get_test_settings() -> settings.Settings:
         # The mypy ignore can be removed once we upgrade to pydantic 2.
         _env_file=None,  # type: ignore[call-arg]
     )
-
-
-def run_psql(dump_file: Path, dsn: str="host=localhost port=5432 user=postgres") -> None:
-    """Run psql and pass dump_file_name as the --file option."""
-
-    # If you need to update a .dump file, use
-    # PGPASSWORD=password pg_dump \
-    # --host=localhost \
-    # --port=5432 \
-    # --dbname=src \
-    # --username=postgres \
-    # --no-password \
-    # --clean \
-    # --create \
-    # --insert \
-    # --if-exists > tests/examples/FILENAME.dump
-
-    env = os.environ.copy()
-    env = {**env, "PGPASSWORD": "password"}
-
-    # Clear and re-create the test database
-    completed_process = run(
-        ["psql", "-d", dsn, f"--file={dump_file}"],
-        capture_output=True,
-        env=env,
-        check=True,
-    )
-    # psql doesn't always return != 0 if it fails
-    assert completed_process.stderr == b"", completed_process.stderr
 
 
 class SSGTestCase(TestCase):
@@ -84,19 +55,49 @@ class SSGTestCase(TestCase):
         self.assertReturnCode(result, 1)
 
 
-@skipUnless(os.environ.get("REQUIRES_DB") == "1", "Set 'REQUIRES_DB=1' to enable.")
+@skipUnless(shutil.which("psql"), "need to find 'psql': install PostgreSQL to enable")
 class RequiresDBTestCase(SSGTestCase):
-    """A test case that only runs if REQUIRES_DB has been set to 1."""
+    """A test case that only runs if PostgreSQL is installed."""
+    schema_name = None
+    use_asyncio = False
+    examples_dir = "tests/examples"
+    dump_file_path = None
+
     def setUp(self) -> None:
         super().setUp()
         self.postgresql = testing.postgresql.Postgresql()
-        self.engine = create_engine(
+        self.engine = create_db_engine(
             self.postgresql.url(),
+            schema_name=self.schema_name,
+            use_asyncio=self.use_asyncio,
         )
+        if self.dump_file_path is not None:
+            self.run_psql(Path(self.examples_dir) / Path(self.dump_file_path))
 
     def tearDown(self) -> None:
         self.postgresql.stop()
         super().tearDown()
 
-    def run_psql(self, file_path: Path) -> None:
-        run_psql(file_path, self.postgresql.url())
+    def run_psql(self, dump_file: Path) -> None:
+        """Run psql and pass dump_file_name as the --file option."""
+
+        # If you need to update a .dump file, use
+        # PGPASSWORD=password pg_dump \
+        # --host=localhost \
+        # --port=5432 \
+        # --dbname=src \
+        # --username=postgres \
+        # --no-password \
+        # --clean \
+        # --create \
+        # --insert \
+        # --if-exists > tests/examples/FILENAME.dump
+
+        # Clear and re-create the test database
+        completed_process = run(
+            ["psql", "-d", self.postgresql.url(), "-f", dump_file],
+            capture_output=True,
+            check=True,
+        )
+        # psql doesn't always return != 0 if it fails
+        assert completed_process.stderr == b"", completed_process.stderr

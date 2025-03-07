@@ -192,6 +192,7 @@ class MyTestCase(SSGTestCase):
 class TestStoryDefaults(RequiresDBTestCase):
     """Test that we can handle column defaults in stories."""
 
+    dump_file_path = "dst.dump"
     # pylint: disable=invalid-name
     Base = declarative_base()
     # pylint: enable=invalid-name
@@ -203,13 +204,6 @@ class TestStoryDefaults(RequiresDBTestCase):
         __tablename__ = "column_defaults"
         someval = Column(Integer, primary_key=True)
         otherval = Column(Integer, server_default="8")
-
-    def setUp(self) -> None:
-        """Ensure we have an empty DB to work with."""
-        super().setUp()
-        dump_file_path = Path("dst.dump")
-        examples_dir = Path("tests/examples")
-        self.run_psql(examples_dir / dump_file_path)
 
     def test_populate(self) -> None:
         """Check that we can populate a table that has column defaults."""
