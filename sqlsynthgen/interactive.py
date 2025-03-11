@@ -57,6 +57,7 @@ class TableCmd(cmd.Cmd):
     file = None
     ERROR_NO_MORE_TABLES = "Error: There are no more tables"
     ERROR_ALREADY_AT_START = "Error: Already at the start"
+    ERROR_NO_SUCH_TABLE = "Error: '{0}' is not the name of a table in this database"
 
     def __init__(self, src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping):
         super().__init__()
@@ -162,7 +163,15 @@ class TableCmd(cmd.Cmd):
             return True
         return False
     def do_next(self, _arg):
-        "Go to the next table"
+        "'next' = go to the next table, 'next tablename' = go to table 'tablename'"
+        if _arg:
+            # Find the index of the table called _arg, if any
+            index = next((i for i,entry in enumerate(self.table_entries) if entry.name == _arg), None)
+            if index is None:
+                self.print(self.ERROR_NO_SUCH_TABLE, _arg)
+                return
+            self.set_index(index)
+            return
         self.next_table(self.ERROR_NO_MORE_TABLES)
     def do_previous(self, _arg):
         "Go to the previous table"
@@ -229,7 +238,7 @@ Type 'help data' for examples."""
     def print_column_data(self, column: str, count: int, min_length: int):
         where = ""
         if 0 < min_length:
-            where = "WHERE LENGTH({column}) > {len}".format(
+            where = "WHERE LENGTH({column}) >= {len}".format(
                 column=column,
                 len=min_length,
             )
