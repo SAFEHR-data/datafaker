@@ -1,5 +1,6 @@
 """Entrypoint for the SQLSynthGen package."""
 import asyncio
+from enum import Enum
 import json
 import sys
 from importlib import metadata
@@ -424,6 +425,37 @@ def remove_tables(
         logger.debug("Tables dropped.")
     else:
         logger.info("Would remove tables if called with --yes.")
+
+
+class TableType(str, Enum):
+    all = "all"
+    vocab = "vocab"
+    generated = "generated"
+
+
+@app.command()
+def list_tables(
+    orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
+    config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
+    tables: TableType = Option(TableType.generated, help="Which tables to list"),
+) -> None:
+    """List the names of tables"""
+    config = read_config_file(config_file) if config_file is not None else {}
+    orm_metadata = load_metadata(orm_file, config)
+    all_table_names = set(orm_metadata.tables.keys())
+    vocab_table_names = {
+        table_name
+        for (table_name, table_config) in config.get("tables", {}).items()
+        if get_flag(table_config, "vocabulary_table")
+    }
+    if tables == TableType.all:
+        names = all_table_names
+    elif tables == TableType.generated:
+        names = all_table_names - vocab_table_names
+    else:
+        names = vocab_table_names
+    for name in sorted(names):
+        print(name)
 
 
 @app.command()
