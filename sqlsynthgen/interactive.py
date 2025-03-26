@@ -173,6 +173,12 @@ class TableCmd(cmd.Cmd):
             self.set_index(index)
             return
         self.next_table(self.ERROR_NO_MORE_TABLES)
+    def complete_next(self, text, line, begidx, endidx):
+        return [
+            entry.name
+            for entry in self.table_entries
+            if entry.name.startswith(text)
+        ]
     def do_previous(self, _arg):
         "Go to the previous table"
         if not self.set_index(self.table_index - 1):
@@ -234,6 +240,15 @@ Type 'help data' for examples."""
             if number is None:
                 number = 48
             self.print_column_data(column, number, min_length)
+    def complete_data(self, text, line, begidx, endidx):
+        previous_parts = line[:begidx - 1].split()
+        if len(previous_parts) != 2:
+            return []
+        table_metadata = self.table_metadata()
+        return [
+            k for k in table_metadata.columns.keys()
+            if k.startswith(text)
+        ]
 
     def print_column_data(self, column: str, count: int, min_length: int):
         where = ""
@@ -250,7 +265,7 @@ Type 'help data' for examples."""
                 where=where,
             ))
         )
-        self.columnize([x[0] for x in result.all()])
+        self.columnize([str(x[0]) for x in result.all()])
 
     def print_row_data(self, count: int):
         result = self.connection.execute(
