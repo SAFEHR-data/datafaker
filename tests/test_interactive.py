@@ -148,3 +148,50 @@ class ConfigureTablesTests(RequiresDBTestCase):
             tc.do_data(f"{to_get_count} name 16")
             self.assertEqual(len(tc.column_items), 1)
             self.assertEqual(set(tc.column_items[0]), set(filter(lambda n: 16 <= len(n), name_set)))
+
+    def test_list_tables(self):
+        """Test that we can list the tables"""
+        metadata = MetaData()
+        metadata.reflect(self.engine)
+        config = {
+            "tables": {
+                "unique_constraint_test": {
+                    "vocabulary_table": True,
+                },
+                "no_pk_test": {
+                    "ignore": True,
+                },
+            },
+        }
+        with TestTableCmd(self.dsn, self.schema_name, metadata, config) as tc:
+            tc.do_next("unique_constraint_test")
+            tc.do_ignore("")
+            tc.do_next("person")
+            tc.do_vocabulary("")
+            tc.reset()
+            tc.do_list("")
+            person_listed = False
+            unique_constraint_test_listed = False
+            no_pk_test_listed = False
+            for (text, args, kwargs) in tc.messages:
+                if args[2] == "person":
+                    self.assertFalse(person_listed)
+                    person_listed = True
+                    self.assertEqual(args[0], " ")
+                    self.assertEqual(args[1], "->V")
+                elif args[2] == "unique_constraint_test":
+                    self.assertFalse(unique_constraint_test_listed)
+                    unique_constraint_test_listed = True
+                    self.assertEqual(args[0], "V")
+                    self.assertEqual(args[1], "->I")
+                elif args[2] == "no_pk_test":
+                    self.assertFalse(no_pk_test_listed)
+                    no_pk_test_listed = True
+                    self.assertEqual(args[0], "I")
+                    self.assertEqual(args[1], "   ")
+                else:
+                    self.assertEqual(args[0], " ")
+                    self.assertEqual(args[1], "   ")
+            self.assertTrue(person_listed)
+            self.assertTrue(unique_constraint_test_listed)
+            self.assertTrue(no_pk_test_listed)

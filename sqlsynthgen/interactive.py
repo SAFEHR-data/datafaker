@@ -17,6 +17,12 @@ class TableType(Enum):
     IGNORE = "ignore"
     VOCABULARY = "vocabulary"
 
+TYPE_LETTER = {
+    TableType.NORMAL: " ",
+    TableType.IGNORE: "I",
+    TableType.VOCABULARY: "V",
+}
+
 @dataclass
 class TableEntry:
     name: str
@@ -162,6 +168,13 @@ class TableCmd(cmd.Cmd):
         if reply == "no":
             return True
         return False
+    def do_list(self, arg):
+        "list the tables with their types"
+        for entry in self.table_entries:
+            old = entry.old_type
+            new = entry.new_type
+            becomes = "   " if old == new else "->" + TYPE_LETTER[new]
+            self.print("{0}{1} {2}", TYPE_LETTER[old], becomes, entry.name)
     def do_next(self, _arg):
         "'next' = go to the next table, 'next tablename' = go to table 'tablename'"
         if _arg:
