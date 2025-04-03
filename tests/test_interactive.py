@@ -69,7 +69,7 @@ class ConfigureTablesTests(RequiresDBTestCase):
             self.assertListEqual(tc.column_items, [["id", "a", "b", "c"]])
 
     def test_configure_tables(self) -> None:
-        """Test that we can change columns to ignore, vocab or reset."""
+        """Test that we can change columns to ignore, vocab or normal."""
         metadata = MetaData()
         metadata.reflect(self.engine)
         config = {
@@ -84,7 +84,7 @@ class ConfigureTablesTests(RequiresDBTestCase):
         }
         with TestTableCmd(self.dsn, self.schema_name, metadata, config) as tc:
             tc.do_next("unique_constraint_test")
-            tc.do_reset("")
+            tc.do_normal("")
             tc.do_next("person")
             tc.do_vocabulary("")
             tc.do_next("mitigation_type")

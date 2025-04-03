@@ -153,6 +153,10 @@
               "description": "Whether to export the table data.",
               "type": "boolean"
             },
+            "primary_private": {
+              "description": "Whether the table is a Primary Private table (perhaps a table of patients).",
+              "type": "boolean"
+            },
             "num_rows_per_pass": {
               "description": "The number of rows to generate per pass.",
               "type": "integer"

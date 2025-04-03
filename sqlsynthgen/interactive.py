@@ -1,12 +1,12 @@
+from abc import ABC, abstractmethod
 import cmd
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 import logging
-from typing import Self
 
 from prettytable import PrettyTable
-from sqlalchemy import MetaData, Table, Column, text
+from sqlalchemy import MetaData, Table, text
 
 from sqlsynthgen.utils import create_db_engine
 
@@ -16,27 +16,25 @@ class TableType(Enum):
     NORMAL = "normal"
     IGNORE = "ignore"
     VOCABULARY = "vocabulary"
+    PRIVATE = "private"
 
 TYPE_LETTER = {
     TableType.NORMAL: " ",
     TableType.IGNORE: "I",
     TableType.VOCABULARY: "V",
+    TableType.PRIVATE: "P",
+}
+
+TYPE_PROMPT = {
+    TableType.NORMAL: "(table: {}) ",
+    TableType.IGNORE: "(table: {} (ignore)) ",
+    TableType.VOCABULARY: "(table: {} (vocab)) ",
+    TableType.PRIVATE: "(table: {} (private)) ",
 }
 
 @dataclass
 class TableEntry:
     name: str
-    old_type: TableType
-    new_type: TableType
-    @classmethod
-    def make(_cls, name: str, config: Mapping) -> Self:
-        tables = config.get("tables", {})
-        table = tables.get(name, {})
-        if table.get("ignore", False):
-            return TableEntry(name, TableType.IGNORE, TableType.IGNORE)
-        if table.get("vocabulary_table", False):
-            return TableEntry(name, TableType.VOCABULARY, TableType.VOCABULARY)
-        return TableEntry(name, TableType.NORMAL, TableType.NORMAL)
 
 
 class AskSaveCmd(cmd.Cmd):
@@ -57,24 +55,25 @@ class AskSaveCmd(cmd.Cmd):
         return True
 
 
-class TableCmd(cmd.Cmd):
-    intro = "Interactive table configuration (ignore or vocabulary). Type ? for help.\n"
-    prompt = "(tableconf) "
-    file = None
+class DbCmd(ABC, cmd.Cmd):
     ERROR_NO_MORE_TABLES = "Error: There are no more tables"
     ERROR_ALREADY_AT_START = "Error: Already at the start"
     ERROR_NO_SUCH_TABLE = "Error: '{0}' is not the name of a table in this database"
 
+    @abstractmethod
+    def make_table_entry(self, name: str) -> TableEntry:
+        ...
+
     def __init__(self, src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping):
         super().__init__()
-        self.table_entries: list[TableEntry] = [
-            TableEntry.make(name, config)
-            for name in metadata.tables.keys()
-        ]
-        self.table_index = 0
         self.config = config
         self.metadata = metadata
-        self.set_prompt()
+        self.table_entries: list[TableEntry] = []
+        for name in metadata.tables.keys():
+            entry = self.make_table_entry(name)
+            if entry is not None:
+                self.table_entries.append(entry)
+        self.table_index = 0
         self.engine = create_db_engine(src_dsn, schema_name=src_schema)
         self.connection = self.engine.connect()
     def __enter__(self):
@@ -82,51 +81,6 @@ class TableCmd(cmd.Cmd):
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.connection.close()
         self.engine.dispose()
-
-    def set_prompt(self):
-        if self.table_index < len(self.table_entries):
-            entry = self.table_entries[self.table_index]
-            if entry.new_type == TableType.IGNORE:
-                self.prompt = "(table: {} (ignored)) ".format(entry.name)
-            elif entry.new_type == TableType.VOCABULARY:
-                self.prompt = "(table: {} (vocab)) ".format(entry.name)
-            else:
-                self.prompt = "(table: {}) ".format(entry.name)
-        else:
-            self.prompt = "(table)"
-    def set_type(self, t_type: TableType):
-        if self.table_index < len(self.table_entries):
-            entry = self.table_entries[self.table_index]
-            entry.new_type = t_type
-    def set_index(self, index) -> bool:
-        if 0 <= index and index < len(self.table_entries):
-            self.table_index = index
-            self.set_prompt()
-            return True
-        return False
-    def next_table(self, report="No more tables"):
-        if not self.set_index(self.table_index + 1):
-            self.print(report)
-    def table_name(self):
-        return self.table_entries[self.table_index].name
-    def table_metadata(self) -> Table:
-        return self.metadata.tables[self.table_name()]
-    def copy_entries(self) -> None:
-        tables = self.config.get("tables", {})
-        for entry in self.table_entries:
-            if entry.old_type != entry.new_type:
-                table: dict = tables.get(entry.name, {})
-                if entry.new_type == TableType.IGNORE:
-                    table["ignore"] = True
-                    table.pop("vocabulary_table", None)
-                elif entry.new_type == TableType.VOCABULARY:
-                    table.pop("ignore", None)
-                    table["vocabulary_table"] = True
-                else:
-                    table.pop("ignore", None)
-                    table.pop("vocabulary_table", None)
-                tables[entry.name] = table
-        self.config["tables"] = tables
 
     def print(self, text: str, *args, **kwargs):
         print(text.format(*args, **kwargs))
@@ -145,6 +99,83 @@ class TableCmd(cmd.Cmd):
         ask = AskSaveCmd()
         ask.cmdloop()
         return ask.result
+
+    def set_table_index(self, index) -> bool:
+        if 0 <= index and index < len(self.table_entries):
+            self.table_index = index
+            self.set_prompt()
+            return True
+        return False
+    def next_table(self, report="No more tables"):
+        if not self.set_table_index(self.table_index + 1):
+            self.print(report)
+            return False
+        return True
+    def table_name(self):
+        return self.table_entries[self.table_index].name
+    def table_metadata(self) -> Table:
+        return self.metadata.tables[self.table_name()]
+
+
+@dataclass
+class TableCmdTableEntry(TableEntry):
+    old_type: TableType
+    new_type: TableType
+
+class TableCmd(DbCmd):
+    intro = "Interactive table configuration (ignore, vocabulary or private). Type ? for help.\n"
+    prompt = "(tableconf) "
+    file = None
+
+    def make_table_entry(self, name: str) -> TableEntry:
+        tables = self.config.get("tables", {})
+        table = tables.get(name, {})
+        if table.get("ignore", False):
+            return TableCmdTableEntry(name, TableType.IGNORE, TableType.IGNORE)
+        if table.get("vocabulary_table", False):
+            return TableCmdTableEntry(name, TableType.VOCABULARY, TableType.VOCABULARY)
+        if table.get("primary_private", False):
+            return TableCmdTableEntry(name, TableType.PRIVATE, TableType.PRIVATE)
+        return TableCmdTableEntry(name, TableType.NORMAL, TableType.NORMAL)
+
+    def __init__(self, src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping):
+        super().__init__(src_dsn, src_schema, metadata, config)
+        self.config = config
+        self.set_prompt()
+
+    def set_prompt(self):
+        if self.table_index < len(self.table_entries):
+            entry = self.table_entries[self.table_index]
+            self.prompt = TYPE_PROMPT[entry.new_type].format(entry.name)
+        else:
+            self.prompt = "(table) "
+    def set_type(self, t_type: TableType):
+        if self.table_index < len(self.table_entries):
+            entry = self.table_entries[self.table_index]
+            entry.new_type = t_type
+    def copy_entries(self) -> None:
+        tables = self.config.get("tables", {})
+        for entry in self.table_entries:
+            if entry.old_type != entry.new_type:
+                table: dict = tables.get(entry.name, {})
+                if entry.new_type == TableType.IGNORE:
+                    table["ignore"] = True
+                    table.pop("vocabulary_table", None)
+                    table.pop("primary_private", None)
+                elif entry.new_type == TableType.VOCABULARY:
+                    table.pop("ignore", None)
+                    table["vocabulary_table"] = True
+                    table.pop("primary_private", None)
+                elif entry.new_type == TableType.PRIVATE:
+                    table.pop("ignore", None)
+                    table.pop("vocabulary_table", None)
+                    table["primary_private"] = True
+                else:
+                    table.pop("ignore", None)
+                    table.pop("vocabulary_table", None)
+                    table.pop("primary_private", None)
+                tables[entry.name] = table
+        self.config["tables"] = tables
 
     def do_quit(self, _arg):
         "Check the updates, save them if desired and quit the configurer."
@@ -183,7 +214,7 @@ class TableCmd(cmd.Cmd):
             if index is None:
                 self.print(self.ERROR_NO_SUCH_TABLE, _arg)
                 return
-            self.set_index(index)
+            self.set_table_index(index)
             return
         self.next_table(self.ERROR_NO_MORE_TABLES)
     def complete_next(self, text, line, begidx, endidx):
@@ -194,7 +225,7 @@ class TableCmd(cmd.Cmd):
         ]
     def do_previous(self, _arg):
         "Go to the previous table"
-        if not self.set_index(self.table_index - 1):
+        if not self.set_table_index(self.table_index - 1):
             self.print(self.ERROR_ALREADY_AT_START)
     def do_ignore(self, _arg):
         "Set the current table as ignored, and go to the next table"
@@ -206,8 +237,13 @@ class TableCmd(cmd.Cmd):
         self.set_type(TableType.VOCABULARY)
         self.print("Table {} set to be a vocabulary table", self.table_name())
         self.next_table()
-    def do_reset(self, _arg):
-        "Set the current table as neither a vocabulary table nor ignored, and go to the next table"
+    def do_private(self, _arg):
+        "Set the current table as a primary private table (such as the table of patients)"
+        self.set_type(TableType.PRIVATE)
+        self.print("Table {} set to be a primary private table", self.table_name())
+        self.next_table()
+    def do_normal(self, _arg):
+        "Set the current table as neither a vocabulary table nor ignored nor primary private, and go to the next table"
         self.set_type(TableType.NORMAL)
         self.print("Table {} reset", self.table_name())
         self.next_table()
@@ -296,3 +332,269 @@ def update_config_tables(src_dsn: str, src_schema: str, metadata: MetaData, conf
     with TableCmd(src_dsn, src_schema, metadata, config) as tc:
         tc.cmdloop()
         return tc.config
+
+
+class Generator(ABC):
+    @abstractmethod
+    def name(self) -> str:
+        """Get the name of this generator."""
+    @abstractmethod
+    def kws(self) -> list[str]:
+        """Get a list of names of kwargs that this generator wants."""
+    #...
+
+
+@dataclass
+class GeneratorInfo:
+    column: str
+    is_primary_key: bool
+    old_name: str | None
+    new_name: str | None
+
+@dataclass
+class GeneratorCmdTableEntry(TableEntry):
+    generators: list[GeneratorInfo]
+
+class GeneratorCmd(DbCmd):
+    intro = "Interactive generator configuration. Type ? for help.\n"
+    prompt = "(generatorconf) "
+    file = None
+
+    def make_table_entry(self, name: str) -> TableEntry:
+        tables = self.config.get("tables", {})
+        table = tables.get(name, {})
+        metadata_table = self.metadata.tables[name]
+        columns = set(metadata_table.columns.keys())
+        generator_infos: list[GeneratorInfo] = []
+        multiple_columns_assigned: dict[str, list[str]] = {}
+        for rg in table.get("row_generators", []):
+            gen_name = rg.get("name", None)
+            if gen_name:
+                ca = rg.get("columns_assigned", [])
+                single_ca = None
+                if isinstance(ca, str):
+                    if ca in columns:
+                        columns.remove(ca)
+                        single_ca = ca
+                    else:
+                        self.print(
+                            "table '{0}' has '{1}' assigned to column '{2}' which is not in this table",
+                            name, gen_name, ca,
+                        )
+                else:
+                    columns.difference_update(ca)
+                    if len(ca) == 1:
+                        single_ca = ca
+            if single_ca is not None:
+                generator_infos.append(GeneratorInfo(
+                    column=single_ca,
+                    is_primary_key=metadata_table.columns[single_ca].primary_key,
+                    old_name=gen_name,
+                    new_name=gen_name,
+                ))
+            else:
+                multiple_columns_assigned[gen_name] = ca
+        for col in columns:
+            generator_infos.append(GeneratorInfo(
+                column=col,
+                is_primary_key=metadata_table.columns[col].primary_key,
+                old_name=None,
+                new_name=None,
+            ))
+        if multiple_columns_assigned:
+            self.print(
+                "The following mulit-column generators for table {0} are defined in the configuration file and cannot be configured with this command",
+                name,
+            )
+            for (gen_name, cols) in multiple_columns_assigned.items():
+                self.print("   {0}: {1}", gen_name, cols)
+        if len(generator_infos) == 0:
+            return None
+        return GeneratorCmdTableEntry(
+            name=name,
+            generators=generator_infos
+        )
+
+    def __init__(self, src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping):
+        super().__init__(src_dsn, src_schema, metadata, config)
+        self.generator_index = 0
+        self.set_prompt()
+
+    def set_table_index(self, index):
+        ret = super().set_table_index(index)
+        if ret:
+            self.generator_index = 0
+        return ret
+
+    def previous_table(self):
+        ret = self.set_table_index(self.table_index - 1)
+        if ret:
+            table = self.get_table()
+            if table is None:
+                self.print("Internal error! table {0} does not have any generators!", self.table_index)
+                return False
+            self.generator_index = len(table.generators) - 1
+        return ret
+
+    def get_table(self) -> GeneratorCmdTableEntry | None:
+        if self.table_index < len(self.table_entries):
+            return self.table_entries[self.table_index]
+        return None
+
+    def get_table_and_generator(self) -> tuple[str | None, GeneratorInfo | None]:
+        if self.table_index < len(self.table_entries):
+            entry = self.table_entries[self.table_index]
+            if self.generator_index < len(entry.generators):
+                return (entry.name, entry.generators[self.generator_index])
+            return (entry.name, None)
+        return (None, None)
+
+    def get_column_name(self) -> str | None:
+        (_, generator_info) = self.get_table_and_generator()
+        return generator_info.column if generator_info else None
+
+    def set_prompt(self):
+        (table_name, gen_info) = self.get_table_and_generator()
+        if table_name is None:
+            self.prompt = "(generators) "
+            return
+        if gen_info is None:
+            self.prompt = "({table}) ".format(table_name)
+            return
+        if gen_info.is_primary_key:
+            column = f"{gen_info.column}[pk]"
+        else:
+            column = gen_info.column
+        if gen_info.new_name:
+            self.prompt = "({table}.{column} ({generator})) ".format(
+                table=table_name,
+                column=column,
+                generator=gen_info.new_name,
+            )
+        else:
+            self.prompt = "({table}.{column}) ".format(
+                table=table_name,
+                column=column,
+            )
+
+    def set_generator(self, generator: str):
+        if self.table_index < len(self.table_entries):
+            entry = self.table_entries[self.table_index]
+            if self.generator_index < len(entry.generators):
+                entry.generators[self.generator_index] = generator
+
+    def copy_entries(self) -> None:
+        tables = self.config.get("tables", {})
+        for entry in self.table_entries:
+            # We probably need to reconstruct row_generators. Hmmm.
+            # We will need to keep row_generators intact not break them apart like now
+            for generator in entry.generators:
+                pass
+        self.config["tables"] = tables
+
+    def do_quit(self, _arg):
+        "Check the updates, save them if desired and quit the configurer."
+        count = 0
+        for entry in self.table_entries:
+            header_shown = False
+            for gen in entry.generators:
+                if gen.old_name != gen.new_name:
+                    if not header_shown:
+                        header_shown = True
+                        self.print("Table {0}:", entry.name)
+                    count += 1
+                    self.print(
+                        "...changing {0} from {1} to {2}",
+                        gen.name,
+                        gen.old_name,
+                        gen.new_name,
+                    )
+        if count == 0:
+            self.print("There are no changes.")
+            return True
+        reply = self.ask_save()
+        if reply == "yes":
+            self.copy_entries()
+            return True
+        if reply == "no":
+            return True
+        return False
+
+    def do_tables(self, arg):
+        "list the tables"
+        for entry in self.table_entries:
+            gen_count = len(entry.generators)
+            how_many = "one generator" if gen_count == 1 else f"{gen_count} generators"
+            self.print("{0} ({1})", entry.name, how_many)
+
+    def do_list(self, arg):
+        "list the generators in the current table"
+        if len(self.table_entries) <= self.table_index:
+            self.print("Error: no table {0}", self.table_index)
+            return
+        for gen in self.table_entries[self.table_index].generators:
+            old = "" if gen.old_name is None else gen.old_name
+            if gen.old_name == gen.new_name:
+                becomes = ""
+                if old == "":
+                    old = "(not set)"
+            elif gen.new_name is None:
+                becomes = "(delete)"
+            else:
+                becomes = f"->{gen.new_name}"
+            primary = "[primary-key]" if gen.is_primary else ""
+            self.print("{0}{1}{2} {3}", old, becomes, primary, gen.column)
+
+    def do_columns(self, _arg):
+        "Report the column names"
+        self.columnize(self.table_metadata().columns.keys())
+
+    def do_next(self, _arg):
+        "Go to the next generator"
+        table = self.get_table()
+        if table is None:
+            self.print("No more tables")
+        next_gi = self.generator_index + 1
+        if next_gi == len(table.generators):
+            self.next_table()
+            return
+        self.generator_index = next_gi
+        self.set_prompt()
+
+    def do_previous(self, _arg):
+        "Go to the previous generator"
+        if self.generator_index == 0:
+            self.previous_table()
+        else:
+            self.generator_index -= 1
+        self.set_prompt()
+
+    def do_data(self, arg: str):
+        """ Report some random data from the source versus the old and new generators. """
+        args = arg.split()
+        source = self.get_column_data(20)
+        self.print_table(["Source data"], [[s] for s in source])
+
+    def get_column_data(self, count: int, min_length: int = 0):
+        column = self.get_column_name()
+        where = ""
+        if 0 < min_length:
+            where = "WHERE LENGTH({column}) >= {len}".format(
+                column=column,
+                len=min_length,
+            )
+        result = self.connection.execute(
+            text("SELECT {column} FROM {table} {where} ORDER BY RANDOM() LIMIT {count}".format(
+                table=self.table_name(),
+                column=column,
+                count=count,
+                where=where,
+            ))
+        )
+        return [str(x[0]) for x in result.all()]
+
+
+def update_config_generators(src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping):
+    with GeneratorCmd(src_dsn, src_schema, metadata, config) as gc:
+        gc.cmdloop()
+        return gc.config
