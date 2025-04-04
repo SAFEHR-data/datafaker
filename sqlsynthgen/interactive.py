@@ -6,8 +6,9 @@ from enum import Enum
 import logging
 
 from prettytable import PrettyTable
-from sqlalchemy import MetaData, Table, text
+from sqlalchemy import Column, MetaData, Table, text
 
+from sqlsynthgen.generators import everything_factory
 from sqlsynthgen.utils import create_db_engine
 
 logger = logging.getLogger(__name__)
@@ -424,6 +425,7 @@ class GeneratorCmd(DbCmd):
         ret = super().set_table_index(index)
         if ret:
             self.generator_index = 0
+            self.set_prompt()
         return ret
 
     def previous_table(self):
@@ -453,13 +455,20 @@ class GeneratorCmd(DbCmd):
         (_, generator_info) = self.get_table_and_generator()
         return generator_info.column if generator_info else None
 
+    def column_metadata(self) -> Column | None:
+        table = self.table_metadata()
+        column_name = self.get_column_name()
+        if table is None or column_name is None:
+            return None
+        return table.columns[column_name]
+
     def set_prompt(self):
         (table_name, gen_info) = self.get_table_and_generator()
         if table_name is None:
             self.prompt = "(generators) "
             return
         if gen_info is None:
-            self.prompt = "({table}) ".format(table_name)
+            self.prompt = "({table}) ".format(table=table_name)
             return
         if gen_info.is_primary_key:
             column = f"{gen_info.column}[pk]"
@@ -542,7 +551,7 @@ class GeneratorCmd(DbCmd):
                 becomes = "(delete)"
             else:
                 becomes = f"->{gen.new_name}"
-            primary = "[primary-key]" if gen.is_primary else ""
+            primary = "[primary-key]" if gen.is_primary_key else ""
             self.print("{0}{1}{2} {3}", old, becomes, primary, gen.column)
 
     def do_columns(self, _arg):
@@ -592,6 +601,15 @@ class GeneratorCmd(DbCmd):
             ))
         )
         return [str(x[0]) for x in result.all()]
+
+    def do_propose(self, arg):
+        column = self.column_metadata()
+        if column is None:
+            self.print("Error: No such column")
+            return
+        gens = everything_factory.get_generators(column, self.connection)
+        for gen in gens:
+            self.print("{0}: (fit: {1}) {2}...", gen.function_name(), gen.fit(), gen.generate_data(5))
 
 
 def update_config_generators(src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping):

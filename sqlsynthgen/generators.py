@@ -1,0 +1,408 @@
+"""
+Generator factories for making generators for single columns.
+"""
+
+from abc import ABC, abstractmethod
+import decimal
+import math
+import mimesis
+import mimesis.locales
+from sqlalchemy import Column, Connection, text
+from sqlalchemy.types import Integer, Numeric, String
+
+from sqlsynthgen.base import DistributionGenerator
+
+dist_gen = DistributionGenerator()
+generic = mimesis.Generic(locale=mimesis.locales.Locale.EN_GB)
+
+class Generator(ABC):
+    """
+    Random data generator.
+
+    A generator is specific to a particular column in a particular table in
+    a particluar database.
+
+    A generator knows how to fetch its summary data from the database, how to calculate
+    its fit (if apropriate) and which function actually does the generation.
+
+    It also knows these summary statistics for the column it was instantiated on,
+    and therefore knows how to generate fake data for that column.
+    """
+    @abstractmethod
+    def function_name(self) -> str:
+        """ The name of the generator function to put into ssg.py. """
+
+    @abstractmethod
+    def nominal_kwargs(self) -> dict[str, str]:
+        """
+        The kwargs the generator wants to be called with.
+        The values will tend to be references to something in the src-stats.yaml
+        file (for example 'SRC_STATS["auto_patient"]["age_mean"]')
+        """
+
+    def select_aggregate_clauses(self) -> dict[str, str]:
+        """
+        SQL clauses to add to a SELECT ... FROM {table} query.
+
+        Will add to SRC_STATS{"auto__{table}")
+        For example {"count": "COUNT(*)", "avg_thiscolumn": "AVG(thiscolumn)"}
+        will make the clause become:
+        SELECT COUNT(*) AS count, AVG(thiscolumn) AS avg_thiscolumn FROM thistable
+        """
+        return {}
+
+    def custom_queries(self) -> dict[str, str]:
+        """
+        SQL queries to add to SRC_STATS.
+
+        Should be used for queries that do not follow the SELECT ... FROM table format,
+        because these should use select_aggregate_clauses.
+        """
+        return {}
+
+    @abstractmethod
+    def actual_kwargs(self) -> dict[str, any]:
+        """
+        The kwargs (summary statistics) this generator is instantiated with.
+        """
+
+    @abstractmethod
+    def generate_data(self, count) -> list[any]:
+        """
+        Generate 'count' random data points for this column.
+        """
+
+    def fit(self) -> float | None:
+        """
+        Return a value representing how well the distribution fits the real source data.
+
+        0.0 means "perfectly".
+        None means undefined.
+        """
+        return None
+
+
+class GeneratorFactory(ABC):
+    """
+    A factory for making generators appropriate for a database column.
+   """
+    @abstractmethod
+    def get_generators(self, column: Column, connection) -> list[Generator]:
+        """
+        Returns all the generators that might be appropriate for this column.
+        """
+
+
+class MultiGeneratorFactory(GeneratorFactory):
+    """ A composite factory. """
+    def __init__(self, factories: list[GeneratorFactory]):
+        super().__init__()
+        self.factories = factories
+
+    def get_generators(self, column, connection) -> list[Generator]:
+        return [
+            generator
+            for factory in self.factories
+            for generator in factory.get_generators(column, connection)
+        ]
+
+class MimesisGenerator(Generator):
+    def __init__(self, function_name: str):
+        """ Function name is relative to 'generic', for example 'person.name' """
+        super().__init__()
+        f = generic
+        for part in function_name.split("."):
+            if not hasattr(f, part):
+                raise Exception(f"Mimesis does not have a function {function_name}: {part} not found")
+            f = getattr(f, part)
+        if not callable(f):
+            raise Exception(f"Mimesis object {function_name} is not a callable, so cannot be used as a generator")
+        self.name = "generic." + function_name
+        self.generator_function = f
+    def function_name(self):
+        return self.name
+    def nominal_kwargs(self):
+        return {}
+    def actual_kwargs(self):
+        return {}
+    def generate_data(self, count):
+        return [
+            self.generator_function()
+            for _ in range(count)
+        ]
+
+class MimesisStringGeneratorFactory(GeneratorFactory):
+    """
+    All Mimesis generators that return strings.
+    """
+    def get_generators(self, column, connection):
+        if not isinstance(column.type.as_generic(), String):
+            return []
+        return list(map(MimesisGenerator, [
+            "address.calling_code",
+            "address.city",
+            "address.continent",
+            "address.country",
+            "address.country_code",
+            "address.postal_code",
+            "address.province",
+            "address.street_number",
+            "address.street_name",
+            "address.street_suffix",
+            "person.blood_type",
+            "person.email",
+            "person.first_name",
+            "person.last_name",
+            "person.full_name",
+            "person.gender",
+            "person.language",
+            "person.nationality",
+            "person.occupation",
+            "person.password",
+            "person.title",
+            "person.university",
+            "person.username",
+            "person.worldview",
+            "text.answer",
+            "text.color",
+            "text.level",
+            "text.quote",
+            "text.sentence",
+            "text.text",
+            "text.word",
+        ]))
+
+class MimesisFloatGeneratorFactory(GeneratorFactory):
+    """
+    All Mimesis generators that return floating point numbers.
+    """
+    def get_generators(self, column, connection):
+        if not isinstance(column.type.as_generic(), Numeric):
+            return []
+        return list(map(MimesisGenerator, [
+            "person.height",
+        ]))
+
+class MimesisIntegerGeneratorFactory(GeneratorFactory):
+    """
+    All Mimesis generators that return integers.
+    """
+    def get_generators(self, column, connection):
+        ct = column.type.as_generic()
+        if not isinstance(ct, Numeric) and not isinstance(ct, Integer):
+            return []
+        return list(map(MimesisGenerator, [
+            "person.weight",
+            "person.age",
+        ]))
+
+
+def fit_from_buckets(xs: list[float], ys: list[float]):
+    sum_diff_squared = sum(map(lambda t, a: (t - a)*(t - a), xs, ys))
+    return math.sqrt(sum_diff_squared / len(ys))
+
+
+class ContinuousDistributionGenerator(Generator):
+    def __init__(self, table_name: str, column_name: str, mean: float, stddev: float, buckets: list[float]):
+        super().__init__()
+        self.table_name = table_name
+        self.column_name = column_name
+        self.mean = mean
+        self.stddev = stddev
+        self._fit = fit_from_buckets(self.expected_buckets, buckets)
+    def nominal_kwargs(self):
+        return {
+            "mean": f'SRC_STATS["auto__{self.table_name}"]["mean__{self.column_name}"]',
+            "sd": f'SRC_STATS["auto__{self.table_name}"]["stddev__{self.column_name}"]',
+        }
+    def actual_kwargs(self):
+        return {
+            "mean": self.mean,
+            "sd": self.stddev,
+        }
+    def select_aggregate_clauses(self):
+        clauses = super().select_aggregate_clauses()
+        return {
+            **clauses,
+            f"mean__{self.column_name}": f"AVG({self.column_name})",
+            f"stddev__{self.column_name}": f"STDDEV({self.column_name})",
+        }
+    def fit(self):
+        return self._fit
+
+
+class GaussianGenerator(ContinuousDistributionGenerator):
+    expected_buckets = [0.0227, 0.0441, 0.0918, 0.1499, 0.1915, 0.1915, 0.1499, 0.0918, 0.0441, 0.0227]
+    def function_name(self):
+        return "dist_gen.normal"
+    def generate_data(self, count):
+        return [
+            dist_gen.normal(self.mean, self.stddev)
+            for _ in range(count)
+        ]
+
+
+class UniformGenerator(ContinuousDistributionGenerator):
+    expected_buckets = [0, 0.06698, 0.14434, 0.14434, 0.14434, 0.14434, 0.14434, 0.14434, 0.06698, 0]
+    def function_name(self):
+        return "dist_gen.uniform_ms"
+    def generate_data(self, count):
+        return [
+            dist_gen.uniform_ms(self.mean, self.stddev)
+            for _ in range(count)
+        ]
+
+
+class ContinuousDistributionGeneratorFactory(GeneratorFactory):
+    """
+    All generators that want an average and standard deviation.
+    """
+    def get_generators(self, column, connection: Connection):
+        ct = column.type.as_generic()
+        if not isinstance(ct, Numeric) and not isinstance(ct, Integer):
+            return []
+        column_name = column.name
+        table_name = column.table.name
+        result = connection.execute(
+            text("SELECT AVG({column}) AS mean, STDDEV({column}) AS stddev, COUNT({column}) AS count FROM {table}".format(
+                table=table_name,
+                column=column_name,
+            ))
+        ).first()
+        if result is None:
+            return []
+        raw_buckets = connection.execute(text(
+            "SELECT COUNT({column}) AS f, FLOOR(({column} - {x})/{w}) AS b FROM {table} GROUP BY b".format(
+                column=column.name, table=column.table.name, x=result.mean - 2 * result.stddev, w = result.stddev / 2
+            )
+        ))
+        buckets = [0] * 10
+        for rb in raw_buckets:
+            if rb.b is not None:
+                bucket = min(9, max(0, int(rb.b) + 1))
+                buckets[bucket] += rb.f / result.count
+        return [
+            GaussianGenerator(table_name, column_name, result.mean, result.stddev, buckets),
+            UniformGenerator(table_name, column_name, result.mean, result.stddev, buckets),
+        ]
+
+
+def zipf_distribution(total, bins):
+    basic_dist = list(map(lambda n: 1/n, range(1, bins + 1)))
+    bd_remaining = sum(basic_dist)
+    for b in basic_dist:
+        # yield b/bd_remaining of the `total` remaining
+        if bd_remaining == 0:
+            yield 0
+        else:
+            x = math.floor(0.5 + total * b / bd_remaining)
+            bd_remaining -= x * bd_remaining / total
+            total -= x
+            yield x
+
+
+class ChoiceGenerator(Generator):
+    def __init__(self, table_name, column_name, values, counts):
+        super().__init__()
+        self.table_name = table_name
+        self.column_name = column_name
+        self.values = values
+        estimated_counts = self.get_estimated_counts(counts)
+        self._fit = fit_from_buckets(counts, estimated_counts)
+    def nominal_kwargs(self):
+        return {
+            "a": f'SRC_STATS["auto__{self.table_name}__{self.column_name}"]["value"]',
+        }
+    def actual_kwargs(self):
+        return {
+            "a": self.values,
+        }
+    def custom_queries(self):
+        qs = super().custom_queries()
+        t = self.table_name
+        c = self.column_name
+        return {
+            **qs,
+            f"auto__{t}__{c}": f"SELECT {c} AS value FROM {t} GROUP BY value ORDER BY COUNT({c}) DESC",
+        }
+    def fit(self):
+        return self._fit
+
+class ZipfChoiceGenerator(ChoiceGenerator):
+    def get_estimated_counts(self, counts):
+        return list(zipf_distribution(sum(counts), len(counts)))
+    def function_name(self):
+        return "dist_gen.zipf_choice"
+    def generate_data(self, count):
+        return [
+            dist_gen.zipf_choice(self.values, len(self.values))
+            for _ in range(count)
+        ]
+
+
+def uniform_distribution(total, bins):
+    p = total // bins
+    n = total % bins
+    for i in range(0, n):
+        yield p + 1
+    for i in range(n, bins):
+        yield p
+
+
+class UniformChoiceGenerator(ChoiceGenerator):
+    def get_estimated_counts(self, counts):
+        return list(uniform_distribution(sum(counts), len(counts)))
+    def function_name(self):
+        return "dist_gen.choice"
+    def generate_data(self, count):
+        return [
+            dist_gen.choice(self.values)
+            for _ in range(count)
+        ]
+
+
+class ChoiceGeneratorFactory(GeneratorFactory):
+    """
+    All generators that want an average and standard deviation.
+    """
+    def get_generators(self, column, connection: Connection):
+        ct = column.type.as_generic()
+        if not isinstance(ct, Numeric) and not isinstance(ct, Integer):
+            return []
+        column_name = column.name
+        table_name = column.table.name
+        results = connection.execute(
+            text("SELECT {column} AS v, COUNT({column}) AS f FROM {table} GROUP BY v ORDER BY f DESC".format(
+                table=table_name,
+                column=column_name,
+            ))
+        )
+        if results is None:
+            return []
+        values = []  # The values found
+        counts = []  # The number or each value
+        total = 0  # total number of non-NULL results
+        for result in results:
+            c = result.f
+            if c != 0:
+                total += c
+                counts.append(c)
+                v = result.v
+                if type(v) is decimal.Decimal:
+                    v = float(v)
+                values.append(v)
+        if not counts or 500 < len(counts):
+            return []
+        return [
+            ZipfChoiceGenerator(table_name, column_name, values, counts),
+            UniformChoiceGenerator(table_name, column_name, values, counts),
+        ]
+
+
+everything_factory = MultiGeneratorFactory([
+    MimesisStringGeneratorFactory(),
+    MimesisIntegerGeneratorFactory(),
+    MimesisFloatGeneratorFactory(),
+    ContinuousDistributionGeneratorFactory(),
+    ChoiceGeneratorFactory(),
+])

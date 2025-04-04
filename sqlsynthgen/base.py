@@ -2,6 +2,8 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
+import functools
+import math
 import numpy
 import os
 from pathlib import Path
@@ -20,6 +22,7 @@ from sqlsynthgen.utils import (
     table_row_count,
 )
 
+@functools.cache
 def zipf_weights(size):
     total = sum(map(lambda n: 1/n, range(1, size + 1)))
     return [
@@ -29,11 +32,17 @@ def zipf_weights(size):
 
 
 class DistributionGenerator:
+    root3 = math.sqrt(3)
     def __init__(self):
         self.rng = numpy.random.default_rng()
 
     def uniform(self, low: float, high: float) -> float:
         return self.rng.uniform(low=low, high=high)
+
+    def uniform_ms(self, mean, sd) -> float:
+        m = float(mean)
+        h = self.root3 * float(sd)
+        return self.rng.uniform(low=m - h, high=m + h)
 
     def normal(self, mean: float, sd: float) -> float:
         return self.rng.normal(loc=mean, scale=sd)
