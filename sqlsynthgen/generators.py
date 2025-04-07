@@ -9,6 +9,7 @@ import mimesis
 import mimesis.locales
 from sqlalchemy import Column, Connection, text
 from sqlalchemy.types import Integer, Numeric, String
+from typing import Callable
 
 from sqlsynthgen.base import DistributionGenerator
 
@@ -93,6 +94,59 @@ class GeneratorFactory(ABC):
         """
 
 
+class Buckets:
+    """
+    Finds the real distribution of continuous data so that we can measure
+    the fit of generators against it.
+    """
+    def __init__(self, connection: Connection, table_name: str, column_name: str, mean:float, stddev: float, count: int):
+        raw_buckets = connection.execute(text(
+            "SELECT COUNT({column}) AS f, FLOOR(({column} - {x})/{w}) AS b FROM {table} GROUP BY b".format(
+                column=column_name, table=table_name, x=mean - 2 * stddev, w = stddev / 2
+            )
+        ))
+        self.buckets = [0] * 10
+        for rb in raw_buckets:
+            if rb.b is not None:
+                bucket = min(9, max(0, int(rb.b) + 1))
+                self.buckets[bucket] += rb.f / count
+        self.mean = mean
+        self.stddev = stddev
+
+    @classmethod
+    def make_buckets(_cls, connection: Connection, table_name: str, column_name: str):
+        """
+        Construct a Buckets object.
+        """
+        result = connection.execute(
+            text("SELECT AVG({column}) AS mean, STDDEV({column}) AS stddev, COUNT({column}) AS count FROM {table}".format(
+                table=table_name,
+                column=column_name,
+            ))
+        ).first()
+        if result is None:
+            return None
+        return Buckets(connection, table_name, column_name, result.mean, result.stddev, result.count)
+
+    def fit_from_counts(self, bucket_counts: list[float]) -> float:
+        """
+        Figure out the fit from bucket counts from the generator distribution.
+        """
+        return fit_from_buckets(self.buckets, bucket_counts)
+
+    def fit_from_values(self, values: list[float]) -> float:
+        """
+        Figure out the fit from samples from the generator distribution.
+        """
+        buckets = [0] * 10
+        x=self.mean - 2 * self.stddev
+        w = self.stddev / 2
+        for v in values:
+            b = min(9, max(0, int((v - x)/w)))
+            buckets[b] += 1
+        return self.fit_from_counts(buckets)
+
+
 class MultiGeneratorFactory(GeneratorFactory):
     """ A composite factory. """
     def __init__(self, factories: list[GeneratorFactory]):
@@ -106,9 +160,23 @@ class MultiGeneratorFactory(GeneratorFactory):
             for generator in factory.get_generators(column, connection)
         ]
 
+
 class MimesisGenerator(Generator):
-    def __init__(self, function_name: str):
-        """ Function name is relative to 'generic', for example 'person.name' """
+    def __init__(
+        self,
+        function_name: str,
+        value_fn: Callable[[any], float] | None=None,
+        buckets: Buckets | None=None,
+    ):
+        """
+        Generator from Mimesis.
+
+        :param: function_name is relative to 'generic', for example 'person.name'.
+        :param: value_fn Function to convert generator output to floats, if needed. The values
+        thus produced are compared against the buckets to estimate the fit.
+        :param: buckets The distribution of string lengths in the real data. If this is None
+        then the fit method will return None.
+        """
         super().__init__()
         f = generic
         for part in function_name.split("."):
@@ -119,6 +187,16 @@ class MimesisGenerator(Generator):
             raise Exception(f"Mimesis object {function_name} is not a callable, so cannot be used as a generator")
         self.name = "generic." + function_name
         self.generator_function = f
+        if buckets is None:
+            self._fit = None
+            return
+        samples = self.generate_data(400)
+        if value_fn:
+            samples = [
+                value_fn(s)
+                for s in samples
+            ]
+        self._fit = buckets.fit_from_values(samples)
     def function_name(self):
         return self.name
     def nominal_kwargs(self):
@@ -130,6 +208,9 @@ class MimesisGenerator(Generator):
             self.generator_function()
             for _ in range(count)
         ]
+    def fit(self):
+        return self._fit
+
 
 class MimesisStringGeneratorFactory(GeneratorFactory):
     """
@@ -138,7 +219,12 @@ class MimesisStringGeneratorFactory(GeneratorFactory):
     def get_generators(self, column, connection):
         if not isinstance(column.type.as_generic(), String):
             return []
-        return list(map(MimesisGenerator, [
+        buckets = Buckets.make_buckets(
+            connection,
+            column.table.name,
+            f"LENGTH({column.name})",
+        )
+        return list(map(lambda gen: MimesisGenerator(gen, len, buckets), [
             "address.calling_code",
             "address.city",
             "address.continent",
@@ -199,26 +285,26 @@ class MimesisIntegerGeneratorFactory(GeneratorFactory):
 
 def fit_from_buckets(xs: list[float], ys: list[float]):
     sum_diff_squared = sum(map(lambda t, a: (t - a)*(t - a), xs, ys))
-    return math.sqrt(sum_diff_squared / len(ys))
+    return sum_diff_squared / len(ys)
 
 
 class ContinuousDistributionGenerator(Generator):
-    def __init__(self, table_name: str, column_name: str, mean: float, stddev: float, buckets: list[float]):
+    def __init__(self, table_name: str, column_name: str, buckets: Buckets):
         super().__init__()
         self.table_name = table_name
         self.column_name = column_name
-        self.mean = mean
-        self.stddev = stddev
-        self._fit = fit_from_buckets(self.expected_buckets, buckets)
+        self.buckets = buckets
     def nominal_kwargs(self):
         return {
             "mean": f'SRC_STATS["auto__{self.table_name}"]["mean__{self.column_name}"]',
             "sd": f'SRC_STATS["auto__{self.table_name}"]["stddev__{self.column_name}"]',
         }
     def actual_kwargs(self):
+        if self.buckets is None:
+            return {}
         return {
-            "mean": self.mean,
-            "sd": self.stddev,
+            "mean": self.buckets.mean,
+            "sd": self.buckets.stddev,
         }
     def select_aggregate_clauses(self):
         clauses = super().select_aggregate_clauses()
@@ -228,7 +314,9 @@ class ContinuousDistributionGenerator(Generator):
             f"stddev__{self.column_name}": f"STDDEV({self.column_name})",
         }
     def fit(self):
-        return self._fit
+        if self.buckets is None:
+            return None
+        return self.buckets.fit_from_counts(self.expected_buckets)
 
 
 class GaussianGenerator(ContinuousDistributionGenerator):
@@ -257,33 +345,16 @@ class ContinuousDistributionGeneratorFactory(GeneratorFactory):
     """
     All generators that want an average and standard deviation.
     """
-    def get_generators(self, column, connection: Connection):
+    def get_generators(self, column: Column, connection: Connection):
         ct = column.type.as_generic()
         if not isinstance(ct, Numeric) and not isinstance(ct, Integer):
             return []
         column_name = column.name
         table_name = column.table.name
-        result = connection.execute(
-            text("SELECT AVG({column}) AS mean, STDDEV({column}) AS stddev, COUNT({column}) AS count FROM {table}".format(
-                table=table_name,
-                column=column_name,
-            ))
-        ).first()
-        if result is None:
-            return []
-        raw_buckets = connection.execute(text(
-            "SELECT COUNT({column}) AS f, FLOOR(({column} - {x})/{w}) AS b FROM {table} GROUP BY b".format(
-                column=column.name, table=column.table.name, x=result.mean - 2 * result.stddev, w = result.stddev / 2
-            )
-        ))
-        buckets = [0] * 10
-        for rb in raw_buckets:
-            if rb.b is not None:
-                bucket = min(9, max(0, int(rb.b) + 1))
-                buckets[bucket] += rb.f / result.count
+        buckets = Buckets.make_buckets(connection, table_name, column_name)
         return [
-            GaussianGenerator(table_name, column_name, result.mean, result.stddev, buckets),
-            UniformGenerator(table_name, column_name, result.mean, result.stddev, buckets),
+            GaussianGenerator(table_name, column_name, buckets),
+            UniformGenerator(table_name, column_name, buckets),
         ]
 
 

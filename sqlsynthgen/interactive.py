@@ -91,6 +91,11 @@ class DbCmd(ABC, cmd.Cmd):
         for row in rows:
             output.add_row(row)
         print(output)
+    def print_table_by_columns(self, columns: dict[str, list[str]]):
+        output = PrettyTable()
+        for field_name, data in columns.items():
+            output.add_column(field_name, data)
+        print(output)
     def print_results(self, result):
         self.print_table(
             list(result.keys()),
@@ -378,8 +383,8 @@ class GeneratorCmd(DbCmd):
                         columns.remove(ca)
                         single_ca = ca
                     else:
-                        self.print(
-                            "table '{0}' has '{1}' assigned to column '{2}' which is not in this table",
+                        logger.warning(
+                            "table '%s' has '%s' assigned to column '%s' which is not in this table",
                             name, gen_name, ca,
                         )
                 else:
@@ -419,6 +424,7 @@ class GeneratorCmd(DbCmd):
     def __init__(self, src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping):
         super().__init__(src_dsn, src_schema, metadata, config)
         self.generator_index = 0
+        self.generators_valid_indices = None
         self.set_prompt()
 
     def set_table_index(self, index):
@@ -578,13 +584,43 @@ class GeneratorCmd(DbCmd):
             self.generator_index -= 1
         self.set_prompt()
 
-    def do_data(self, arg: str):
-        """ Report some random data from the source versus the old and new generators. """
-        args = arg.split()
-        source = self.get_column_data(20)
-        self.print_table(["Source data"], [[s] for s in source])
+    def get_generator_proposals(self) -> list[Generator]:
+        if (self.table_index, self.generator_index) != self.generators_valid_indices:
+            self.generators = None
+        if self.generators is None:
+            column = self.column_metadata()
+            if column is None:
+                logger.error("No such column")
+                return []
+            gens = everything_factory.get_generators(column, self.connection)
+            gens.sort(key=lambda g: g.fit())
+            self.generators = gens
+        return self.generators
 
-    def get_column_data(self, count: int, min_length: int = 0):
+    def do_compare(self, arg: str):
+        """
+        Compare the real data with some generators.
+
+        'compare': just look at some source data from this column.
+        'compare 5 6 10': compare a sample of the source data with a sample
+        from generators 5, 6 and 10. You can find out which numbers
+        correspond to which generators using the 'propose' command.
+        """
+        args = arg.split()
+        limit = 20
+        comparison = {
+            "source": self.get_column_data(limit, to_str=str),
+        }
+        gens = self.get_generator_proposals()
+        for argument in args:
+            if argument.isnumeric():
+                n = int(argument)
+                if 0 < n and n <= len(gens):
+                    gen = gens[n - 1]
+                    comparison[gen.function_name()] = gen.generate_data(limit)
+        self.print_table_by_columns(comparison)
+
+    def get_column_data(self, count: int, to_str=repr, min_length: int = 0):
         column = self.get_column_name()
         where = ""
         if 0 < min_length:
@@ -600,16 +636,28 @@ class GeneratorCmd(DbCmd):
                 where=where,
             ))
         )
-        return [str(x[0]) for x in result.all()]
+        return [to_str(x[0]) for x in result.all()]
 
     def do_propose(self, arg):
-        column = self.column_metadata()
-        if column is None:
-            self.print("Error: No such column")
-            return
-        gens = everything_factory.get_generators(column, self.connection)
-        for gen in gens:
-            self.print("{0}: (fit: {1}) {2}...", gen.function_name(), gen.fit(), gen.generate_data(5))
+        """
+        Display a list of possible generators for this column.
+
+        They will be listed in order of fit, the most likely matches first.
+        The results can be compared (against a sample of the real data in
+        the column and against each other) with the 'compare' command.
+        """
+        limit = 5
+        gens = self.get_generator_proposals()
+        sample = self.get_column_data(limit)
+        self.print("Sample of actual source data: {0}...", ",".join(sample))
+        for index, gen in enumerate(gens):
+            self.print(
+                "{index}. {name}: (fit: {fit:.0f}) {sample} ...",
+                index = index + 1,
+                name=gen.function_name(),
+                fit=gen.fit(),
+                sample=", ".join(map(repr, gen.generate_data(limit)))
+            )
 
 
 def update_config_generators(src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping):

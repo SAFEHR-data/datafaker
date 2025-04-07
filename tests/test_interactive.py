@@ -15,11 +15,14 @@ class TestTableCmd(TableCmd):
         self.headings = []
         self.rows = []
         self.column_items = []
+        self.columns: dict[str, list[str]] = {}
     def print(self, text: str, *args, **kwargs):
         self.messages.append((text, args, kwargs))
     def print_table(self, headings: list[str], rows: list[list[str]]):
         self.headings = headings
         self.rows = rows
+    def print_table_by_columns(self, columns: dict[str, list[str]]):
+        self.columns = columns
     def columnize(self, items):
         self.column_items.append(items)
     def ask_save(self):
