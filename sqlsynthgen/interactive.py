@@ -8,7 +8,7 @@ import logging
 from prettytable import PrettyTable
 from sqlalchemy import Column, MetaData, Table, text
 
-from sqlsynthgen.generators import everything_factory
+from sqlsynthgen.generators import everything_factory, Generator
 from sqlsynthgen.utils import create_db_engine
 
 logger = logging.getLogger(__name__)
@@ -76,11 +76,9 @@ class DbCmd(ABC, cmd.Cmd):
                 self.table_entries.append(entry)
         self.table_index = 0
         self.engine = create_db_engine(src_dsn, schema_name=src_schema)
-        self.connection = self.engine.connect()
     def __enter__(self):
         return self
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.connection.close()
         self.engine.dispose()
 
     def print(self, text: str, *args, **kwargs):
@@ -312,42 +310,34 @@ Type 'help data' for examples."""
                 column=column,
                 len=min_length,
             )
-        result = self.connection.execute(
-            text("SELECT {column} FROM {table} {where} ORDER BY RANDOM() LIMIT {count}".format(
-                table=self.table_name(),
-                column=column,
-                count=count,
-                where=where,
-            ))
-        )
-        self.columnize([str(x[0]) for x in result.all()])
+        with self.engine.connect() as connection:
+            result = connection.execute(
+                text("SELECT {column} FROM {table} {where} ORDER BY RANDOM() LIMIT {count}".format(
+                    table=self.table_name(),
+                    column=column,
+                    count=count,
+                    where=where,
+                ))
+            )
+            self.columnize([str(x[0]) for x in result.all()])
 
     def print_row_data(self, count: int):
-        result = self.connection.execute(
-            text("SELECT * FROM {table} ORDER BY RANDOM() LIMIT {count}".format(
-                table=self.table_name(),
-                count=count,
-            ))
-        )
-        if result is None:
-            self.print("No rows in this table!")
-            return
-        self.print_results(result)
+        with self.engine.connect() as connection:
+            result = connection.execute(
+                text("SELECT * FROM {table} ORDER BY RANDOM() LIMIT {count}".format(
+                    table=self.table_name(),
+                    count=count,
+                ))
+            )
+            if result is None:
+                self.print("No rows in this table!")
+                return
+            self.print_results(result)
 
 def update_config_tables(src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping):
     with TableCmd(src_dsn, src_schema, metadata, config) as tc:
         tc.cmdloop()
         return tc.config
-
-
-class Generator(ABC):
-    @abstractmethod
-    def name(self) -> str:
-        """Get the name of this generator."""
-    @abstractmethod
-    def kws(self) -> list[str]:
-        """Get a list of names of kwargs that this generator wants."""
-    #...
 
 
 @dataclass
@@ -592,8 +582,8 @@ class GeneratorCmd(DbCmd):
             if column is None:
                 logger.error("No such column")
                 return []
-            gens = everything_factory.get_generators(column, self.connection)
-            gens.sort(key=lambda g: g.fit())
+            gens = everything_factory.get_generators(column, self.engine)
+            gens.sort(key=lambda g: g.fit(9999))
             self.generators = gens
         return self.generators
 
@@ -611,13 +601,39 @@ class GeneratorCmd(DbCmd):
         comparison = {
             "source": self.get_column_data(limit, to_str=str),
         }
-        gens = self.get_generator_proposals()
+        gens: list[Generator] = self.get_generator_proposals()
+        table_name = self.table_name()
         for argument in args:
             if argument.isnumeric():
                 n = int(argument)
                 if 0 < n and n <= len(gens):
                     gen = gens[n - 1]
-                    comparison[gen.function_name()] = gen.generate_data(limit)
+                    comparison[f"{n}. {gen.function_name()}"] = gen.generate_data(limit)
+                    sacs = gen.select_aggregate_clauses()
+                    cqs = gen.custom_queries()
+                    if not sacs and cqs:
+                        self.print(
+                            "{0}. {1} requires no data from the source database.",
+                            n,
+                            gen.function_name(),
+                        )
+                    else:
+                        self.print(
+                            "{0}. {1} requires the following data from the source database:",
+                            n,
+                            gen.function_name(),
+                        )
+                        kwa = gen.actual_kwargs()
+                        kwn = gen.nominal_kwargs()
+                        if sacs:
+                            clauses = [
+                                f"{q} AS {n}"
+                                for n, q in sacs
+                            ]
+                            select_q = f"SELECT {', '.join(clauses)} FROM {table_name}"
+                            "..."
+                        if cqs:
+                            "..."
         self.print_table_by_columns(comparison)
 
     def get_column_data(self, count: int, to_str=repr, min_length: int = 0):
@@ -628,15 +644,16 @@ class GeneratorCmd(DbCmd):
                 column=column,
                 len=min_length,
             )
-        result = self.connection.execute(
-            text("SELECT {column} FROM {table} {where} ORDER BY RANDOM() LIMIT {count}".format(
-                table=self.table_name(),
-                column=column,
-                count=count,
-                where=where,
-            ))
-        )
-        return [to_str(x[0]) for x in result.all()]
+        with self.engine.connect() as connection:
+            result = connection.execute(
+                text("SELECT {column} FROM {table} {where} ORDER BY RANDOM() LIMIT {count}".format(
+                    table=self.table_name(),
+                    column=column,
+                    count=count,
+                    where=where,
+                ))
+            )
+            return [to_str(x[0]) for x in result.all()]
 
     def do_propose(self, arg):
         """
@@ -653,9 +670,9 @@ class GeneratorCmd(DbCmd):
         for index, gen in enumerate(gens):
             self.print(
                 "{index}. {name}: (fit: {fit:.0f}) {sample} ...",
-                index = index + 1,
+                index=index + 1,
                 name=gen.function_name(),
-                fit=gen.fit(),
+                fit=gen.fit(9999),
                 sample=", ".join(map(repr, gen.generate_data(limit)))
             )
 
