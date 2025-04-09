@@ -13,6 +13,10 @@ from typing import Callable
 
 from sqlsynthgen.base import DistributionGenerator
 
+# How many distinct values can we have before we consider a
+# choice distribution to be infeasible?
+MAXIMUM_CHOICES = 500
+
 dist_gen = DistributionGenerator()
 generic = mimesis.Generic(locale=mimesis.locales.Locale.EN_GB)
 
@@ -68,6 +72,9 @@ class Generator(ABC):
         For example {"myquery", "SELECT one, too AS two FROM mytable WHERE too > 1"}
         will populate SRC_STATS["myquery"]["one"] and SRC_STATS["myquery"]["two"]
         in the src-stats.yaml file.
+
+        Keys should be chosen to minimize the chances of clashing with other queries,
+        for example "auto__{table}__{column}__{queryname}"
         """
         return {}
 
@@ -232,14 +239,13 @@ class MimesisStringGeneratorFactory(GeneratorFactory):
         if not isinstance(column.type.as_generic(), String):
             return []
         try:
-            with engine.connect() as connection:
-                buckets = Buckets.make_buckets(
-                    connection,
-                    column.table.name,
-                    f"LENGTH({column.name})",
-                )
+            buckets = Buckets.make_buckets(
+                engine,
+                column.table.name,
+                f"LENGTH({column.name})",
+            )
             fitness_fn = len
-        except Exception:
+        except Exception as exc:
             # Some column types that appear to be strings (such as enums)
             # cannot have their lengths measured. In this case we cannot
             # detect fitness using lengths.
@@ -459,18 +465,17 @@ class ChoiceGeneratorFactory(GeneratorFactory):
     """
     def get_generators(self, column, engine: Engine):
         ct = column.type.as_generic()
-        if not isinstance(ct, Numeric) and not isinstance(ct, Integer):
-            return []
         column_name = column.name
         table_name = column.table.name
         with engine.connect() as connection:
             results = connection.execute(
-                text("SELECT {column} AS v, COUNT({column}) AS f FROM {table} GROUP BY v ORDER BY f DESC".format(
+                text("SELECT {column} AS v, COUNT({column}) AS f FROM {table} GROUP BY v ORDER BY f DESC LIMIT {limit}".format(
                     table=table_name,
                     column=column_name,
+                    limit=MAXIMUM_CHOICES+1,
                 ))
             )
-            if results is None:
+            if results is None or MAXIMUM_CHOICES < results.rowcount:
                 return []
             values = []  # The values found
             counts = []  # The number or each value
@@ -484,7 +489,7 @@ class ChoiceGeneratorFactory(GeneratorFactory):
                     if type(v) is decimal.Decimal:
                         v = float(v)
                     values.append(v)
-        if not counts or 500 < len(counts):
+        if not counts:
             return []
         return [
             ZipfChoiceGenerator(table_name, column_name, values, counts),

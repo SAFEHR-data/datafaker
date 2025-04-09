@@ -4,8 +4,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 import logging
-
 from prettytable import PrettyTable
+import re
 from sqlalchemy import Column, MetaData, Table, text
 
 from sqlsynthgen.generators import everything_factory, Generator
@@ -609,9 +609,10 @@ class GeneratorCmd(DbCmd):
                 if 0 < n and n <= len(gens):
                     gen = gens[n - 1]
                     comparison[f"{n}. {gen.function_name()}"] = gen.generate_data(limit)
+                    kwa = gen.actual_kwargs()
                     sacs = gen.select_aggregate_clauses()
                     cqs = gen.custom_queries()
-                    if not sacs and cqs:
+                    if not sacs and not cqs:
                         self.print(
                             "{0}. {1} requires no data from the source database.",
                             n,
@@ -623,17 +624,38 @@ class GeneratorCmd(DbCmd):
                             n,
                             gen.function_name(),
                         )
-                        kwa = gen.actual_kwargs()
-                        kwn = gen.nominal_kwargs()
                         if sacs:
                             clauses = [
                                 f"{q} AS {n}"
-                                for n, q in sacs
+                                for n, q in sacs.items()
                             ]
+                            vals = []
+                            src_stat2kwarg = { v: k for k, v in gen.nominal_kwargs().items() }
+                            for n in sacs.keys():
+                                src_stat = f'SRC_STATS["auto__{table_name}"]["{n}"]'
+                                if src_stat in src_stat2kwarg:
+                                    ak = src_stat2kwarg[src_stat]
+                                    if ak in kwa:
+                                        vals.append(kwa[ak])
+                                    else:
+                                        vals.append("(actual_kwargs() does not report)")
+                                else:
+                                    vals += "(unused)"
                             select_q = f"SELECT {', '.join(clauses)} FROM {table_name}"
-                            "..."
+                            self.print("{0}; providing the following values: {1}", select_q, vals)
                         if cqs:
-                            "..."
+                            cq_key2args = {}
+                            src_stat_re = re.compile(f'SRC_STATS\\["([^"]+)"\\]\\["([^"]+)"\\]')
+                            for argname, src_stat in gen.nominal_kwargs().items():
+                                if argname in kwa:
+                                    src_stat_groups = src_stat_re.match(src_stat)
+                                    if src_stat_groups:
+                                        cq_key = src_stat_groups.group(1)
+                                        if cq_key not in cq_key2args:
+                                            cq_key2args[cq_key] = []
+                                        cq_key2args[cq_key].append(kwa[argname])
+                            for cq_key, cq in cqs.items():
+                                self.print("{0}; providing the following values: {1}", cq, cq_key2args[cq_key])
         self.print_table_by_columns(comparison)
 
     def get_column_data(self, count: int, to_str=repr, min_length: int = 0):
@@ -668,11 +690,13 @@ class GeneratorCmd(DbCmd):
         sample = self.get_column_data(limit)
         self.print("Sample of actual source data: {0}...", ",".join(sample))
         for index, gen in enumerate(gens):
+            fit = gen.fit()
+            fit_s = "(no fit)" if fit is None else f"(fit: {fit:.0f})"
             self.print(
-                "{index}. {name}: (fit: {fit:.0f}) {sample} ...",
+                "{index}. {name}: {fit} {sample} ...",
                 index=index + 1,
                 name=gen.function_name(),
-                fit=gen.fit(9999),
+                fit=fit_s,
                 sample=", ".join(map(repr, gen.generate_data(limit)))
             )
 
