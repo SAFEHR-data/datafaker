@@ -609,54 +609,75 @@ class GeneratorCmd(DbCmd):
                 if 0 < n and n <= len(gens):
                     gen = gens[n - 1]
                     comparison[f"{n}. {gen.function_name()}"] = gen.generate_data(limit)
-                    kwa = gen.actual_kwargs()
-                    sacs = gen.select_aggregate_clauses()
-                    cqs = gen.custom_queries()
-                    if not sacs and not cqs:
-                        self.print(
-                            "{0}. {1} requires no data from the source database.",
-                            n,
-                            gen.function_name(),
-                        )
-                    else:
-                        self.print(
-                            "{0}. {1} requires the following data from the source database:",
-                            n,
-                            gen.function_name(),
-                        )
-                        if sacs:
-                            clauses = [
+                    self.print_values_queried(table_name, n, gen)
+        self.print_table_by_columns(comparison)
+
+    def print_values_queried(self, table_name: str, n: int, gen: Generator):
+        """
+        Print the values queried from the database for this generator.
+        """
+        if not gen.select_aggregate_clauses() and not gen.custom_queries():
+            self.print(
+                "{0}. {1} requires no data from the source database.",
+                n,
+                gen.function_name(),
+            )
+        else:
+            self.print(
+                "{0}. {1} requires the following data from the source database:",
+                n,
+                gen.function_name(),
+            )
+            self.print_select_aggregate_query(table_name, gen)
+            self.print_custom_queries(gen)
+
+    def print_custom_queries(self, gen: Generator) -> None:
+        """
+        Print all the custom queries and all the values they get in this case.
+        """
+        cqs = gen.custom_queries()
+        if not cqs:
+            return
+        kwa = gen.actual_kwargs()
+        cq_key2args = {}
+        src_stat_re = re.compile(f'SRC_STATS\\["([^"]+)"\\]\\["([^"]+)"\\]')
+        for argname, src_stat in gen.nominal_kwargs().items():
+            if argname in kwa:
+                src_stat_groups = src_stat_re.match(src_stat)
+                if src_stat_groups:
+                    cq_key = src_stat_groups.group(1)
+                    if cq_key not in cq_key2args:
+                        cq_key2args[cq_key] = []
+                    cq_key2args[cq_key].append(kwa[argname])
+        for cq_key, cq in cqs.items():
+            self.print("{0}; providing the following values: {1}", cq, cq_key2args[cq_key])
+
+    def print_select_aggregate_query(self, table_name, gen) -> None:
+        """
+        Prints the select aggregate query and all the values it gets in this case.
+        """
+        sacs = gen.select_aggregate_clauses()
+        if not sacs:
+            return
+        kwa = gen.actual_kwargs()
+        clauses = [
                                 f"{q} AS {n}"
                                 for n, q in sacs.items()
                             ]
-                            vals = []
-                            src_stat2kwarg = { v: k for k, v in gen.nominal_kwargs().items() }
-                            for n in sacs.keys():
-                                src_stat = f'SRC_STATS["auto__{table_name}"]["{n}"]'
-                                if src_stat in src_stat2kwarg:
-                                    ak = src_stat2kwarg[src_stat]
-                                    if ak in kwa:
-                                        vals.append(kwa[ak])
-                                    else:
-                                        vals.append("(actual_kwargs() does not report)")
-                                else:
-                                    vals += "(unused)"
-                            select_q = f"SELECT {', '.join(clauses)} FROM {table_name}"
-                            self.print("{0}; providing the following values: {1}", select_q, vals)
-                        if cqs:
-                            cq_key2args = {}
-                            src_stat_re = re.compile(f'SRC_STATS\\["([^"]+)"\\]\\["([^"]+)"\\]')
-                            for argname, src_stat in gen.nominal_kwargs().items():
-                                if argname in kwa:
-                                    src_stat_groups = src_stat_re.match(src_stat)
-                                    if src_stat_groups:
-                                        cq_key = src_stat_groups.group(1)
-                                        if cq_key not in cq_key2args:
-                                            cq_key2args[cq_key] = []
-                                        cq_key2args[cq_key].append(kwa[argname])
-                            for cq_key, cq in cqs.items():
-                                self.print("{0}; providing the following values: {1}", cq, cq_key2args[cq_key])
-        self.print_table_by_columns(comparison)
+        vals = []
+        src_stat2kwarg = { v: k for k, v in gen.nominal_kwargs().items() }
+        for n in sacs.keys():
+            src_stat = f'SRC_STATS["auto__{table_name}"]["{n}"]'
+            if src_stat in src_stat2kwarg:
+                ak = src_stat2kwarg[src_stat]
+                if ak in kwa:
+                    vals.append(kwa[ak])
+                else:
+                    vals.append("(actual_kwargs() does not report)")
+            else:
+                vals += "(unused)"
+        select_q = f"SELECT {', '.join(clauses)} FROM {table_name}"
+        self.print("{0}; providing the following values: {1}", select_q, vals)
 
     def get_column_data(self, count: int, to_str=repr, min_length: int = 0):
         column = self.get_column_name()
