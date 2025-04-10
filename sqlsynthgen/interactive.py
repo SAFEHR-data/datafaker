@@ -8,7 +8,7 @@ from prettytable import PrettyTable
 import re
 from sqlalchemy import Column, MetaData, Table, text
 
-from sqlsynthgen.generators import everything_factory, Generator
+from sqlsynthgen.generators import everything_factory, Generator, PredefinedGenerator
 from sqlsynthgen.utils import create_db_engine
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ TYPE_PROMPT = {
 
 @dataclass
 class TableEntry:
-    name: str
+    name: str  # name of the table
 
 
 class AskSaveCmd(cmd.Cmd):
@@ -144,7 +144,6 @@ class TableCmd(DbCmd):
 
     def __init__(self, src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping):
         super().__init__(src_dsn, src_schema, metadata, config)
-        self.config = config
         self.set_prompt()
 
     def set_prompt(self):
@@ -157,7 +156,7 @@ class TableCmd(DbCmd):
         if self.table_index < len(self.table_entries):
             entry = self.table_entries[self.table_index]
             entry.new_type = t_type
-    def copy_entries(self) -> None:
+    def _copy_entries(self) -> None:
         tables = self.config.get("tables", {})
         for entry in self.table_entries:
             if entry.old_type != entry.new_type:
@@ -198,7 +197,7 @@ class TableCmd(DbCmd):
             return True
         reply = self.ask_save()
         if reply == "yes":
-            self.copy_entries()
+            self._copy_entries()
             return True
         if reply == "no":
             return True
@@ -268,13 +267,13 @@ class TableCmd(DbCmd):
         arg_index = 0
         min_length = 0
         table_metadata = self.table_metadata()
-        if arg_index < len(args) and args[arg_index].isnumeric():
+        if arg_index < len(args) and args[arg_index].isdigit():
             number = int(args[arg_index])
             arg_index += 1
         if arg_index < len(args) and args[arg_index] in table_metadata.columns:
             column = args[arg_index]
             arg_index += 1
-        if arg_index < len(args) and args[arg_index].isnumeric():
+        if arg_index < len(args) and args[arg_index].isdigit():
             min_length = int(args[arg_index])
             arg_index += 1
         if arg_index != len(args):
@@ -344,8 +343,8 @@ def update_config_tables(src_dsn: str, src_schema: str, metadata: MetaData, conf
 class GeneratorInfo:
     column: str
     is_primary_key: bool
-    old_name: str | None
-    new_name: str | None
+    old_gen: Generator | None
+    new_gen: Generator | None
 
 @dataclass
 class GeneratorCmdTableEntry(TableEntry):
@@ -358,7 +357,7 @@ class GeneratorCmd(DbCmd):
 
     def make_table_entry(self, name: str) -> TableEntry:
         tables = self.config.get("tables", {})
-        table = tables.get(name, {})
+        table: str = tables.get(name, {})
         metadata_table = self.metadata.tables[name]
         columns = set(metadata_table.columns.keys())
         generator_infos: list[GeneratorInfo] = []
@@ -382,11 +381,12 @@ class GeneratorCmd(DbCmd):
                     if len(ca) == 1:
                         single_ca = ca
             if single_ca is not None:
+                gen = PredefinedGenerator(table, rg, self.config)
                 generator_infos.append(GeneratorInfo(
                     column=single_ca,
                     is_primary_key=metadata_table.columns[single_ca].primary_key,
-                    old_name=gen_name,
-                    new_name=gen_name,
+                    old_gen=gen,
+                    new_gen=gen,
                 ))
             else:
                 multiple_columns_assigned[gen_name] = ca
@@ -394,8 +394,8 @@ class GeneratorCmd(DbCmd):
             generator_infos.append(GeneratorInfo(
                 column=col,
                 is_primary_key=metadata_table.columns[col].primary_key,
-                old_name=None,
-                new_name=None,
+                old_gen=None,
+                new_gen=None,
             ))
         if multiple_columns_assigned:
             self.print(
@@ -470,11 +470,11 @@ class GeneratorCmd(DbCmd):
             column = f"{gen_info.column}[pk]"
         else:
             column = gen_info.column
-        if gen_info.new_name:
+        if gen_info.new_gen:
             self.prompt = "({table}.{column} ({generator})) ".format(
                 table=table_name,
                 column=column,
-                generator=gen_info.new_name,
+                generator=gen_info.new_gen.function_name(),
             )
         else:
             self.prompt = "({table}.{column}) ".format(
@@ -488,38 +488,72 @@ class GeneratorCmd(DbCmd):
             if self.generator_index < len(entry.generators):
                 entry.generators[self.generator_index] = generator
 
-    def copy_entries(self) -> None:
+    def _remove_auto_src_stats(self) -> list[dict[str, any]]:
+        src_stats = self.config.get("src-stats", {})
+        new_src_stats = []
+        for stat in src_stats:
+            if not stat.get("name", "").startswith("auto__"):
+                new_src_stats.append(stat)
+        self.config["src-stats"] = new_src_stats
+        return new_src_stats
+
+    def _copy_entries(self) -> None:
+        src_stats = self._remove_auto_src_stats()
         tables = self.config.get("tables", {})
-        for entry in self.table_entries:
-            # We probably need to reconstruct row_generators. Hmmm.
-            # We will need to keep row_generators intact not break them apart like now
+        tes: list[GeneratorCmdTableEntry] = self.table_entries
+        for entry in tes:
+            rgs = []
             for generator in entry.generators:
-                pass
+                if generator.new_gen is not None:
+                    sacs = generator.new_gen.select_aggregate_clauses()
+                    if sacs:
+                        src_stats[f"auto__{entry.name}"] = self._get_aggregate_query(generator.new_gen, entry.name)
+                    cqs = generator.new_gen.custom_queries()
+                    for cq_key, cq in cqs.items():
+                        src_stats.append({
+                            "name": cq_key,
+                            "query": cq,
+                        })
+                    rg = {
+                        "name": generator.new_gen.function_name(),
+                    }
+                    kwn = generator.new_gen.nominal_kwargs()
+                    if kwn:
+                        rg["kwargs"] = kwn
+                    rgs.append(rg)
+            if entry.name not in tables:
+                tables[entry.name] = {}
+            if rgs:
+                tables[entry.name]["row_generators"] = rgs
+            elif "row_generators" in tables[entry.name]:
+                del tables[entry.name]["row_generators"]
         self.config["tables"] = tables
+        self.config["src-stats"] = src_stats
 
     def do_quit(self, _arg):
         "Check the updates, save them if desired and quit the configurer."
         count = 0
         for entry in self.table_entries:
             header_shown = False
-            for gen in entry.generators:
-                if gen.old_name != gen.new_name:
+            g_entry: GeneratorCmdTableEntry = entry
+            for gen in g_entry.generators:
+                if gen.old_gen != gen.new_gen:
                     if not header_shown:
                         header_shown = True
                         self.print("Table {0}:", entry.name)
                     count += 1
                     self.print(
                         "...changing {0} from {1} to {2}",
-                        gen.name,
-                        gen.old_name,
-                        gen.new_name,
+                        gen.column,
+                        gen.old_gen.function_name() if gen.old_gen else "nothing",
+                        gen.new_gen.function_name() if gen.new_gen else "nothing",
                     )
         if count == 0:
             self.print("There are no changes.")
             return True
         reply = self.ask_save()
         if reply == "yes":
-            self.copy_entries()
+            self._copy_entries()
             return True
         if reply == "no":
             return True
@@ -538,15 +572,15 @@ class GeneratorCmd(DbCmd):
             self.print("Error: no table {0}", self.table_index)
             return
         for gen in self.table_entries[self.table_index].generators:
-            old = "" if gen.old_name is None else gen.old_name
-            if gen.old_name == gen.new_name:
+            old = "" if gen.old_gen is None else gen.old_gen.function_name()
+            if gen.old_gen == gen.new_gen:
                 becomes = ""
                 if old == "":
                     old = "(not set)"
-            elif gen.new_name is None:
+            elif gen.new_gen is None:
                 becomes = "(delete)"
             else:
-                becomes = f"->{gen.new_name}"
+                becomes = f"->{gen.new_gen.function_name()}"
             primary = "[primary-key]" if gen.is_primary_key else ""
             self.print("{0}{1}{2} {3}", old, becomes, primary, gen.column)
 
@@ -575,7 +609,7 @@ class GeneratorCmd(DbCmd):
         self.set_prompt()
 
     def get_generator_proposals(self) -> list[Generator]:
-        if (self.table_index, self.generator_index) != self.generators_valid_indices:
+        if self.generators_valid_indices != (self.table_index, self.generator_index):
             self.generators = None
         if self.generators is None:
             column = self.column_metadata()
@@ -585,6 +619,7 @@ class GeneratorCmd(DbCmd):
             gens = everything_factory.get_generators(column, self.engine)
             gens.sort(key=lambda g: g.fit(9999))
             self.generators = gens
+            self.generators_valid_indices = (self.table_index, self.generator_index)
         return self.generators
 
     def do_compare(self, arg: str):
@@ -604,7 +639,7 @@ class GeneratorCmd(DbCmd):
         gens: list[Generator] = self.get_generator_proposals()
         table_name = self.table_name()
         for argument in args:
-            if argument.isnumeric():
+            if argument.isdigit():
                 n = int(argument)
                 if 0 < n and n <= len(gens):
                     gen = gens[n - 1]
@@ -652,6 +687,16 @@ class GeneratorCmd(DbCmd):
         for cq_key, cq in cqs.items():
             self.print("{0}; providing the following values: {1}", cq, cq_key2args[cq_key])
 
+    def _get_aggregate_query(self, gen: Generator, table_name: str) -> str | None:
+        sacs = gen.select_aggregate_clauses()
+        if not sacs:
+            return None
+        clauses = [
+            f"{q} AS {n}"
+            for n, q in sacs.items()
+        ]
+        return f"SELECT {', '.join(clauses)} FROM {table_name}"
+
     def print_select_aggregate_query(self, table_name, gen) -> None:
         """
         Prints the select aggregate query and all the values it gets in this case.
@@ -660,10 +705,6 @@ class GeneratorCmd(DbCmd):
         if not sacs:
             return
         kwa = gen.actual_kwargs()
-        clauses = [
-                                f"{q} AS {n}"
-                                for n, q in sacs.items()
-                            ]
         vals = []
         src_stat2kwarg = { v: k for k, v in gen.nominal_kwargs().items() }
         for n in sacs.keys():
@@ -676,7 +717,7 @@ class GeneratorCmd(DbCmd):
                     vals.append("(actual_kwargs() does not report)")
             else:
                 vals += "(unused)"
-        select_q = f"SELECT {', '.join(clauses)} FROM {table_name}"
+        select_q = self._get_aggregate_query(gen, table_name)
         self.print("{0}; providing the following values: {1}", select_q, vals)
 
     def get_column_data(self, count: int, to_str=repr, min_length: int = 0):
@@ -720,6 +761,31 @@ class GeneratorCmd(DbCmd):
                 fit=fit_s,
                 sample=", ".join(map(repr, gen.generate_data(limit)))
             )
+
+    def do_set(self, arg: str):
+        """
+        Set one of the proposals as a generator.
+        Takes a single integer argument.
+        """
+        if not arg.isdigit():
+            self.print("set requires a single integer argument; 'set 3' sets the third generator that 'propose' lists.")
+            return
+        gens = self.get_generator_proposals()
+        index = int(arg)
+        if index < 1:
+            self.print("set's argument must be at least 1")
+            return
+        if len(gens) <= index:
+            self.print("There are currently only {0} generators proposed, please select one of them.")
+            return
+        (table, gen_info) = self.get_table_and_generator()
+        if table is None:
+            self.print("Error: no table")
+            return
+        if gen_info is None:
+            self.print("Error: no column")
+            return
+        gen_info.new_gen = gens[index - 1]
 
 
 def update_config_generators(src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping):

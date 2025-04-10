@@ -3,15 +3,20 @@ Generator factories for making generators for single columns.
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 import decimal
+import logging
 import math
 import mimesis
 import mimesis.locales
+import re
 from sqlalchemy import Column, Engine, text
 from sqlalchemy.types import Integer, Numeric, String
 from typing import Callable
 
 from sqlsynthgen.base import DistributionGenerator
+
+logger = logging.getLogger(__name__)
 
 # How many distinct values can we have before we consider a
 # choice distribution to be infeasible?
@@ -98,6 +103,78 @@ class Generator(ABC):
         Returns default if no fitness has been defined.
         """
         return default
+
+
+class PredefinedGenerator(Generator):
+    """
+    Generator built from an existing config.yaml.
+    """
+    SELECT_AGGREGATE_RE = re.compile(r"SELECT (.*) FROM ([A-Za-z_][A-Za-z0-9_]*)")
+    AS_CLAUSE = re.compile(r" *(.+) +AS +([A-Za-z_][A-Za-z0-9_]*) *")
+    SRC_STAT_NAME = re.compile(r"SRC_STATS\[([^]]*)\].*")
+
+    def __init__(self, table_name: str, generator_object: Mapping[str, any], config: Mapping[str, any]):
+        """
+        Initialise a generator from a config.yaml.
+        :param config: The entire configuration.
+        :param generator_object: The part of the configuration at tables.*.row_generators
+        """
+        self._table_name = table_name
+        self._name: str = generator_object["name"]
+        self._kwn: dict[str, str] = generator_object.get("kwargs", {})
+        self._src_stats_mentioned = set()
+        for kwnv in self._kwn.values():
+            ss = self.SRC_STAT_NAME.match(kwnv)
+            if ss:
+                self._src_stats_mentioned.add(ss.group(1))
+        # Need to deal with this somehow (or remove it from the schema)
+        self._argn: list[str] = generator_object.get("args", [])
+        self._select_aggregate_clauses = {}
+        self._custom_queries = {}
+        tables = config.get("tables", {})
+        for sstat in config.get("src-stats", []):
+            name: str = sstat["name"]
+            dpq = sstat.get("dp-query", None)
+            query = sstat.get("query", dpq)  #... should not combine these probably?
+            if query and name.startswith("auto__"):
+                qname = name[6:]
+                sam = None if query is None else self.SELECT_AGGREGATE_RE.match(query)
+                if sam and qname in tables and qname == sam.group(2):
+                    sacs = [
+                        self.AS_CLAUSE.match(clause)
+                        for clause in sam.group(1).split(',')
+                    ]
+                    self._select_aggregate_clauses = {
+                        sac.group(2): sac.group(1)
+                        for sac in sacs
+                        if sac is not None
+                    }
+                elif name in self._src_stats_mentioned:
+                    self._custom_queries[name] = query
+
+    def function_name(self) -> str:
+        return self._name
+
+    def nominal_kwargs(self) -> dict[str, str]:
+        return self._kwn
+
+    def select_aggregate_clauses(self) -> dict[str, str]:
+        return self._select_aggregate_clauses
+
+    def custom_queries(self) -> dict[str, str]:
+        return self._custom_queries
+
+    def actual_kwargs(self) -> dict[str, any]:
+        # Run the queries from nominal_kwargs
+        #...
+        logger.error("PredefinedGenerator.actual_kwargs not implemented yet")
+        return {}
+
+    def generate_data(self, count) -> list[any]:
+        # Call the function if we can. This could be tricky...
+        #...
+        logger.error("PredefinedGenerator.generate_data not implemented yet")
+        return []
 
 
 class GeneratorFactory(ABC):
