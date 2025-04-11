@@ -51,7 +51,7 @@ class DistributionGenerator:
         return self.rng.choice(a).item()
 
     def zipf_choice(self, a, n):
-        return self.rng.choice(a, p = zipf_weights(n)).item()
+        return self.rng.choice(a, p = zipf_weights(n))
 
 
 class TableGenerator(ABC):

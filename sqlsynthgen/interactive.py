@@ -359,7 +359,7 @@ class GeneratorCmd(DbCmd):
         tables = self.config.get("tables", {})
         table: str = tables.get(name, {})
         metadata_table = self.metadata.tables[name]
-        columns = set(metadata_table.columns.keys())
+        columns = {str(col_name) for col_name in metadata_table.columns.keys()}
         generator_infos: list[GeneratorInfo] = []
         multiple_columns_assigned: dict[str, list[str]] = {}
         for rg in table.get("row_generators", []):
@@ -379,7 +379,7 @@ class GeneratorCmd(DbCmd):
                 else:
                     columns.difference_update(ca)
                     if len(ca) == 1:
-                        single_ca = ca
+                        single_ca = str(ca)
             if single_ca is not None:
                 gen = PredefinedGenerator(table, rg, self.config)
                 generator_infos.append(GeneratorInfo(
@@ -507,7 +507,10 @@ class GeneratorCmd(DbCmd):
                 if generator.new_gen is not None:
                     sacs = generator.new_gen.select_aggregate_clauses()
                     if sacs:
-                        src_stats[f"auto__{entry.name}"] = self._get_aggregate_query(generator.new_gen, entry.name)
+                        src_stats.append({
+                            "name": f"auto__{entry.name}",
+                            "query": self._get_aggregate_query(generator.new_gen, entry.name),
+                        })
                     cqs = generator.new_gen.custom_queries()
                     for cq_key, cq in cqs.items():
                         src_stats.append({
@@ -516,6 +519,7 @@ class GeneratorCmd(DbCmd):
                         })
                     rg = {
                         "name": generator.new_gen.function_name(),
+                        "columns_assigned": generator.column,
                     }
                     kwn = generator.new_gen.nominal_kwargs()
                     if kwn:
@@ -721,7 +725,7 @@ class GeneratorCmd(DbCmd):
         self.print("{0}; providing the following values: {1}", select_q, vals)
 
     def get_column_data(self, count: int, to_str=repr, min_length: int = 0):
-        column = self.get_column_name()
+        column = str(self.get_column_name())
         where = ""
         if 0 < min_length:
             where = "WHERE LENGTH({column}) >= {len}".format(
@@ -753,7 +757,12 @@ class GeneratorCmd(DbCmd):
         self.print("Sample of actual source data: {0}...", ",".join(sample))
         for index, gen in enumerate(gens):
             fit = gen.fit()
-            fit_s = "(no fit)" if fit is None else f"(fit: {fit:.0f})"
+            if fit is None:
+                fit_s = "(no fit)"
+            elif fit < 100:
+                fit_s = f"(fit: {fit:.3g})"
+            else:
+                fit_s = f"(fit: {fit:.0f})"
             self.print(
                 "{index}. {name}: {fit} {sample} ...",
                 index=index + 1,
