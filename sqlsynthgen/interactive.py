@@ -379,7 +379,7 @@ class GeneratorCmd(DbCmd):
                 else:
                     columns.difference_update(ca)
                     if len(ca) == 1:
-                        single_ca = str(ca)
+                        single_ca = str(ca[0])
             if single_ca is not None:
                 gen = PredefinedGenerator(table, rg, self.config)
                 generator_infos.append(GeneratorInfo(
@@ -519,7 +519,7 @@ class GeneratorCmd(DbCmd):
                         })
                     rg = {
                         "name": generator.new_gen.function_name(),
-                        "columns_assigned": generator.column,
+                        "columns_assigned": [generator.column],
                     }
                     kwn = generator.new_gen.nominal_kwargs()
                     if kwn:
@@ -701,7 +701,7 @@ class GeneratorCmd(DbCmd):
         ]
         return f"SELECT {', '.join(clauses)} FROM {table_name}"
 
-    def print_select_aggregate_query(self, table_name, gen) -> None:
+    def print_select_aggregate_query(self, table_name, gen: Generator) -> None:
         """
         Prints the select aggregate query and all the values it gets in this case.
         """
@@ -718,9 +718,9 @@ class GeneratorCmd(DbCmd):
                 if ak in kwa:
                     vals.append(kwa[ak])
                 else:
-                    vals.append("(actual_kwargs() does not report)")
+                    logger.warning("actual_kwargs for %s does not report %s", gen.function_name(), ak)
             else:
-                vals += "(unused)"
+                logger.warning('nominal_kwargs for %s does not have a value SRC_STATS["auto__%s"]["%s"]', gen.function_name(), table_name, n)
         select_q = self._get_aggregate_query(gen, table_name)
         self.print("{0}; providing the following values: {1}", select_q, vals)
 
@@ -784,8 +784,8 @@ class GeneratorCmd(DbCmd):
         if index < 1:
             self.print("set's argument must be at least 1")
             return
-        if len(gens) <= index:
-            self.print("There are currently only {0} generators proposed, please select one of them.")
+        if len(gens) < index:
+            self.print("There are currently only {0} generators proposed, please select one of them.", index)
             return
         (table, gen_info) = self.get_table_and_generator()
         if table is None:

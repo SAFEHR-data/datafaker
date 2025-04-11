@@ -11,7 +11,7 @@ import mimesis
 import mimesis.locales
 import re
 from sqlalchemy import Column, Engine, text
-from sqlalchemy.types import Integer, Numeric, String
+from sqlalchemy.types import Date, DateTime, Integer, Numeric, String, Time
 from typing import Callable
 
 from sqlsynthgen.base import DistributionGenerator
@@ -257,21 +257,15 @@ class MultiGeneratorFactory(GeneratorFactory):
         ]
 
 
-class MimesisGenerator(Generator):
+class MimesisGeneratorBase(Generator):
     def __init__(
         self,
         function_name: str,
-        value_fn: Callable[[any], float] | None=None,
-        buckets: Buckets | None=None,
     ):
         """
         Generator from Mimesis.
 
-        :param: function_name is relative to 'generic', for example 'person.name'.
-        :param: value_fn Function to convert generator output to floats, if needed. The values
-        thus produced are compared against the buckets to estimate the fit.
-        :param: buckets The distribution of string lengths in the real data. If this is None
-        then the fit method will return None.
+        :param function_name: is relative to 'generic', for example 'person.name'.
         """
         super().__init__()
         f = generic
@@ -281,8 +275,34 @@ class MimesisGenerator(Generator):
             f = getattr(f, part)
         if not callable(f):
             raise Exception(f"Mimesis object {function_name} is not a callable, so cannot be used as a generator")
-        self.name = "generic." + function_name
-        self.generator_function = f
+        self._name = "generic." + function_name
+        self._generator_function = f
+    def function_name(self):
+        return self._name
+    def generate_data(self, count):
+        return [
+            self._generator_function()
+            for _ in range(count)
+        ]
+
+
+class MimesisGenerator(MimesisGeneratorBase):
+    def __init__(
+        self,
+        function_name: str,
+        value_fn: Callable[[any], float] | None=None,
+        buckets: Buckets | None=None,
+    ):
+        """
+        Generator from Mimesis.
+
+        :param function_name: is relative to 'generic', for example 'person.name'.
+        :param value_fn: Function to convert generator output to floats, if needed. The values
+        thus produced are compared against the buckets to estimate the fit.
+        :param buckets: The distribution of string lengths in the real data. If this is None
+        then the fit method will return None.
+        """
+        super().__init__(function_name)
         if buckets is None:
             self._fit = None
             return
@@ -294,18 +314,51 @@ class MimesisGenerator(Generator):
             ]
         self._fit = buckets.fit_from_values(samples)
     def function_name(self):
-        return self.name
+        return self._name
     def nominal_kwargs(self):
         return {}
     def actual_kwargs(self):
         return {}
-    def generate_data(self, count):
-        return [
-            self.generator_function()
-            for _ in range(count)
-        ]
     def fit(self, default=None):
         return default if self._fit is None else self._fit
+
+
+class MimesisDateTimeGenerator(MimesisGeneratorBase):
+    def __init__(self, column: Column, engine: Engine, function_name: str):
+        super().__init__(function_name)
+        self._column = column
+        self._function_name = function_name
+        self._extract_year = f"EXTRACT(YEAR FROM {column.name})"
+        self._max_year = f"MAX({self._extract_year})"
+        self._min_year = f"MIN({self._extract_year})"
+        with engine.connect() as connection:
+            result = connection.execute(
+                text(f"SELECT {self._min_year} AS start, {self._max_year} AS end FROM {column.table.name}")
+            ).first()
+            if result is None:
+                return None
+            self._start = result.start
+            self._end = result.end
+    def nominal_kwargs(self):
+        return {
+            "start": f'SRC_STATS["auto__{self._column.table.name}"]["{self._column.name}__start"]',
+            "end": f'SRC_STATS["auto__{self._column.table.name}"]["{self._column.name}__end"]',
+        }
+    def actual_kwargs(self):
+        return {
+            "start": self._start,
+            "end": self._end,
+        }
+    def select_aggregate_clauses(self) -> dict[str, str]:
+        return {
+            f"{self._column.name}__start": self._min_year,
+            f"{self._column.name}__end": self._max_year,
+        }
+    def generate_data(self, count):
+        return [
+            self._generator_function(start=self._start, end=self._end)
+            for _ in range(count)
+        ]
 
 
 class MimesisStringGeneratorFactory(GeneratorFactory):
@@ -362,6 +415,7 @@ class MimesisStringGeneratorFactory(GeneratorFactory):
             "text.word",
         ]))
 
+
 class MimesisFloatGeneratorFactory(GeneratorFactory):
     """
     All Mimesis generators that return floating point numbers.
@@ -372,6 +426,40 @@ class MimesisFloatGeneratorFactory(GeneratorFactory):
         return list(map(MimesisGenerator, [
             "person.height",
         ]))
+
+
+class MimesisDateGeneratorFactory(GeneratorFactory):
+    """
+    All Mimesis generators that return dates.
+    """
+    def get_generators(self, column: Column, engine: Engine):
+        ct = column.type.as_generic()
+        if not isinstance(ct, Date):
+            return []
+        return [MimesisDateTimeGenerator(column, engine, "datetime.date")]
+
+
+class MimesisDateTimeGeneratorFactory(GeneratorFactory):
+    """
+    All Mimesis generators that return datetimes.
+    """
+    def get_generators(self, column: Column, engine: Engine):
+        ct = column.type.as_generic()
+        if not isinstance(ct, DateTime):
+            return []
+        return [MimesisDateTimeGenerator(column, engine, "datetime.datetime")]
+
+
+class MimesisTimeGeneratorFactory(GeneratorFactory):
+    """
+    All Mimesis generators that return times.
+    """
+    def get_generators(self, column: Column, _engine: Engine):
+        ct = column.type.as_generic()
+        if not isinstance(ct, Time):
+            return []
+        return [MimesisGenerator("datetime.time")]
+
 
 class MimesisIntegerGeneratorFactory(GeneratorFactory):
     """
@@ -578,6 +666,9 @@ everything_factory = MultiGeneratorFactory([
     MimesisStringGeneratorFactory(),
     MimesisIntegerGeneratorFactory(),
     MimesisFloatGeneratorFactory(),
+    MimesisDateGeneratorFactory(),
+    MimesisDateTimeGeneratorFactory(),
+    MimesisTimeGeneratorFactory(),
     ContinuousDistributionGeneratorFactory(),
     ChoiceGeneratorFactory(),
 ])

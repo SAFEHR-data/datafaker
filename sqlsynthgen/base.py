@@ -48,7 +48,7 @@ class DistributionGenerator:
         return self.rng.normal(loc=mean, scale=sd)
 
     def choice(self, a):
-        return self.rng.choice(a).item()
+        return self.rng.choice(a)
 
     def zipf_choice(self, a, n):
         return self.rng.choice(a, p = zipf_weights(n))
