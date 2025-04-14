@@ -167,7 +167,6 @@ So we edit the appropriate parts of the ``config.yaml`` file. You will see seven
       num_rows_per_pass: 1
       row_generators: []
       unions: {}
-      vocabulary_columns: []
       vocabulary_table: false
 
 We need to change ``ignore: false`` to ``ignore: true``, and we can delete the other lines in these blocks if we like:

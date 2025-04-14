@@ -153,9 +153,6 @@ def make_column_choices(
 ) -> list[ColumnChoice]:
     # each union is a dict of union names to a list of its columns
     unions: dict[str, list[str]] = get_property(table_config, "unions", {})
-    generic = src_stats.get("_sqlsynthgen_generic", {})
-    table_stats = generic.get(table_name, {})
-    column_generators = table_stats.get("column_generators", {})
     # Set of all columns that are part of a union
     columns_in_union: set[str] = set()
     for (union_name, cols) in unions.items():
@@ -181,15 +178,11 @@ def make_column_choices(
             elif 1 == n:
                 u = intersection.pop()
                 dependent_columns[u] = assigned_set
-    # table row count:
-    row_count: int | None = table_stats.get("row_count", None)
-    # some columns have counts of nonnull values:
-    value_count = { col: vs.get("count", None) for (col, vs) in column_generators.items() }
     # Now we can convert unions to ColumnChoices
     choices: list[ColumnChoice] = []
     for cols in unions.values():
         choices.append(
-            ColumnChoice.make(cols, dependent_columns, row_count, value_count)
+            ColumnChoice.make(cols, dependent_columns)
         )
     return choices
 
@@ -573,23 +566,9 @@ def _get_generator_for_table(
     row_gen_info_data, columns_covered = _get_row_generator(table_config)
     table_data.row_gens.extend(row_gen_info_data)
 
-    generic_generators = get_property(src_stats, "_sqlsynthgen_generic", {}
-    ).get(table.name, {}).get("column_generators", {})
     for column in table.columns:
         if column.name not in columns_covered:
-            # No generator for this column in the user config.
-            # Perhaps there is something for us in src-stats.yaml's
-            # _sqlsynthgen_generic?
-            if column.name in generic_generators:
-                gen = generic_generators[column.name]
-                table_data.row_gens.append(
-                    RowGeneratorInfo([column.name], FunctionCall(
-                        gen["name"],
-                        [f"{k}={v}" for (k, v) in gen.get("kwargs", {}).items()]
-                    ))
-                )
-            else:
-                table_data.row_gens.append(_get_default_generator(column))
+            table_data.row_gens.append(_get_default_generator(column))
 
     return table_data
 
@@ -773,7 +752,6 @@ def generate_config_file(
             "unions": {},
             "num_rows_per_pass": 1,
             "row_generators": [],
-            "vocabulary_columns": [],
         }
         tables[table_name] = table
     return yaml.dump({"tables": tables})
@@ -815,47 +793,6 @@ def make_tables_file(
     return yaml.dump(meta_dict)
 
 
-def zipf_distribution(total, bins):
-    basic_dist = list(map(lambda n: 1/n, range(1, bins + 1)))
-    bd_remaining = sum(basic_dist)
-    for b in basic_dist:
-        # yield b/bd_remaining of the `total` remaining
-        if bd_remaining == 0:
-            yield 0
-        else:
-            x = math.floor(0.5 + total * b / bd_remaining)
-            bd_remaining -= x * bd_remaining / total
-            total -= x
-            yield x
-
-
-def uniform_distribution(total, bins):
-    p = total // bins
-    n = total % bins
-    for i in range(0, n):
-        yield p + 1
-    for i in range(n, bins):
-        yield p
-
-
-def fit_error(test, actual):
-    return sum(map(lambda t, a: (t - a)*(t - a), test, actual))
-
-
-_CDF_BUCKETS = {
-    "dist_gen.normal": {
-        "buckets": [0.0227, 0.0441, 0.0918, 0.1499, 0.1915, 0.1915, 0.1499, 0.0918, 0.0441, 0.0227],
-        "kwarg_fn": lambda mean, sd: {"mean": mean, "sd": sd},
-    },
-    # Uniform wih mean 0 and sigma 1 runs between +/-sqrt(3) = +/-1.732
-    # and has height 1 / 2sqrt(3) = 0.28868.
-    "dist_gen.uniform": {
-        "buckets": [0, 0.06698, 0.14434, 0.14434, 0.14434, 0.14434, 0.14434, 0.14434, 0.06698, 0],
-        "kwarg_fn": lambda mean, sd: {"low": mean - sd * math.sqrt(3), "high": mean + sd * math.sqrt(3)},
-    },
-}
-
-
 class DbConnection:
     def __init__(self, engine):
         self._engine = engine
@@ -889,7 +826,7 @@ class DbConnection:
         """Execute query in query_block."""
         logger.debug("Executing query %s", query_block["name"])
         query = text(query_block["query"])
-        raw_result = self.execute_raw_query(query)
+        raw_result = await self.execute_raw_query(query)
 
         if "dp-query" in query_block:
             result_df = pd.DataFrame(raw_result.mappings())
@@ -909,6 +846,18 @@ class DbConnection:
                 for row in raw_result.mappings().fetchall()
             ]
         return final_result
+
+
+def fix_type(value):
+    if type(value) is decimal.Decimal:
+        return float(value)
+    return value
+
+
+def fix_types(dics):
+    return [{
+        k: fix_type(v) for k, v in dic.items()
+    } for dic in dics]
 
 
 async def make_src_stats(
@@ -939,7 +888,7 @@ async def make_src_stats_connection(config: Mapping, db_conn: DbConnection, meta
         *[db_conn.execute_query(query_block) for query_block in query_blocks]
     )
     src_stats = {
-        query_block["name"]: result
+        query_block["name"]: fix_types(result)
         for query_block, result in zip(query_blocks, results)
     }
 
@@ -947,135 +896,4 @@ async def make_src_stats_connection(config: Mapping, db_conn: DbConnection, meta
         if not result:
             logger.warning("src-stats query %s returned no results", name)
 
-    generic = {}
-    tables_config = config.get("tables", {})
-    for table_name0, table in metadata.tables.items():
-        table_name = str(table_name0)
-        row_count = await db_conn.table_row_count(table_name)
-        generic[table_name] = {
-            "row_count": row_count,
-            "column_generators": {},
-        }
-        table_config = tables_config.get(table_name, None)
-        vocab_columns = set() if table_config is None else set(table_config.get("vocabulary_columns", []))
-        for column_name, column in table.columns.items():
-            is_vocab = column_name in vocab_columns
-            info = _get_info_for_column_type(type(column.type))
-            best_generic_generator = None
-            if not column.foreign_keys and not column.primary_key and info is not None:
-                if info.numeric:
-                    # Find summary information; mean, standard deviation and buckets 1/2 standard deviation width around mean.
-                    best_generic_generator = await _get_generic_numeric_generator(
-                        db_conn,
-                        column_name,
-                        table_name,
-                    )
-                if info.choice and is_vocab:  # If it's not a vocabulary column then it's less useful to work out the choice distribution
-                    # Find information on how many of each example there is
-                    gg = await _get_generic_choice_generator(
-                        db_conn,
-                        column_name,
-                        table_name,
-                    )
-                    if best_generic_generator is None or (
-                        gg is not None and gg["fit"] < best_generic_generator["fit"]
-                    ):
-                        best_generic_generator = gg
-                if info.summary_query is not None:
-                    # Run specified query
-                    results = await db_conn.execute_raw_query(text(info.summary_query.format(
-                        column=column_name, table=table_name
-                    )))
-                    kw = get_result_mappings(info, results)
-                    if kw is not None:
-                        best_generic_generator = { "name": info.generator, "kwargs": kw }
-            if best_generic_generator is not None:
-                generic[table_name]["column_generators"][str(column_name)] = best_generic_generator
-    if generic:
-        src_stats["_sqlsynthgen_generic"] = generic
     return src_stats
-
-
-async def _get_generic_choice_generator(db_conn, column_name, table_name):
-    results = await db_conn.execute_raw_query(text(
-        "SELECT {column} AS v, COUNT({column}) AS f FROM {table} GROUP BY v ORDER BY f DESC".format(
-            column=column_name, table=table_name
-        )
-    ))
-    values = []  # The values found
-    counts = []  # The number or each value
-    total = 0  # total number of non-NULL results
-    for result in results:
-        c = result.f
-        if c != 0:
-            total += c
-            counts.append(c)
-            v = result.v
-            if type(v) is decimal.Decimal:
-                v = float(v)
-            values.append(v)
-    if not counts:
-        return None
-    total2 = total * total
-    # Which distribution fits best?
-    zipf = zipf_distribution(total, len(counts))
-    zipf_fit = fit_error(zipf, counts) / total2
-    unif = uniform_distribution(total, len(counts))
-    unif_fit = fit_error(unif, counts) / total2
-    if zipf_fit < unif_fit:
-        return {
-            "name": "dist_gen.zipf_choice",
-            "fit": zipf_fit,
-            "count": total,
-            "kwargs": {
-                "a": values,
-                "n": f"{len(counts)}",
-            }
-        }
-    return {
-        "name": "dist_gen.choice",
-        "fit": unif_fit,
-        "count": total,
-        "kwargs": {
-            "a": values,
-        }
-    }
-
-
-async def _get_generic_numeric_generator(db_conn, column_name, table_name):
-    # Find summary information; mean, standard deviation and buckets 1/2 standard deviation width around mean.
-    results = await db_conn.execute_raw_query(text(
-        "SELECT AVG({column}) AS mean, STDDEV({column}) AS sd, COUNT({column}) AS count FROM {table}".format(
-            column=column_name, table=table_name
-        )
-    ))
-    result = results.first()
-    count = result.count
-    generator = None
-    if result.sd is not None and not math.isnan(result.sd) and 0 < result.sd:
-        raw_buckets = await db_conn.execute_raw_query(text(
-            "SELECT COUNT({column}) AS f, FLOOR(({column} - {x})/{w}) AS b FROM {table} GROUP BY b".format(
-                column=column_name, table=table_name, x=result.mean - 2 * result.sd, w = result.sd / 2
-            )
-        ))
-        buckets = [0] * 10
-        for rb in raw_buckets:
-            if rb.b is not None:
-                bucket = min(9, max(0, int(rb.b) + 1))
-                buckets[bucket] += rb.f / count
-        best_fit = None
-        best_fit_distribution = None
-        best_fit_info = None
-        for dist_name, dist_info in _CDF_BUCKETS.items():
-            fit = fit_error(dist_info["buckets"], buckets)
-            if best_fit is None or fit < best_fit:
-                best_fit = fit
-                best_fit_distribution = dist_name
-                best_fit_info = dist_info
-        generator = {
-            "name": best_fit_distribution,
-            "fit": best_fit,
-            "count": count,
-            "kwargs": best_fit_info["kwarg_fn"](float(result.mean), float(result.sd)),
-        }
-    return generator

@@ -489,7 +489,7 @@ class GeneratorCmd(DbCmd):
                 entry.generators[self.generator_index] = generator
 
     def _remove_auto_src_stats(self) -> list[dict[str, any]]:
-        src_stats = self.config.get("src-stats", {})
+        src_stats = self.config.get("src-stats", [])
         new_src_stats = []
         for stat in src_stats:
             if not stat.get("name", "").startswith("auto__"):
