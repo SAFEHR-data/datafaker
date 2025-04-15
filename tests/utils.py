@@ -63,10 +63,19 @@ class RequiresDBTestCase(SSGTestCase):
     examples_dir = "tests/examples"
     dump_file_path = None
     database_name = None
+    Postgresql = None
+
+    @classmethod
+    def setUpClass(cls):
+        cls.Postgresql = testing.postgresql.PostgresqlFactory(cache_initialized_db=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.Postgresql.clear_cache()
 
     def setUp(self) -> None:
         super().setUp()
-        self.postgresql = testing.postgresql.Postgresql()
+        self.postgresql = self.Postgresql()
         if self.dump_file_path is not None:
             self.run_psql(Path(self.examples_dir) / Path(self.dump_file_path))
         self.engine = create_db_engine(
