@@ -355,12 +355,12 @@ class GeneratorCmd(DbCmd):
     prompt = "(generatorconf) "
     file = None
 
-    def make_table_entry(self, name: str) -> TableEntry:
+    def make_table_entry(self, table_name: str) -> TableEntry:
         tables = self.config.get("tables", {})
-        table: str = tables.get(name, {})
-        metadata_table = self.metadata.tables[name]
-        columns = {str(col_name) for col_name in metadata_table.columns.keys()}
-        generator_infos: list[GeneratorInfo] = []
+        table: str = tables.get(table_name, {})
+        metadata_table = self.metadata.tables[table_name]
+        columns = frozenset(metadata_table.columns.keys())
+        col2gen: dict[str, Generator] = {}
         multiple_columns_assigned: dict[str, list[str]] = {}
         for rg in table.get("row_generators", []):
             gen_name = rg.get("name", None)
@@ -368,46 +368,45 @@ class GeneratorCmd(DbCmd):
                 ca = rg.get("columns_assigned", [])
                 single_ca = None
                 if isinstance(ca, str):
-                    if ca in columns:
-                        columns.remove(ca)
-                        single_ca = ca
-                    else:
+                    if ca not in columns:
                         logger.warning(
                             "table '%s' has '%s' assigned to column '%s' which is not in this table",
-                            name, gen_name, ca,
+                            table_name, gen_name, ca,
                         )
+                    elif ca in col2gen:
+                        logger.warning(
+                            "table '%s' has column '%s' assigned to multiple times",
+                            table_name, ca,
+                        )
+                    else:
+                        single_ca = ca
                 else:
-                    columns.difference_update(ca)
                     if len(ca) == 1:
                         single_ca = str(ca[0])
-            if single_ca is not None:
-                gen = PredefinedGenerator(table, rg, self.config)
-                generator_infos.append(GeneratorInfo(
-                    column=single_ca,
-                    is_primary_key=metadata_table.columns[single_ca].primary_key,
-                    old_gen=gen,
-                    new_gen=gen,
-                ))
-            else:
-                multiple_columns_assigned[gen_name] = ca
-        for col in columns:
+                if single_ca is not None:
+                    col2gen[single_ca] = PredefinedGenerator(table, rg, self.config)
+                else:
+                    multiple_columns_assigned[gen_name] = ca
+        generator_infos: list[GeneratorInfo] = []
+        for name, col in metadata_table.columns.items():
+            gen = col2gen.get(name, None)
             generator_infos.append(GeneratorInfo(
-                column=col,
-                is_primary_key=metadata_table.columns[col].primary_key,
-                old_gen=None,
-                new_gen=None,
+                column=name,
+                is_primary_key=col.primary_key,
+                old_gen=gen,
+                new_gen=gen,
             ))
         if multiple_columns_assigned:
             self.print(
                 "The following mulit-column generators for table {0} are defined in the configuration file and cannot be configured with this command",
-                name,
+                table_name,
             )
             for (gen_name, cols) in multiple_columns_assigned.items():
                 self.print("   {0}: {1}", gen_name, cols)
         if len(generator_infos) == 0:
             return None
         return GeneratorCmdTableEntry(
-            name=name,
+            name=table_name,
             generators=generator_infos
         )
 
