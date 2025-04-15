@@ -210,8 +210,6 @@ def warning_or_higher(record: logging.LogRecord) -> bool:
 def conf_logger(verbose: bool) -> None:
     """Configure the logger."""
     # Note that this function modifies the global `logger`.
-    level = logging.DEBUG if verbose else logging.INFO
-    logger.setLevel(level)
     log_format = "%(message)s"
 
     # info will always be printed to stdout
@@ -225,8 +223,11 @@ def conf_logger(verbose: bool) -> None:
     stderr_handler.setFormatter(logging.Formatter(log_format))
     stderr_handler.addFilter(warning_or_higher)
 
-    logger.addHandler(stdout_handler)
-    logger.addHandler(stderr_handler)
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format=log_format,
+        handlers=[stdout_handler, stderr_handler],
+    )
 
 
 def get_flag(maybe_dict, key):
