@@ -398,7 +398,7 @@ class GeneratorCmd(DbCmd):
         for name, col in metadata_table.columns.items():
             gen = col2gen.get(name, None)
             generator_infos.append(GeneratorInfo(
-                column=name,
+                column=str(name),
                 is_primary_key=col.primary_key,
                 old_gen=gen,
                 new_gen=gen,
@@ -487,12 +487,6 @@ class GeneratorCmd(DbCmd):
                 table=table_name,
                 column=column,
             )
-
-    def set_generator(self, generator: str):
-        if self.table_index < len(self.table_entries):
-            entry = self.table_entries[self.table_index]
-            if self.generator_index < len(entry.generators):
-                entry.generators[self.generator_index] = generator
 
     def _remove_auto_src_stats(self) -> list[dict[str, any]]:
         src_stats = self.config.get("src-stats", [])

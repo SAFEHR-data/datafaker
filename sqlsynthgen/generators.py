@@ -111,7 +111,7 @@ class PredefinedGenerator(Generator):
     """
     SELECT_AGGREGATE_RE = re.compile(r"SELECT (.*) FROM ([A-Za-z_][A-Za-z0-9_]*)")
     AS_CLAUSE_RE = re.compile(r" *(.+) +AS +([A-Za-z_][A-Za-z0-9_]*) *")
-    SRC_STAT_NAME_RE = re.compile(r"SRC_STATS\[([^]]*)\].*")
+    SRC_STAT_NAME_RE = re.compile(r'SRC_STATS\["([^]]*)"\].*')
 
     def __init__(self, table_name: str, generator_object: Mapping[str, any], config: Mapping[str, any]):
         """
@@ -136,15 +136,17 @@ class PredefinedGenerator(Generator):
         self._argn: list[str] = generator_object.get("args", [])
         self._select_aggregate_clauses = {}
         self._custom_queries = {}
-        tables = config.get("tables", {})
         for sstat in config.get("src-stats", []):
             name: str = sstat["name"]
             dpq = sstat.get("dp-query", None)
             query = sstat.get("query", dpq)  #... should not combine these probably?
-            if query and name.startswith("auto__"):
-                qname = name[6:]
+            if name in self._src_stats_mentioned:
+                logger.debug("Found a src-stats entry for %s", name)
+                # This query is one that this generator is interested in
                 sam = None if query is None else self.SELECT_AGGREGATE_RE.match(query)
-                if sam and qname in tables and qname == sam.group(2):
+                # sam.group(2) is the table name from the FROM clause of the query
+                if sam and name == f"auto__{sam.group(2)}":
+                    # name is auto__{table_name}, so it's a select_aggregate, so we split up its clauses
                     sacs = [
                         self.AS_CLAUSE_RE.match(clause)
                         for clause in sam.group(1).split(',')
@@ -154,11 +156,10 @@ class PredefinedGenerator(Generator):
                         for sac in sacs
                         if sac is not None
                     })
-                elif name in self._src_stats_mentioned:
+                else:
+                    # some other name, so must be a custom query
                     logger.debug("Custom query %s is '%s'", name, query)
                     self._custom_queries[name] = query
-                else:
-                    logger.debug("Could not parse %s query %s", name, query)
 
     def function_name(self) -> str:
         return self._name
