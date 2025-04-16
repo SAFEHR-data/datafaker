@@ -110,8 +110,8 @@ class PredefinedGenerator(Generator):
     Generator built from an existing config.yaml.
     """
     SELECT_AGGREGATE_RE = re.compile(r"SELECT (.*) FROM ([A-Za-z_][A-Za-z0-9_]*)")
-    AS_CLAUSE = re.compile(r" *(.+) +AS +([A-Za-z_][A-Za-z0-9_]*) *")
-    SRC_STAT_NAME = re.compile(r"SRC_STATS\[([^]]*)\].*")
+    AS_CLAUSE_RE = re.compile(r" *(.+) +AS +([A-Za-z_][A-Za-z0-9_]*) *")
+    SRC_STAT_NAME_RE = re.compile(r"SRC_STATS\[([^]]*)\].*")
 
     def __init__(self, table_name: str, generator_object: Mapping[str, any], config: Mapping[str, any]):
         """
@@ -119,14 +119,19 @@ class PredefinedGenerator(Generator):
         :param config: The entire configuration.
         :param generator_object: The part of the configuration at tables.*.row_generators
         """
+        logger.debug("Creating a PredefinedGenerator %s from table %s", generator_object["name"], table_name)
         self._table_name = table_name
         self._name: str = generator_object["name"]
         self._kwn: dict[str, str] = generator_object.get("kwargs", {})
         self._src_stats_mentioned = set()
         for kwnv in self._kwn.values():
-            ss = self.SRC_STAT_NAME.match(kwnv)
+            ss = self.SRC_STAT_NAME_RE.match(kwnv)
             if ss:
-                self._src_stats_mentioned.add(ss.group(1))
+                ss_name = ss.group(1)
+                self._src_stats_mentioned.add(ss_name)
+                logger.debug("Found SRC_STATS reference %s", ss_name)
+            else:
+                logger.debug("Value %s does not seem to be a SRC_STATS reference", kwnv)
         # Need to deal with this somehow (or remove it from the schema)
         self._argn: list[str] = generator_object.get("args", [])
         self._select_aggregate_clauses = {}
@@ -141,16 +146,19 @@ class PredefinedGenerator(Generator):
                 sam = None if query is None else self.SELECT_AGGREGATE_RE.match(query)
                 if sam and qname in tables and qname == sam.group(2):
                     sacs = [
-                        self.AS_CLAUSE.match(clause)
+                        self.AS_CLAUSE_RE.match(clause)
                         for clause in sam.group(1).split(',')
                     ]
-                    self._select_aggregate_clauses = {
+                    self._select_aggregate_clauses.update({
                         sac.group(2): sac.group(1)
                         for sac in sacs
                         if sac is not None
-                    }
+                    })
                 elif name in self._src_stats_mentioned:
+                    logger.debug("Custom query %s is '%s'", name, query)
                     self._custom_queries[name] = query
+                else:
+                    logger.debug("Could not parse %s query %s", name, query)
 
     def function_name(self) -> str:
         return self._name
@@ -220,7 +228,7 @@ class Buckets:
                     column=column_name,
                 ))
             ).first()
-            if result is None:
+            if result is None or result.stddev is None:
                 return None
         return Buckets(engine, table_name, column_name, result.mean, result.stddev, result.count)
 
@@ -337,8 +345,8 @@ class MimesisDateTimeGenerator(MimesisGeneratorBase):
             ).first()
             if result is None:
                 return None
-            self._start = result.start
-            self._end = result.end
+            self._start = int(result.start)
+            self._end = int(result.end)
     def nominal_kwargs(self):
         return {
             "start": f'SRC_STATS["auto__{self._column.table.name}"]["{self._column.name}__start"]',
@@ -469,10 +477,7 @@ class MimesisIntegerGeneratorFactory(GeneratorFactory):
         ct = column.type.as_generic()
         if not isinstance(ct, Numeric) and not isinstance(ct, Integer):
             return []
-        return list(map(MimesisGenerator, [
-            "person.weight",
-            "person.age",
-        ]))
+        return [MimesisGenerator("person.weight")]
 
 
 def fit_from_buckets(xs: list[float], ys: list[float]):
@@ -544,6 +549,8 @@ class ContinuousDistributionGeneratorFactory(GeneratorFactory):
         column_name = column.name
         table_name = column.table.name
         buckets = Buckets.make_buckets(engine, table_name, column_name)
+        if buckets is None:
+            return []
         return [
             GaussianGenerator(table_name, column_name, buckets),
             UniformGenerator(table_name, column_name, buckets),

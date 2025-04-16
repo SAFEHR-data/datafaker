@@ -12,7 +12,7 @@ from sqlalchemy.schema import Table
 from sqlsynthgen.base import FileUploader, TableGenerator
 from sqlsynthgen.create import (
     Story,
-    _populate_story,
+    StoryIterator,
     create_db_data,
     create_db_tables,
     create_db_vocab,
@@ -215,6 +215,9 @@ class TestStoryDefaults(RequiresDBTestCase):
             self.assertEqual(1, first_row["someval"])
             self.assertEqual(8, first_row["otherval"])
 
+        story_iterator = StoryIterator([my_story()], dict(self.metadata.tables), {}, conn)
         with self.engine.connect() as conn:
             with conn.begin():
-                _populate_story(my_story(), dict(self.metadata.tables), {}, conn)
+                while not story_iterator.is_ended():
+                    story_iterator.insert()
+                    story_iterator.next()

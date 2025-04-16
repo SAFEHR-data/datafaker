@@ -1,4 +1,5 @@
 """Tests for the base module."""
+import copy
 from sqlalchemy import MetaData, select
 from sqlalchemy.orm import declarative_base
 
@@ -294,4 +295,55 @@ class ConfigureTablesTests(RequiresDBTestCase):
             self.assertDictEqual(gc.config["src-stats"][0], {
                 "name": f"auto__{TABLE}__{COLUMN}",
                 "query": f"SELECT {COLUMN} AS value FROM {TABLE} GROUP BY value ORDER BY COUNT({COLUMN}) DESC",
+            })
+
+    def test_old_generators_remain(self):
+        """ Test that we can set one generator and keep an old one. """
+        metadata = MetaData()
+        metadata.reflect(self.engine)
+        config = {
+            "tables": {
+                "string": {
+                    "row_generators": [{
+                        "name": "dist_gen.normal",
+                        "columns_assigned": ["frequency"],
+                        "kwargs": {
+                            "mean": 'SRC_STATS["auto__string"]["mean__frequency"]',
+                            "sd": 'SRC_STATS["auto__string"]["stddev__frequency"]',
+                        },
+                    }]
+                }
+            },
+            "src-stats": [{
+                "name": "auto__string",
+                "query": 'SELECT AVG(frequency) AS mean__frequency, STDDEV(frequency) AS stddev__frequency FROM string',
+            }]
+        }
+        with TestGeneratorCmd(self.dsn, self.schema_name, metadata, copy.deepcopy(config)) as gc:
+            TABLE = "model"
+            COLUMN = "name"
+            GENERATOR = "person.first_name"
+            gc.do_next(f"{TABLE}.{COLUMN}")
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            gc.do_set(str(proposals[f"generic.{GENERATOR}"][0]))
+            gc.do_quit("")
+            self.assertEqual(len(gc.config["tables"][TABLE]["row_generators"]), 1)
+            self.assertDictEqual(
+                gc.config["tables"][TABLE]["row_generators"][0],
+                {"name": f"generic.{GENERATOR}", "columns_assigned": [COLUMN]},
+            )
+            row_gens = gc.config["tables"]["string"]["row_generators"]
+            self.assertEqual(len(row_gens), 1)
+            row_gen = row_gens[0]
+            self.assertEqual(row_gen["name"], "dist_gen.normal")
+            self.assertListEqual(row_gen["columns_assigned"], ["frequency"])
+            self.assertDictEqual(row_gen["kwargs"], {
+                "mean": 'SRC_STATS["auto__string"]["mean__frequency"]',
+                "sd": 'SRC_STATS["auto__string"]["stddev__frequency"]',
+            })
+            self.assertEqual(len(gc.config["src-stats"]), 1)
+            self.assertDictEqual(gc.config["src-stats"][0], {
+                "name": f"auto__string",
+                "query": f"SELECT AVG(frequency) AS mean__frequency, STDDEV(frequency) AS stddev__frequency FROM string",
             })

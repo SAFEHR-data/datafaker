@@ -355,9 +355,16 @@ class GeneratorCmd(DbCmd):
     prompt = "(generatorconf) "
     file = None
 
-    def make_table_entry(self, table_name: str) -> TableEntry:
+    PROPOSE_SOURCE_SAMPLE_TEXT = "Sample of actual source data: {0}..."
+    PROPOSE_GENERATOR_SAMPLE_TEXT = "{index}. {name}: {fit} {sample} ..."
+
+    def make_table_entry(self, table_name: str) -> TableEntry | None:
         tables = self.config.get("tables", {})
         table: str = tables.get(table_name, {})
+        if table.get("ignore", False):
+            return None
+        if table.get("vocabulary_table", False):
+            return None
         metadata_table = self.metadata.tables[table_name]
         columns = frozenset(metadata_table.columns.keys())
         col2gen: dict[str, Generator] = {}
@@ -591,8 +598,42 @@ class GeneratorCmd(DbCmd):
         "Report the column names"
         self.columnize(self.table_metadata().columns.keys())
 
-    def do_next(self, _arg):
-        "Go to the next generator"
+    def get_table_index(self, table_name: str) -> int | None:
+        for n, entry in enumerate(self.table_entries):
+            if entry.name == table_name:
+                return n
+        return None
+
+    def get_generator_index(self, table_index, column_name):
+        entry: GeneratorCmdTableEntry = self.table_entries[table_index]
+        for n, gen in enumerate(entry.generators):
+            if gen.column == column_name:
+                return n
+        return None
+
+    def do_next(self, arg):
+        """
+        Go to the next generator.
+        Or, go to a named table: 'next tablename'.
+        Or go to a column: 'next tablename.columnname'.
+        """
+        if arg:
+            parts = arg.split(".", 1)
+            table_index = self.get_table_index(parts[0])
+            if table_index is None:
+                self.print("No such (non-vocabulary, non-ignored) table name {0}", parts[0])
+                return
+            gen_index = None
+            if 1 < len(parts):
+                gen_index = self.get_generator_index(table_index, parts[1])
+                if gen_index is None:
+                    self.print("we cannot set the generator for column {0}", parts[1])
+                    return
+            self.set_table_index(table_index)
+            if gen_index is not None:
+                self.generator_index = gen_index
+                self.set_prompt()
+            return
         table = self.get_table()
         if table is None:
             self.print("No more tables")
@@ -753,7 +794,7 @@ class GeneratorCmd(DbCmd):
         limit = 5
         gens = self.get_generator_proposals()
         sample = self.get_column_data(limit)
-        self.print("Sample of actual source data: {0}...", ",".join(sample))
+        self.print(self.PROPOSE_SOURCE_SAMPLE_TEXT, ",".join(sample))
         for index, gen in enumerate(gens):
             fit = gen.fit()
             if fit is None:
@@ -763,7 +804,7 @@ class GeneratorCmd(DbCmd):
             else:
                 fit_s = f"(fit: {fit:.0f})"
             self.print(
-                "{index}. {name}: {fit} {sample} ...",
+                self.PROPOSE_GENERATOR_SAMPLE_TEXT,
                 index=index + 1,
                 name=gen.function_name(),
                 fit=fit_s,
