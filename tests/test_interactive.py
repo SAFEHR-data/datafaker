@@ -2,19 +2,19 @@
 from sqlalchemy import MetaData, select
 from sqlalchemy.orm import declarative_base
 
-from sqlsynthgen.interactive import TableCmd
+from sqlsynthgen.interactive import DbCmd, TableCmd, GeneratorCmd
 from tests.utils import RequiresDBTestCase
 
 
-class TestTableCmd(TableCmd):
+class TestDbCmdMixin(DbCmd):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.reset()
     def reset(self):
-        self.messages = []
-        self.headings = []
-        self.rows = []
-        self.column_items = []
+        self.messages: list[tuple[str, list, dict[str, any]]] = []
+        self.headings: list[str] = []
+        self.rows: list[list[str]] = []
+        self.column_items: list[str] = []
         self.columns: dict[str, list[str]] = {}
     def print(self, text: str, *args, **kwargs):
         self.messages.append((text, args, kwargs))
@@ -23,10 +23,14 @@ class TestTableCmd(TableCmd):
         self.rows = rows
     def print_table_by_columns(self, columns: dict[str, list[str]]):
         self.columns = columns
-    def columnize(self, items):
+    def columnize(self, items: list[str]):
         self.column_items.append(items)
-    def ask_save(self):
+    def ask_save(self) -> str:
         return "yes"
+
+
+class TestTableCmd(TableCmd, TestDbCmdMixin):
+    """ TableCmd but mocked """
 
 
 class ConfigureTablesTests(RequiresDBTestCase):
@@ -198,3 +202,96 @@ class ConfigureTablesTests(RequiresDBTestCase):
             self.assertTrue(person_listed)
             self.assertTrue(unique_constraint_test_listed)
             self.assertTrue(no_pk_test_listed)
+
+
+class TestGeneratorCmd(GeneratorCmd, TestDbCmdMixin):
+    """ TableCmd but mocked """
+    def get_proposals(self) -> dict[str, tuple[int, str, str, list[str]]]:
+        """
+        Returns a dict of generator name to a tuple of (index, fit_string, [list,of,samples])"""
+        return {
+            kw["name"]: (kw["index"], kw["fit"], kw["sample"].split(", "))
+            for (s, _, kw) in self.messages
+            if s == self.PROPOSE_GENERATOR_SAMPLE_TEXT
+        }
+
+
+class ConfigureTablesTests(RequiresDBTestCase):
+    """Testing configure-tables."""
+    dump_file_path = "instrument.sql"
+    database_name = "instrument"
+    schema_name = "public"
+
+    def test_set_generator_mimesis(self):
+        """ Test that we can set one generator to a mimesis generator. """
+        metadata = MetaData()
+        metadata.reflect(self.engine)
+        with TestGeneratorCmd(self.dsn, self.schema_name, metadata, {}) as gc:
+            TABLE = "model"
+            COLUMN = "name"
+            GENERATOR = "person.first_name"
+            gc.do_next(f"{TABLE}.{COLUMN}")
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            gc.do_set(str(proposals[f"generic.{GENERATOR}"][0]))
+            gc.do_quit("")
+            self.assertEqual(len(gc.config["tables"][TABLE]["row_generators"]), 1)
+            self.assertDictEqual(
+                gc.config["tables"][TABLE]["row_generators"][0],
+                {"name": f"generic.{GENERATOR}", "columns_assigned": [COLUMN]},
+            )
+
+    def test_set_generator_distribution(self):
+        """ Test that we can set one generator to gaussian. """
+        metadata = MetaData()
+        metadata.reflect(self.engine)
+        with TestGeneratorCmd(self.dsn, self.schema_name, metadata, {}) as gc:
+            TABLE = "string"
+            COLUMN = "frequency"
+            GENERATOR = "dist_gen.normal"
+            gc.do_next(f"{TABLE}.{COLUMN}")
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            gc.do_set(str(proposals[GENERATOR][0]))
+            gc.do_quit("")
+            row_gens = gc.config["tables"][TABLE]["row_generators"]
+            self.assertEqual(len(row_gens), 1)
+            row_gen = row_gens[0]
+            self.assertEqual(row_gen["name"], GENERATOR)
+            self.assertListEqual(row_gen["columns_assigned"], [COLUMN])
+            self.assertDictEqual(row_gen["kwargs"], {
+                "mean": f'SRC_STATS["auto__{TABLE}"]["mean__{COLUMN}"]',
+                "sd": f'SRC_STATS["auto__{TABLE}"]["stddev__{COLUMN}"]',
+            })
+            self.assertEqual(len(gc.config["src-stats"]), 1)
+            self.assertDictEqual(gc.config["src-stats"][0], {
+                "name": f"auto__{TABLE}",
+                "query": f"SELECT AVG({COLUMN}) AS mean__{COLUMN}, STDDEV({COLUMN}) AS stddev__{COLUMN} FROM {TABLE}",
+            })
+
+    def test_set_generator_choice(self):
+        """ Test that we can set one generator to uniform choice. """
+        metadata = MetaData()
+        metadata.reflect(self.engine)
+        with TestGeneratorCmd(self.dsn, self.schema_name, metadata, {}) as gc:
+            TABLE = "string"
+            COLUMN = "frequency"
+            GENERATOR = "dist_gen.choice"
+            gc.do_next(f"{TABLE}.{COLUMN}")
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            gc.do_set(str(proposals[GENERATOR][0]))
+            gc.do_quit("")
+            row_gens = gc.config["tables"][TABLE]["row_generators"]
+            self.assertEqual(len(row_gens), 1)
+            row_gen = row_gens[0]
+            self.assertEqual(row_gen["name"], GENERATOR)
+            self.assertListEqual(row_gen["columns_assigned"], [COLUMN])
+            self.assertDictEqual(row_gen["kwargs"], {
+                "a": f'SRC_STATS["auto__{TABLE}__{COLUMN}"]["value"]',
+            })
+            self.assertEqual(len(gc.config["src-stats"]), 1)
+            self.assertDictEqual(gc.config["src-stats"][0], {
+                "name": f"auto__{TABLE}__{COLUMN}",
+                "query": f"SELECT {COLUMN} AS value FROM {TABLE} GROUP BY value ORDER BY COUNT({COLUMN}) DESC",
+            })
