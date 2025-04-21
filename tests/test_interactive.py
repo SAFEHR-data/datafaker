@@ -1,5 +1,6 @@
 """Tests for the base module."""
 import copy
+import re
 from sqlalchemy import MetaData, select
 from sqlalchemy.orm import declarative_base
 
@@ -344,6 +345,70 @@ class ConfigureTablesTests(RequiresDBTestCase):
             })
             self.assertEqual(len(gc.config["src-stats"]), 1)
             self.assertDictEqual(gc.config["src-stats"][0], {
-                "name": f"auto__string",
-                "query": f"SELECT AVG(frequency) AS mean__frequency, STDDEV(frequency) AS stddev__frequency FROM string",
+                "name": "auto__string",
+                "query": "SELECT AVG(frequency) AS mean__frequency, STDDEV(frequency) AS stddev__frequency FROM string",
+            })
+    
+    def test_aggregate_queries_merge(self):
+        """
+        Test that we can set a generator that requires select aggregate clauses
+        and keep an old one, resulting in a merged query.
+        """
+        metadata = MetaData()
+        metadata.reflect(self.engine)
+        config = {
+            "tables": {
+                "string": {
+                    "row_generators": [{
+                        "name": "dist_gen.normal",
+                        "columns_assigned": ["frequency"],
+                        "kwargs": {
+                            "mean": 'SRC_STATS["auto__string"]["mean__frequency"]',
+                            "sd": 'SRC_STATS["auto__string"]["stddev__frequency"]',
+                        },
+                    }]
+                }
+            },
+            "src-stats": [{
+                "name": "auto__string",
+                "query": 'SELECT AVG(frequency) AS mean__frequency, STDDEV(frequency) AS stddev__frequency FROM string',
+            }]
+        }
+        with TestGeneratorCmd(self.dsn, self.schema_name, metadata, copy.deepcopy(config)) as gc:
+            COLUMN = "position"
+            GENERATOR = "dist_gen.uniform_ms"
+            gc.do_next(f"string.{COLUMN}")
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            gc.do_set(str(proposals[f"{GENERATOR}"][0]))
+            gc.do_quit("")
+            row_gens: list[dict[str,any]] = gc.config["tables"]["string"]["row_generators"]
+            self.assertEqual(len(row_gens), 2)
+            if row_gens[0]["name"] == GENERATOR:
+                row_gen0 = row_gens[0]
+                row_gen1 = row_gens[1]
+            else:
+                row_gen0 = row_gens[1]
+                row_gen1 = row_gens[0]
+            self.assertEqual(row_gen0["name"], GENERATOR)
+            self.assertEqual(row_gen1["name"], "dist_gen.normal")
+            self.assertListEqual(row_gen0["columns_assigned"], [COLUMN])
+            self.assertDictEqual(row_gen0["kwargs"], {
+                "mean": f'SRC_STATS["auto__string"]["mean__{COLUMN}"]',
+                "sd": f'SRC_STATS["auto__string"]["stddev__{COLUMN}"]',
+            })
+            self.assertListEqual(row_gen1["columns_assigned"], ["frequency"])
+            self.assertDictEqual(row_gen1["kwargs"], {
+                "mean": 'SRC_STATS["auto__string"]["mean__frequency"]',
+                "sd": 'SRC_STATS["auto__string"]["stddev__frequency"]',
+            })
+            self.assertEqual(len(gc.config["src-stats"]), 1)
+            self.assertEqual(gc.config["src-stats"][0]["name"], "auto__string")
+            select_match = re.match(r'SELECT (.*) FROM string', gc.config["src-stats"][0]["query"])
+            self.assertIsNotNone(select_match, "src_stats[0].query is not an aggregate select")
+            self.assertSetEqual(set(select_match.group(1).split(", ")), {
+                "AVG(frequency) AS mean__frequency",
+                "STDDEV(frequency) AS stddev__frequency",
+                f"AVG({COLUMN}) AS mean__{COLUMN}",
+                f"STDDEV({COLUMN}) AS stddev__{COLUMN}",
             })

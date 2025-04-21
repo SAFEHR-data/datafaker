@@ -13,6 +13,9 @@ from sqlsynthgen.utils import create_db_engine
 
 logger = logging.getLogger(__name__)
 
+def or_default(v, d):
+    return d if v is None else v
+
 class TableType(Enum):
     NORMAL = "normal"
     IGNORE = "ignore"
@@ -503,14 +506,10 @@ class GeneratorCmd(DbCmd):
         tes: list[GeneratorCmdTableEntry] = self.table_entries
         for entry in tes:
             rgs = []
+            new_gens: list[Generator] = []
             for generator in entry.generators:
                 if generator.new_gen is not None:
-                    sacs = generator.new_gen.select_aggregate_clauses()
-                    if sacs:
-                        src_stats.append({
-                            "name": f"auto__{entry.name}",
-                            "query": self._get_aggregate_query(generator.new_gen, entry.name),
-                        })
+                    new_gens.append(generator.new_gen)
                     cqs = generator.new_gen.custom_queries()
                     for cq_key, cq in cqs.items():
                         src_stats.append({
@@ -527,6 +526,12 @@ class GeneratorCmd(DbCmd):
                     rgs.append(rg)
             if entry.name not in tables:
                 tables[entry.name] = {}
+            aq = self._get_aggregate_query(new_gens, entry.name)
+            if aq:
+                src_stats.append({
+                    "name": f"auto__{entry.name}",
+                    "query": aq,
+                })
             if rgs:
                 tables[entry.name]["row_generators"] = rgs
             elif "row_generators" in tables[entry.name]:
@@ -725,14 +730,14 @@ class GeneratorCmd(DbCmd):
         for cq_key, cq in cqs.items():
             self.print("{0}; providing the following values: {1}", cq, cq_key2args[cq_key])
 
-    def _get_aggregate_query(self, gen: Generator, table_name: str) -> str | None:
-        sacs = gen.select_aggregate_clauses()
-        if not sacs:
-            return None
+    def _get_aggregate_query(self, gens: list[Generator], table_name: str) -> str | None:
         clauses = [
             f"{q} AS {n}"
-            for n, q in sacs.items()
+            for gen in gens
+            for n, q in or_default(gen.select_aggregate_clauses(), {}).items()
         ]
+        if not clauses:
+            return None
         return f"SELECT {', '.join(clauses)} FROM {table_name}"
 
     def print_select_aggregate_query(self, table_name, gen: Generator) -> None:
@@ -755,7 +760,7 @@ class GeneratorCmd(DbCmd):
                     logger.warning("actual_kwargs for %s does not report %s", gen.function_name(), ak)
             else:
                 logger.warning('nominal_kwargs for %s does not have a value SRC_STATS["auto__%s"]["%s"]', gen.function_name(), table_name, n)
-        select_q = self._get_aggregate_query(gen, table_name)
+        select_q = self._get_aggregate_query([gen], table_name)
         self.print("{0}; providing the following values: {1}", select_q, vals)
 
     def get_column_data(self, count: int, to_str=repr, min_length: int = 0):
