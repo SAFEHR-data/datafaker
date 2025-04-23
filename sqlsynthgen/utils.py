@@ -250,6 +250,30 @@ def get_related_table_names(table: Table) -> set[str]:
     }
 
 
+def table_is_private(config: Mapping, table_name: str) -> bool:
+    """
+    Return True if the table with name table_name is a primary private table
+    according to config.
+    """
+    ts = config.get("tables", {})
+    t = ts.get(table_name, {})
+    return t.get("primary_private", False)
+
+
+def primary_private_fks(config: Mapping, table: Table) -> list[str]:
+    """
+    Returns the list of columns in the table that refer to primary private tables.
+
+    A table that is not primary private but has a non-empty list of
+    primary_private_fks is secondary private.
+    """
+    return [
+        str(fk.referred_table.name)
+        for fk in table.foreign_key_constraints
+        if table_is_private(config, str(fk.referred_table.name))
+    ]
+
+
 def get_vocabulary_table_names(config: Mapping) -> set[str]:
     """
     Extract the table names with a vocabulary_table: true property.

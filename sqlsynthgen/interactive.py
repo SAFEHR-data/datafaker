@@ -9,7 +9,7 @@ import re
 from sqlalchemy import Column, MetaData, Table, text
 
 from sqlsynthgen.generators import everything_factory, Generator, PredefinedGenerator
-from sqlsynthgen.utils import create_db_engine
+from sqlsynthgen.utils import create_db_engine, primary_private_fks, table_is_private
 
 logger = logging.getLogger(__name__)
 
@@ -360,6 +360,9 @@ class GeneratorCmd(DbCmd):
 
     PROPOSE_SOURCE_SAMPLE_TEXT = "Sample of actual source data: {0}..."
     PROPOSE_GENERATOR_SAMPLE_TEXT = "{index}. {name}: {fit} {sample} ..."
+    PRIMARY_PRIVATE_TEXT = "Primary Private"
+    SECONDARY_PRIVATE_TEXT = "Secondary Private on columns {0}"
+    NOT_PRIVATE_TEXT = "Not private"
 
     def make_table_entry(self, table_name: str) -> TableEntry | None:
         tables = self.config.get("tables", {})
@@ -597,13 +600,13 @@ class GeneratorCmd(DbCmd):
         "Report the column names"
         self.columnize(self.table_metadata().columns.keys())
 
-    def get_table_index(self, table_name: str) -> int | None:
+    def _get_table_index(self, table_name: str) -> int | None:
         for n, entry in enumerate(self.table_entries):
             if entry.name == table_name:
                 return n
         return None
 
-    def get_generator_index(self, table_index, column_name):
+    def _get_generator_index(self, table_index, column_name):
         entry: GeneratorCmdTableEntry = self.table_entries[table_index]
         for n, gen in enumerate(entry.generators):
             if gen.column == column_name:
@@ -618,13 +621,13 @@ class GeneratorCmd(DbCmd):
         """
         if arg:
             parts = arg.split(".", 1)
-            table_index = self.get_table_index(parts[0])
+            table_index = self._get_table_index(parts[0])
             if table_index is None:
                 self.print("No such (non-vocabulary, non-ignored) table name {0}", parts[0])
                 return
             gen_index = None
             if 1 < len(parts) and parts[1]:
-                gen_index = self.get_generator_index(table_index, parts[1])
+                gen_index = self._get_generator_index(table_index, parts[1])
                 if gen_index is None:
                     self.print("we cannot set the generator for column {0}", parts[1])
                     return
@@ -648,7 +651,7 @@ class GeneratorCmd(DbCmd):
         table_name = parts[0]
         if 1 < len(parts):
             column_name = parts[1]
-            table_index = self.get_table_index(table_name)
+            table_index = self._get_table_index(table_name)
             if table_index is None:
                 return []
             table_entry: GeneratorCmdTableEntry = self.table_entries[table_index]
@@ -674,7 +677,7 @@ class GeneratorCmd(DbCmd):
             self.generator_index -= 1
         self.set_prompt()
 
-    def get_generator_proposals(self) -> list[Generator]:
+    def _get_generator_proposals(self) -> list[Generator]:
         if self.generators_valid_indices != (self.table_index, self.generator_index):
             self.generators = None
         if self.generators is None:
@@ -688,6 +691,19 @@ class GeneratorCmd(DbCmd):
             self.generators_valid_indices = (self.table_index, self.generator_index)
         return self.generators
 
+    def _print_privacy(self):
+        table = self.table_metadata()
+        if table is None:
+            return
+        if table_is_private(self.config, table.name):
+            self.print(self.PRIMARY_PRIVATE_TEXT)
+            return
+        pfks = primary_private_fks(self.config, table)
+        if not pfks:
+            self.print(self.NOT_PRIVATE_TEXT)
+            return
+        self.print(self.SECONDARY_PRIVATE_TEXT, pfks)
+
     def do_compare(self, arg: str):
         """
         Compare the real data with some generators.
@@ -697,12 +713,13 @@ class GeneratorCmd(DbCmd):
         from generators 5, 6 and 10. You can find out which numbers
         correspond to which generators using the 'propose' command.
         """
+        self._print_privacy()
         args = arg.split()
         limit = 20
         comparison = {
-            "source": self.get_column_data(limit, to_str=str),
+            "source": self._get_column_data(limit, to_str=str),
         }
-        gens: list[Generator] = self.get_generator_proposals()
+        gens: list[Generator] = self._get_generator_proposals()
         table_name = self.table_name()
         for argument in args:
             if argument.isdigit():
@@ -710,10 +727,10 @@ class GeneratorCmd(DbCmd):
                 if 0 < n and n <= len(gens):
                     gen = gens[n - 1]
                     comparison[f"{n}. {gen.function_name()}"] = gen.generate_data(limit)
-                    self.print_values_queried(table_name, n, gen)
+                    self._print_values_queried(table_name, n, gen)
         self.print_table_by_columns(comparison)
 
-    def print_values_queried(self, table_name: str, n: int, gen: Generator):
+    def _print_values_queried(self, table_name: str, n: int, gen: Generator):
         """
         Print the values queried from the database for this generator.
         """
@@ -729,10 +746,10 @@ class GeneratorCmd(DbCmd):
                 n,
                 gen.function_name(),
             )
-            self.print_select_aggregate_query(table_name, gen)
-            self.print_custom_queries(gen)
+            self._print_select_aggregate_query(table_name, gen)
+            self._print_custom_queries(gen)
 
-    def print_custom_queries(self, gen: Generator) -> None:
+    def _print_custom_queries(self, gen: Generator) -> None:
         """
         Print all the custom queries and all the values they get in this case.
         """
@@ -763,7 +780,7 @@ class GeneratorCmd(DbCmd):
             return None
         return f"SELECT {', '.join(clauses)} FROM {table_name}"
 
-    def print_select_aggregate_query(self, table_name, gen: Generator) -> None:
+    def _print_select_aggregate_query(self, table_name, gen: Generator) -> None:
         """
         Prints the select aggregate query and all the values it gets in this case.
         """
@@ -786,7 +803,7 @@ class GeneratorCmd(DbCmd):
         select_q = self._get_aggregate_query([gen], table_name)
         self.print("{0}; providing the following values: {1}", select_q, vals)
 
-    def get_column_data(self, count: int, to_str=repr, min_length: int = 0):
+    def _get_column_data(self, count: int, to_str=repr, min_length: int = 0):
         column = str(self.get_column_name())
         where = ""
         if 0 < min_length:
@@ -814,8 +831,8 @@ class GeneratorCmd(DbCmd):
         the column and against each other) with the 'compare' command.
         """
         limit = 5
-        gens = self.get_generator_proposals()
-        sample = self.get_column_data(limit)
+        gens = self._get_generator_proposals()
+        sample = self._get_column_data(limit)
         self.print(self.PROPOSE_SOURCE_SAMPLE_TEXT, ",".join(sample))
         for index, gen in enumerate(gens):
             fit = gen.fit()
@@ -841,7 +858,7 @@ class GeneratorCmd(DbCmd):
         if not arg.isdigit():
             self.print("set requires a single integer argument; 'set 3' sets the third generator that 'propose' lists.")
             return
-        gens = self.get_generator_proposals()
+        gens = self._get_generator_proposals()
         index = int(arg)
         if index < 1:
             self.print("set's argument must be at least 1")

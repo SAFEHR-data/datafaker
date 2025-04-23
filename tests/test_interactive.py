@@ -218,8 +218,8 @@ class TestGeneratorCmd(GeneratorCmd, TestDbCmdMixin):
         }
 
 
-class ConfigureTablesTests(RequiresDBTestCase):
-    """Testing configure-tables."""
+class ConfigureGeneratorsTests(RequiresDBTestCase):
+    """ Testing configure-generators. """
     dump_file_path = "instrument.sql"
     database_name = "instrument"
     schema_name = "public"
@@ -436,3 +436,35 @@ class ConfigureTablesTests(RequiresDBTestCase):
             )
             self.assertListEqual(gc.complete_next("string.q", "next string.q", 5, 12), [])
             self.assertListEqual(gc.complete_next("ww", "next ww", 5, 7), [])
+
+    def test_compare_reports_privacy(self):
+        """
+        Test that compare reports whether the current table is primary private,
+        secondary private or not private.
+        """
+        metadata = MetaData()
+        metadata.reflect(self.engine)
+        config = {
+            "tables": {
+                "model": {
+                    "primary_private": True,
+                }
+            },
+        }
+        with TestGeneratorCmd(self.dsn, self.schema_name, metadata, copy.deepcopy(config)) as gc:
+            gc.do_next("manufacturer")
+            gc.reset()
+            gc.do_compare("")
+            (text, args, kwargs) = gc.messages[0]
+            self.assertEqual(text, gc.NOT_PRIVATE_TEXT)
+            gc.do_next("model")
+            gc.reset()
+            gc.do_compare("")
+            (text, args, kwargs) = gc.messages[0]
+            self.assertEqual(text, gc.PRIMARY_PRIVATE_TEXT)
+            gc.do_next("string")
+            gc.reset()
+            gc.do_compare("")
+            (text, args, kwargs) = gc.messages[0]
+            self.assertEqual(text, gc.SECONDARY_PRIVATE_TEXT)
+            self.assertSequenceEqual(args, [["model"]])
