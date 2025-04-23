@@ -412,3 +412,27 @@ class ConfigureTablesTests(RequiresDBTestCase):
                 f"AVG({COLUMN}) AS mean__{COLUMN}",
                 f"STDDEV({COLUMN}) AS stddev__{COLUMN}",
             })
+
+    def test_next_completion(self):
+        """ Test tab completion for the next command. """
+        metadata = MetaData()
+        metadata.reflect(self.engine)
+        with TestGeneratorCmd(self.dsn, self.schema_name, metadata, {}) as gc:
+            self.assertSetEqual(
+                set(gc.complete_next("m", "next m", 5, 6)),
+                {"manufacturer", "model"},
+            )
+            self.assertSetEqual(
+                set(gc.complete_next("model", "next model", 5, 10)),
+                {"model", "model."},
+            )
+            self.assertSetEqual(
+                set(gc.complete_next("string.", "next string.", 5, 11)),
+                {"string.id", "string.model_id", "string.position", "string.frequency"},
+            )
+            self.assertSetEqual(
+                set(gc.complete_next("string.p", "next string.p", 5, 12)),
+                {"string.position"},
+            )
+            self.assertListEqual(gc.complete_next("string.q", "next string.q", 5, 12), [])
+            self.assertListEqual(gc.complete_next("ww", "next ww", 5, 7), [])

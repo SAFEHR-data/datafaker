@@ -623,7 +623,7 @@ class GeneratorCmd(DbCmd):
                 self.print("No such (non-vocabulary, non-ignored) table name {0}", parts[0])
                 return
             gen_index = None
-            if 1 < len(parts):
+            if 1 < len(parts) and parts[1]:
                 gen_index = self.get_generator_index(table_index, parts[1])
                 if gen_index is None:
                     self.print("we cannot set the generator for column {0}", parts[1])
@@ -642,6 +642,29 @@ class GeneratorCmd(DbCmd):
             return
         self.generator_index = next_gi
         self.set_prompt()
+
+    def complete_next(self, text: str, _line: str, _begidx: int, _endidx: int):
+        parts = text.split(".", 1)
+        table_name = parts[0]
+        if 1 < len(parts):
+            column_name = parts[1]
+            table_index = self.get_table_index(table_name)
+            if table_index is None:
+                return []
+            table_entry: GeneratorCmdTableEntry = self.table_entries[table_index]
+            return [
+                f"{table_name}.{gen.column}"
+                for gen in table_entry.generators
+                if gen.column.startswith(column_name)
+            ]
+        table_names = [
+            entry.name
+            for entry in self.table_entries
+            if entry.name.startswith(table_name)
+        ]
+        if table_name in table_names:
+            table_names.append(f"{table_name}.")
+        return table_names
 
     def do_previous(self, _arg):
         "Go to the previous generator"
