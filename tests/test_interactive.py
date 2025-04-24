@@ -455,16 +455,48 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             gc.do_next("manufacturer")
             gc.reset()
             gc.do_compare("")
-            (text, args, kwargs) = gc.messages[0]
+            (text, args, _kwargs) = gc.messages[0]
             self.assertEqual(text, gc.NOT_PRIVATE_TEXT)
             gc.do_next("model")
             gc.reset()
             gc.do_compare("")
-            (text, args, kwargs) = gc.messages[0]
+            (text, args, _kwargs) = gc.messages[0]
             self.assertEqual(text, gc.PRIMARY_PRIVATE_TEXT)
             gc.do_next("string")
             gc.reset()
             gc.do_compare("")
-            (text, args, kwargs) = gc.messages[0]
+            (text, args, _kwargs) = gc.messages[0]
             self.assertEqual(text, gc.SECONDARY_PRIVATE_TEXT)
             self.assertSequenceEqual(args, [["model"]])
+
+    def test_existing_configuration_remains(self):
+        """
+        Test setting a generator does not remove other information.
+        """
+        metadata = MetaData()
+        metadata.reflect(self.engine)
+        config = {
+            "tables": {
+                "string": {
+                    "primary_private": True,
+                }
+            },
+            "src-stats": [{
+                "name": "kraken",
+                "query": 'SELECT MAX(frequency) AS max_frequency FROM string',
+            }]
+        }
+        with TestGeneratorCmd(self.dsn, self.schema_name, metadata, copy.deepcopy(config)) as gc:
+            COLUMN = "position"
+            GENERATOR = "dist_gen.uniform_ms"
+            gc.do_next(f"string.{COLUMN}")
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            gc.do_set(str(proposals[f"{GENERATOR}"][0]))
+            gc.do_quit("")
+            src_stats = {
+                stat["name"]: stat["query"]
+                for stat in gc.config["src-stats"]
+            }
+            self.assertEqual(src_stats["kraken"], config["src-stats"][0]["query"])
+            self.assertTrue(gc.config["tables"]["string"]["primary_private"])
