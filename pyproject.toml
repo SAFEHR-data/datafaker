@@ -46,7 +46,7 @@ pydocstyle = "^6.3.0"
 restructuredtext-lint = "^1.4.0"
 pygments = "^2.14.0"
 rstcheck-core = {extras = ["sphinx"], version = "^1.0.3"}
-json-schema-for-humans = "^0.44.5"
+json-schema-for-humans = "^1.3.4"
 pre-commit = "^3.3.3"
 testing-postgresql = "^1.3.0"
 
