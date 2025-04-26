@@ -128,6 +128,18 @@ class DbCmd(ABC, cmd.Cmd):
         return self.table_entries[self.table_index].name
     def table_metadata(self) -> Table:
         return self.metadata.tables[self.table_name()]
+    def get_table_config(self, table_name: str) -> dict[str, any]:
+        ts = self.config.get("tables", None)
+        if type(ts) is not dict:
+            return {}
+        t = ts.get(table_name)
+        return t if type(t) is dict else {}
+    def set_table_config(self, table_name: str, config: dict[str, any]):
+        ts = self.config.get("tables", None)
+        if type(ts) is not dict:
+            self.config["tables"] = {table_name: config}
+            return
+        ts[table_name] = config
 
 
 @dataclass
@@ -164,14 +176,9 @@ class TableCmd(DbCmd):
             entry = self.table_entries[self.table_index]
             entry.new_type = t_type
     def _copy_entries(self) -> None:
-        tables = self.config.get("tables", {})
-        if type(tables) is not dict:
-            tables = {}
         for entry in self.table_entries:
             if entry.old_type != entry.new_type:
-                table: dict = tables.get(entry.name, {})
-                if type(table) is not dict:
-                    table = {}
+                table = self.get_table_config(entry.name)
                 if entry.new_type == TableType.IGNORE:
                     table["ignore"] = True
                     table.pop("vocabulary_table", None)
@@ -188,8 +195,7 @@ class TableCmd(DbCmd):
                     table.pop("ignore", None)
                     table.pop("vocabulary_table", None)
                     table.pop("primary_private", None)
-                tables[entry.name] = table
-        self.config["tables"] = tables
+                self.set_table_config(entry.name, table)
 
     def do_quit(self, _arg):
         "Check the updates, save them if desired and quit the configurer."
@@ -511,9 +517,6 @@ class GeneratorCmd(DbCmd):
 
     def _copy_entries(self) -> None:
         src_stats = self._remove_auto_src_stats()
-        tables = self.config.get("tables", {})
-        if type(tables) is not dict:
-            tables = {}
         tes: list[GeneratorCmdTableEntry] = self.table_entries
         for entry in tes:
             rgs = []
@@ -535,19 +538,18 @@ class GeneratorCmd(DbCmd):
                     if kwn:
                         rg["kwargs"] = kwn
                     rgs.append(rg)
-            if type(tables.get(entry.name, None)) is not dict:
-                tables[entry.name] = {}
             aq = self._get_aggregate_query(new_gens, entry.name)
             if aq:
                 src_stats.append({
                     "name": f"auto__{entry.name}",
                     "query": aq,
                 })
+            table_config = self.get_table_config(entry.name)
             if rgs:
-                tables[entry.name]["row_generators"] = rgs
-            elif "row_generators" in tables[entry.name]:
-                del tables[entry.name]["row_generators"]
-        self.config["tables"] = tables
+                table_config["row_generators"] = rgs
+            elif "row_generators" in table_config:
+                del table_config["row_generators"]
+            self.set_table_config(entry.name, table_config)
         self.config["src-stats"] = src_stats
 
     def do_quit(self, _arg):

@@ -269,6 +269,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             TABLE = "model"
             gc.do_next(f"{TABLE}.name")
             gc.do_propose("")
+            gc.do_compare("")
             gc.do_set("1")
             gc.do_quit("")
             self.assertEqual(len(gc.config["tables"][TABLE]["row_generators"]), 1)

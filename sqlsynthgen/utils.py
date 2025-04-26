@@ -256,6 +256,8 @@ def table_is_private(config: Mapping, table_name: str) -> bool:
     according to config.
     """
     ts = config.get("tables", {})
+    if type(ts) is not dict:
+        return False
     t = ts.get(table_name, {})
     return t.get("primary_private", False)
 
