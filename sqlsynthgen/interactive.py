@@ -65,7 +65,7 @@ class DbCmd(ABC, cmd.Cmd):
     ERROR_NO_SUCH_TABLE = "Error: '{0}' is not the name of a table in this database"
 
     @abstractmethod
-    def make_table_entry(self, name: str) -> TableEntry:
+    def make_table_entry(self, name: str, table_config: Mapping) -> TableEntry:
         ...
 
     def __init__(self, src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping):
@@ -73,8 +73,14 @@ class DbCmd(ABC, cmd.Cmd):
         self.config = config
         self.metadata = metadata
         self.table_entries: list[TableEntry] = []
+        tables_config: Mapping = config.get("tables", {})
+        if type(tables_config) is not dict:
+            tables_config = {}
         for name in metadata.tables.keys():
-            entry = self.make_table_entry(name)
+            table_config = tables_config.get(name, {})
+            if type(table_config) is not dict:
+                table_config = {}
+            entry = self.make_table_entry(name, table_config)
             if entry is not None:
                 self.table_entries.append(entry)
         self.table_index = 0
@@ -134,9 +140,7 @@ class TableCmd(DbCmd):
     prompt = "(tableconf) "
     file = None
 
-    def make_table_entry(self, name: str) -> TableEntry:
-        tables = self.config.get("tables", {})
-        table = tables.get(name, {})
+    def make_table_entry(self, name: str, table: Mapping) -> TableEntry:
         if table.get("ignore", False):
             return TableCmdTableEntry(name, TableType.IGNORE, TableType.IGNORE)
         if table.get("vocabulary_table", False):
@@ -161,9 +165,13 @@ class TableCmd(DbCmd):
             entry.new_type = t_type
     def _copy_entries(self) -> None:
         tables = self.config.get("tables", {})
+        if type(tables) is not dict:
+            tables = {}
         for entry in self.table_entries:
             if entry.old_type != entry.new_type:
                 table: dict = tables.get(entry.name, {})
+                if type(table) is not dict:
+                    table = {}
                 if entry.new_type == TableType.IGNORE:
                     table["ignore"] = True
                     table.pop("vocabulary_table", None)
@@ -364,9 +372,7 @@ class GeneratorCmd(DbCmd):
     SECONDARY_PRIVATE_TEXT = "Secondary Private on columns {0}"
     NOT_PRIVATE_TEXT = "Not private"
 
-    def make_table_entry(self, table_name: str) -> TableEntry | None:
-        tables = self.config.get("tables", {})
-        table: str = tables.get(table_name, {})
+    def make_table_entry(self, table_name: str, table: Mapping) -> TableEntry | None:
         if table.get("ignore", False):
             return None
         if table.get("vocabulary_table", False):
@@ -506,6 +512,8 @@ class GeneratorCmd(DbCmd):
     def _copy_entries(self) -> None:
         src_stats = self._remove_auto_src_stats()
         tables = self.config.get("tables", {})
+        if type(tables) is not dict:
+            tables = {}
         tes: list[GeneratorCmdTableEntry] = self.table_entries
         for entry in tes:
             rgs = []
@@ -527,7 +535,7 @@ class GeneratorCmd(DbCmd):
                     if kwn:
                         rg["kwargs"] = kwn
                     rgs.append(rg)
-            if entry.name not in tables:
+            if type(tables.get(entry.name, None)) is not dict:
                 tables[entry.name] = {}
             aq = self._get_aggregate_query(new_gens, entry.name)
             if aq:

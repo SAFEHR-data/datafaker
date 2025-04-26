@@ -77,6 +77,40 @@ class ConfigureTablesTests(RequiresDBTestCase):
             tc.do_columns("")
             self.assertListEqual(tc.column_items, [["id", "a", "b", "c"]])
 
+    def test_null_configuration(self) -> None:
+        """A table still works if its configuration is None."""
+        metadata = MetaData()
+        metadata.reflect(self.engine)
+        config = {
+            "tables": None,
+        }
+        with TestTableCmd(self.dsn, self.schema_name, metadata, config) as tc:
+            tc.do_next("unique_constraint_test")
+            tc.do_private("")
+            tc.do_quit("")
+            tables = tc.config["tables"]
+            self.assertFalse(tables["unique_constraint_test"].get("vocabulary_table", False))
+            self.assertFalse(tables["unique_constraint_test"].get("ignore", False))
+            self.assertTrue(tables["unique_constraint_test"].get("primary_private", False))
+
+    def test_null_table_configuration(self) -> None:
+        """A table still works if its configuration is None."""
+        metadata = MetaData()
+        metadata.reflect(self.engine)
+        config = {
+            "tables": {
+                "unique_constraint_test": None,
+            },
+        }
+        with TestTableCmd(self.dsn, self.schema_name, metadata, config) as tc:
+            tc.do_next("unique_constraint_test")
+            tc.do_private("")
+            tc.do_quit("")
+            tables = tc.config["tables"]
+            self.assertFalse(tables["unique_constraint_test"].get("vocabulary_table", False))
+            self.assertFalse(tables["unique_constraint_test"].get("ignore", False))
+            self.assertTrue(tables["unique_constraint_test"].get("primary_private", False))
+
     def test_configure_tables(self) -> None:
         """Test that we can change columns to ignore, vocab or normal."""
         metadata = MetaData()
@@ -223,6 +257,38 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
     dump_file_path = "instrument.sql"
     database_name = "instrument"
     schema_name = "public"
+
+    def test_null_configuration(self):
+        """ Test that a table having null configuration does not break. """
+        metadata = MetaData()
+        metadata.reflect(self.engine)
+        config = {
+            "tables": None,
+        }
+        with TestGeneratorCmd(self.dsn, self.schema_name, metadata, config) as gc:
+            TABLE = "model"
+            gc.do_next(f"{TABLE}.name")
+            gc.do_propose("")
+            gc.do_set("1")
+            gc.do_quit("")
+            self.assertEqual(len(gc.config["tables"][TABLE]["row_generators"]), 1)
+
+    def test_null_table_configuration(self):
+        """ Test that a table having null configuration does not break. """
+        metadata = MetaData()
+        metadata.reflect(self.engine)
+        config = {
+            "tables": {
+                "model": None,
+            }
+        }
+        with TestGeneratorCmd(self.dsn, self.schema_name, metadata, config) as gc:
+            TABLE = "model"
+            gc.do_next(f"{TABLE}.name")
+            gc.do_propose("")
+            gc.do_set("1")
+            gc.do_quit("")
+            self.assertEqual(len(gc.config["tables"][TABLE]["row_generators"]), 1)
 
     def test_set_generator_mimesis(self):
         """ Test that we can set one generator to a mimesis generator. """
