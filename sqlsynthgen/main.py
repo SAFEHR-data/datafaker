@@ -280,7 +280,7 @@ def make_stats(
 
 @app.command()
 def make_tables(
-    config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
+    config_file: Optional[str] = Option(None, help="The configuration file, used if you want an orm.yaml lacking data for the ignored tables"),
     orm_file: str = Option(ORM_FILENAME, help="Path to write the ORM yaml file to"),
     force: bool = Option(False, help="Overwrite any existing orm yaml file."),
 ) -> None:
