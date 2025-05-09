@@ -33,7 +33,7 @@ from sqlsynthgen.utils import (
     sorted_non_vocabulary_tables,
 )
 
-from .serialize_metadata import dict_to_metadata
+from sqlsynthgen.serialize_metadata import dict_to_metadata
 
 # pylint: disable=too-many-arguments
 

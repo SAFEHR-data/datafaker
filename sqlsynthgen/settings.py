@@ -19,7 +19,8 @@ from functools import lru_cache
 from typing import Any, Optional
 
 # pylint: disable=no-self-argument
-from pydantic import BaseSettings, validator
+from pydantic import validator
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
