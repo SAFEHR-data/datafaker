@@ -367,8 +367,8 @@ def update_config_tables(src_dsn: str, src_schema: str, metadata: MetaData, conf
 
 @dataclass
 class MissingnessType:
-    SAMPLE="sample"
-    SAMPLE_QUERY=(
+    SAMPLED="column_presence.sampled"
+    SAMPLED_QUERY=(
         "SELECT COUNT(*) AS _row_count, {result_names} FROM "
         "(SELECT {column_is_nulls} FROM {table} ORDER BY RANDOM() LIMIT {count})"
         " GROUP BY {result_names}"
@@ -377,7 +377,7 @@ class MissingnessType:
     query: str
     columns: list[str]
     @classmethod
-    def sample_query(cls, table, count, column_names):
+    def sampled_query(cls, table, count, column_names):
         result_names = ", ".join([
             "{0}__is_null".format(c)
             for c in column_names
@@ -386,7 +386,7 @@ class MissingnessType:
             "{0} IS NULL AS {0}__is_null".format(c)
             for c in column_names
         ])
-        return cls.SAMPLE_QUERY.format(
+        return cls.SAMPLED_QUERY.format(
             result_names=result_names,
             column_is_nulls=column_is_nulls,
             table=table,
@@ -561,12 +561,12 @@ class MissingnessCmd(DbCmd):
             return
         entry: MissingnessCmdTableEntry = self.table_entries[self.table_index]
         entry.new_type = None
-    def do_sample(self, arg: str):
+    def do_sampled(self, arg: str):
         """
-        Set the current table missingness as sample, and go to the next table.
-        "sample 3000" means sample 3000 rows at random and choose the missingness
+        Set the current table missingness as 'sampled', and go to the next table.
+        "sampled 3000" means sample 3000 rows at random and choose the missingness
         to be the same as one of those 3000 at random.
-        "sample" means the same, but with a default number of rows sampled (1000).
+        "sampled" means the same, but with a default number of rows sampled (1000).
         """
         if len(self.table_entries) <= self.table_index:
             self.print("Error! not on a table")
@@ -577,11 +577,11 @@ class MissingnessCmd(DbCmd):
         elif arg.isdecimal():
             count = int(arg)
         else:
-            self.print("Error: sample can be used alone or with an integer argument. {0} is not permitted", arg)
+            self.print("Error: sampled can be used alone or with an integer argument. {0} is not permitted", arg)
             return
         self._set_type(
-            MissingnessType.SAMPLE,
-            MissingnessType.sample_query(
+            MissingnessType.SAMPLED,
+            MissingnessType.sampled_query(
                 entry.name,
                 count,
                 self.get_nonnull_columns(entry.name),
@@ -606,7 +606,7 @@ class MissingnessCmd(DbCmd):
         ]
         with self.engine.connect() as connection:
             result = connection.execute(
-                text("SELECT COUNT(*) AS _total_row_count{colcounts} FROM {table}".format(
+                text("SELECT COUNT(*) AS row_count{colcounts} FROM {table}".format(
                     table=table_name,
                     colcounts="".join(colcounts),
                 ))
@@ -614,12 +614,12 @@ class MissingnessCmd(DbCmd):
             if result is None:
                 self.print("Could not count rows in table {0}", table_name)
                 return
-            row_count = result._total_row_count
+            row_count = result.row_count
             self.print("Total row count: {}", row_count)
             self.print_table(["Column", "NULL count"], [
                 [name, row_count - count]
                 for name, count in result._mapping.items()
-                if name != "_total_row_count"
+                if name != "row_count"
             ])
 
 

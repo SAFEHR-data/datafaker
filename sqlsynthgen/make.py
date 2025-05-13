@@ -74,117 +74,24 @@ class RowGeneratorInfo:
 @dataclass
 class ColumnChoice:
     """ Chooses columns based on a random number in [0,1) """
-    options: list[tuple[float, set[str]]]
-
-    def all_columns(self) -> set[str]:
-        """ Returns the set of all columns known """
-        cols: set[str] = set()
-        for (_, cs) in self.options:
-            cols.update(cs)
-        return cols
-
-    def choose(self, p: float) -> set[str]:
-        """
-        Returns a set of columns that should have non-null values set.
-
-        p is a random number 0 <= p < 1 upon which this choice is made.
-        """
-        for (cumulative_probability, values) in self.options:
-            if p < cumulative_probability:
-                return values
-        return []
-
-    @classmethod
-    def make(
-        _cls,
-        cols: Iterable[str],
-        dependent_columns: dict[str, Iterable[str]],
-        row_count: int | None,
-        value_count: dict[str, int],
-    ) -> Self:
-        """
-        Makes a ColumnChoice out of a union
-
-        cols: the columns in the union
-        dependent_columns: a dict whose keys are a subset of cols, and
-        whose values are the names of the columns (including the key!)
-        that share row generators with this column (if any).
-        row_count: The total number of rows in the table, if known.
-        value_count: A dict whose keys are a subset of cols, and whose
-        values are the number of nonnull values in this column.
-        Columns for which this number is not known are not in the
-        keys of this dict.
-        """
-        total_value_count = 0
-        counted_column_count = 0
-        for col in cols:
-            vc = value_count.get(col, None)
-            if vc is not None:
-                counted_column_count += 1
-                total_value_count += vc
-            # work out what proportion to assign to uncounted columns
-        if row_count is None:
-            if counted_column_count == 0:
-                default_count = 1
-                row_count = len(cols)
-            else:
-                default_count = total_value_count / counted_column_count
-                row_count = default_count * len(cols)
-        elif counted_column_count == len(cols):
-            default_count = 0
-        else:
-            default_count = row_count / (len(cols) - counted_column_count)
-        cumulative_count = 0
-        choice = ColumnChoice(options=[])
-        for col in cols:
-            cumulative_count += value_count.get(col, default_count)
-            proportion = cumulative_count / row_count
-            if col in dependent_columns:
-                choice.options.append((proportion, dependent_columns[col]))
-            else:
-                choice.options.append((proportion, {col}))
-        return choice
+    function_name: str
+    argument_values: list[str]
 
 
 def make_column_choices(
-    table_name: str,
     table_config: Mapping[str, Any],
-    src_stats: Mapping[str, Any],
 ) -> list[ColumnChoice]:
-    # each union is a dict of union names to a list of its columns
-    unions: dict[str, list[str]] = get_property(table_config, "unions", {})
-    # Set of all columns that are part of a union
-    columns_in_union: set[str] = set()
-    for (union_name, cols) in unions.items():
-        for col in cols:
-            if col in columns_in_union:
-                logger.warning("union %s overlaps with another union in table %s", union_name, table_name)
-            columns_in_union.add(col)
-    # Now we find row_generators that overlap (by one only!) with unions:
-    # the columns in these generators must be null (or not null) together.
-    dependent_columns: dict[str, set[str]] = {}
-    for row_gen in get_property(table_config, "row_generators", []):
-        assigned = row_gen["columns_assigned"]
-        if type(assigned) is list:
-            assigned_set = set(assigned)
-            intersection = assigned_set.intersection(columns_in_union)
-            n = len(intersection)
-            if 1 < n:
-                logger.warning(
-                    "row generator %s in table %s supplies columns for multiple unions",
-                    row_gen["name"],
-                    table_name,
-                )
-            elif 1 == n:
-                u = intersection.pop()
-                dependent_columns[u] = assigned_set
-    # Now we can convert unions to ColumnChoices
-    choices: list[ColumnChoice] = []
-    for cols in unions.values():
-        choices.append(
-            ColumnChoice.make(cols, dependent_columns)
+    return [
+        ColumnChoice(
+            function_name=mg["name"],
+            argument_values=[
+                f"{k}={v}"
+                for k, v in mg.get("kwargs", {}).items()
+            ]
         )
-    return choices
+        for mg in table_config.get("missingness_generators", [])
+        if "name" in mg
+    ]
 
 
 @dataclass
@@ -530,7 +437,6 @@ class _PrimaryConstraint:
 def _get_generator_for_table(
     table_config: Mapping[str, Any],
     table: Table,
-    src_stats: Mapping[str, Any]=None
 ) -> TableGeneratorInfo:
     """Get generator information for the given table."""
     unique_constraints = sorted(
@@ -550,10 +456,15 @@ def _get_generator_for_table(
             *primary_keys,
             name=f"{table.name}_primary_key"
         ))
-    column_choices = make_column_choices(table.name, table_config, src_stats)
-    nonnull_columns={str(col.name) for col in table.columns}
-    for cc in column_choices:
-        nonnull_columns.difference_update(cc.all_columns())
+    column_choices = make_column_choices(table_config)
+    if column_choices:
+        nonnull_columns = {
+            str(col.name)
+            for col in table.columns
+            if not table.columns[col.name].nullable
+        }
+    else:
+        nonnull_columns = {str(col.name) for col in table.columns}
     table_data: TableGeneratorInfo = TableGeneratorInfo(
         table_name=table.name,
         class_name=table.name.title() + "Generator",
@@ -672,7 +583,6 @@ def make_table_generators(  # pylint: disable=too-many-locals
             tables.append(_get_generator_for_table(
                 tables_config.get(table.name, {}),
                 table,
-                src_stats,
             ))
 
     story_generators = _get_story_generators(config)

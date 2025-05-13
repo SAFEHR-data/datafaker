@@ -190,15 +190,27 @@
                 }
               }
             },
-            "unions": {
-              "description": "Groups of columns that represent different representations of the same value.",
-              "type": "object",
-              "patternProperties": {
-                ".*": {
-                  "type": "array",
-                  "items": {
-                    "description": "Column name.",
+            "missingness_generators": {
+              "description": "Function to generate a set of nullable columns that should not be null",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                  "name": {
+                    "description": "The name of a (built-in or custom) function (e.g. column_presence.sampled).",
                     "type": "string"
+                  },
+                  "kwargs": {
+                    "description": "Keyword arguments to pass to the function.",
+                    "type": "object"
+                  },
+                  "columns_assigned": {
+                    "description": "Column names that might be returned.",
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 }
               }

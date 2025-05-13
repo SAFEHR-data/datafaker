@@ -120,3 +120,22 @@ class FileUploader:
             logger.warning(
                 "Error inserting rows into table %s: %s", self.table.fullname, e
             )
+
+class ColumnPresence:
+    def __init__(self):
+        self.rng = numpy.random.default_rng()
+    def sampled(self, patterns):
+        total = 0
+        for pattern in patterns:
+            total += pattern.get("row_count", 0)
+        s = self.rng.integers(total)
+        for pattern in patterns:
+            s -= pattern.get("row_count", 0)
+            if s < 0:
+                cs = set()
+                for column, nullness in pattern.items():
+                    if not nullness and column.endswith("__is_null"):
+                        cs.add(column[:-9])
+                return cs
+        logger.error("failed to sample patterns")
+        return set()
