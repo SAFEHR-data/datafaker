@@ -140,6 +140,14 @@ class DbCmd(ABC, cmd.Cmd):
             self.config["tables"] = {table_name: config}
             return
         ts[table_name] = config
+    def _remove_prefix_src_stats(self, prefix: str) -> list[dict[str, any]]:
+        src_stats = self.config.get("src-stats", [])
+        new_src_stats = []
+        for stat in src_stats:
+            if not stat.get("name", "").startswith(prefix):
+                new_src_stats.append(stat)
+        self.config["src-stats"] = new_src_stats
+        return new_src_stats
 
 
 @dataclass
@@ -226,13 +234,13 @@ class TableCmd(DbCmd):
             new = entry.new_type
             becomes = "   " if old == new else "->" + TYPE_LETTER[new]
             self.print("{0}{1} {2}", TYPE_LETTER[old], becomes, entry.name)
-    def do_next(self, _arg):
+    def do_next(self, arg):
         "'next' = go to the next table, 'next tablename' = go to table 'tablename'"
-        if _arg:
+        if arg:
             # Find the index of the table called _arg, if any
-            index = next((i for i,entry in enumerate(self.table_entries) if entry.name == _arg), None)
+            index = next((i for i,entry in enumerate(self.table_entries) if entry.name == arg), None)
             if index is None:
-                self.print(self.ERROR_NO_SUCH_TABLE, _arg)
+                self.print(self.ERROR_NO_SUCH_TABLE, arg)
                 return
             self.set_table_index(index)
             return
@@ -350,10 +358,275 @@ Type 'help data' for examples."""
                 return
             self.print_results(result)
 
+
 def update_config_tables(src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping):
     with TableCmd(src_dsn, src_schema, metadata, config) as tc:
         tc.cmdloop()
         return tc.config
+
+
+@dataclass
+class MissingnessType:
+    SAMPLE="sample"
+    SAMPLE_QUERY=(
+        "SELECT COUNT(*) AS _row_count, {result_names} FROM "
+        "(SELECT {column_is_nulls} FROM {table} ORDER BY RANDOM() LIMIT {count})"
+        " GROUP BY {result_names}"
+    )
+    name: str
+    query: str
+    columns: list[str]
+    @classmethod
+    def sample_query(cls, table, count, column_names):
+        result_names = ", ".join([
+            "{0}__is_null".format(c)
+            for c in column_names
+        ])
+        column_is_nulls = ", ".join([
+            "{0} IS NULL AS {0}__is_null".format(c)
+            for c in column_names
+        ])
+        return cls.SAMPLE_QUERY.format(
+            result_names=result_names,
+            column_is_nulls=column_is_nulls,
+            table=table,
+            count=count,
+        )
+
+
+@dataclass
+class MissingnessCmdTableEntry(TableEntry):
+    old_type: MissingnessType
+    new_type: MissingnessType
+
+
+class MissingnessCmd(DbCmd):
+    intro = "Interactive missingness configuration. Type ? for help.\n"
+    prompt = "(missingness) "
+    file = None
+    PATTERN_RE = re.compile(r'SRC_STATS\["([^"]*)"\]')
+
+    def get_nonnull_columns(self, table_name: str):
+        metadata_table = self.metadata.tables[table_name]
+        return [
+            str(name)
+            for name, column in metadata_table.columns.items()
+            if column.nullable
+        ]
+    def find_missingness_query(self, missingness_generator: Mapping):
+        kwargs = missingness_generator.get("kwargs", {})
+        patterns = kwargs.get("patterns", "")
+        pattern_match = self.PATTERN_RE.match(patterns)
+        if pattern_match:
+            key = pattern_match.group(1)
+            for src_stat in self.config["src-stats"]:
+                if src_stat.get("name") == key:
+                    return src_stat.get("query", None)
+            return None
+    def make_table_entry(self, name: str, table: Mapping) -> TableEntry:
+        mgs = table.get("missingness_generators", [])
+        old = None
+        nonnull_columns = self.get_nonnull_columns(name)
+        if not nonnull_columns:
+            return None
+        if not mgs:
+            old = MissingnessType(
+                name="none",
+                query="",
+                columns=[],
+            )
+        elif len(mgs) == 1:
+            mg = mgs[0]
+            mg_name = mg.get("name", None)
+            if mg_name is not None:
+                query = self.find_missingness_query(mg)
+                if query is not None:
+                    old = MissingnessType(
+                        name=mg_name,
+                        query=query,
+                        columns=mg.get("columns_assigned", []),
+                    )
+        if old is None:
+            return None
+        return MissingnessCmdTableEntry(
+            name=name,
+            old_type=old,
+            new_type=old,
+        )
+
+    def __init__(self, src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping):
+        super().__init__(src_dsn, src_schema, metadata, config)
+        self.set_prompt()
+
+    def set_prompt(self):
+        if self.table_index < len(self.table_entries):
+            entry: MissingnessCmdTableEntry = self.table_entries[self.table_index]
+            nt = entry.new_type
+            if nt is None:
+                self.prompt = "(missingness for {0}) ".format(entry.name)
+            else:
+                self.prompt = "(missingness for {0}: {1}) ".format(entry.name, nt.name)
+        else:
+            self.prompt = "(missingness) "
+    def set_type(self, t_type: TableType):
+        if self.table_index < len(self.table_entries):
+            entry = self.table_entries[self.table_index]
+            entry.new_type = t_type
+    def _copy_entries(self) -> None:
+        src_stats = self._remove_prefix_src_stats("missing_auto__")
+        for entry in self.table_entries:
+            entry: MissingnessCmdTableEntry
+            table = self.get_table_config(entry.name)
+            if entry.new_type is None or entry.new_type.name == "none":
+                table.pop("missingness_generators", None)
+            else:
+                src_stat_key = "missing_auto__{0}__0".format(entry.name)
+                table["missingness_generators"] = [{
+                    "name": entry.new_type.name,
+                    "kwargs": {"patterns": 'SRC_STATS["{0}"]'.format(src_stat_key)},
+                    "columns": entry.new_type.columns,
+                }]
+                src_stats.append({
+                    "name": src_stat_key,
+                    "query": entry.new_type.query,
+                })
+            self.set_table_config(entry.name, table)
+
+    def do_quit(self, _arg):
+        "Check the updates, save them if desired and quit the configurer."
+        count = 0
+        for entry in self.table_entries:
+            if entry.old_type != entry.new_type:
+                count += 1
+                if entry.old_type is None:
+                    self.print("Putting generator {0} on table {1}", entry.name, entry.new_type.name)
+                elif entry.new_type is None:
+                    self.print("Deleting generator {1} from table {0}", entry.name, entry.old_type.name)
+                else:
+                    self.print(
+                        "Changing {0} from {1} to {2}",
+                        entry.name,
+                        entry.old_type.name,
+                        entry.new_type.name,
+                    )
+        if count == 0:
+            self.print("There are no changes.")
+            return True
+        reply = self.ask_save()
+        if reply == "yes":
+            self._copy_entries()
+            return True
+        if reply == "no":
+            return True
+        return False
+    def do_list(self, arg):
+        "list the tables with their types"
+        for entry in self.table_entries:
+            old = "-" if entry.old_type is None else entry.old_type.name
+            new = "-" if entry.new_type is None else entry.new_type.name
+            desc = new if old == new else "{0}->{1}".format(old, new)
+            self.print("{0} {1}", entry.name, desc)
+    def do_next(self, arg):
+        "'next' = go to the next table, 'next tablename' = go to table 'tablename'"
+        if arg:
+            # Find the index of the table called _arg, if any
+            index = next((i for i,entry in enumerate(self.table_entries) if entry.name == arg), None)
+            if index is None:
+                self.print(self.ERROR_NO_SUCH_TABLE, arg)
+                return
+            self.set_table_index(index)
+            return
+        self.next_table(self.ERROR_NO_MORE_TABLES)
+    def complete_next(self, text, line, begidx, endidx):
+        return [
+            entry.name
+            for entry in self.table_entries
+            if entry.name.startswith(text)
+        ]
+    def do_previous(self, _arg):
+        "Go to the previous table"
+        if not self.set_table_index(self.table_index - 1):
+            self.print(self.ERROR_ALREADY_AT_START)
+    def _set_type(self, name, query):
+        if len(self.table_entries) <= self.table_index:
+            return
+        entry: MissingnessCmdTableEntry = self.table_entries[self.table_index]
+        entry.new_type = MissingnessType(
+            name=name,
+            query=query,
+            columns=entry.old_type.columns,
+        )
+    def _set_none(self):
+        if len(self.table_entries) <= self.table_index:
+            return
+        entry: MissingnessCmdTableEntry = self.table_entries[self.table_index]
+        entry.new_type = None
+    def do_sample(self, arg: str):
+        """
+        Set the current table missingness as sample, and go to the next table.
+        "sample 3000" means sample 3000 rows at random and choose the missingness
+        to be the same as one of those 3000 at random.
+        "sample" means the same, but with a default number of rows sampled (1000).
+        """
+        if len(self.table_entries) <= self.table_index:
+            self.print("Error! not on a table")
+            return
+        entry: MissingnessCmdTableEntry = self.table_entries[self.table_index]
+        if arg == "":
+            count = 1000
+        elif arg.isdecimal():
+            count = int(arg)
+        else:
+            self.print("Error: sample can be used alone or with an integer argument. {0} is not permitted", arg)
+            return
+        self._set_type(
+            MissingnessType.SAMPLE,
+            MissingnessType.sample_query(
+                entry.name,
+                count,
+                self.get_nonnull_columns(entry.name),
+            ),
+        )
+        self.print("Table {} set to sampled missingness", self.table_name())
+        self.next_table()
+    def do_none(self, _arg):
+        "Set the current table to have no missingness, and go to the next table"
+        self._set_none()
+        self.print("Table {} set to have no missingness", self.table_name())
+        self.next_table()
+    def do_counts(self, _arg):
+        "Report the column names with the counts of nulls in them"
+        if len(self.table_entries) <= self.table_index:
+            return
+        table_name = self.table_entries[self.table_index].name
+        nonnull_columns = self.get_nonnull_columns(table_name)
+        colcounts = [
+            ", COUNT({0}) AS {0}".format(nnc)
+            for nnc in nonnull_columns
+        ]
+        with self.engine.connect() as connection:
+            result = connection.execute(
+                text("SELECT COUNT(*) AS _total_row_count{colcounts} FROM {table}".format(
+                    table=table_name,
+                    colcounts="".join(colcounts),
+                ))
+            ).first()
+            if result is None:
+                self.print("Could not count rows in table {0}", table_name)
+                return
+            row_count = result._total_row_count
+            self.print("Total row count: {}", row_count)
+            self.print_table(["Column", "NULL count"], [
+                [name, row_count - count]
+                for name, count in result._mapping.items()
+                if name != "_total_row_count"
+            ])
+
+
+def update_missingness(src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping):
+    with MissingnessCmd(src_dsn, src_schema, metadata, config) as mc:
+        mc.cmdloop()
+        return mc.config
 
 
 @dataclass
@@ -507,13 +780,7 @@ class GeneratorCmd(DbCmd):
             )
 
     def _remove_auto_src_stats(self) -> list[dict[str, any]]:
-        src_stats = self.config.get("src-stats", [])
-        new_src_stats = []
-        for stat in src_stats:
-            if not stat.get("name", "").startswith("auto__"):
-                new_src_stats.append(stat)
-        self.config["src-stats"] = new_src_stats
-        return new_src_stats
+        return self._remove_prefix_src_stats("auto__")
 
     def _copy_entries(self) -> None:
         src_stats = self._remove_auto_src_stats()

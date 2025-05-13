@@ -13,7 +13,11 @@ from jsonschema.validators import validate
 from typer import Argument, Option, Typer
 
 from sqlsynthgen.create import create_db_data, create_db_tables, create_db_vocab
-from sqlsynthgen.interactive import update_config_tables, update_config_generators
+from sqlsynthgen.interactive import (
+    update_config_tables,
+    update_config_generators,
+    update_missingness,
+)
 from sqlsynthgen.make import (
     make_src_stats,
     make_table_generators,
@@ -353,6 +357,31 @@ def configure_tables(
     content = yaml.dump(config_updated)
     config_file_path.write_text(content, encoding="utf-8")
     logger.debug("Tables configured in %s.", config_file)
+
+
+@app.command()
+def configure_missing(
+    config_file: Optional[str] = Option(CONFIG_FILENAME, help="Path to write the configuration file to"),
+    orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
+):
+    """
+    Interactively set the missingness of the generated data.
+    """
+    logger.debug("Configuring missingness in %s.", config_file)
+    settings = get_settings()
+    src_dsn: str = _require_src_db_dsn(settings)
+    config_file_path = Path(config_file)
+    config = {}
+    if config_file_path.exists():
+        config = yaml.load(config_file_path.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader)
+    metadata = load_metadata(orm_file, config)
+    config_updated = update_missingness(src_dsn, settings.src_schema, metadata, config)
+    if config_updated is None:
+        logger.debug("Cancelled")
+        return
+    content = yaml.dump(config_updated)
+    config_file_path.write_text(content, encoding="utf-8")
+    logger.debug("Generators missingness in %s.", config_file)
 
 
 @app.command()
