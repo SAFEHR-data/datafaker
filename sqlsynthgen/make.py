@@ -557,11 +557,6 @@ def make_table_generators(  # pylint: disable=too-many-locals
     story_generator_module_name = config.get("story_generators_module", None)
     tables_config = config.get("tables", {})
 
-    src_stats = {}
-    if src_stats_filename:
-        with open(src_stats_filename, "r", encoding="utf-8") as f:
-            src_stats = yaml.unsafe_load(f)
-
     tables: list[TableGeneratorInfo] = []
     vocabulary_tables: list[VocabularyTableGeneratorInfo] = []
     vocab_names = get_vocabulary_table_names(config)
