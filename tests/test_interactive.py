@@ -2,9 +2,8 @@
 import copy
 import re
 from sqlalchemy import MetaData, select
-from sqlalchemy.orm import declarative_base
 
-from sqlsynthgen.interactive import DbCmd, TableCmd, GeneratorCmd
+from sqlsynthgen.interactive import DbCmd, TableCmd, GeneratorCmd, MissingnessCmd
 from tests.utils import RequiresDBTestCase
 
 
@@ -241,7 +240,7 @@ class ConfigureTablesTests(RequiresDBTestCase):
 
 
 class TestGeneratorCmd(GeneratorCmd, TestDbCmdMixin):
-    """ TableCmd but mocked """
+    """ GeneratorCmd but mocked """
     def get_proposals(self) -> dict[str, tuple[int, str, str, list[str]]]:
         """
         Returns a dict of generator name to a tuple of (index, fit_string, [list,of,samples])"""
@@ -259,7 +258,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
     schema_name = "public"
 
     def test_null_configuration(self):
-        """ Test that a table having null configuration does not break. """
+        """ Test that the tables having null configuration does not break. """
         metadata = MetaData()
         metadata.reflect(self.engine)
         config = {
@@ -567,3 +566,41 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             }
             self.assertEqual(src_stats["kraken"], config["src-stats"][0]["query"])
             self.assertTrue(gc.config["tables"]["string"]["primary_private"])
+
+
+class TestMissingnessCmd(MissingnessCmd, TestDbCmdMixin):
+    """ MissingnessCmd but mocked """
+
+class ConfigureMissingnessTests(RequiresDBTestCase):
+    """ Testing configure-missing. """
+    dump_file_path = "instrument.sql"
+    database_name = "instrument"
+    schema_name = "public"
+
+    def test_set_missingness_to_sampled(self):
+        """ Test that we can set one table to sampled missingness. """
+        metadata = MetaData()
+        metadata.reflect(self.engine)
+        with TestMissingnessCmd(self.dsn, self.schema_name, metadata, {}) as mc:
+            TABLE = "signature_model"
+            mc.do_next(TABLE)
+            mc.do_counts("")
+            self.assertListEqual(mc.messages, [(MissingnessCmd.ROW_COUNT_MSG, (6,), {})])
+            self.assertListEqual(mc.rows, [['player_id', 3], ['based_on', 2]])
+            mc.do_sampled("")
+            mc.do_quit("")
+            self.assertDictEqual(
+                mc.config,
+                { "tables": {TABLE: {"missingness_generators": [{
+                    "columns": ["player_id", "based_on"],
+                    "kwargs": {"patterns": 'SRC_STATS["missing_auto__signature_model__0"]'},
+                    "name": "column_presence.sampled",
+                }]}},
+                    "src-stats": [{
+                      "name": "missing_auto__signature_model__0",
+                      "query": ("SELECT COUNT(*) AS _row_count, player_id__is_null, based_on__is_null FROM"
+                                " (SELECT player_id IS NULL AS player_id__is_null, based_on IS NULL AS based_on__is_null FROM"
+                                " signature_model ORDER BY RANDOM() LIMIT 1000) GROUP BY player_id__is_null, based_on__is_null")
+                    }]
+                }
+            )

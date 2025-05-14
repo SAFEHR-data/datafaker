@@ -404,6 +404,7 @@ class MissingnessCmd(DbCmd):
     intro = "Interactive missingness configuration. Type ? for help.\n"
     prompt = "(missingness) "
     file = None
+    ROW_COUNT_MSG = "Total row count: {}"
     PATTERN_RE = re.compile(r'SRC_STATS\["([^"]*)"\]')
 
     def get_nonnull_columns(self, table_name: str):
@@ -554,7 +555,7 @@ class MissingnessCmd(DbCmd):
         entry.new_type = MissingnessType(
             name=name,
             query=query,
-            columns=entry.old_type.columns,
+            columns=self.get_nonnull_columns(entry.name),
         )
     def _set_none(self):
         if len(self.table_entries) <= self.table_index:
@@ -615,7 +616,7 @@ class MissingnessCmd(DbCmd):
                 self.print("Could not count rows in table {0}", table_name)
                 return
             row_count = result.row_count
-            self.print("Total row count: {}", row_count)
+            self.print(self.ROW_COUNT_MSG, row_count)
             self.print_table(["Column", "NULL count"], [
                 [name, row_count - count]
                 for name, count in result._mapping.items()
