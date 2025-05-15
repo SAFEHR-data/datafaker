@@ -219,8 +219,7 @@ class TableCmd(DbCmd):
                     entry.new_type.value,
                 )
         if count == 0:
-            self.print("There are no changes.")
-            return True
+            self.print("You have made no changes.")
         reply = self.ask_save()
         if reply == "yes":
             self._copy_entries()
@@ -512,8 +511,7 @@ class MissingnessCmd(DbCmd):
                         entry.new_type.name,
                     )
         if count == 0:
-            self.print("There are no changes.")
-            return True
+            self.print("You have made no changes.")
         reply = self.ask_save()
         if reply == "yes":
             self._copy_entries()
@@ -840,8 +838,7 @@ class GeneratorCmd(DbCmd):
                         gen.new_gen.function_name() if gen.new_gen else "nothing",
                     )
         if count == 0:
-            self.print("There are no changes.")
-            return True
+            self.print("You have made no changes.")
         reply = self.ask_save()
         if reply == "yes":
             self._copy_entries()
