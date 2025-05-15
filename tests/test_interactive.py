@@ -1,9 +1,21 @@
 """Tests for the base module."""
+import asyncio
 import copy
+import os
+import random
 import re
 from sqlalchemy import MetaData, select
+from tempfile import mkstemp
+import yaml
 
+from pydantic import BaseSettings
+
+from sqlsynthgen.create import create_db_data_into
 from sqlsynthgen.interactive import DbCmd, TableCmd, GeneratorCmd, MissingnessCmd
+from sqlsynthgen.make import make_tables_file, make_src_stats, make_table_generators
+from sqlsynthgen.remove import remove_db_data_from
+from sqlsynthgen.utils import import_file, sorted_non_vocabulary_tables
+
 from tests.utils import RequiresDBTestCase
 
 
@@ -598,9 +610,77 @@ class ConfigureMissingnessTests(RequiresDBTestCase):
                 }]}},
                     "src-stats": [{
                       "name": "missing_auto__signature_model__0",
-                      "query": ("SELECT COUNT(*) AS _row_count, player_id__is_null, based_on__is_null FROM"
+                      "query": ("SELECT COUNT(*) AS row_count, player_id__is_null, based_on__is_null FROM"
                                 " (SELECT player_id IS NULL AS player_id__is_null, based_on IS NULL AS based_on__is_null FROM"
                                 " signature_model ORDER BY RANDOM() LIMIT 1000) GROUP BY player_id__is_null, based_on__is_null")
                     }]
                 }
             )
+
+    def test_create_with_missingness(self):
+        """ Test that we can sample real missingness and reproduce it. """
+        random.seed(45)
+        # Generate the `orm.yaml` from the database
+        (orm_fd, orm_file_path) = mkstemp(".yaml", "orm_", text=True)
+        (config_fd, config_file_path) = mkstemp(".yaml", "config_", text=True)
+        (stats_fd, stats_file_path) = mkstemp(".yaml", "src_stats_", text=True)
+        (ssg_fd, ssg_file_path) = mkstemp(".py", "ssg_", text=True)
+        schema = "public"
+        table_name = "signature_model"
+        with os.fdopen(orm_fd, "w", encoding="utf-8") as orm_fh:
+            orm_fh.write(make_tables_file(self.dsn, schema, {}))
+        # Configure the missingness
+        metadata = MetaData()
+        metadata.reflect(self.engine)
+        with TestMissingnessCmd(self.dsn, self.schema_name, metadata, {}) as mc:
+            mc.do_next(table_name)
+            mc.do_sampled("")
+            mc.do_quit("")
+            config = mc.config
+            # Save out the resulting configuration
+            with os.fdopen(config_fd, "w", encoding="utf-8") as config_fh:
+                config_fh.write(yaml.dump(config))
+        # `make-stats` producing `src-stats.yaml`
+        loop = asyncio.new_event_loop()
+        src_stats = loop.run_until_complete(
+            make_src_stats(self.dsn, config, metadata, schema)
+        )
+        loop.close()
+        with os.fdopen(stats_fd, "w", encoding="utf-8") as stats_fh:
+            stats_fh.write(yaml.dump(src_stats))
+        # `make-generators` with `src-stats.yaml` and the rest, producing `ssg.py`
+        ssg_content = make_table_generators(
+            metadata,
+            config,
+            orm_file_path,
+            config_file_path,
+            stats_file_path,
+        )
+        with os.fdopen(ssg_fd, "w", encoding="utf-8") as ssg_fh:
+            ssg_fh.write(ssg_content)
+        # `remove-data` so we don't have to use a separate database for the destination
+        remove_db_data_from(metadata, config, self.dsn, schema)
+        # `create-data` with all this stuff
+        ssg_module = import_file(ssg_file_path)
+        table_generator_dict = ssg_module.table_generator_dict
+        story_generator_list = ssg_module.story_generator_list
+        num_passes = 100
+        row_counts = create_db_data_into(
+            sorted_non_vocabulary_tables(metadata, config),
+            table_generator_dict,
+            story_generator_list,
+            num_passes,
+            self.dsn,
+            schema,
+        )
+        # Test that each missingness pattern is present in the database
+        with self.engine.connect() as conn:
+            stmt = select(metadata.tables[table_name])
+            rows = conn.execute(stmt).mappings().fetchall()
+            patterns: set[int] = set()
+            for row in rows:
+                p = 0 if row["player_id"] is None else 1
+                b = 0 if row["based_on"] is None else 2
+                patterns.add(p + b)
+            # all pattern possibilities should be present
+            self.assertSetEqual(patterns, {0, 1, 2, 3})

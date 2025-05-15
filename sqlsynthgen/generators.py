@@ -344,7 +344,7 @@ class MimesisDateTimeGenerator(MimesisGeneratorBase):
             result = connection.execute(
                 text(f"SELECT {self._min_year} AS start, {self._max_year} AS end FROM {column.table.name}")
             ).first()
-            if result is None:
+            if result is None or result.start is None or result.end is None:
                 return None
             self._start = int(result.start)
             self._end = int(result.end)

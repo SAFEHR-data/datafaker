@@ -100,8 +100,26 @@ def create_db_data(
     dst_dsn: str = settings.dst_dsn or ""
     assert dst_dsn != "", "Missing DST_DSN setting."
 
+    return create_db_data_into(
+        sorted_tables,
+        table_generator_dict,
+        story_generator_list,
+        num_passes,
+        dst_dsn,
+        settings.dst_schema,
+    )
+
+
+def create_db_data_into(
+    sorted_tables: Sequence[Table],
+    table_generator_dict: Mapping[str, TableGenerator],
+    story_generator_list: Sequence[Mapping[str, Any]],
+    num_passes: int,
+    db_dsn: str,
+    schema_name: str | None,
+) -> RowCounts:
     dst_engine = get_sync_engine(
-        create_db_engine(dst_dsn, schema_name=settings.dst_schema)
+        create_db_engine(db_dsn, schema_name=schema_name)
     )
 
     row_counts: Counter[str] = Counter()

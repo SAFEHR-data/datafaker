@@ -100,8 +100,9 @@ class DbCmd(ABC, cmd.Cmd):
         print(output)
     def print_table_by_columns(self, columns: dict[str, list[str]]):
         output = PrettyTable()
+        row_count = max([len(col) for col in columns.values()])
         for field_name, data in columns.items():
-            output.add_column(field_name, data)
+            output.add_column(field_name, data + [None] * (row_count - len(data)))
         print(output)
     def print_results(self, result):
         self.print_table(
@@ -369,7 +370,7 @@ def update_config_tables(src_dsn: str, src_schema: str, metadata: MetaData, conf
 class MissingnessType:
     SAMPLED="column_presence.sampled"
     SAMPLED_QUERY=(
-        "SELECT COUNT(*) AS _row_count, {result_names} FROM "
+        "SELECT COUNT(*) AS row_count, {result_names} FROM "
         "(SELECT {column_is_nulls} FROM {table} ORDER BY RANDOM() LIMIT {count})"
         " GROUP BY {result_names}"
     )

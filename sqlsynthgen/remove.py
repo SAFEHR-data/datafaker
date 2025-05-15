@@ -21,8 +21,20 @@ def remove_db_data(
     """Truncate the synthetic data tables but not the vocabularies."""
     settings = get_settings()
     assert settings.dst_dsn, "Missing destination database settings"
+    remove_db_data_from(
+        metadata,
+        config,
+        settings.dst_dsn,
+        schema_name=settings.dst_schema
+    )
+
+
+def remove_db_data_from(
+    metadata: MetaData, config: Mapping[str, Any], db_dsn: str, schema_name: str | None
+) -> None:
+    """Truncate the synthetic data tables but not the vocabularies."""
     dst_engine = get_sync_engine(
-        create_db_engine(settings.dst_dsn, schema_name=settings.dst_schema)
+        create_db_engine(db_dsn, schema_name=schema_name)
     )
 
     with dst_engine.connect() as dst_conn:
