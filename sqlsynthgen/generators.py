@@ -669,8 +669,7 @@ class ChoiceGeneratorFactory(GeneratorFactory):
     """
     All generators that want an average and standard deviation.
     """
-    def get_generators(self, column, engine: Engine):
-        ct = column.type.as_generic()
+    def get_generators(self, column: Column, engine: Engine):
         column_name = column.name
         table_name = column.table.name
         with engine.connect() as connection:
@@ -703,6 +702,29 @@ class ChoiceGeneratorFactory(GeneratorFactory):
         ]
 
 
+class NullGenerator(Generator):
+    def __init__(self):
+        super().__init__()
+    def function_name(self) -> str:
+        return "dist_gen.constant"
+    def nominal_kwargs(self) -> dict[str, str]:
+        return {"value": "None"}
+    def actual_kwargs(self) -> dict[str, any]:
+        return {"value": None}
+    def generate_data(self, count) -> list[any]:
+        return [None for _ in range(count)]
+
+
+class ConstantGeneratorFactory(GeneratorFactory):
+    """
+    Just the null generator
+    """
+    def get_generators(self, column: Column, _engine: Engine):
+        if column.nullable:
+            return [NullGenerator()]
+        return []
+
+
 everything_factory = MultiGeneratorFactory([
     MimesisStringGeneratorFactory(),
     MimesisIntegerGeneratorFactory(),
@@ -712,4 +734,5 @@ everything_factory = MultiGeneratorFactory([
     MimesisTimeGeneratorFactory(),
     ContinuousDistributionGeneratorFactory(),
     ChoiceGeneratorFactory(),
+    ConstantGeneratorFactory(),
 ])

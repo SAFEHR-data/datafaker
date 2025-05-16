@@ -53,6 +53,9 @@ class DistributionGenerator:
     def zipf_choice(self, a, n):
         return self.rng.choice(a, p = zipf_weights(n))
 
+    def constant(self, value):
+        return value
+
 
 class TableGenerator(ABC):
     """Abstract base class for table generator classes."""

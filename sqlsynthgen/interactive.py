@@ -350,7 +350,7 @@ Type 'help data' for examples."""
         ]
 
     def print_column_data(self, column: str, count: int, min_length: int):
-        where = ""
+        where = f"WHERE {column} IS NOT NULL"
         if 0 < min_length:
             where = "WHERE LENGTH({column}) >= {len}".format(
                 column=column,
@@ -1134,7 +1134,7 @@ class GeneratorCmd(DbCmd):
 
     def _get_column_data(self, count: int, to_str=repr, min_length: int = 0):
         column = str(self.get_column_name())
-        where = ""
+        where = f"WHERE {column} IS NOT NULL"
         if 0 < min_length:
             where = "WHERE LENGTH({column}) >= {len}".format(
                 column=column,
@@ -1151,7 +1151,7 @@ class GeneratorCmd(DbCmd):
             )
             return [to_str(x[0]) for x in result.all()]
 
-    def do_propose(self, arg):
+    def do_propose(self, _arg):
         """
         Display a list of possible generators for this column.
 
