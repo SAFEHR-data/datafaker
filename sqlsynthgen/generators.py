@@ -9,6 +9,7 @@ import logging
 import math
 import mimesis
 import mimesis.locales
+import psycopg2
 import re
 from sqlalchemy import Column, Engine, text
 from sqlalchemy.types import Date, DateTime, Integer, Numeric, String, Time
@@ -229,9 +230,21 @@ class Buckets:
                     column=column_name,
                 ))
             ).first()
-            if result is None or result.stddev is None:
+            if result is None or result.stddev is None or result.count == 0:
                 return None
-        return Buckets(engine, table_name, column_name, result.mean, result.stddev, result.count)
+        try:
+            buckets = Buckets(
+                engine,
+                table_name,
+                column_name,
+                result.mean,
+                result.stddev,
+                result.count
+            )
+        except psycopg2.errors.DatabaseError as e:
+            logger.debug("Failed to instantiate Buckets object %s", e)
+            return None
+        return buckets
 
     def fit_from_counts(self, bucket_counts: list[float]) -> float:
         """
