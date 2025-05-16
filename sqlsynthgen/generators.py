@@ -346,21 +346,41 @@ class MimesisGenerator(MimesisGeneratorBase):
 
 
 class MimesisDateTimeGenerator(MimesisGeneratorBase):
-    def __init__(self, column: Column, engine: Engine, function_name: str):
+    def __init__(self, column: Column, function_name: str, min_year: str, max_year: str, start: int, end: int):
+        """
+        :param column: The column to generate into
+        :param function_name: The name of the mimesis function
+        :param min_year: SQL expression extracting the minimum year
+        :param min_year: SQL expression extracting the maximum year
+        :param start: The actual first year found
+        :param end: The actual last year found
+        """
         super().__init__(function_name)
         self._column = column
-        self._function_name = function_name
-        self._extract_year = f"EXTRACT(YEAR FROM {column.name})"
-        self._max_year = f"MAX({self._extract_year})"
-        self._min_year = f"MIN({self._extract_year})"
+        self._max_year = max_year
+        self._min_year = min_year
+        self._start = start
+        self._end = end
+
+    @classmethod
+    def make_singleton(_cls, column: Column, engine: Engine, function_name: str):
+        extract_year = f"EXTRACT(YEAR FROM {column.name})"
+        max_year = f"MAX({extract_year})"
+        min_year = f"MIN({extract_year})"
         with engine.connect() as connection:
             result = connection.execute(
-                text(f"SELECT {self._min_year} AS start, {self._max_year} AS end FROM {column.table.name}")
+                text(f"SELECT {min_year} AS start, {max_year} AS end FROM {column.table.name}")
             ).first()
             if result is None or result.start is None or result.end is None:
-                return None
-            self._start = int(result.start)
-            self._end = int(result.end)
+                return []
+        return [MimesisDateTimeGenerator(
+            column,
+            function_name,
+            min_year,
+            max_year,
+            int(result.start),
+            int(result.end),
+        )]
     def nominal_kwargs(self):
         return {
             "start": f'SRC_STATS["auto__{self._column.table.name}"]["{self._column.name}__start"]',
@@ -458,7 +478,7 @@ class MimesisDateGeneratorFactory(GeneratorFactory):
         ct = column.type.as_generic()
         if not isinstance(ct, Date):
             return []
-        return [MimesisDateTimeGenerator(column, engine, "datetime.date")]
+        return MimesisDateTimeGenerator.make_singleton(column, engine, "datetime.date")
 
 
 class MimesisDateTimeGeneratorFactory(GeneratorFactory):
@@ -469,7 +489,7 @@ class MimesisDateTimeGeneratorFactory(GeneratorFactory):
         ct = column.type.as_generic()
         if not isinstance(ct, DateTime):
             return []
-        return [MimesisDateTimeGenerator(column, engine, "datetime.datetime")]
+        return MimesisDateTimeGenerator.make_singleton(column, engine, "datetime.datetime")
 
 
 class MimesisTimeGeneratorFactory(GeneratorFactory):
