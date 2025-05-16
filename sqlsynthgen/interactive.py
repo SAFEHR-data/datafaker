@@ -674,6 +674,7 @@ class GeneratorCmd(DbCmd):
     file = None
 
     PROPOSE_SOURCE_SAMPLE_TEXT = "Sample of actual source data: {0}..."
+    PROPOSE_SOURCE_EMPTY_TEXT = "Source database has no data in this column."
     PROPOSE_GENERATOR_SAMPLE_TEXT = "{index}. {name}: {fit} {sample} ..."
     PRIMARY_PRIVATE_TEXT = "Primary Private"
     SECONDARY_PRIVATE_TEXT = "Secondary Private on columns {0}"
@@ -1165,7 +1166,10 @@ class GeneratorCmd(DbCmd):
         limit = 5
         gens = self._get_generator_proposals()
         sample = self._get_column_data(limit)
-        self.print(self.PROPOSE_SOURCE_SAMPLE_TEXT, ",".join(sample))
+        if sample:
+            self.print(self.PROPOSE_SOURCE_SAMPLE_TEXT, ",".join(sample))
+        else:
+            self.print(self.PROPOSE_SOURCE_EMPTY_TEXT)
         for index, gen in enumerate(gens):
             fit = gen.fit()
             if fit is None:
