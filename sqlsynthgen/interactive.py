@@ -129,6 +129,11 @@ class DbCmd(ABC, cmd.Cmd):
         return self.table_entries[self.table_index].name
     def table_metadata(self) -> Table:
         return self.metadata.tables[self.table_name()]
+    def report_columns(self):
+        self.print_table(["name", "type", "primary", "nullable", "foreign key"], [
+            [name, str(col.type), col.primary_key, col.nullable, ", ".join([fk.column.name for fk in col.foreign_keys])]
+            for name, col in self.table_metadata().columns.items()
+        ])
     def get_table_config(self, table_name: str) -> dict[str, any]:
         ts = self.config.get("tables", None)
         if type(ts) is not dict:
@@ -157,7 +162,7 @@ class TableCmdTableEntry(TableEntry):
     new_type: TableType
 
 class TableCmd(DbCmd):
-    intro = "Interactive table configuration (ignore, vocabulary or private). Type ? for help.\n"
+    intro = "Interactive table configuration (ignore, vocabulary, private or normal). Type ? for help.\n"
     prompt = "(tableconf) "
     file = None
 
@@ -273,11 +278,11 @@ class TableCmd(DbCmd):
     def do_normal(self, _arg):
         "Set the current table as neither a vocabulary table nor ignored nor primary private, and go to the next table"
         self.set_type(TableType.NORMAL)
-        self.print("Table {} reset", self.table_name())
+        self.print("Table {} normal", self.table_name())
         self.next_table()
     def do_columns(self, _arg):
-        "Report the column names"
-        self.columnize(self.table_metadata().columns.keys())
+        "Report the column names and metadata"
+        self.report_columns()
     def do_data(self, arg: str):
         """
         Report some data.
@@ -873,8 +878,28 @@ class GeneratorCmd(DbCmd):
             self.print("{0}{1}{2} {3}", old, becomes, primary, gen.column)
 
     def do_columns(self, _arg):
-        "Report the column names"
-        self.columnize(self.table_metadata().columns.keys())
+        "Report the column names and metadata"
+        self.report_columns()
+
+    def do_info(self, _arg):
+        "Show information about the current column"
+        cm = self.column_metadata()
+        if cm is None:
+            return
+        self.print(
+            "Column {0} in table {1} has type {2} ({3}).",
+            cm.name,
+            cm.table.name,
+            str(cm.type),
+            "nullable" if cm.nullable else "not nullable",
+        )
+        if cm.primary_key:
+            self.print("It is a primary key, which usually does not need a generator")
+        elif cm.foreign_keys:
+            fk_names = [fk.column.name for fk in cm.foreign_keys]
+            self.print("It is a foreign key referencing table {0}", ", ".join(fk_names))
+            if len(fk_names) == 1:
+                self.print("You do not need a generator if you just want a uniform choice over the referenced table's rows")
 
     def _get_table_index(self, table_name: str) -> int | None:
         for n, entry in enumerate(self.table_entries):
@@ -912,6 +937,9 @@ class GeneratorCmd(DbCmd):
                 self.generator_index = gen_index
                 self.set_prompt()
             return
+        self._go_next()
+
+    def _go_next(self):
         table = self.get_table()
         if table is None:
             self.print("No more tables")
@@ -1150,6 +1178,7 @@ class GeneratorCmd(DbCmd):
             self.print("Error: no column")
             return
         gen_info.new_gen = gens[index - 1]
+        self._go_next()
 
 
 def update_config_generators(src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping):
