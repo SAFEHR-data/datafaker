@@ -1006,8 +1006,11 @@ class GeneratorCmd(DbCmd):
             self.generator_index -= 1
         self.set_prompt()
 
+    def _generators_valid(self) -> bool:
+        return self.generators_valid_indices == (self.table_index, self.generator_index)
+
     def _get_generator_proposals(self) -> list[Generator]:
-        if self.generators_valid_indices != (self.table_index, self.generator_index):
+        if not self._generators_valid():
             self.generators = None
         if self.generators is None:
             column = self.column_metadata()
@@ -1187,6 +1190,9 @@ class GeneratorCmd(DbCmd):
         if not arg.isdigit():
             self.print("set requires a single integer argument; 'set 3' sets the third generator that 'propose' lists.")
             return
+        if not self._generators_valid():
+            self.print("Please run 'propose' before 'set'")
+            return
         gens = self._get_generator_proposals()
         index = int(arg)
         if index < 1:
@@ -1205,6 +1211,19 @@ class GeneratorCmd(DbCmd):
         gen_info.new_gen = gens[index - 1]
         self._go_next()
 
+    def do_unset(self, _arg):
+        """
+        Removes any generator set for this column.
+        """
+        (table, gen_info) = self.get_table_and_generator()
+        if table is None:
+            self.print("Error: no table")
+            return
+        if gen_info is None:
+            self.print("Error: no column")
+            return
+        gen_info.new_gen = None
+        self._go_next()
 
 def update_config_generators(src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping):
     with GeneratorCmd(src_dsn, src_schema, metadata, config) as gc:

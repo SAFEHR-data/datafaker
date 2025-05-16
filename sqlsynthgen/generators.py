@@ -11,6 +11,7 @@ import mimesis
 import mimesis.locales
 import psycopg2
 import re
+import sqlalchemy
 from sqlalchemy import Column, Engine, text
 from sqlalchemy.types import Date, DateTime, Integer, Numeric, String, Time
 from typing import Callable
@@ -239,10 +240,10 @@ class Buckets:
                 column_name,
                 result.mean,
                 result.stddev,
-                result.count
+                result.count,
             )
-        except psycopg2.errors.DatabaseError as e:
-            logger.debug("Failed to instantiate Buckets object %s", e)
+        except sqlalchemy.exc.ProgrammingError as exc:
+            logger.debug("Failed to instantiate Buckets object: %s", exc)
             return None
         return buckets
 
