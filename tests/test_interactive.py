@@ -86,7 +86,15 @@ class ConfigureTablesTests(RequiresDBTestCase):
         with TestTableCmd(self.dsn, self.schema_name, metadata, config) as tc:
             tc.do_next("unique_constraint_test")
             tc.do_columns("")
-            self.assertListEqual(tc.column_items, [["id", "a", "b", "c"]])
+            self.assertListEqual(
+                tc.rows,
+                [
+                    ["id", "INTEGER", True, False, ""],
+                    ["a", "BOOLEAN", False, False, ""],
+                    ["b", "BOOLEAN", False, False, ""],
+                    ["c", "TEXT", False, False, ""],
+                ],
+            )
 
     def test_null_configuration(self) -> None:
         """A table still works if its configuration is None."""
@@ -134,6 +142,12 @@ class ConfigureTablesTests(RequiresDBTestCase):
                 "no_pk_test": {
                     "ignore": True,
                 },
+                "hospital_visit": {
+                    "num_passes": 0,
+                },
+                "empty_vocabulary": {
+                    "private": True,
+                }
             },
         }
         with TestTableCmd(self.dsn, self.schema_name, metadata, config) as tc:
@@ -143,16 +157,37 @@ class ConfigureTablesTests(RequiresDBTestCase):
             tc.do_vocabulary("")
             tc.do_next("mitigation_type")
             tc.do_ignore("")
+            tc.do_next("hospital_visit")
+            tc.do_private("")
+            tc.do_quit("")
+            tc.do_next("empty_vocabulary")
+            tc.do_empty("")
             tc.do_quit("")
             tables = tc.config["tables"]
             self.assertFalse(tables["unique_constraint_test"].get("vocabulary_table", False))
             self.assertFalse(tables["unique_constraint_test"].get("ignore", False))
+            self.assertFalse(tables["unique_constraint_test"].get("primary_private", False))
+            self.assertEqual(tables["unique_constraint_test"].get("num_passes", 1), 1)
             self.assertFalse(tables["no_pk_test"].get("vocabulary_table", False))
             self.assertTrue(tables["no_pk_test"].get("ignore", False))
+            self.assertFalse(tables["no_pk_test"].get("primary_private", False))
+            self.assertEqual(tables["no_pk_test"].get("num_passes", 1), 1)
             self.assertTrue(tables["person"].get("vocabulary_table", False))
             self.assertFalse(tables["person"].get("ignore", False))
+            self.assertFalse(tables["person"].get("primary_private", False))
+            self.assertEqual(tables["person"].get("num_passes", 1), 1)
             self.assertFalse(tables["mitigation_type"].get("vocabulary_table", False))
             self.assertTrue(tables["mitigation_type"].get("ignore", False))
+            self.assertFalse(tables["mitigation_type"].get("primary_private", False))
+            self.assertEqual(tables["mitigation_type"].get("num_passes", 1), 1)
+            self.assertFalse(tables["hospital_visit"].get("vocabulary_table", False))
+            self.assertFalse(tables["hospital_visit"].get("ignore", False))
+            self.assertTrue(tables["hospital_visit"].get("primary_private", False))
+            self.assertEqual(tables["hospital_visit"].get("num_passes", 1), 1)
+            self.assertFalse(tables["empty_vocabulary"].get("vocabulary_table", False))
+            self.assertFalse(tables["empty_vocabulary"].get("ignore", False))
+            self.assertFalse(tables["empty_vocabulary"].get("primary_private", False))
+            self.assertEqual(tables["empty_vocabulary"].get("num_passes", 1), 0)
 
     def test_print_data(self) -> None:
         """Test that we can print random rows from the table and random data from columns."""

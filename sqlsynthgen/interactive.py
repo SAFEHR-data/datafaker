@@ -21,12 +21,14 @@ class TableType(Enum):
     IGNORE = "ignore"
     VOCABULARY = "vocabulary"
     PRIVATE = "private"
+    EMPTY = "empty"
 
 TYPE_LETTER = {
     TableType.NORMAL: " ",
     TableType.IGNORE: "I",
     TableType.VOCABULARY: "V",
     TableType.PRIVATE: "P",
+    TableType.EMPTY: "e",
 }
 
 TYPE_PROMPT = {
@@ -34,6 +36,7 @@ TYPE_PROMPT = {
     TableType.IGNORE: "(table: {} (ignore)) ",
     TableType.VOCABULARY: "(table: {} (vocab)) ",
     TableType.PRIVATE: "(table: {} (private)) ",
+    TableType.EMPTY: "(table: {} (empty))",
 }
 
 @dataclass
@@ -162,7 +165,7 @@ class TableCmdTableEntry(TableEntry):
     new_type: TableType
 
 class TableCmd(DbCmd):
-    intro = "Interactive table configuration (ignore, vocabulary, private or normal). Type ? for help.\n"
+    intro = "Interactive table configuration (ignore, vocabulary, private, normal or empty). Type ? for help.\n"
     prompt = "(tableconf) "
     file = None
 
@@ -173,6 +176,8 @@ class TableCmd(DbCmd):
             return TableCmdTableEntry(name, TableType.VOCABULARY, TableType.VOCABULARY)
         if table.get("primary_private", False):
             return TableCmdTableEntry(name, TableType.PRIVATE, TableType.PRIVATE)
+        if table.get("num_passes", 1) == 0:
+            return TableCmdTableEntry(name, TableType.EMPTY, TableType.EMPTY)
         return TableCmdTableEntry(name, TableType.NORMAL, TableType.NORMAL)
 
     def __init__(self, src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping):
@@ -193,6 +198,8 @@ class TableCmd(DbCmd):
         for entry in self.table_entries:
             if entry.old_type != entry.new_type:
                 table = self.get_table_config(entry.name)
+                if entry.old_type == TableType.EMPTY and table.get("num_passes", 1) == 0:
+                    table["num_passes"] = 1
                 if entry.new_type == TableType.IGNORE:
                     table["ignore"] = True
                     table.pop("vocabulary_table", None)
@@ -205,6 +212,11 @@ class TableCmd(DbCmd):
                     table.pop("ignore", None)
                     table.pop("vocabulary_table", None)
                     table["primary_private"] = True
+                elif entry.new_type == TableType.EMPTY:
+                    table.pop("ignore", None)
+                    table.pop("vocabulary_table", None)
+                    table.pop("primary_private", None)
+                    table["num_passes"] = 0
                 else:
                     table.pop("ignore", None)
                     table.pop("vocabulary_table", None)
@@ -279,6 +291,11 @@ class TableCmd(DbCmd):
         "Set the current table as neither a vocabulary table nor ignored nor primary private, and go to the next table"
         self.set_type(TableType.NORMAL)
         self.print("Table {} normal", self.table_name())
+        self.next_table()
+    def do_empty(self, _arg):
+        "Set the current table as empty; no generators will be run for it"
+        self.set_type(TableType.EMPTY)
+        self.print("Table {} empty", self.table_name())
         self.next_table()
     def do_columns(self, _arg):
         "Report the column names and metadata"
@@ -430,6 +447,12 @@ class MissingnessCmd(DbCmd):
                     return src_stat.get("query", None)
             return None
     def make_table_entry(self, name: str, table: Mapping) -> TableEntry:
+        if table.get("ignore", False):
+            return None
+        if table.get("vocabulary_table", False):
+            return None
+        if table.get("num_passes", 1) == 0:
+            return None
         mgs = table.get("missingness_generators", [])
         old = None
         nonnull_columns = self.get_nonnull_columns(name)
@@ -660,6 +683,8 @@ class GeneratorCmd(DbCmd):
         if table.get("ignore", False):
             return None
         if table.get("vocabulary_table", False):
+            return None
+        if table.get("num_passes", 1) == 0:
             return None
         metadata_table = self.metadata.tables[table_name]
         columns = frozenset(metadata_table.columns.keys())
