@@ -231,7 +231,7 @@ class Buckets:
                     column=column_name,
                 ))
             ).first()
-            if result is None or result.stddev is None or result.count == 0:
+            if result is None or result.stddev is None or result.count < 2:
                 return None
         try:
             buckets = Buckets(
@@ -242,7 +242,7 @@ class Buckets:
                 result.stddev,
                 result.count,
             )
-        except sqlalchemy.exc.ProgrammingError as exc:
+        except sqlalchemy.exc.DatabaseError as exc:
             logger.debug("Failed to instantiate Buckets object: %s", exc)
             return None
         return buckets
@@ -258,7 +258,7 @@ class Buckets:
         Figure out the fit from samples from the generator distribution.
         """
         buckets = [0] * 10
-        x=self.mean - 2 * self.stddev
+        x = self.mean - 2 * self.stddev
         w = self.stddev / 2
         for v in values:
             b = min(9, max(0, int((v - x)/w)))
@@ -517,7 +517,8 @@ class MimesisIntegerGeneratorFactory(GeneratorFactory):
 
 def fit_from_buckets(xs: list[float], ys: list[float]):
     sum_diff_squared = sum(map(lambda t, a: (t - a)*(t - a), xs, ys))
-    return sum_diff_squared / len(ys)
+    count = len(ys)
+    return sum_diff_squared / (count * count)
 
 
 class ContinuousDistributionGenerator(Generator):

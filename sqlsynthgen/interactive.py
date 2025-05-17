@@ -166,6 +166,9 @@ class TableCmdTableEntry(TableEntry):
 
 class TableCmd(DbCmd):
     intro = "Interactive table configuration (ignore, vocabulary, private, normal or empty). Type ? for help.\n"
+    doc_leader = """Use the commands ignore, vocabulary, private, empty or normal to set the table's type.
+Use next or previous to change table. Use list and columns for information about the database.
+Use data to see some data contained in the current table. Use quit to exit this program."""
     prompt = "(tableconf) "
     file = None
 
@@ -176,7 +179,7 @@ class TableCmd(DbCmd):
             return TableCmdTableEntry(name, TableType.VOCABULARY, TableType.VOCABULARY)
         if table.get("primary_private", False):
             return TableCmdTableEntry(name, TableType.PRIVATE, TableType.PRIVATE)
-        if table.get("num_passes", 1) == 0:
+        if table.get("num_rows_per_pass", 1) == 0:
             return TableCmdTableEntry(name, TableType.EMPTY, TableType.EMPTY)
         return TableCmdTableEntry(name, TableType.NORMAL, TableType.NORMAL)
 
@@ -198,8 +201,8 @@ class TableCmd(DbCmd):
         for entry in self.table_entries:
             if entry.old_type != entry.new_type:
                 table = self.get_table_config(entry.name)
-                if entry.old_type == TableType.EMPTY and table.get("num_passes", 1) == 0:
-                    table["num_passes"] = 1
+                if entry.old_type == TableType.EMPTY and table.get("num_rows_per_pass", 1) == 0:
+                    table["num_rows_per_pass"] = 1
                 if entry.new_type == TableType.IGNORE:
                     table["ignore"] = True
                     table.pop("vocabulary_table", None)
@@ -216,7 +219,7 @@ class TableCmd(DbCmd):
                     table.pop("ignore", None)
                     table.pop("vocabulary_table", None)
                     table.pop("primary_private", None)
-                    table["num_passes"] = 0
+                    table["num_rows_per_pass"] = 0
                 else:
                     table.pop("ignore", None)
                     table.pop("vocabulary_table", None)
@@ -393,7 +396,7 @@ class MissingnessType:
     SAMPLED_QUERY=(
         "SELECT COUNT(*) AS row_count, {result_names} FROM "
         "(SELECT {column_is_nulls} FROM {table} ORDER BY RANDOM() LIMIT {count})"
-        " GROUP BY {result_names}"
+        " AS __t GROUP BY {result_names}"
     )
     name: str
     query: str
@@ -424,6 +427,11 @@ class MissingnessCmdTableEntry(TableEntry):
 
 class MissingnessCmd(DbCmd):
     intro = "Interactive missingness configuration. Type ? for help.\n"
+    doc_leader = """Use commands sampled and none to choose the
+missingness style for the current table. Use commands next and
+previous to change the current table. Use list to list the tables and
+count to show how many NULLs exist in each column. Use quit
+to exit this tool."""
     prompt = "(missingness) "
     file = None
     ROW_COUNT_MSG = "Total row count: {}"
@@ -670,6 +678,14 @@ class GeneratorCmdTableEntry(TableEntry):
 
 class GeneratorCmd(DbCmd):
     intro = "Interactive generator configuration. Type ? for help.\n"
+    doc_leader = """Use command 'propose' for a list of generators applicable to the current
+column, then command 'compare' to see how these perform against the
+source data, then command 'set' to choose your favourite. Use 'unset'
+to remove the column's generator. Use commands 'next' and
+'previous' to change which column we are examining. Use 'info'
+for useful information about the current column. Use 'tables' and
+'list' to see available tables and columns. Use 'columns' to see
+information about the columns in the current table.'"""
     prompt = "(generatorconf) "
     file = None
 
