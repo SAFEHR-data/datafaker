@@ -6,6 +6,7 @@ from enum import Enum
 import logging
 from prettytable import PrettyTable
 import re
+import sqlalchemy
 from sqlalchemy import Column, MetaData, Table, text
 
 from sqlsynthgen.generators import everything_factory, Generator, PredefinedGenerator
@@ -66,6 +67,7 @@ class DbCmd(ABC, cmd.Cmd):
     ERROR_NO_MORE_TABLES = "Error: There are no more tables"
     ERROR_ALREADY_AT_START = "Error: Already at the start"
     ERROR_NO_SUCH_TABLE = "Error: '{0}' is not the name of a table in this database"
+    ROW_COUNT_MSG = "Total row count: {}"
 
     @abstractmethod
     def make_table_entry(self, name: str, table_config: Mapping) -> TableEntry:
@@ -157,6 +159,95 @@ class DbCmd(ABC, cmd.Cmd):
                 new_src_stats.append(stat)
         self.config["src-stats"] = new_src_stats
         return new_src_stats
+    def get_nonnull_columns(self, table_name: str):
+        metadata_table = self.metadata.tables[table_name]
+        return [
+            str(name)
+            for name, column in metadata_table.columns.items()
+            if column.nullable
+        ]
+
+    def do_counts(self, _arg):
+        "Report the column names with the counts of nulls in them"
+        if len(self.table_entries) <= self.table_index:
+            return
+        table_name = self.table_name()
+        nonnull_columns = self.get_nonnull_columns(table_name)
+        colcounts = [
+            ", COUNT({0}) AS {0}".format(nnc)
+            for nnc in nonnull_columns
+        ]
+        with self.engine.connect() as connection:
+            result = connection.execute(
+                text("SELECT COUNT(*) AS row_count{colcounts} FROM {table}".format(
+                    table=table_name,
+                    colcounts="".join(colcounts),
+                ))
+            ).first()
+            if result is None:
+                self.print("Could not count rows in table {0}", table_name)
+                return
+            row_count = result.row_count
+            self.print(self.ROW_COUNT_MSG, row_count)
+            self.print_table(["Column", "NULL count"], [
+                [name, row_count - count]
+                for name, count in result._mapping.items()
+                if name != "row_count"
+            ])
+
+    def do_select(self, arg):
+        "Run a select query over the database and show the first 50 results"
+        MAX_SELECT_ROWS = 50
+        with self.engine.connect() as connection:
+            try:
+                result = connection.execute(
+                    text("SELECT " + arg)
+                )
+            except sqlalchemy.exc.DatabaseError as exc:
+                self.print("Failed to execute: {}", exc)
+                return
+            row_count = result.rowcount
+            self.print(self.ROW_COUNT_MSG, row_count)
+            if 50 < row_count:
+                self.print("Showing the first {} rows", MAX_SELECT_ROWS)
+            fields = list(result.keys())
+            rows = [
+                row.tuple()
+                for row in result.fetchmany(MAX_SELECT_ROWS)
+            ]
+            self.print_table(fields, rows)
+
+    def do_peek(self, arg: str):
+        """Use 'peek col1 col2 col3' to see a sample of values from columns col1, col2 and col3 in the current table."""
+        MAX_PEEK_ROWS = 25
+        if len(self.table_entries) <= self.table_index:
+            return
+        table_name = self.table_name()
+        col_names = arg.split()
+        nonnulls = [cn + " IS NOT NULL" for cn in col_names]
+        with self.engine.connect() as connection:
+            result = connection.execute(
+                text("SELECT {cols} FROM {table} WHERE {nonnull} LIMIT {max}".format(
+                    cols=",".join(col_names),
+                    table=table_name,
+                    nonnull=" AND ".join(nonnulls),
+                    max=MAX_PEEK_ROWS,
+                ))
+            )
+            rows = [
+                row.tuple()
+                for row in result.fetchmany(MAX_PEEK_ROWS)
+            ]
+            self.print_table(list(result.keys()), rows)
+
+    def complete_peek(self, text: str, _line: str, _begidx: int, _endidx: int):
+        if len(self.table_entries) <= self.table_index:
+            return []
+        return [
+            col
+            for col in self.table_metadata().columns.keys()
+            if col.startswith(text)
+        ]
 
 
 @dataclass
@@ -166,9 +257,12 @@ class TableCmdTableEntry(TableEntry):
 
 class TableCmd(DbCmd):
     intro = "Interactive table configuration (ignore, vocabulary, private, normal or empty). Type ? for help.\n"
-    doc_leader = """Use the commands ignore, vocabulary, private, empty or normal to set the table's type.
-Use next or previous to change table. Use list and columns for information about the database.
-Use data to see some data contained in the current table. Use quit to exit this program."""
+    doc_leader = """Use the commands 'ignore', 'vocabulary',
+'private', 'empty' or 'normal' to set the table's type. Use 'next' or
+'previous' to change table. Use 'tables' and 'columns' for
+information about the database. Use 'data', 'peek', 'select' or
+'count' to see some data contained in the current table. Use 'quit'
+to exit this program."""
     prompt = "(tableconf) "
     file = None
 
@@ -247,7 +341,7 @@ Use data to see some data contained in the current table. Use quit to exit this 
         if reply == "no":
             return True
         return False
-    def do_list(self, arg):
+    def do_tables(self, arg):
         "list the tables with their types"
         for entry in self.table_entries:
             old = entry.old_type
@@ -427,23 +521,15 @@ class MissingnessCmdTableEntry(TableEntry):
 
 class MissingnessCmd(DbCmd):
     intro = "Interactive missingness configuration. Type ? for help.\n"
-    doc_leader = """Use commands sampled and none to choose the
-missingness style for the current table. Use commands next and
-previous to change the current table. Use list to list the tables and
-count to show how many NULLs exist in each column. Use quit
-to exit this tool."""
+    doc_leader = """Use commands 'sampled' and 'none' to choose the missingness style for
+the current table. Use commands 'next' and 'previous' to change the
+current table. Use 'tables' to list the tables and 'count' to show
+how many NULLs exist in each column. Use 'peek' or 'select' to see
+data from the database. Use 'quit' to exit this tool."""
     prompt = "(missingness) "
     file = None
-    ROW_COUNT_MSG = "Total row count: {}"
     PATTERN_RE = re.compile(r'SRC_STATS\["([^"]*)"\]')
 
-    def get_nonnull_columns(self, table_name: str):
-        metadata_table = self.metadata.tables[table_name]
-        return [
-            str(name)
-            for name, column in metadata_table.columns.items()
-            if column.nullable
-        ]
     def find_missingness_query(self, missingness_generator: Mapping):
         kwargs = missingness_generator.get("kwargs", {})
         patterns = kwargs.get("patterns", "")
@@ -555,7 +641,7 @@ to exit this tool."""
         if reply == "no":
             return True
         return False
-    def do_list(self, arg):
+    def do_tables(self, arg):
         "list the tables with their types"
         for entry in self.table_entries:
             old = "-" if entry.old_type is None else entry.old_type.name
@@ -630,33 +716,6 @@ to exit this tool."""
         self._set_none()
         self.print("Table {} set to have no missingness", self.table_name())
         self.next_table()
-    def do_counts(self, _arg):
-        "Report the column names with the counts of nulls in them"
-        if len(self.table_entries) <= self.table_index:
-            return
-        table_name = self.table_entries[self.table_index].name
-        nonnull_columns = self.get_nonnull_columns(table_name)
-        colcounts = [
-            ", COUNT({0}) AS {0}".format(nnc)
-            for nnc in nonnull_columns
-        ]
-        with self.engine.connect() as connection:
-            result = connection.execute(
-                text("SELECT COUNT(*) AS row_count{colcounts} FROM {table}".format(
-                    table=table_name,
-                    colcounts="".join(colcounts),
-                ))
-            ).first()
-            if result is None:
-                self.print("Could not count rows in table {0}", table_name)
-                return
-            row_count = result.row_count
-            self.print(self.ROW_COUNT_MSG, row_count)
-            self.print_table(["Column", "NULL count"], [
-                [name, row_count - count]
-                for name, count in result._mapping.items()
-                if name != "row_count"
-            ])
 
 
 def update_missingness(src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping):
@@ -678,14 +737,16 @@ class GeneratorCmdTableEntry(TableEntry):
 
 class GeneratorCmd(DbCmd):
     intro = "Interactive generator configuration. Type ? for help.\n"
-    doc_leader = """Use command 'propose' for a list of generators applicable to the current
-column, then command 'compare' to see how these perform against the
-source data, then command 'set' to choose your favourite. Use 'unset'
-to remove the column's generator. Use commands 'next' and
+    doc_leader = """Use command 'propose' for a list of generators applicable to the
+current column, then command 'compare' to see how these perform
+against the source data, then command 'set' to choose your favourite.
+Use 'unset' to remove the column's generator. Use commands 'next' and
 'previous' to change which column we are examining. Use 'info'
 for useful information about the current column. Use 'tables' and
 'list' to see available tables and columns. Use 'columns' to see
-information about the columns in the current table.'"""
+information about the columns in the current table. Use 'peek',
+'count' or 'select' to fetch data from the source database. Use
+'quit' to exit this program."""
     prompt = "(generatorconf) "
     file = None
 

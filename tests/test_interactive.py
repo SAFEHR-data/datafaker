@@ -171,23 +171,23 @@ class ConfigureTablesTests(RequiresDBTestCase):
             self.assertFalse(tables["no_pk_test"].get("vocabulary_table", False))
             self.assertTrue(tables["no_pk_test"].get("ignore", False))
             self.assertFalse(tables["no_pk_test"].get("primary_private", False))
-            self.assertEqual(tables["no_pk_test"].get("num_passes", 1), 1)
+            self.assertEqual(tables["no_pk_test"].get("num_rows_per_pass", 1), 1)
             self.assertTrue(tables["person"].get("vocabulary_table", False))
             self.assertFalse(tables["person"].get("ignore", False))
             self.assertFalse(tables["person"].get("primary_private", False))
-            self.assertEqual(tables["person"].get("num_passes", 1), 1)
+            self.assertEqual(tables["person"].get("num_rows_per_pass", 1), 1)
             self.assertFalse(tables["mitigation_type"].get("vocabulary_table", False))
             self.assertTrue(tables["mitigation_type"].get("ignore", False))
             self.assertFalse(tables["mitigation_type"].get("primary_private", False))
-            self.assertEqual(tables["mitigation_type"].get("num_passes", 1), 1)
+            self.assertEqual(tables["mitigation_type"].get("num_rows_per_pass", 1), 1)
             self.assertFalse(tables["hospital_visit"].get("vocabulary_table", False))
             self.assertFalse(tables["hospital_visit"].get("ignore", False))
             self.assertTrue(tables["hospital_visit"].get("primary_private", False))
-            self.assertEqual(tables["hospital_visit"].get("num_passes", 1), 1)
+            self.assertEqual(tables["hospital_visit"].get("num_rows_per_pass", 1), 1)
             self.assertFalse(tables["empty_vocabulary"].get("vocabulary_table", False))
             self.assertFalse(tables["empty_vocabulary"].get("ignore", False))
             self.assertFalse(tables["empty_vocabulary"].get("primary_private", False))
-            self.assertEqual(tables["empty_vocabulary"].get("num_passes", 1), 0)
+            self.assertEqual(tables["empty_vocabulary"].get("num_rows_per_pass", 1), 0)
 
     def test_print_data(self) -> None:
         """Test that we can print random rows from the table and random data from columns."""
@@ -258,7 +258,7 @@ class ConfigureTablesTests(RequiresDBTestCase):
             tc.do_next("person")
             tc.do_vocabulary("")
             tc.reset()
-            tc.do_list("")
+            tc.do_tables("")
             person_listed = False
             unique_constraint_test_listed = False
             no_pk_test_listed = False
@@ -647,7 +647,7 @@ class ConfigureMissingnessTests(RequiresDBTestCase):
                       "name": "missing_auto__signature_model__0",
                       "query": ("SELECT COUNT(*) AS row_count, player_id__is_null, based_on__is_null FROM"
                                 " (SELECT player_id IS NULL AS player_id__is_null, based_on IS NULL AS based_on__is_null FROM"
-                                " signature_model ORDER BY RANDOM() LIMIT 1000) GROUP BY player_id__is_null, based_on__is_null")
+                                " signature_model ORDER BY RANDOM() LIMIT 1000) AS __t GROUP BY player_id__is_null, based_on__is_null")
                     }]
                 }
             )
