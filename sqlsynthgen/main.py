@@ -191,6 +191,7 @@ def make_vocab(
     config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
     force: bool = Option(True, help="Overwrite any existing vocabulary file."),
     compress: bool = Option(False, help="Compress file to .gz"),
+    only: list[str] = Option([], help="Only download this table."),
 ) -> None:
     """Make files of vocabulary tables.
 
@@ -209,6 +210,7 @@ def make_vocab(
         generator_config,
         overwrite_files=force,
         compress=compress,
+        table_names=set(only) if only else None,
     )
 
 

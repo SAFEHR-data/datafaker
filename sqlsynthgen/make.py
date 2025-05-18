@@ -508,6 +508,7 @@ def make_vocabulary_tables(
     config: Mapping,
     overwrite_files: bool,
     compress: bool,
+    table_names: set[str] | None=None,
 ):
     """
     Extracts the data from the source database for each
@@ -519,7 +520,15 @@ def make_vocabulary_tables(
 
     engine = get_sync_engine(create_db_engine(src_dsn, schema_name=settings.src_schema))
     vocab_names = get_vocabulary_table_names(config)
-    for table_name in vocab_names:
+    if table_names is None:
+        table_names = vocab_names
+    else:
+        invalid_names = table_names - vocab_names
+        if invalid_names:
+            logger.error("The following names are not the names of vocabulary tables: %s", invalid_names)
+            logger.info("Valid names are: %s", vocab_names)
+            return
+    for table_name in table_names:
         _generate_vocabulary_table(
             metadata.tables[table_name],
             engine,
