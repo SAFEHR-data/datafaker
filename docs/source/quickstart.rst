@@ -14,18 +14,24 @@ After :ref:`Installation <page-installation>`, we can run ``sqlsynthgen`` to see
      --help                          Show this message and exit.
 
    Commands:
-     create-data      Populate schema with synthetic data.
-     create-tables    Create schema from Python classes.
-     create-vocab     Create tables using the SQLAlchemy file.
-     make-generators  Make a SQLSynthGen file of generator classes.
-     make-stats       Compute summary statistics from the source database.
-     make-tables      Make a SQLAlchemy file of Table classes.
-     remove-data      Truncate all non-vocabulary tables in the dst schema.
-     remove-tables    Drop all tables in the dst schema.
-     remove-vocab     Truncate all vocabulary tables in the dst schema.
-     validate-config  Validate the format of a config file.
+      configure-generators  Interactively set generators for column data.
+      configure-missing     Interactively set the missingness of the...
+      configure-tables      Interactively set tables to ignored, vocabulary...
+      create-data           Populate the schema in the target directory with...
+      create-tables         Create schema from the ORM YAML file.
+      create-vocab          Import vocabulary data into the target database.
+      list-tables           List the names of tables
+      create-generators     Make a SQLSynthGen file of generator classes.
+      make-stats            Compute summary statistics from the source database.
+      make-tables           Make a YAML file representing the tables in the...
+      make-vocab            Make files of vocabulary tables.
+      remove-data           Truncate non-vocabulary tables in the destination...
+      remove-tables         Drop all tables in the destination schema.
+      remove-vocab          Truncate vocabulary tables in the destination...
+      validate-config       Validate the format of a config file.
+      version               Display version information.
 
-For the simplest case, we will need ``make-tables``, ``make-generators``, ``create-tables`` and ``create-data`` but, first,
+For the simplest case, we will need ``make-tables``, ``create-generators``, ``create-tables`` and ``create-data`` but, first,
 we need to set environment variables to tell sqlsynthgen how to access our source database (where the real data resides now) and destination database (where the synthetic data will go).
 We can do that in the terminal with the ``export`` keyword, as shown below, or in a file called ``.env``.
 The source and destination may be on the same database server, as long as the database or schema names differ.
@@ -52,7 +58,7 @@ The next step is to make a sqlsynthgen file that defines one data generator per 
 
 .. code-block:: console
 
-   $ sqlsynthgen make-generators
+   $ sqlsynthgen create-generators
 
 This will have created a file called ``ssg.py`` in the current directory.
 

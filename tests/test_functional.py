@@ -95,7 +95,7 @@ class DBFunctionalTestCase(RequiresDBTestCase):
         self.assertEqual("", completed_process.stdout.decode("utf-8"))
 
         completed_process = run(
-            ["sqlsynthgen", "make-generators", "--force"],
+            ["sqlsynthgen", "create-generators", "--force"],
             capture_output=True,
             env=self.env,
         )
@@ -256,7 +256,7 @@ class DBFunctionalTestCase(RequiresDBTestCase):
         completed_process = run(
             [
                 "sqlsynthgen",
-                "make-generators",
+                "create-generators",
                 f"--orm-file={self.alt_orm_file_path}",
                 f"--ssg-file={self.alt_ssg_file_path}",
                 f"--config-file={self.config_file_path}",
@@ -510,7 +510,7 @@ class DBFunctionalTestCase(RequiresDBTestCase):
         run(
             [
                 "sqlsynthgen",
-                "make-generators",
+                "create-generators",
                 f"--orm-file={self.alt_orm_file_path}",
                 f"--ssg-file={self.alt_ssg_file_path}",
                 f"--config-file={self.config_file_path}",

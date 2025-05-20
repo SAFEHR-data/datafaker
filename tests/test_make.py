@@ -70,7 +70,7 @@ class TestMakeGenerators(SSGTestCase):
     @patch("sqlsynthgen.make.Path")
     @patch("sqlsynthgen.make.get_settings")
     @patch("sqlsynthgen.utils.create_engine")
-    def test_make_generators_do_not_overwrite(
+    def test_create_generators_do_not_overwrite(
         self,
         mock_create: MagicMock,
         mock_get_settings: MagicMock,
@@ -99,7 +99,7 @@ class TestMakeGenerators(SSGTestCase):
     @patch("sqlsynthgen.utils.create_engine")
     @patch("sqlsynthgen.make.get_settings")
     @patch("sqlsynthgen.make.Path")
-    def test_make_generators_force_overwrite(
+    def test_create_generators_force_overwrite(
         self,
         mock_path: MagicMock,
         mock_get_settings: MagicMock,

@@ -62,12 +62,12 @@ And let's populate it with the fake data:
 
     export DST_DSN='postgresql://tim:password@localhost/fake_pagila'
     export DST_SCHEMA='public'
-    sqlsynthgen make-generators
+    sqlsynthgen create-generators
     sqlsynthgen create-tables
     sqlsynthgen create-data
 
-``make-generators`` creates a Python file called ``ssg.py``.
-You can edit this file if you want, but it is much easier to edit ``config.yaml`` and call ``sqlsynthgen make-generators --force`` to regenerate this file.
+``create-generators`` creates a Python file called ``ssg.py``.
+You can edit this file if you want, but it is much easier to edit ``config.yaml`` and call ``sqlsynthgen create-generators --force`` to regenerate this file.
 
 You will notice that ``create-tables`` produces a couple of warnings, and PostgreSQL complains when ``sqlsynthgen`` tries to create the data.
 The warnings are that ``sqlsynthgen`` doesn't understand the special PostgresSQL types ``TSVECTOR`` and ``ARRAY``, so it doesn't know how to generate data for those columns.
@@ -121,10 +121,10 @@ Some of these functions take arguments, that we can assign like this:
 
 (but only static booleans, strings or numbers)
 
-Anyway, we now need to remake the generators (``make-generators``) and re-run them (``create-data``):
+Anyway, we now need to remake the generators (``create-generators``) and re-run them (``create-data``):
 
 .. code-block:: console
-  $ sqlsynthgen make-generators --force
+  $ sqlsynthgen create-generators --force
   $ sqlsynthgen create-data --num-passes 15
 
 Now you can use ``psql --username tim fake_pagila`` to explore the data.
@@ -295,7 +295,7 @@ If you haven't created the destination database, you may first need to run a com
 
 We can also use the ``orm.py`` file to make a Python module that generates synthetic data::
 
-    $ sqlsynthgen make-generators
+    $ sqlsynthgen create-generators
 
 This creates an ``ssg.py`` file that contains one generator class (not to be confused with Python generator functions) per source database table.
 By default, without any user configuration, the data produced by these generators fulfills the schema of the original data:
@@ -382,7 +382,7 @@ We identify ``countries`` as a vocabulary table in our ``config.yaml`` file:
 
 The vocabulary tables are exported from the source database when the generator module is made, so we overwrite ``ssg.py`` with one that includes the vocabulary import classes, using the ``--force`` option::
 
-    $ sqlsynthgen make-generators --config-file config.yaml --force
+    $ sqlsynthgen create-generators --config-file config.yaml --force
 
 This will export the ``countries`` table rows to a file called ``countries.yaml`` in your current working directory:
 
@@ -410,14 +410,14 @@ We need to truncate any tables in our destination database before importing the 
     $ sqlsynthgen remove-data --config-file config.yaml
     $ sqlsynthgen create-vocab --config-file config.yaml --orm-file orm.yaml
 
-Since ``make-generators`` rewrote ``ssg.py``, we must now re-edit it to add the primary key ``VARCHAR`` workarounds for the ``users`` and ``age_gender_bkts`` tables, as we did in section above.
+Since ``create-generators`` rewrote ``ssg.py``, we must now re-edit it to add the primary key ``VARCHAR`` workarounds for the ``users`` and ``age_gender_bkts`` tables, as we did in section above.
 Once this is done, we can generate random data for the other three tables with::
 
     $ sqlsynthgen create-data
 
 From now on, whenever we make a change to ``config.yaml``, we should re-run these steps to see the effects:
 
-1. Run ``sqlsynthgen make-generators --config-file config.yaml --force``.
+1. Run ``sqlsynthgen create-generators --config-file config.yaml --force``.
 2. If necessary, perform any manual edits to ``ssg.py``.
 3. Truncate the non-vocabulary database tables with ``sqlsynthgen remove-data --config-file config.yaml``.
 4. Run ``sqlsynthgen create-data``.
@@ -431,7 +431,7 @@ Note that one has to be careful in making sure that the tables marked as vocabul
 Specifying Row-based Custom Generators
 --------------------------------------
 
-As we’ve seen above, ``ssg.py`` is overwritten whenever you re-run ``make-generators``.
+As we’ve seen above, ``ssg.py`` is overwritten whenever you re-run ``create-generators``.
 To avoid having to manually edit ``ssg.py`` after each overwrite, we can specify “row generators” for various columns in the config file:
 
 **config.yaml**:
@@ -459,7 +459,7 @@ To avoid having to manually edit ``ssg.py`` after each overwrite, we can specify
 
 For instance, on lines 5-6 above we say that every time a row is generated for the ``agen_gender_bkts`` table, the ``generic.person.password`` function should be called (without arguments), and the output should be written to the ``gender`` column.
 We similarly use ``generic.person.password`` to populate ``age_gender_bkts.age_bucket`` and ``users.id``, and ``generic.column_value_provider.column_value`` (more on that one later) to populate ``country_destination``.
-The next time we run ``make-generators``, these config-specified row generators will override the default ones and we will not need to edit the ``ssg.py`` manually any more.
+The next time we run ``create-generators``, these config-specified row generators will override the default ones and we will not need to edit the ``ssg.py`` manually any more.
 
 You may notice in the above code block a few magical-seeming keywords, namely ``generic``, ``dst_db_conn``, and ``orm``, that deserve an explanation.
 
@@ -623,7 +623,7 @@ which executes the query and writes the results to a ``src-stats.yaml`` file, wh
 This is the output of the SQL query in YAML format.
 To be able to use these numbers in our generators we need to regenerate ``ssg.py`` with ::
 
-    $ sqlsynthgen make-generators --config-file config.yaml --stats-file src-stats.yaml --force
+    $ sqlsynthgen create-generators --config-file config.yaml --stats-file src-stats.yaml --force
 
 The new option ``--stats-file src-stats.yaml`` makes it such that the ``SRC_STATS`` variable in ``ssg.py`` is populated with the concents of ``src-stats.yaml``, allowing you to pass them to your generators as arguments, as we do above in the ``config.yaml`` snippet on line 13.
 Note how the query name ``name: age_stats`` (line 2) is used in ``SRC_STATS["age_stats"]`` (line 13) to access the results of this particular query.
@@ -814,7 +814,7 @@ To use and get the most from story generators, we will need to make some changes
 
 After editing the ``config.yaml`` and ``airbnb_generators.py`` as above, you can run: ::
 
-  $ sqlsynthgen make-generators --config-file=config.yaml --stats-file=src-stats.yaml --force
+  $ sqlsynthgen create-generators --config-file=config.yaml --stats-file=src-stats.yaml --force
 
 This will regenerate the ``ssg.py`` file to incorporate your story generator, and running ``create-data`` as usual will then create some storied users and sessions.
 

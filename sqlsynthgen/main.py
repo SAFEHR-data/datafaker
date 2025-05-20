@@ -214,7 +214,7 @@ def make_vocab(
 
 
 @app.command()
-def make_generators(
+def create_generators(
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
     ssg_file: str = Option(SSG_FILENAME, help="Path to write Python generators to."),
     config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
@@ -227,7 +227,7 @@ def make_generators(
     returns a set of synthetic data generators for each attribute
 
     Example:
-        $ sqlsynthgen make-generators
+        $ sqlsynthgen create-generators
     """
     logger.debug("Making %s.", ssg_file)
 
