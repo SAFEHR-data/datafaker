@@ -1168,7 +1168,7 @@ information about the columns in the current table. Use 'peek',
             return
         kwa = gen.actual_kwargs()
         cq_key2args = {}
-        src_stat_re = re.compile(f'SRC_STATS\\["([^"]+)"\\]\\["([^"]+)"\\]')
+        src_stat_re = re.compile(f'SRC_STATS\\["([^"]+)"\\]')
         for argname, src_stat in gen.nominal_kwargs().items():
             if argname in kwa:
                 src_stat_groups = src_stat_re.match(src_stat)
@@ -1201,7 +1201,7 @@ information about the columns in the current table. Use 'peek',
         vals = []
         src_stat2kwarg = { v: k for k, v in gen.nominal_kwargs().items() }
         for n in sacs.keys():
-            src_stat = f'SRC_STATS["auto__{table_name}"]["{n}"]'
+            src_stat = f'SRC_STATS["auto__{table_name}"][0]["{n}"]'
             if src_stat in src_stat2kwarg:
                 ak = src_stat2kwarg[src_stat]
                 if ak in kwa:
@@ -1209,7 +1209,7 @@ information about the columns in the current table. Use 'peek',
                 else:
                     logger.warning("actual_kwargs for %s does not report %s", gen.function_name(), ak)
             else:
-                logger.warning('nominal_kwargs for %s does not have a value SRC_STATS["auto__%s"]["%s"]', gen.function_name(), table_name, n)
+                logger.warning('nominal_kwargs for %s does not have a value SRC_STATS["auto__%s"][0]["%s"]', gen.function_name(), table_name, n)
         select_q = self._get_aggregate_query([gen], table_name)
         self.print("{0}; providing the following values: {1}", select_q, vals)
 

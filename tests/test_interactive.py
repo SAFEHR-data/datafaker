@@ -375,8 +375,8 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertEqual(row_gen["name"], GENERATOR)
             self.assertListEqual(row_gen["columns_assigned"], [COLUMN])
             self.assertDictEqual(row_gen["kwargs"], {
-                "mean": f'SRC_STATS["auto__{TABLE}"]["mean__{COLUMN}"]',
-                "sd": f'SRC_STATS["auto__{TABLE}"]["stddev__{COLUMN}"]',
+                "mean": f'SRC_STATS["auto__{TABLE}"][0]["mean__{COLUMN}"]',
+                "sd": f'SRC_STATS["auto__{TABLE}"][0]["stddev__{COLUMN}"]',
             })
             self.assertEqual(len(gc.config["src-stats"]), 1)
             self.assertDictEqual(gc.config["src-stats"][0], {
@@ -403,7 +403,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertEqual(row_gen["name"], GENERATOR)
             self.assertListEqual(row_gen["columns_assigned"], [COLUMN])
             self.assertDictEqual(row_gen["kwargs"], {
-                "a": f'SRC_STATS["auto__{TABLE}__{COLUMN}"]["value"]',
+                "a": f'SRC_STATS["auto__{TABLE}__{COLUMN}"]',
             })
             self.assertEqual(len(gc.config["src-stats"]), 1)
             self.assertDictEqual(gc.config["src-stats"][0], {
@@ -422,8 +422,8 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
                         "name": "dist_gen.normal",
                         "columns_assigned": ["frequency"],
                         "kwargs": {
-                            "mean": 'SRC_STATS["auto__string"]["mean__frequency"]',
-                            "sd": 'SRC_STATS["auto__string"]["stddev__frequency"]',
+                            "mean": 'SRC_STATS["auto__string"][0]["mean__frequency"]',
+                            "sd": 'SRC_STATS["auto__string"][0]["stddev__frequency"]',
                         },
                     }]
                 }
@@ -453,8 +453,8 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertEqual(row_gen["name"], "dist_gen.normal")
             self.assertListEqual(row_gen["columns_assigned"], ["frequency"])
             self.assertDictEqual(row_gen["kwargs"], {
-                "mean": 'SRC_STATS["auto__string"]["mean__frequency"]',
-                "sd": 'SRC_STATS["auto__string"]["stddev__frequency"]',
+                "mean": 'SRC_STATS["auto__string"][0]["mean__frequency"]',
+                "sd": 'SRC_STATS["auto__string"][0]["stddev__frequency"]',
             })
             self.assertEqual(len(gc.config["src-stats"]), 1)
             self.assertDictEqual(gc.config["src-stats"][0], {
@@ -476,8 +476,8 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
                         "name": "dist_gen.normal",
                         "columns_assigned": ["frequency"],
                         "kwargs": {
-                            "mean": 'SRC_STATS["auto__string"]["mean__frequency"]',
-                            "sd": 'SRC_STATS["auto__string"]["stddev__frequency"]',
+                            "mean": 'SRC_STATS["auto__string"][0]["mean__frequency"]',
+                            "sd": 'SRC_STATS["auto__string"][0]["stddev__frequency"]',
                         },
                     }]
                 }
@@ -507,13 +507,13 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertEqual(row_gen1["name"], "dist_gen.normal")
             self.assertListEqual(row_gen0["columns_assigned"], [COLUMN])
             self.assertDictEqual(row_gen0["kwargs"], {
-                "mean": f'SRC_STATS["auto__string"]["mean__{COLUMN}"]',
-                "sd": f'SRC_STATS["auto__string"]["stddev__{COLUMN}"]',
+                "mean": f'SRC_STATS["auto__string"][0]["mean__{COLUMN}"]',
+                "sd": f'SRC_STATS["auto__string"][0]["stddev__{COLUMN}"]',
             })
             self.assertListEqual(row_gen1["columns_assigned"], ["frequency"])
             self.assertDictEqual(row_gen1["kwargs"], {
-                "mean": 'SRC_STATS["auto__string"]["mean__frequency"]',
-                "sd": 'SRC_STATS["auto__string"]["stddev__frequency"]',
+                "mean": 'SRC_STATS["auto__string"][0]["mean__frequency"]',
+                "sd": 'SRC_STATS["auto__string"][0]["stddev__frequency"]',
             })
             self.assertEqual(len(gc.config["src-stats"]), 1)
             self.assertEqual(gc.config["src-stats"][0]["name"], "auto__string")
@@ -683,7 +683,7 @@ class ConfigureMissingnessTests(RequiresDBTestCase):
         loop.close()
         with os.fdopen(stats_fd, "w", encoding="utf-8") as stats_fh:
             stats_fh.write(yaml.dump(src_stats))
-        # `make-generators` with `src-stats.yaml` and the rest, producing `ssg.py`
+        # `create-generators` with `src-stats.yaml` and the rest, producing `ssg.py`
         ssg_content = make_table_generators(
             metadata,
             config,

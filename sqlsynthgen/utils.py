@@ -110,7 +110,7 @@ def download_table(
 ) -> None:
     """Download a Table and store it as a .yaml file."""
     open_fn = open_compressed_file if compress else open_file
-    with engine.connect() as conn:
+    with engine.connect().execution_options(yield_per=1000) as conn:
         with open_fn(yaml_file_name) as yamlfile:
             stmt = select(table)
             rowcount = table_row_count(table, conn)

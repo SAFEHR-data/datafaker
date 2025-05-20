@@ -4,9 +4,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 import functools
 import math
-import numpy
 import os
 from pathlib import Path
+import random
 from typing import Any
 
 import yaml
@@ -33,25 +33,27 @@ def zipf_weights(size):
 
 class DistributionGenerator:
     root3 = math.sqrt(3)
-    def __init__(self):
-        self.rng = numpy.random.default_rng()
 
-    def uniform(self, low: float, high: float) -> float:
-        return self.rng.uniform(low=low, high=high)
+    def uniform(self, low, high) -> float:
+        return random.uniform(float(low), float(high))
 
     def uniform_ms(self, mean, sd) -> float:
         m = float(mean)
         h = self.root3 * float(sd)
-        return self.rng.uniform(low=m - h, high=m + h)
+        return random.uniform(m - h, m + h)
 
-    def normal(self, mean: float, sd: float) -> float:
-        return self.rng.normal(loc=mean, scale=sd)
+    def normal(self, mean, sd) -> float:
+        return random.normalvariate(float(mean), float(sd))
 
     def choice(self, a):
-        return self.rng.choice(a)
+        c = random.choice(a)
+        return c["value"] if type(c) is dict and "value" in c else c
 
-    def zipf_choice(self, a, n):
-        return self.rng.choice(a, p = zipf_weights(n))
+    def zipf_choice(self, a, n=None):
+        if n is None:
+            n = len(a)
+        c = random.choices(a, weights=zipf_weights(n))[0]
+        return c["value"] if type(c) is dict and "value" in c else c
 
     def constant(self, value):
         return value
@@ -125,13 +127,11 @@ class FileUploader:
             )
 
 class ColumnPresence:
-    def __init__(self):
-        self.rng = numpy.random.default_rng()
     def sampled(self, patterns):
         total = 0
         for pattern in patterns:
             total += pattern.get("row_count", 0)
-        s = self.rng.integers(total)
+        s = random.randrange(total)
         for pattern in patterns:
             s -= pattern.get("row_count", 0)
             if s < 0:

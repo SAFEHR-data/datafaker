@@ -50,9 +50,9 @@ class Generator(ABC):
         The kwargs the generator wants to be called with.
         The values will tend to be references to something in the src-stats.yaml
         file.
-        For example {"avg_age": 'SRC_STATS["auto__patient"]["age_mean"]'} will
+        For example {"avg_age": 'SRC_STATS["auto__patient"][0]["age_mean"]'} will
         provide the value stored in src-stats.yaml as 
-        SRC_STATS["auto__patient"]["age_mean"] as the "avg_age" argument
+        SRC_STATS["auto__patient"][0]["age_mean"] as the "avg_age" argument
         to the generator function.
         """
 
@@ -64,8 +64,8 @@ class Generator(ABC):
         For example {"count": "COUNT(*)", "avg_thiscolumn": "AVG(thiscolumn)"}
         will make the clause become:
         "SELECT COUNT(*) AS count, AVG(thiscolumn) AS avg_thiscolumn FROM thistable"
-        and this will populate SRC_STATS["auto__thistable"]["count"] and
-        SRC_STATS["auto__thistable"]["avg_thiscolumn"] in the src-stats.yaml file.
+        and this will populate SRC_STATS["auto__thistable"][0]["count"] and
+        SRC_STATS["auto__thistable"][0]["avg_thiscolumn"] in the src-stats.yaml file.
         """
         return {}
 
@@ -77,7 +77,7 @@ class Generator(ABC):
         because these should use select_aggregate_clauses.
 
         For example {"myquery", "SELECT one, too AS two FROM mytable WHERE too > 1"}
-        will populate SRC_STATS["myquery"]["one"] and SRC_STATS["myquery"]["two"]
+        will populate SRC_STATS["myquery"][0]["one"] and SRC_STATS["myquery"][0]["two"]
         in the src-stats.yaml file.
 
         Keys should be chosen to minimize the chances of clashing with other queries,
@@ -365,7 +365,7 @@ class MimesisDateTimeGenerator(MimesisGeneratorBase):
 
     @classmethod
     def make_singleton(_cls, column: Column, engine: Engine, function_name: str):
-        extract_year = f"EXTRACT(YEAR FROM {column.name})"
+        extract_year = f"CAST(EXTRACT(YEAR FROM {column.name}) AS INT)"
         max_year = f"MAX({extract_year})"
         min_year = f"MIN({extract_year})"
         with engine.connect() as connection:
@@ -384,8 +384,8 @@ class MimesisDateTimeGenerator(MimesisGeneratorBase):
         )]
     def nominal_kwargs(self):
         return {
-            "start": f'SRC_STATS["auto__{self._column.table.name}"]["{self._column.name}__start"]',
-            "end": f'SRC_STATS["auto__{self._column.table.name}"]["{self._column.name}__end"]',
+            "start": f'SRC_STATS["auto__{self._column.table.name}"][0]["{self._column.name}__start"]',
+            "end": f'SRC_STATS["auto__{self._column.table.name}"][0]["{self._column.name}__end"]',
         }
     def actual_kwargs(self):
         return {
@@ -529,8 +529,8 @@ class ContinuousDistributionGenerator(Generator):
         self.buckets = buckets
     def nominal_kwargs(self):
         return {
-            "mean": f'SRC_STATS["auto__{self.table_name}"]["mean__{self.column_name}"]',
-            "sd": f'SRC_STATS["auto__{self.table_name}"]["stddev__{self.column_name}"]',
+            "mean": f'SRC_STATS["auto__{self.table_name}"][0]["mean__{self.column_name}"]',
+            "sd": f'SRC_STATS["auto__{self.table_name}"][0]["stddev__{self.column_name}"]',
         }
     def actual_kwargs(self):
         if self.buckets is None:
@@ -617,7 +617,7 @@ class ChoiceGenerator(Generator):
         self._fit = fit_from_buckets(counts, estimated_counts)
     def nominal_kwargs(self):
         return {
-            "a": f'SRC_STATS["auto__{self.table_name}__{self.column_name}"]["value"]',
+            "a": f'SRC_STATS["auto__{self.table_name}__{self.column_name}"]',
         }
     def actual_kwargs(self):
         return {
