@@ -23,7 +23,6 @@ from sqlsynthgen.make import (
     make_table_generators,
     make_tables_file,
     make_vocabulary_tables,
-    generate_config_file,
 )
 from sqlsynthgen.remove import remove_db_data, remove_db_tables, remove_db_vocab
 from sqlsynthgen.settings import Settings, get_settings
@@ -308,31 +307,6 @@ def make_tables(
     content = make_tables_file(src_dsn, settings.src_schema, config)
     orm_file_path.write_text(content, encoding="utf-8")
     logger.debug("%s created.", orm_file)
-
-
-@app.command()
-def generate_config(
-    config_file: Optional[str] = Option(CONFIG_FILENAME, help="Path to write the configuration file to"),
-    force: bool = Option(False, help="Overwrite any existing configuration yaml file"),
-) -> None:
-    """
-    Generate a basic configuration file.
-    
-    The configuration produced just includes default configuration for the
-    existing source database tables.
-    """
-    logger.debug("Creating %s.", config_file)
-
-    config_file_path = Path(config_file)
-    if not force:
-        _check_file_non_existence(config_file_path)
-
-    settings = get_settings()
-    src_dsn: str = _require_src_db_dsn(settings)
-
-    content = generate_config_file(src_dsn, settings.src_schema)
-    config_file_path.write_text(content, encoding="utf-8")
-    logger.debug("%s created.", config_file)
 
 
 @app.command()
