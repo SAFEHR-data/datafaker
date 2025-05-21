@@ -185,35 +185,6 @@ def create_tables(
 
 
 @app.command()
-def make_vocab(
-    orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
-    config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
-    force: bool = Option(True, help="Overwrite any existing vocabulary file."),
-    compress: bool = Option(False, help="Compress file to .gz"),
-    only: list[str] = Option([], help="Only download this table."),
-) -> None:
-    """Make files of vocabulary tables.
-
-    Each table marked in the configuration file as "vocabulary_table: true"
-
-    Example:
-        $ sqlsynthgen make-vocab --config-file config.yml
-    """
-    settings = get_settings()
-    _require_src_db_dsn(settings)
-
-    generator_config = read_config_file(config_file) if config_file is not None else {}
-    orm_metadata = load_metadata(orm_file, generator_config)
-    make_vocabulary_tables(
-        orm_metadata,
-        generator_config,
-        overwrite_files=force,
-        compress=compress,
-        table_names=set(only) if only else None,
-    )
-
-
-@app.command()
 def create_generators(
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
     ssg_file: str = Option(SSG_FILENAME, help="Path to write Python generators to."),
@@ -248,6 +219,35 @@ def create_generators(
     ssg_file_path.write_text(result, encoding="utf-8")
 
     logger.debug("%s created.", ssg_file)
+
+
+@app.command()
+def make_vocab(
+    orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
+    config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
+    force: bool = Option(True, help="Overwrite any existing vocabulary file."),
+    compress: bool = Option(False, help="Compress file to .gz"),
+    only: list[str] = Option([], help="Only download this table."),
+) -> None:
+    """Make files of vocabulary tables.
+
+    Each table marked in the configuration file as "vocabulary_table: true"
+
+    Example:
+        $ sqlsynthgen make-vocab --config-file config.yml
+    """
+    settings = get_settings()
+    _require_src_db_dsn(settings)
+
+    generator_config = read_config_file(config_file) if config_file is not None else {}
+    orm_metadata = load_metadata(orm_file, generator_config)
+    make_vocabulary_tables(
+        orm_metadata,
+        generator_config,
+        overwrite_files=force,
+        compress=compress,
+        table_names=set(only) if only else None,
+    )
 
 
 @app.command()
@@ -469,7 +469,7 @@ def list_tables(
     config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
     tables: TableType = Option(TableType.generated, help="Which tables to list"),
 ) -> None:
-    """List the names of tables"""
+    """List the names of tables described in the metadata file."""
     config = read_config_file(config_file) if config_file is not None else {}
     orm_metadata = load_metadata(orm_file, config)
     all_table_names = set(orm_metadata.tables.keys())
