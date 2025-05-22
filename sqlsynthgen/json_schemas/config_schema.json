@@ -22,7 +22,10 @@
       "type": "array",
       "items": {
         "additionalProperties": false,
-        "required": ["name", "query"],
+        "oneOf": [
+          {"required": ["name", "query"]},
+          {"required": ["name", "dp-query", "table"]}
+        ],
         "properties": {
           "name": {
             "description": "A name for the query, which will be used in the stats file.",
@@ -34,6 +37,10 @@
           },
           "dp-query": {
             "description": "A SmartNoise SQL query.",
+            "type": "string"
+          },
+          "table": {
+            "description": "The name of the table being queried (only required if 'dp-query' is used without 'query').",
             "type": "string"
           },
           "epsilon": {

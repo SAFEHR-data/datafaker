@@ -720,18 +720,24 @@ class DbConnection:
     async def execute_query(self, query_block: Mapping[str, Any]) -> Any:
         """Execute query in query_block."""
         logger.debug("Executing query %s", query_block["name"])
-        query = text(query_block["query"])
-        raw_result = await self.execute_raw_query(query)
-
+        raw_result = None
+        if "query" in query_block:
+            query = text(query_block["query"])
+            raw_result = await self.execute_raw_query(query)
         if "dp-query" in query_block:
-            result_df = pd.DataFrame(raw_result.mappings())
             logger.debug("Executing dp-query for %s", query_block["name"])
             dp_query = query_block["dp-query"]
-            snsql_metadata = {"": {"": {"query_result": query_block["snsql-metadata"]}}}
+            table = query_block.get("table", "query_result")
+            snsql_metadata = {"": {"": {table: query_block["snsql-metadata"]}}}
             privacy = snsql.Privacy(
                 epsilon=query_block["epsilon"], delta=query_block["delta"]
             )
-            reader = snsql.from_df(result_df, privacy=privacy, metadata=snsql_metadata)
+            if raw_result is None:
+                raw_connection = self._engine.raw_connection().dbapi_connection
+                reader = snsql.from_connection(raw_connection, privacy=privacy, metadata=snsql_metadata)
+            else:
+                result_df = pd.DataFrame(raw_result.mappings())
+                reader = snsql.from_df(result_df, privacy=privacy, metadata=snsql_metadata)
             private_result = reader.execute(dp_query)
             header = tuple(str(x) for x in private_result[0])
             final_result = [dict(zip(header, row)) for row in private_result[1:]]
