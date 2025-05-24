@@ -49,22 +49,22 @@ MacOS or Linux:
 
 .. code-block:: console
 
-   $ export SRC_DSN="postgresql://someuser:somepassword@myserver.mydomain.com"
+   $ export SRC_DSN="postgresql://someuser:somepassword@myserver.mydomain.com:5432/db_name"
    $ export SRC_SCHEMA='myschema'
 
 Windows Command Shell:
 
 .. code-block:: console
 
-   $ set SRC_DSN "postgresql://someuser:somepassword@myserver.mydomain.com"
-   $ set SRC_SCHEMA "myschema"
+   $ set SRC_DSN=postgresql://someuser:somepassword@myserver.mydomain.com:5432/db_name
+   $ set SRC_SCHEMA=myschema
 
 Running from the ready-built Docker container, make an output directory then use that as the data volume like so (please use WSL for this on Windows):
 
 .. code-block:: console
 
    $ mkdir output
-   $ docker run --rm --user $(id -u):$(id -g) --network host -e SRC_SCHEMA=myschema -e DST_DSN=postgresql://someuser:somepassword@myserver.mydomain.com -itv ./output:data --pull always timband/ssg
+   $ docker run --rm --user $(id -u):$(id -g) --network host -e SRC_SCHEMA=myschema -e DST_DSN=postgresql://someuser:somepassword@myserver.mydomain.com:5432/db_name -itv ./output:data --pull always timband/ssg
 
 Now you can use the commands that use the source database (the ones beginning ``configure-`` and ``make-`` but not the ones beginning ``create-`` and ``remove-``).
 
@@ -328,14 +328,16 @@ Windows Command Shell:
 
 .. code-block:: console
 
-   $ set DST_DSN "postgresql://someuser:somepassword@myserver.mydomain.com/dst_db"
-   $ set DST_SCHEMA "myschema"
+   $ set DST_DSN=postgresql://someuser:somepassword@myserver.mydomain.com:5432/dst_db
+   $ set DST_SCHEMA=myschema
 
 Running from the ready-built Docker container, from within a directory holding only your ``.yaml`` and ``.yaml.gz`` files (please use WSL for this on Windows):
 
 .. code-block:: console
 
-   $ docker run --rm --user $(id -u):$(id -g) --network host -e DST_SCHEMA=myschema -e DST_DSN=postgresql://someuser:somepassword@myserver.mydomain.com/dst_db -itv .:data --pull always timband/ssg
+   $ docker run --rm --user $(id -u):$(id -g) --network host -e DST_SCHEMA=myschema -e DST_DSN=postgresql://someuser:somepassword@myserver.mydomain.com:5432/dst_db -itv .:data --pull always timband/ssg
+
+(Windows users will need to modify this docker command, perhaps removing the `--user` option and its argument?)
 
 Whichever we chose, now we can create the generators Python file:
 

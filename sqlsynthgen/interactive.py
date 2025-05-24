@@ -12,6 +12,15 @@ from sqlalchemy import Column, MetaData, Table, text
 from sqlsynthgen.generators import everything_factory, Generator, PredefinedGenerator
 from sqlsynthgen.utils import create_db_engine, primary_private_fks, table_is_private
 
+# Monkey patch pyreadline3 v3.5 so that it works with Python 3.13
+# Windows users can install pyreadline3 to get tab completion working
+try:
+    import readline
+    if not hasattr(readline, "backend"):
+        readline.backend = "readline"
+except:
+    pass
+
 logger = logging.getLogger(__name__)
 
 def or_default(v, d):
