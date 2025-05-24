@@ -7,6 +7,8 @@ ENV POETRY_VIRTUALENVS_PATH=/pypoetry/cache/virtualenv
 ENV SHELL=/bin/bash
 ENV HOME=/
 RUN poetry install
-RUN poetry run sqlsynthgen --install-completion bash
+SHELL ["/bin/bash", "-c"]
+# The redirect to /dev/null seems to help shellingham detect bash!
+RUN poetry run sqlsynthgen --install-completion > /dev/null
 WORKDIR /data
 CMD ["poetry", "--directory=/app", "shell"]
