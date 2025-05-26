@@ -124,6 +124,7 @@ Some of these functions take arguments, that we can assign like this:
 Anyway, we now need to remake the generators (``create-generators``) and re-run them (``create-data``):
 
 .. code-block:: console
+  
   $ sqlsynthgen create-generators --force
   $ sqlsynthgen create-data --num-passes 15
 

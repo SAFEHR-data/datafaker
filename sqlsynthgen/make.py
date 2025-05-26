@@ -671,7 +671,7 @@ def make_tables_file(
         engine,
         only=reflect_if,
     )
-    meta_dict = metadata_to_dict(metadata, db_dsn, engine.dialect)
+    meta_dict = metadata_to_dict(metadata, schema_name, engine)
 
     for table_name in metadata.tables.keys():
         table_config = tables_config.get(table_name, {})

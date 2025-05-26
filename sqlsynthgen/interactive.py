@@ -13,7 +13,8 @@ from sqlsynthgen.generators import everything_factory, Generator, PredefinedGene
 from sqlsynthgen.utils import create_db_engine, primary_private_fks, table_is_private
 
 # Monkey patch pyreadline3 v3.5 so that it works with Python 3.13
-# Windows users can install pyreadline3 to get tab completion working
+# Windows users can install pyreadline3 to get tab completion working.
+# See https://github.com/pyreadline3/pyreadline3/issues/37
 try:
     import readline
     if not hasattr(readline, "backend"):

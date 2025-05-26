@@ -8,12 +8,14 @@ To use SqlSynthGen, first install it.
 Make sure you have pipx installed. To do this on Windows:
 
 .. code-block:: console
+
    $ python -m pip install pipx
    $ python -m pipx ensurepath
 
 Windows users should also install `pyreadline3` so that tab completion works in the interactive commands:
 
 .. code-block:: console
+
    $ python -m pip install pyreadline3
 
 Then close your command shell and open another. Now you can use ``pipx``.

@@ -1,5 +1,5 @@
 import parsy
-from sqlalchemy import MetaData, Table, Column, Dialect, ForeignKey
+from sqlalchemy import Column, Dialect, Engine, ForeignKey, MetaData, Table
 from sqlalchemy.dialects import oracle, postgresql
 from sqlalchemy.sql import sqltypes, schema
 from sqlsynthgen.utils import make_foreign_key_name
@@ -188,7 +188,6 @@ def table_to_dict(table: Table, dialect: Dialect) -> table_t:
             str(column.key): column_to_dict(column, dialect)
             for (k, column) in table.columns.items()
         },
-        "schema": table.schema,
         "unique": [
             unique_to_dict(constraint)
             for constraint in table.constraints
@@ -206,21 +205,20 @@ def dict_to_table(name: str, meta: MetaData, table_dict: table_t) -> Table:
         *[ dict_to_unique(constraint)
             for constraint in table_dict.get("unique", [])
         ],
-        schema=table_dict.get("schema")
     )
 
-def metadata_to_dict(meta: MetaData, dsn: str, dialect: Dialect) -> dict[str, table_t]:
+def metadata_to_dict(meta: MetaData, schema_name: str | None, engine: Engine) -> dict[str, table_t]:
     """
     Converts a SQL Alchemy MetaData object into
     a Python object ready for conversion to YAML.
     """
     return {
         "tables": {
-            str(table.name): table_to_dict(table, dialect)
+            str(table.name): table_to_dict(table, engine.dialect)
             for (k, table) in meta.tables.items()
         },
-        "dsn": dsn,
-        "schema": meta.schema
+        "dsn": str(engine.url),
+        "schema": schema_name,
     }
 
 def dict_to_metadata(obj: dict[str, table_t]) -> MetaData:
@@ -228,8 +226,7 @@ def dict_to_metadata(obj: dict[str, table_t]) -> MetaData:
     Converts a dict to a SQL Alchemy MetaData object.
     """
     table_dict = obj.get("tables", {})
-    schema = obj.get("schema", "public")
-    meta = MetaData(schema=schema)
+    meta = MetaData()
     for (k, td) in table_dict.items():
         dict_to_table(k, meta, td)
     return meta

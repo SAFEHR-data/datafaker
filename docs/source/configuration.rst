@@ -7,6 +7,7 @@ Throughout the docs, we will refer to this file as ``config.yaml`` but it can be
 You can generate an example configuration file, based on your source database and filled with only default values (therefore you can safely delete any parts of the generated configuration file you don't need) like this:
 
 .. code-block:: shell
+
    sqlsynthgen generate-config
 
 Below, we see the schema for the configuration file.
