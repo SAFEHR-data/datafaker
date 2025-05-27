@@ -9,7 +9,6 @@ import logging
 import math
 import mimesis
 import mimesis.locales
-import psycopg2
 import re
 import sqlalchemy
 from sqlalchemy import Column, Engine, text
