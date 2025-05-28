@@ -131,7 +131,7 @@ class ConfigureTablesTests(RequiresDBTestCase):
             self.assertTrue(tables["unique_constraint_test"].get("primary_private", False))
 
     def test_configure_tables(self) -> None:
-        """Test that we can change columns to ignore, vocab or normal."""
+        """Test that we can change columns to ignore, vocab or generate."""
         metadata = MetaData()
         metadata.reflect(self.engine)
         config = {
@@ -152,7 +152,7 @@ class ConfigureTablesTests(RequiresDBTestCase):
         }
         with TestTableCmd(self.dsn, self.schema_name, metadata, config) as tc:
             tc.do_next("unique_constraint_test")
-            tc.do_normal("")
+            tc.do_generate("")
             tc.do_next("person")
             tc.do_vocabulary("")
             tc.do_next("mitigation_type")
@@ -266,7 +266,7 @@ class ConfigureTablesTests(RequiresDBTestCase):
                 if args[2] == "person":
                     self.assertFalse(person_listed)
                     person_listed = True
-                    self.assertEqual(args[0], " ")
+                    self.assertEqual(args[0], "G")
                     self.assertEqual(args[1], "->V")
                 elif args[2] == "unique_constraint_test":
                     self.assertFalse(unique_constraint_test_listed)
@@ -279,11 +279,93 @@ class ConfigureTablesTests(RequiresDBTestCase):
                     self.assertEqual(args[0], "I")
                     self.assertEqual(args[1], "   ")
                 else:
-                    self.assertEqual(args[0], " ")
+                    self.assertEqual(args[0], "G")
                     self.assertEqual(args[1], "   ")
             self.assertTrue(person_listed)
             self.assertTrue(unique_constraint_test_listed)
             self.assertTrue(no_pk_test_listed)
+
+
+class ConfigureTablesInstrumentsTests(RequiresDBTestCase):
+    """ Testing configure-tables with the instrument.sql database. """
+    dump_file_path = "instrument.sql"
+    database_name = "instrument"
+    schema_name = "public"
+
+    def test_sanity_checks_both(self):
+        metadata = MetaData()
+        metadata.reflect(self.engine)
+        config = {
+            "tables": {
+                "model": {
+                    "vocabulary_table": True,
+                },
+                "manufacturer": {
+                    "ignore": True,
+                },
+                "player": {
+                    "num_rows_per_pass": 0,
+                },
+            },
+        }
+        with TestTableCmd(self.dsn, self.schema_name, metadata, config) as tc:
+            tc.reset()
+            tc.do_quit("")
+            self.assertEqual(tc.messages[0], (TableCmd.NOTE_TEXT_NO_CHANGES, (), {}))
+            self.assertEqual(tc.messages[1], (TableCmd.WARNING_TEXT_PROBLEMS_EXIST, (), {}))
+            self.assertEqual(tc.messages[2], (TableCmd.WARNING_TEXT_VOCAB_TO_NON_VOCAB, ("model", "manufacturer"), {}))
+            self.assertEqual(tc.messages[3], (TableCmd.WARNING_TEXT_POTENTIAL_PROBLEMS, (), {}))
+            self.assertEqual(tc.messages[4], (TableCmd.WARNING_TEXT_NON_EMPTY_TO_EMPTY, ("signature_model", "player"), {}))
+
+    def test_sanity_checks_warnings_only(self):
+        metadata = MetaData()
+        metadata.reflect(self.engine)
+        config = {
+            "tables": {
+                "model": {
+                    "vocabulary_table": True,
+                },
+                "manufacturer": {
+                    "ignore": True,
+                },
+                "player": {
+                    "num_rows_per_pass": 0,
+                },
+            },
+        }
+        with TestTableCmd(self.dsn, self.schema_name, metadata, config) as tc:
+            tc.do_next("manufacturer")
+            tc.do_vocabulary("")
+            tc.reset()
+            tc.do_quit("")
+            self.assertEqual(tc.messages[0], (TableCmd.NOTE_TEXT_CHANGING, ("manufacturer", "ignore", "vocabulary"), {}))
+            self.assertEqual(tc.messages[1], (TableCmd.WARNING_TEXT_POTENTIAL_PROBLEMS, (), {}))
+            self.assertEqual(tc.messages[2], (TableCmd.WARNING_TEXT_NON_EMPTY_TO_EMPTY, ("signature_model", "player"), {}))
+
+    def test_sanity_checks_errors_only(self):
+        metadata = MetaData()
+        metadata.reflect(self.engine)
+        config = {
+            "tables": {
+                "model": {
+                    "vocabulary_table": True,
+                },
+                "manufacturer": {
+                    "ignore": True,
+                },
+                "player": {
+                    "num_rows_per_pass": 0,
+                },
+            },
+        }
+        with TestTableCmd(self.dsn, self.schema_name, metadata, config) as tc:
+            tc.do_next("signature_model")
+            tc.do_empty("")
+            tc.reset()
+            tc.do_quit("")
+            self.assertEqual(tc.messages[0], (TableCmd.NOTE_TEXT_CHANGING, ("signature_model", "generate", "empty"), {}))
+            self.assertEqual(tc.messages[1], (TableCmd.WARNING_TEXT_PROBLEMS_EXIST, (), {}))
+            self.assertEqual(tc.messages[2], (TableCmd.WARNING_TEXT_VOCAB_TO_NON_VOCAB, ("model", "manufacturer"), {}))
 
 
 class TestGeneratorCmd(GeneratorCmd, TestDbCmdMixin):
@@ -613,6 +695,23 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             }
             self.assertEqual(src_stats["kraken"], config["src-stats"][0]["query"])
             self.assertTrue(gc.config["tables"]["string"]["primary_private"])
+
+    def test_empty_tables_are_not_configured(self):
+        """ Test that tables marked as empty are not configured. """
+        metadata = MetaData()
+        metadata.reflect(self.engine)
+        config = {
+            "tables": {
+                "string": {
+                    "num_rows_per_pass": 0,
+                }
+            },
+        }
+        with TestGeneratorCmd(self.dsn, self.schema_name, metadata, copy.deepcopy(config)) as gc:
+            gc.do_tables("")
+            table_names = { m[1][0] for m in gc.messages }
+            self.assertIn("model", table_names)
+            self.assertNotIn("string", table_names)
 
 
 class TestMissingnessCmd(MissingnessCmd, TestDbCmdMixin):

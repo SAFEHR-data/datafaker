@@ -28,14 +28,14 @@ def or_default(v, d):
     return d if v is None else v
 
 class TableType(Enum):
-    NORMAL = "normal"
+    GENERATE = "generate"
     IGNORE = "ignore"
     VOCABULARY = "vocabulary"
     PRIVATE = "private"
     EMPTY = "empty"
 
 TYPE_LETTER = {
-    TableType.NORMAL: " ",
+    TableType.GENERATE: "G",
     TableType.IGNORE: "I",
     TableType.VOCABULARY: "V",
     TableType.PRIVATE: "P",
@@ -43,7 +43,7 @@ TYPE_LETTER = {
 }
 
 TYPE_PROMPT = {
-    TableType.NORMAL: "(table: {}) ",
+    TableType.GENERATE: "(table: {}) ",
     TableType.IGNORE: "(table: {} (ignore)) ",
     TableType.VOCABULARY: "(table: {} (vocab)) ",
     TableType.PRIVATE: "(table: {} (private)) ",
@@ -176,7 +176,16 @@ class DbCmd(ABC, cmd.Cmd):
             for name, column in metadata_table.columns.items()
             if column.nullable
         ]
-
+    def find_entry_index_by_table_name(self, table_name) -> int | None:
+        return next(
+            (i for i,entry in enumerate(self.table_entries) if entry.name == table_name),
+            None,
+        )
+    def find_entry_by_table_name(self, table_name) -> TableEntry | None:
+        for e in self.table_entries:
+            if e.name == table_name:
+                return e
+        return None
     def do_counts(self, _arg):
         "Report the column names with the counts of nulls in them"
         if len(self.table_entries) <= self.table_index:
@@ -266,15 +275,21 @@ class TableCmdTableEntry(TableEntry):
     new_type: TableType
 
 class TableCmd(DbCmd):
-    intro = "Interactive table configuration (ignore, vocabulary, private, normal or empty). Type ? for help.\n"
+    intro = "Interactive table configuration (ignore, vocabulary, private, generate or empty). Type ? for help.\n"
     doc_leader = """Use the commands 'ignore', 'vocabulary',
-'private', 'empty' or 'normal' to set the table's type. Use 'next' or
+'private', 'empty' or 'generate' to set the table's type. Use 'next' or
 'previous' to change table. Use 'tables' and 'columns' for
 information about the database. Use 'data', 'peek', 'select' or
 'count' to see some data contained in the current table. Use 'quit'
 to exit this program."""
     prompt = "(tableconf) "
     file = None
+    WARNING_TEXT_VOCAB_TO_NON_VOCAB = "Vocabulary table {0} references non-vocabulary table {1}"
+    WARNING_TEXT_NON_EMPTY_TO_EMPTY = "Empty table {1} referenced from non-empty table {0}. {1} will need stories."
+    WARNING_TEXT_PROBLEMS_EXIST = "WARNING: The following table types have problems:"
+    WARNING_TEXT_POTENTIAL_PROBLEMS = "NOTE: The following table types might cause problems later:"
+    NOTE_TEXT_NO_CHANGES = "You have made no changes."
+    NOTE_TEXT_CHANGING = "Changing {0} from {1} to {2}"
 
     def make_table_entry(self, name: str, table: Mapping) -> TableEntry:
         if table.get("ignore", False):
@@ -285,7 +300,7 @@ to exit this program."""
             return TableCmdTableEntry(name, TableType.PRIVATE, TableType.PRIVATE)
         if table.get("num_rows_per_pass", 1) == 0:
             return TableCmdTableEntry(name, TableType.EMPTY, TableType.EMPTY)
-        return TableCmdTableEntry(name, TableType.NORMAL, TableType.NORMAL)
+        return TableCmdTableEntry(name, TableType.GENERATE, TableType.GENERATE)
 
     def __init__(self, src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping):
         super().__init__(src_dsn, src_schema, metadata, config)
@@ -303,6 +318,7 @@ to exit this program."""
             entry.new_type = t_type
     def _copy_entries(self) -> None:
         for entry in self.table_entries:
+            entry: TableCmdTableEntry
             if entry.old_type != entry.new_type:
                 table = self.get_table_config(entry.name)
                 if entry.old_type == TableType.EMPTY and table.get("num_rows_per_pass", 1) == 0:
@@ -330,6 +346,51 @@ to exit this program."""
                     table.pop("primary_private", None)
                 self.set_table_config(entry.name, table)
 
+    def _get_referenced_tables(self, from_table_name: str) -> set[str]:
+        from_meta = self.metadata.tables[from_table_name]
+        return {
+            fk.column.table.name
+            for col in from_meta.columns
+            for fk in col.foreign_keys
+        }
+
+    def _sanity_check_failures(self) -> list[tuple[str, str, str]]:
+        """ Find tables that reference each other that should not given their types. """
+        failures = []
+        for from_entry in self.table_entries:
+            from_entry: TableCmdTableEntry
+            from_t = from_entry.new_type
+            if from_t == TableType.VOCABULARY:
+                referenced = self._get_referenced_tables(from_entry.name)
+                for ref in referenced:
+                    to_entry = self.find_entry_by_table_name(ref)
+                    if to_entry is not None and to_entry.new_type != TableType.VOCABULARY:
+                        failures.append((
+                            self.WARNING_TEXT_VOCAB_TO_NON_VOCAB,
+                            from_entry.name,
+                            to_entry.name,
+                        ))
+        return failures
+
+    def _sanity_check_warnings(self) -> list[tuple[str, str, str]]:
+        """ Find tables that reference each other that might cause problems given their types. """
+        warnings = []
+        for from_entry in self.table_entries:
+            from_entry: TableCmdTableEntry
+            from_t = from_entry.new_type
+            if from_t in {TableType.GENERATE, TableType.PRIVATE}:
+                referenced = self._get_referenced_tables(from_entry.name)
+                for ref in referenced:
+                    to_entry = self.find_entry_by_table_name(ref)
+                    if to_entry is not None and to_entry.new_type in {TableType.EMPTY, TableType.IGNORE}:
+                        warnings.append((
+                            self.WARNING_TEXT_NON_EMPTY_TO_EMPTY,
+                            from_entry.name,
+                            to_entry.name,
+                        ))
+        return warnings
+
+
     def do_quit(self, _arg):
         "Check the updates, save them if desired and quit the configurer."
         count = 0
@@ -337,13 +398,23 @@ to exit this program."""
             if entry.old_type != entry.new_type:
                 count += 1
                 self.print(
-                    "Changing {0} from {1} to {2}",
+                    self.NOTE_TEXT_CHANGING,
                     entry.name,
                     entry.old_type.value,
                     entry.new_type.value,
                 )
         if count == 0:
-            self.print("You have made no changes.")
+            self.print(self.NOTE_TEXT_NO_CHANGES)
+        failures = self._sanity_check_failures()
+        if failures:
+            self.print(self.WARNING_TEXT_PROBLEMS_EXIST)
+            for (text, from_t, to_t) in failures:
+                self.print(text, from_t, to_t)
+        warnings = self._sanity_check_warnings()
+        if warnings:
+            self.print(self.WARNING_TEXT_POTENTIAL_PROBLEMS)
+            for (text, from_t, to_t) in warnings:
+                self.print(text, from_t, to_t)
         reply = self.ask_save()
         if reply == "yes":
             self._copy_entries()
@@ -362,7 +433,7 @@ to exit this program."""
         "'next' = go to the next table, 'next tablename' = go to table 'tablename'"
         if arg:
             # Find the index of the table called _arg, if any
-            index = next((i for i,entry in enumerate(self.table_entries) if entry.name == arg), None)
+            index = self.find_entry_index_by_table_name(arg)
             if index is None:
                 self.print(self.ERROR_NO_SUCH_TABLE, arg)
                 return
@@ -394,10 +465,10 @@ to exit this program."""
         self.set_type(TableType.PRIVATE)
         self.print("Table {} set to be a primary private table", self.table_name())
         self.next_table()
-    def do_normal(self, _arg):
+    def do_generate(self, _arg):
         "Set the current table as neither a vocabulary table nor ignored nor primary private, and go to the next table"
-        self.set_type(TableType.NORMAL)
-        self.print("Table {} normal", self.table_name())
+        self.set_type(TableType.GENERATE)
+        self.print("Table {} generate", self.table_name())
         self.next_table()
     def do_empty(self, _arg):
         "Set the current table as empty; no generators will be run for it"
@@ -555,7 +626,7 @@ data from the database. Use 'quit' to exit this tool."""
             return None
         if table.get("vocabulary_table", False):
             return None
-        if table.get("num_passes", 1) == 0:
+        if table.get("num_rows_per_pass", 1) == 0:
             return None
         mgs = table.get("missingness_generators", [])
         old = None
@@ -772,7 +843,7 @@ information about the columns in the current table. Use 'peek',
             return None
         if table.get("vocabulary_table", False):
             return None
-        if table.get("num_passes", 1) == 0:
+        if table.get("num_rows_per_pass", 1) == 0:
             return None
         metadata_table = self.metadata.tables[table_name]
         columns = frozenset(metadata_table.columns.keys())
