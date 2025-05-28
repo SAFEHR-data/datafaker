@@ -88,19 +88,19 @@ Next you can use the ``configure-tables`` command categorize each of your source
 * ``ignore`` for tables that should not be present in the destination database
 * ``empty`` for tables that should contain no data, but be present (also for tables that should be populated entirely from stories, see later)
 * ``vocabulary`` for tables that should be reproduced exactly in the destination database
-* ``normal`` for everything else
+* ``generate`` for everything else
 
 This command will start an interactive command shell. Don't be intimidated, just type ``?`` (and press return) to get help:
 
 .. code-block:: console
 
    $ sqlsynthgen configure-tables
-   Interactive table configuration (ignore, vocabulary, private, normal or empty). Type ? for help.
+   Interactive table configuration (ignore, vocabulary, private, generate or empty). Type ? for help.
 
    (table: myfirsttable) ?
 
    Use the commands 'ignore', 'vocabulary',
-   'private', 'empty' or 'normal' to set the table's type. Use 'next' or
+   'private', 'empty' or 'generate' to set the table's type. Use 'next' or
    'previous' to change table. Use 'tables' and 'columns' for
    information about the database. Use 'data', 'peek', 'select' or
    'count' to see some data contained in the current table. Use 'quit'
@@ -108,7 +108,7 @@ This command will start an interactive command shell. Don't be intimidated, just
    Documented commands (type help <topic>):
    ========================================
    columns  data   help    next    peek      private  select  vocabulary
-   counts   empty  ignore  normal  previous  quit     tables
+   counts   empty  ignore  generate  previous  quit     tables
 
    (table: myfirsttable) 
 
@@ -147,7 +147,7 @@ You can use ``tables`` to list all the tables and any configuration you have alr
 Setting the type of the table
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Use ``private``, ``ignore``, ``empty``, ``vocabulary`` or ``normal`` to set the type of the table. Any you don't set will be ``normal``.
+Use ``private``, ``ignore``, ``empty``, ``vocabulary`` or ``generate`` to set the type of the table. Any you don't set will be ``generate``.
 If you have previously run ``configure-tables`` (or edited the ``config.yaml`` file yourself!) the previously set types will be preserved unless you change them.
 
 Examining the data
@@ -181,7 +181,7 @@ You must type one of these three options in full but tab completion is available
 Configuring column generators
 -----------------------------
 
-The ``configure-generators`` command is similar to ``configure-tables``, but here you are configuring each column in ``normal`` and  ``private`` tables.
+The ``configure-generators`` command is similar to ``configure-tables``, but here you are configuring each column in ``generate`` and  ``private`` tables.
 
 The ``next``, ``previous``, ``peek``, ``columns``, ``select``, ``tables``, ``counts``, ``help`` and ``quit`` work as before, but ``next`` allows you to visit not just a different table but also any column with the ``next table.column`` syntax.
 
