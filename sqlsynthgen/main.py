@@ -13,6 +13,7 @@ from jsonschema.validators import validate
 from typer import Argument, Option, Typer
 
 from sqlsynthgen.create import create_db_data, create_db_tables, create_db_vocab
+from sqlsynthgen.dump import dump_db_tables
 from sqlsynthgen.interactive import (
     update_config_tables,
     update_config_generators,
@@ -383,6 +384,27 @@ def configure_generators(
     content = yaml.dump(config_updated)
     config_file_path.write_text(content, encoding="utf-8")
     logger.debug("Generators configured in %s.", config_file)
+
+
+@app.command()
+def dump_data(
+    config_file: Optional[str] = Option(CONFIG_FILENAME, help="Path of the configuration file to alter"),
+    orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
+    table: str = Argument(help="The table to dump"),
+    output: str | None = Option(None, help="output CSV file name"),
+):
+    """ Dump a whole table as a CSV file (or to the console) from the destination database. """
+    settings = get_settings()
+    dst_dsn: str = settings.dst_dsn or ""
+    assert dst_dsn != "", "Missing DST_DSN setting."
+    schema_name = settings.dst_schema
+    config = read_config_file(config_file) if config_file is not None else {}
+    metadata = load_metadata(orm_file, config)
+    if output == None:
+        dump_db_tables(metadata, dst_dsn, schema_name, table, sys.stdout)
+        return
+    with open(output, 'wt', newline='') as out:
+        dump_db_tables(metadata, dst_dsn, schema_name, table, out)
 
 
 @app.command()
