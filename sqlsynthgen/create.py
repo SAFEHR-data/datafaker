@@ -3,7 +3,7 @@ from collections import Counter
 import random
 from typing import Any, Generator, Iterable, Iterator, Mapping, Sequence, Tuple
 
-from sqlalchemy import Connection, insert
+from sqlalchemy import Connection, insert, inspect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import (
@@ -38,8 +38,12 @@ def create_db_tables(metadata: MetaData) -> None:
     if settings.dst_schema:
         schema_name = settings.dst_schema
         with engine.connect() as connection:
-            connection.execute(CreateSchema(schema_name, if_not_exists=True))
-            connection.commit()
+            # Do not try to create a schema if the schema already exists.
+            # This is necessary if the user does not have schema creation privileges
+            # but does have a schema they are able to write to.
+            if not inspect(connection).has_schema(schema_name):
+                connection.execute(CreateSchema(schema_name, if_not_exists=True))
+                connection.commit()
 
         # Recreate the engine, this time with a schema specified
         engine = get_sync_engine(create_db_engine(dst_dsn, schema_name=schema_name))
