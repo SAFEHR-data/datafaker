@@ -22,8 +22,10 @@ Contents:
    :maxdepth: 2
 
    installation
+   docker
    quickstart
    introduction
+   orm
    loan_data
    health_data
    configuration
