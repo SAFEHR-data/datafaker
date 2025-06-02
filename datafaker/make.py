@@ -3,10 +3,10 @@ import asyncio
 import decimal
 import inspect
 from dataclasses import dataclass, field
-import math
+from datetime import datetime
 from pathlib import Path
 from typing import (
-    Any, Callable, Iterable, Final, Mapping, Optional, Self, Sequence, Tuple
+    Any, Callable, Final, Mapping, Optional, Sequence, Tuple
 )
 import yaml
 
@@ -778,12 +778,19 @@ async def make_src_stats(
         return await make_src_stats_connection(config, db_conn, metadata)
 
 async def make_src_stats_connection(config: Mapping, db_conn: DbConnection, metadata: MetaData):
+    date_string = datetime.today().strftime("%Y-%m-%d %H:%M:%S")
     query_blocks = config.get("src-stats", [])
     results = await asyncio.gather(
         *[db_conn.execute_query(query_block) for query_block in query_blocks]
     )
     src_stats = {
-        query_block["name"]: fix_types(result)
+        query_block["name"]: {
+            "queries": {
+                "date": date_string,
+                "query": query_block["query"],
+            },
+            "results": fix_types(result),
+        }
         for query_block, result in zip(query_blocks, results)
     }
 

@@ -687,7 +687,7 @@ data from the database. Use 'quit' to exit this tool."""
                 src_stat_key = "missing_auto__{0}__0".format(entry.name)
                 table["missingness_generators"] = [{
                     "name": entry.new_type.name,
-                    "kwargs": {"patterns": 'SRC_STATS["{0}"]'.format(src_stat_key)},
+                    "kwargs": {"patterns": 'SRC_STATS["{0}"]["results"]'.format(src_stat_key)},
                     "columns": entry.new_type.columns,
                 }]
                 src_stats.append({
@@ -1282,7 +1282,7 @@ information about the columns in the current table. Use 'peek',
         vals = []
         src_stat2kwarg = { v: k for k, v in gen.nominal_kwargs().items() }
         for n in sacs.keys():
-            src_stat = f'SRC_STATS["auto__{table_name}"][0]["{n}"]'
+            src_stat = f'SRC_STATS["auto__{table_name}"]["results"][0]["{n}"]'
             if src_stat in src_stat2kwarg:
                 ak = src_stat2kwarg[src_stat]
                 if ak in kwa:
@@ -1290,7 +1290,7 @@ information about the columns in the current table. Use 'peek',
                 else:
                     logger.warning("actual_kwargs for %s does not report %s", gen.function_name(), ak)
             else:
-                logger.warning('nominal_kwargs for %s does not have a value SRC_STATS["auto__%s"][0]["%s"]', gen.function_name(), table_name, n)
+                logger.warning('nominal_kwargs for %s does not have a value SRC_STATS["auto__%s"]["results"][0]["%s"]', gen.function_name(), table_name, n)
         select_q = self._get_aggregate_query([gen], table_name)
         self.print("{0}; providing the following values: {1}", select_q, vals)
 
