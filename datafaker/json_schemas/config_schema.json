@@ -28,6 +28,13 @@
             "description": "A name for the query, which will be used in the stats file.",
             "type": "string"
           },
+          "comments": {
+            "description": "Comments to be copied into the src-stats.yaml file describing the query results.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "query": {
             "description": "A SQL query.",
             "type": "string"

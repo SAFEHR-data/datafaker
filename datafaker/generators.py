@@ -49,22 +49,29 @@ class Generator(ABC):
         The kwargs the generator wants to be called with.
         The values will tend to be references to something in the src-stats.yaml
         file.
-        For example {"avg_age": 'SRC_STATS["auto__patient"][0]["age_mean"]'} will
+        For example {"avg_age": 'SRC_STATS["auto__patient"]["results"][0]["age_mean"]'} will
         provide the value stored in src-stats.yaml as 
-        SRC_STATS["auto__patient"][0]["age_mean"] as the "avg_age" argument
+        SRC_STATS["auto__patient"]["results"][0]["age_mean"] as the "avg_age" argument
         to the generator function.
         """
 
-    def select_aggregate_clauses(self) -> dict[str, str]:
+    def select_aggregate_clauses(self) -> dict[str, dict[str, str]]:
         """
         SQL clauses to add to a SELECT ... FROM {table} query.
 
         Will add to SRC_STATS["auto__{table}"]
-        For example {"count": "COUNT(*)", "avg_thiscolumn": "AVG(thiscolumn)"}
+        For example {
+            "count": {
+                "clause": "COUNT(*)",
+                "comment": "number of rows in table {table}"
+            }, "avg_thiscolumn": {
+                "clause": "AVG(thiscolumn)",
+                "comment": "Average value of thiscolumn in table {table}"
+        }}
         will make the clause become:
         "SELECT COUNT(*) AS count, AVG(thiscolumn) AS avg_thiscolumn FROM thistable"
-        and this will populate SRC_STATS["auto__thistable"][0]["count"] and
-        SRC_STATS["auto__thistable"][0]["avg_thiscolumn"] in the src-stats.yaml file.
+        and this will populate SRC_STATS["auto__thistable"]["results"][0]["count"] and
+        SRC_STATS["auto__thistable"]["results"][0]["avg_thiscolumn"] in the src-stats.yaml file.
         """
         return {}
 
@@ -72,11 +79,14 @@ class Generator(ABC):
         """
         SQL queries to add to SRC_STATS.
 
-        Should be used for queries that do not follow the SELECT ... FROM table format,
-        because these should use select_aggregate_clauses.
+        Should be used for queries that do not follow the SELECT ... FROM table format
+        using aggregate queries, because these should use select_aggregate_clauses.
 
-        For example {"myquery", "SELECT one, too AS two FROM mytable WHERE too > 1"}
-        will populate SRC_STATS["myquery"][0]["one"] and SRC_STATS["myquery"][0]["two"]
+        For example {"myquery": {
+            "query": "SELECT one, too AS two FROM mytable WHERE too > 1",
+            "comment": "big enough one and two from table mytable"
+        }}
+        will populate SRC_STATS["myquery"]["results"][0]["one"] and SRC_STATS["myquery"]["results"][0]["two"]
         in the src-stats.yaml file.
 
         Keys should be chosen to minimize the chances of clashing with other queries,
@@ -140,7 +150,8 @@ class PredefinedGenerator(Generator):
         for sstat in config.get("src-stats", []):
             name: str = sstat["name"]
             dpq = sstat.get("dp-query", None)
-            query = sstat.get("query", dpq)  #... should not combine these probably?
+            query = sstat.get("query", dpq)  #... should we really be combining query and dp-query?
+            comments = sstat.get("comments", [])
             if name in self._src_stats_mentioned:
                 logger.debug("Found a src-stats entry for %s", name)
                 # This query is one that this generator is interested in
@@ -152,15 +163,21 @@ class PredefinedGenerator(Generator):
                         self.AS_CLAUSE_RE.match(clause)
                         for clause in sam.group(1).split(',')
                     ]
-                    self._select_aggregate_clauses.update({
-                        sac.group(2): sac.group(1)
-                        for sac in sacs
-                        if sac is not None
-                    })
+                    # Work out what select_aggregate_clauses this represents
+                    for sac in sacs:
+                        if sac is not None:
+                            comment = comments.pop() if comments else None
+                            self._select_aggregate_clauses[sac.group(2)] = {
+                                "clause": sac.group(1),
+                                "comment": comment,
+                            }
                 else:
                     # some other name, so must be a custom query
                     logger.debug("Custom query %s is '%s'", name, query)
-                    self._custom_queries[name] = query
+                    self._custom_queries[name] = {
+                        "query": query,
+                        "comment": comments[0] if comments else None,
+                    }
 
     def function_name(self) -> str:
         return self._name
@@ -168,10 +185,10 @@ class PredefinedGenerator(Generator):
     def nominal_kwargs(self) -> dict[str, str]:
         return self._kwn
 
-    def select_aggregate_clauses(self) -> dict[str, str]:
+    def select_aggregate_clauses(self) -> dict[str, dict[str, str]]:
         return self._select_aggregate_clauses
 
-    def custom_queries(self) -> dict[str, str]:
+    def custom_queries(self) -> dict[str, dict[str, str]]:
         return self._custom_queries
 
     def actual_kwargs(self) -> dict[str, any]:
@@ -383,18 +400,24 @@ class MimesisDateTimeGenerator(MimesisGeneratorBase):
         )]
     def nominal_kwargs(self):
         return {
-            "start": f'SRC_STATS["auto__{self._column.table.name}"][0]["{self._column.name}__start"]',
-            "end": f'SRC_STATS["auto__{self._column.table.name}"][0]["{self._column.name}__end"]',
+            "start": f'SRC_STATS["auto__{self._column.table.name}"]["results"][0]["{self._column.name}__start"]',
+            "end": f'SRC_STATS["auto__{self._column.table.name}"]["results"][0]["{self._column.name}__end"]',
         }
     def actual_kwargs(self):
         return {
             "start": self._start,
             "end": self._end,
         }
-    def select_aggregate_clauses(self) -> dict[str, str]:
+    def select_aggregate_clauses(self) -> dict[str, dict[str, str]]:
         return {
-            f"{self._column.name}__start": self._min_year,
-            f"{self._column.name}__end": self._max_year,
+            f"{self._column.name}__start": {
+                "clause": self._min_year,
+                "comment": f"Earliest year found for column {self._column.name} in table {self._column.table.name}",
+            },
+            f"{self._column.name}__end": {
+                "clause": self._max_year,
+                "comment": f"Latest year found for column {self._column.name} in table {self._column.table.name}",
+            },
         }
     def generate_data(self, count):
         return [
@@ -403,12 +426,19 @@ class MimesisDateTimeGenerator(MimesisGeneratorBase):
         ]
 
 
+def get_column_type(column: Column):
+    try:
+        return column.type.as_generic()
+    except NotImplementedError:
+        return column.type
+
+
 class MimesisStringGeneratorFactory(GeneratorFactory):
     """
     All Mimesis generators that return strings.
     """
     def get_generators(self, column: Column, engine: Engine):
-        if not isinstance(column.type.as_generic(), String):
+        if not isinstance(get_column_type(column), String):
             return []
         try:
             buckets = Buckets.make_buckets(
@@ -463,7 +493,7 @@ class MimesisFloatGeneratorFactory(GeneratorFactory):
     All Mimesis generators that return floating point numbers.
     """
     def get_generators(self, column: Column, _engine: Engine):
-        if not isinstance(column.type.as_generic(), Numeric):
+        if not isinstance(get_column_type(column), Numeric):
             return []
         return list(map(MimesisGenerator, [
             "person.height",
@@ -475,7 +505,7 @@ class MimesisDateGeneratorFactory(GeneratorFactory):
     All Mimesis generators that return dates.
     """
     def get_generators(self, column: Column, engine: Engine):
-        ct = column.type.as_generic()
+        ct = get_column_type(column)
         if not isinstance(ct, Date):
             return []
         return MimesisDateTimeGenerator.make_singleton(column, engine, "datetime.date")
@@ -486,7 +516,7 @@ class MimesisDateTimeGeneratorFactory(GeneratorFactory):
     All Mimesis generators that return datetimes.
     """
     def get_generators(self, column: Column, engine: Engine):
-        ct = column.type.as_generic()
+        ct = get_column_type(column)
         if not isinstance(ct, DateTime):
             return []
         return MimesisDateTimeGenerator.make_singleton(column, engine, "datetime.datetime")
@@ -497,7 +527,7 @@ class MimesisTimeGeneratorFactory(GeneratorFactory):
     All Mimesis generators that return times.
     """
     def get_generators(self, column: Column, _engine: Engine):
-        ct = column.type.as_generic()
+        ct = get_column_type(column)
         if not isinstance(ct, Time):
             return []
         return [MimesisGenerator("datetime.time")]
@@ -508,7 +538,7 @@ class MimesisIntegerGeneratorFactory(GeneratorFactory):
     All Mimesis generators that return integers.
     """
     def get_generators(self, column: Column, _engine: Engine):
-        ct = column.type.as_generic()
+        ct = get_column_type(column)
         if not isinstance(ct, Numeric) and not isinstance(ct, Integer):
             return []
         return [MimesisGenerator("person.weight")]
@@ -528,8 +558,8 @@ class ContinuousDistributionGenerator(Generator):
         self.buckets = buckets
     def nominal_kwargs(self):
         return {
-            "mean": f'SRC_STATS["auto__{self.table_name}"][0]["mean__{self.column_name}"]',
-            "sd": f'SRC_STATS["auto__{self.table_name}"][0]["stddev__{self.column_name}"]',
+            "mean": f'SRC_STATS["auto__{self.table_name}"]["results"][0]["mean__{self.column_name}"]',
+            "sd": f'SRC_STATS["auto__{self.table_name}"]["results"][0]["stddev__{self.column_name}"]',
         }
     def actual_kwargs(self):
         if self.buckets is None:
@@ -538,12 +568,18 @@ class ContinuousDistributionGenerator(Generator):
             "mean": self.buckets.mean,
             "sd": self.buckets.stddev,
         }
-    def select_aggregate_clauses(self):
+    def select_aggregate_clauses(self) -> dict[str, dict[str, str]]:
         clauses = super().select_aggregate_clauses()
         return {
             **clauses,
-            f"mean__{self.column_name}": f"AVG({self.column_name})",
-            f"stddev__{self.column_name}": f"STDDEV({self.column_name})",
+            f"mean__{self.column_name}": {
+                "clause": f"AVG({self.column_name})",
+                "comment": f"Mean of {self.column_name} from table {self.table_name}",
+            },
+            f"stddev__{self.column_name}": {
+                "clause": f"STDDEV({self.column_name})",
+                "comment": f"Standard deviation of {self.column_name} from table {self.table_name}",
+            },
         }
     def fit(self, default=None):
         if self.buckets is None:
@@ -578,7 +614,7 @@ class ContinuousDistributionGeneratorFactory(GeneratorFactory):
     All generators that want an average and standard deviation.
     """
     def get_generators(self, column: Column, engine: Engine):
-        ct = column.type.as_generic()
+        ct = get_column_type(column)
         if not isinstance(ct, Numeric) and not isinstance(ct, Integer):
             return []
         column_name = column.name
@@ -616,19 +652,22 @@ class ChoiceGenerator(Generator):
         self._fit = fit_from_buckets(counts, estimated_counts)
     def nominal_kwargs(self):
         return {
-            "a": f'SRC_STATS["auto__{self.table_name}__{self.column_name}"]',
+            "a": f'SRC_STATS["auto__{self.table_name}__{self.column_name}"]["results"]',
         }
     def actual_kwargs(self):
         return {
             "a": self.values,
         }
-    def custom_queries(self):
+    def custom_queries(self) -> dict[str, dict[str, str]]:
         qs = super().custom_queries()
         t = self.table_name
         c = self.column_name
         return {
             **qs,
-            f"auto__{t}__{c}": f"SELECT {c} AS value FROM {t} GROUP BY value ORDER BY COUNT({c}) DESC",
+            f"auto__{t}__{c}": {
+                "query": f"SELECT {c} AS value FROM {t} GROUP BY value ORDER BY COUNT({c}) DESC",
+                "comment": f"All the values that appear in column {c} of table {t}",
+            }
         }
     def fit(self, default=None):
         return default if self._fit is None else self._fit

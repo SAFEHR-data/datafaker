@@ -150,3 +150,5 @@ orm.yaml
 src-stats.yaml
 config.yaml
 *.yaml.gz
+
+*_stories.py

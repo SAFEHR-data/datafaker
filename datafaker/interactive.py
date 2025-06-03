@@ -25,6 +25,7 @@ except:
 logger = logging.getLogger(__name__)
 
 def or_default(v, d):
+    """ Returns v if it isn't None, otherwise d. """
     return d if v is None else v
 
 class TableType(Enum):
@@ -246,9 +247,10 @@ class DbCmd(ABC, cmd.Cmd):
         nonnulls = [cn + " IS NOT NULL" for cn in col_names]
         with self.engine.connect() as connection:
             result = connection.execute(
-                text("SELECT {cols} FROM {table} WHERE {nonnull} LIMIT {max}".format(
+                text("SELECT {cols} FROM {table} {where} {nonnull} LIMIT {max}".format(
                     cols=",".join(col_names),
                     table=table_name,
+                    where="WHERE" if nonnulls else "",
                     nonnull=" AND ".join(nonnulls),
                     max=MAX_PEEK_ROWS,
                 ))
@@ -575,9 +577,10 @@ class MissingnessType:
     )
     name: str
     query: str
+    comment: str
     columns: list[str]
     @classmethod
-    def sampled_query(cls, table, count, column_names):
+    def sampled_query(cls, table, count, column_names) -> str:
         result_names = ", ".join([
             "{0}__is_null".format(c)
             for c in column_names
@@ -611,7 +614,8 @@ data from the database. Use 'quit' to exit this tool."""
     file = None
     PATTERN_RE = re.compile(r'SRC_STATS\["([^"]*)"\]')
 
-    def find_missingness_query(self, missingness_generator: Mapping):
+    def find_missingness_query(self, missingness_generator: Mapping) -> tuple[str | None, str | None] | None:
+        """ Find query and comment from src-stats for the passed missingness generator. """
         kwargs = missingness_generator.get("kwargs", {})
         patterns = kwargs.get("patterns", "")
         pattern_match = self.PATTERN_RE.match(patterns)
@@ -619,7 +623,7 @@ data from the database. Use 'quit' to exit this tool."""
             key = pattern_match.group(1)
             for src_stat in self.config["src-stats"]:
                 if src_stat.get("name") == key:
-                    return src_stat.get("query", None)
+                    return (src_stat.get("query", None), src_stat.get("comment", None))
             return None
     def make_table_entry(self, name: str, table: Mapping) -> TableEntry:
         if table.get("ignore", False):
@@ -637,17 +641,20 @@ data from the database. Use 'quit' to exit this tool."""
             old = MissingnessType(
                 name="none",
                 query="",
+                comment="",
                 columns=[],
             )
         elif len(mgs) == 1:
             mg = mgs[0]
             mg_name = mg.get("name", None)
             if mg_name is not None:
-                query = self.find_missingness_query(mg)
-                if query is not None:
+                query_comment = self.find_missingness_query(mg)
+                if query_comment is not None:
+                    (query, comment) = query_comment
                     old = MissingnessType(
                         name=mg_name,
                         query=query,
+                        comment=comment,
                         columns=mg.get("columns_assigned", []),
                     )
         if old is None:
@@ -687,12 +694,13 @@ data from the database. Use 'quit' to exit this tool."""
                 src_stat_key = "missing_auto__{0}__0".format(entry.name)
                 table["missingness_generators"] = [{
                     "name": entry.new_type.name,
-                    "kwargs": {"patterns": 'SRC_STATS["{0}"]'.format(src_stat_key)},
+                    "kwargs": {"patterns": 'SRC_STATS["{0}"]["results"]'.format(src_stat_key)},
                     "columns": entry.new_type.columns,
                 }]
                 src_stats.append({
                     "name": src_stat_key,
                     "query": entry.new_type.query,
+                    "comments": [] if entry.new_type.comment is None else [entry.new_type.comment],
                 })
             self.set_table_config(entry.name, table)
 
@@ -750,13 +758,14 @@ data from the database. Use 'quit' to exit this tool."""
         "Go to the previous table"
         if not self.set_table_index(self.table_index - 1):
             self.print(self.ERROR_ALREADY_AT_START)
-    def _set_type(self, name, query):
+    def _set_type(self, name, query, comment):
         if len(self.table_entries) <= self.table_index:
             return
         entry: MissingnessCmdTableEntry = self.table_entries[self.table_index]
         entry.new_type = MissingnessType(
             name=name,
             query=query,
+            comment=comment,
             columns=self.get_nonnull_columns(entry.name),
         )
     def _set_none(self):
@@ -789,6 +798,7 @@ data from the database. Use 'quit' to exit this tool."""
                 count,
                 self.get_nonnull_columns(entry.name),
             ),
+            f"The missingness patterns and how often they appear in a sample of {count} from table {entry.name}"
         )
         self.print("Table {} set to sampled missingness", self.table_name())
         self.next_table()
@@ -984,7 +994,8 @@ information about the columns in the current table. Use 'peek',
                     for cq_key, cq in cqs.items():
                         src_stats.append({
                             "name": cq_key,
-                            "query": cq,
+                            "query": cq["query"],
+                            "comments": [cq["comment"]] if "comment" in cq and cq["comment"] else [],
                         })
                     rg = {
                         "name": generator.new_gen.function_name(),
@@ -999,6 +1010,12 @@ information about the columns in the current table. Use 'peek',
                 src_stats.append({
                     "name": f"auto__{entry.name}",
                     "query": aq,
+                    "comments": [
+                        q["comment"]
+                        for gen in new_gens
+                        for q in gen.select_aggregate_clauses().values()
+                        if "comment" in q and q["comment"] is not None
+                    ],
                 })
             table_config = self.get_table_config(entry.name)
             if rgs:
@@ -1123,6 +1140,10 @@ information about the columns in the current table. Use 'peek',
             return
         self._go_next()
 
+    def do_n(self, arg):
+        """ Synonym for next """
+        self.do_next(arg)
+
     def _go_next(self):
         table = self.get_table()
         if table is None:
@@ -1158,12 +1179,16 @@ information about the columns in the current table. Use 'peek',
         return table_names
 
     def do_previous(self, _arg):
-        "Go to the previous generator"
+        """ Go to the previous generator """
         if self.generator_index == 0:
             self.previous_table()
         else:
             self.generator_index -= 1
         self.set_prompt()
+
+    def do_b(self, arg):
+        """ Synonym for previous """
+        self.do_previous(arg)
 
     def _generators_valid(self) -> bool:
         return self.generators_valid_indices == (self.table_index, self.generator_index)
@@ -1221,6 +1246,10 @@ information about the columns in the current table. Use 'peek',
                     self._print_values_queried(table_name, n, gen)
         self.print_table_by_columns(comparison)
 
+    def do_c(self, arg):
+        """ Synonym for compare. """
+        self.do_compare(arg)
+
     def _print_values_queried(self, table_name: str, n: int, gen: Generator):
         """
         Print the values queried from the database for this generator.
@@ -1263,7 +1292,7 @@ information about the columns in the current table. Use 'peek',
 
     def _get_aggregate_query(self, gens: list[Generator], table_name: str) -> str | None:
         clauses = [
-            f"{q} AS {n}"
+            f'{q["clause"]} AS {n}'
             for gen in gens
             for n, q in or_default(gen.select_aggregate_clauses(), {}).items()
         ]
@@ -1282,7 +1311,7 @@ information about the columns in the current table. Use 'peek',
         vals = []
         src_stat2kwarg = { v: k for k, v in gen.nominal_kwargs().items() }
         for n in sacs.keys():
-            src_stat = f'SRC_STATS["auto__{table_name}"][0]["{n}"]'
+            src_stat = f'SRC_STATS["auto__{table_name}"]["results"][0]["{n}"]'
             if src_stat in src_stat2kwarg:
                 ak = src_stat2kwarg[src_stat]
                 if ak in kwa:
@@ -1290,7 +1319,7 @@ information about the columns in the current table. Use 'peek',
                 else:
                     logger.warning("actual_kwargs for %s does not report %s", gen.function_name(), ak)
             else:
-                logger.warning('nominal_kwargs for %s does not have a value SRC_STATS["auto__%s"][0]["%s"]', gen.function_name(), table_name, n)
+                logger.warning('nominal_kwargs for %s does not have a value SRC_STATS["auto__%s"]["results"][0]["%s"]', gen.function_name(), table_name, n)
         select_q = self._get_aggregate_query([gen], table_name)
         self.print("{0}; providing the following values: {1}", select_q, vals)
 
@@ -1344,6 +1373,10 @@ information about the columns in the current table. Use 'peek',
                 sample=", ".join(map(repr, gen.generate_data(limit)))
             )
 
+    def do_p(self, arg):
+        """ Synonym for propose """
+        self.do_propose(arg)
+
     def do_set(self, arg: str):
         """
         Set one of the proposals as a generator.
@@ -1372,6 +1405,10 @@ information about the columns in the current table. Use 'peek',
             return
         gen_info.new_gen = gens[index - 1]
         self._go_next()
+
+    def do_s(self, arg):
+        """ Synonym for set """
+        self.do_set(arg)
 
     def do_unset(self, _arg):
         """

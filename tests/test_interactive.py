@@ -427,14 +427,16 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertEqual(row_gen["name"], GENERATOR)
             self.assertListEqual(row_gen["columns_assigned"], [COLUMN])
             self.assertDictEqual(row_gen["kwargs"], {
-                "mean": f'SRC_STATS["auto__{TABLE}"][0]["mean__{COLUMN}"]',
-                "sd": f'SRC_STATS["auto__{TABLE}"][0]["stddev__{COLUMN}"]',
+                "mean": f'SRC_STATS["auto__{TABLE}"]["results"][0]["mean__{COLUMN}"]',
+                "sd": f'SRC_STATS["auto__{TABLE}"]["results"][0]["stddev__{COLUMN}"]',
             })
             self.assertEqual(len(gc.config["src-stats"]), 1)
-            self.assertDictEqual(gc.config["src-stats"][0], {
-                "name": f"auto__{TABLE}",
-                "query": f"SELECT AVG({COLUMN}) AS mean__{COLUMN}, STDDEV({COLUMN}) AS stddev__{COLUMN} FROM {TABLE}",
-            })
+            self.assertSetEqual(set(gc.config["src-stats"][0].keys()), {"comments", "name", "query"})
+            self.assertEqual(gc.config["src-stats"][0]["name"], f"auto__{TABLE}")
+            self.assertEqual(
+                gc.config["src-stats"][0]["query"],
+                f"SELECT AVG({COLUMN}) AS mean__{COLUMN}, STDDEV({COLUMN}) AS stddev__{COLUMN} FROM {TABLE}",
+            )
 
     def test_set_generator_choice(self):
         """ Test that we can set one generator to uniform choice. """
@@ -453,13 +455,15 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertEqual(row_gen["name"], GENERATOR)
             self.assertListEqual(row_gen["columns_assigned"], [COLUMN])
             self.assertDictEqual(row_gen["kwargs"], {
-                "a": f'SRC_STATS["auto__{TABLE}__{COLUMN}"]',
+                "a": f'SRC_STATS["auto__{TABLE}__{COLUMN}"]["results"]',
             })
             self.assertEqual(len(gc.config["src-stats"]), 1)
-            self.assertDictEqual(gc.config["src-stats"][0], {
-                "name": f"auto__{TABLE}__{COLUMN}",
-                "query": f"SELECT {COLUMN} AS value FROM {TABLE} GROUP BY value ORDER BY COUNT({COLUMN}) DESC",
-            })
+            self.assertSetEqual(set(gc.config["src-stats"][0].keys()), {"comments", "name", "query"})
+            self.assertEqual(gc.config["src-stats"][0]["name"], f"auto__{TABLE}__{COLUMN}")
+            self.assertEqual(
+                gc.config["src-stats"][0]["query"],
+                f"SELECT {COLUMN} AS value FROM {TABLE} GROUP BY value ORDER BY COUNT({COLUMN}) DESC",
+            )
 
     def test_old_generators_remain(self):
         """ Test that we can set one generator and keep an old one. """
@@ -505,10 +509,12 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
                 "sd": 'SRC_STATS["auto__string"][0]["stddev__frequency"]',
             })
             self.assertEqual(len(gc.config["src-stats"]), 1)
-            self.assertDictEqual(gc.config["src-stats"][0], {
-                "name": "auto__string",
-                "query": "SELECT AVG(frequency) AS mean__frequency, STDDEV(frequency) AS stddev__frequency FROM string",
-            })
+            self.assertSetEqual(set(gc.config["src-stats"][0].keys()), {"comments", "name", "query"})
+            self.assertEqual(gc.config["src-stats"][0]["name"], f"auto__string")
+            self.assertEqual(
+                gc.config["src-stats"][0]["query"],
+                "SELECT AVG(frequency) AS mean__frequency, STDDEV(frequency) AS stddev__frequency FROM string",
+            )
     
     def test_aggregate_queries_merge(self):
         """
@@ -522,8 +528,8 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
                         "name": "dist_gen.normal",
                         "columns_assigned": ["frequency"],
                         "kwargs": {
-                            "mean": 'SRC_STATS["auto__string"][0]["mean__frequency"]',
-                            "sd": 'SRC_STATS["auto__string"][0]["stddev__frequency"]',
+                            "mean": 'SRC_STATS["auto__string"]["results"][0]["mean__frequency"]',
+                            "sd": 'SRC_STATS["auto__string"]["results"][0]["stddev__frequency"]',
                         },
                     }]
                 }
@@ -553,13 +559,13 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertEqual(row_gen1["name"], "dist_gen.normal")
             self.assertListEqual(row_gen0["columns_assigned"], [COLUMN])
             self.assertDictEqual(row_gen0["kwargs"], {
-                "mean": f'SRC_STATS["auto__string"][0]["mean__{COLUMN}"]',
-                "sd": f'SRC_STATS["auto__string"][0]["stddev__{COLUMN}"]',
+                "mean": f'SRC_STATS["auto__string"]["results"][0]["mean__{COLUMN}"]',
+                "sd": f'SRC_STATS["auto__string"]["results"][0]["stddev__{COLUMN}"]',
             })
             self.assertListEqual(row_gen1["columns_assigned"], ["frequency"])
             self.assertDictEqual(row_gen1["kwargs"], {
-                "mean": 'SRC_STATS["auto__string"][0]["mean__frequency"]',
-                "sd": 'SRC_STATS["auto__string"][0]["stddev__frequency"]',
+                "mean": 'SRC_STATS["auto__string"]["results"][0]["mean__frequency"]',
+                "sd": 'SRC_STATS["auto__string"]["results"][0]["stddev__frequency"]',
             })
             self.assertEqual(len(gc.config["src-stats"]), 1)
             self.assertEqual(gc.config["src-stats"][0]["name"], "auto__string")
