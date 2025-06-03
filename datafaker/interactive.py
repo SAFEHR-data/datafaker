@@ -1140,6 +1140,10 @@ information about the columns in the current table. Use 'peek',
             return
         self._go_next()
 
+    def do_n(self, arg):
+        """ Synonym for next """
+        self.do_next(arg)
+
     def _go_next(self):
         table = self.get_table()
         if table is None:
@@ -1175,12 +1179,16 @@ information about the columns in the current table. Use 'peek',
         return table_names
 
     def do_previous(self, _arg):
-        "Go to the previous generator"
+        """ Go to the previous generator """
         if self.generator_index == 0:
             self.previous_table()
         else:
             self.generator_index -= 1
         self.set_prompt()
+
+    def do_b(self, arg):
+        """ Synonym for previous """
+        self.do_previous(arg)
 
     def _generators_valid(self) -> bool:
         return self.generators_valid_indices == (self.table_index, self.generator_index)
@@ -1237,6 +1245,10 @@ information about the columns in the current table. Use 'peek',
                     comparison[f"{n}. {gen.function_name()}"] = gen.generate_data(limit)
                     self._print_values_queried(table_name, n, gen)
         self.print_table_by_columns(comparison)
+
+    def do_c(self, arg):
+        """ Synonym for compare. """
+        self.do_compare(arg)
 
     def _print_values_queried(self, table_name: str, n: int, gen: Generator):
         """
@@ -1361,6 +1373,10 @@ information about the columns in the current table. Use 'peek',
                 sample=", ".join(map(repr, gen.generate_data(limit)))
             )
 
+    def do_p(self, arg):
+        """ Synonym for propose """
+        self.do_propose(arg)
+
     def do_set(self, arg: str):
         """
         Set one of the proposals as a generator.
@@ -1389,6 +1405,10 @@ information about the columns in the current table. Use 'peek',
             return
         gen_info.new_gen = gens[index - 1]
         self._go_next()
+
+    def do_s(self, arg):
+        """ Synonym for set """
+        self.do_set(arg)
 
     def do_unset(self, _arg):
         """
