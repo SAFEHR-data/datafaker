@@ -789,6 +789,7 @@ async def make_src_stats_connection(config: Mapping, db_conn: DbConnection, meta
                 "date": date_string,
                 "query": query_block["query"],
             },
+            "comments": query_block["comments"],
             "results": fix_types(result),
         }
         for query_block, result in zip(query_blocks, results)

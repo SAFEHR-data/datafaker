@@ -200,6 +200,8 @@ class StoryIterator:
         else:
             return_values = {}
         self._final_values = {**insert_values, **return_values}
+        self._dst_conn.commit()
+        cursor.close()
 
     def next(self) -> None:
         """
@@ -207,12 +209,17 @@ class StoryIterator:
         """
         while True:
             try:
-                self._table_name, self._provided_values = self._story.send(self._final_values)
-                return
+                if self._final_values is None:
+                    self._table_name, self._provided_values = next(self._story)
+                    return
+                else:
+                    self._table_name, self._provided_values = self._story.send(self._final_values)
+                    return
             except StopIteration:
                 try:
                     name, self._story = next(self._stories)
                     logger.info("Generating data for story '%s'", name)
+                    self._final_values = None
                 except StopIteration:
                     self._table_name = None
                     return
@@ -258,11 +265,16 @@ def populate(
             continue
         logger.debug('Generating data for table "%s".', table.name)
         # Run all the inserts for one table in a transaction
-        with dst_conn.begin():
-            for _ in range(table_generator.num_rows_per_pass):
-                stmt = insert(table).values(table_generator(dst_conn, random.random))
-                dst_conn.execute(stmt)
-                row_counts[table.name] = row_counts.get(table.name, 0) + 1
+        try:
+            with dst_conn.begin():
+                for _ in range(table_generator.num_rows_per_pass):
+                    stmt = insert(table).values(table_generator(dst_conn, random.random))
+                    dst_conn.execute(stmt)
+                    row_counts[table.name] = row_counts.get(table.name, 0) + 1
+                dst_conn.commit()
+        except:
+            dst_conn.rollback()
+            raise
 
     # Insert any remaining stories
     while not story_iterator.is_ended():
