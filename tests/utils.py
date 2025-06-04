@@ -66,7 +66,15 @@ class DatafakerTestCase(TestCase):
 
 @skipUnless(shutil.which("psql"), "need to find 'psql': install PostgreSQL to enable")
 class RequiresDBTestCase(DatafakerTestCase):
-    """A test case that only runs if PostgreSQL is installed."""
+    """
+    A test case that only runs if PostgreSQL is installed.
+    A test postgres is installed
+    dump_file_path can be set to run in this postgres database.
+    database_name is the name of the database referred to in dump_file_path.
+    You can use ``self.dsn`` to retrieve the DSN of this database, ``self.engine``
+    to get an engine to access the database and self.metadata to get metadata
+    reflected from that engine.
+    """
     schema_name = None
     use_asyncio = False
     examples_dir = "tests/examples"

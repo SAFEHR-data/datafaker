@@ -789,14 +789,14 @@ async def make_src_stats_connection(config: Mapping, db_conn: DbConnection, meta
                 "date": date_string,
                 "query": query_block["query"],
             },
-            "comments": query_block["comments"],
+            "comments": query_block.get("comments", []),
             "results": fix_types(result),
         }
         for query_block, result in zip(query_blocks, results)
     }
 
     for name, result in src_stats.items():
-        if not result:
+        if not result["results"]:
             logger.warning("src-stats query %s returned no results", name)
 
     return src_stats

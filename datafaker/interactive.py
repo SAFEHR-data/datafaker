@@ -3,14 +3,13 @@ import cmd
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
-import logging
 from prettytable import PrettyTable
 import re
 import sqlalchemy
 from sqlalchemy import Column, MetaData, Table, text
 
 from datafaker.generators import everything_factory, Generator, PredefinedGenerator
-from datafaker.utils import create_db_engine, primary_private_fks, table_is_private
+from datafaker.utils import create_db_engine, primary_private_fks, table_is_private, logger
 
 # Monkey patch pyreadline3 v3.5 so that it works with Python 3.13
 # Windows users can install pyreadline3 to get tab completion working.
@@ -21,8 +20,6 @@ try:
         readline.backend = "readline"
 except:
     pass
-
-logger = logging.getLogger(__name__)
 
 def or_default(v, d):
     """ Returns v if it isn't None, otherwise d. """

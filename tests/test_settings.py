@@ -1,4 +1,7 @@
 """Tests for the settings module."""
+import os
+from unittest import mock
+
 from pydantic import ValidationError
 
 from datafaker.settings import Settings
@@ -8,13 +11,10 @@ from tests.utils import DatafakerTestCase
 class TestSettings(DatafakerTestCase):
     """Tests for the Settings class."""
 
+    @mock.patch.dict(os.environ, {}, clear=True)
     def test_minimal_settings(self) -> None:
         """Test the minimal settings."""
-        settings = Settings(
-            # To stop any local .env files influencing the test
-            # The mypy ignore can be removed once we upgrade to pydantic 2.
-            _env_file=None,  # type: ignore[call-arg]
-        )
+        settings = Settings()
         self.assertIsNone(settings.src_dsn)
         self.assertIsNone(settings.src_schema)
 

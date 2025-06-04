@@ -273,6 +273,12 @@ Set and unset
 Say we decide on generator 2, we can set this with ``set 2``.
 ``unset`` removes any previously set generator.
 
+Short commands
+^^^^^^^^^^^^^^
+
+In case you couldn't get tab completion working on your favourite terminal on your machine, there are single letter commands for the most common operations of ``configure-generators``:
+``n`` and ``b`` are synonymns for ``next`` and ``previous`` ("back"), and ``p``, ``c`` and ``s`` are synonymns for ``propose``, ``compare`` and ``set`` respectively.
+
 Configuring missingness
 -----------------------
 

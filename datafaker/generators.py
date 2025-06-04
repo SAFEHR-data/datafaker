@@ -16,8 +16,7 @@ from sqlalchemy.types import Date, DateTime, Integer, Numeric, String, Time
 from typing import Callable
 
 from datafaker.base import DistributionGenerator
-
-logger = logging.getLogger(__name__)
+from datafaker.utils import logger
 
 # How many distinct values can we have before we consider a
 # choice distribution to be infeasible?
