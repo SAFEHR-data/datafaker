@@ -356,7 +356,7 @@ Whichever we chose, now we can create the generators Python file:
 
 The first of these uses ``orm.yaml`` to create the destination database.
 The second uses all the ``.yaml.gz`` (or ``.yaml``) files representing the vocabulary tables (this can take hours, too).
-The third uses ``config.yaml`` to create a file ``datafaker.py`` file containing code to call the generators as configured.
+The third uses ``config.yaml`` to create a file ``df.py`` file containing code to call the generators as configured.
 The last one actually generates the data. ``--num-passes`` controls how many rows are generated.
 At present the only ways to generate different numbers of rows for different tables is to configure ``num_rows_per_pass`` in ``config.yaml``:
 

@@ -2,12 +2,9 @@
 import asyncio
 import os
 from pathlib import Path
-import random
 from unittest.mock import MagicMock, patch
 
 import yaml
-from pydantic import PostgresDsn
-from pydantic.tools import parse_obj_as
 from sqlalchemy import BigInteger, Column, String, select
 from sqlalchemy.dialects.mysql.types import INTEGER
 from sqlalchemy.dialects.postgresql import UUID
@@ -15,11 +12,8 @@ from sqlalchemy.dialects.postgresql import UUID
 from datafaker.make import (
     _get_provider_for_column,
     make_src_stats,
-    make_table_generators,
-    make_tables_file,
 )
-from tests.examples import example_orm
-from tests.utils import RequiresDBTestCase, DatafakerTestCase, get_test_settings, GeneratesDBTestCase
+from tests.utils import RequiresDBTestCase, GeneratesDBTestCase
 
 
 class TestMakeGenerators(GeneratesDBTestCase):
@@ -30,8 +24,6 @@ class TestMakeGenerators(GeneratesDBTestCase):
 
     def test_make_table_generators(self) -> None:
         """ Check that we can make a generators file. """
-        random.seed(45)
-        # Configure the missingness
         config = {
             "tables": {
                 "player": {
@@ -52,7 +44,6 @@ class TestMakeGenerators(GeneratesDBTestCase):
             },
         }
         self.generate_data(config, num_passes=3)
-        # Test that each missingness pattern is present in the database
         with self.engine.connect() as conn:
             stmt = select(self.metadata.tables["player"])
             rows = conn.execute(stmt).mappings().fetchall()

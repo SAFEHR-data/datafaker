@@ -4,13 +4,10 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
-from pydantic import PostgresDsn
-from pydantic.tools import parse_obj_as
-from sqlalchemy import Column, Integer, create_engine, insert
+from sqlalchemy import Column, Integer, insert
 from sqlalchemy.orm import declarative_base
 
 from datafaker.utils import (
-    create_db_engine,
     download_table,
     import_file,
     read_config_file,

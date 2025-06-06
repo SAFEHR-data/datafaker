@@ -100,13 +100,13 @@ class FileUploader:
                         100 * fh.tell() / file_size,
                     )
 
-    def load(self, connection: Connection) -> None:
+    def load(self, connection: Connection, base_path: Path=Path(".")) -> None:
         """Load the data from file."""
-        yaml_file = Path(self.table.fullname + ".yaml")
+        yaml_file = base_path / Path(self.table.fullname + ".yaml")
         if yaml_file.exists():
             opener = lambda: open(yaml_file, mode="r", encoding="utf-8")
         else:
-            yaml_file = Path(self.table.fullname + ".yaml.gz")
+            yaml_file = base_path / Path(self.table.fullname + ".yaml.gz")
             if yaml_file.exists():
                 opener = lambda: gzip.open(yaml_file, mode="rt")
             else:

@@ -1,5 +1,6 @@
 """Functions and classes to create and populate the target database."""
 from collections import Counter
+import pathlib
 import random
 from typing import Any, Generator, Iterable, Iterator, Mapping, Sequence, Tuple
 
@@ -51,7 +52,12 @@ def create_db_tables(metadata: MetaData) -> None:
     metadata.create_all(engine)
 
 
-def create_db_vocab(metadata: MetaData, meta_dict: dict[str, Any], config: Mapping) -> int:
+def create_db_vocab(
+    metadata: MetaData,
+    meta_dict: dict[str, Any],
+    config: Mapping,
+    base_path: pathlib.Path | None
+) -> int:
     """
     Load vocabulary tables from files.
     
@@ -79,7 +85,7 @@ def create_db_vocab(metadata: MetaData, meta_dict: dict[str, Any], config: Mappi
             uploader = FileUploader(table=vocab_table)
             with Session(dst_engine) as session:
                 session.begin()
-                uploader.load(session.connection())
+                uploader.load(session.connection(), base_path = base_path)
             session.commit()
             tables_loaded.append(vocab_table_name)
         except IntegrityError:

@@ -40,7 +40,7 @@ class Generator(ABC):
     """
     @abstractmethod
     def function_name(self) -> str:
-        """ The name of the generator function to put into datafaker.py. """
+        """ The name of the generator function to put into df.py. """
 
     @abstractmethod
     def nominal_kwargs(self) -> dict[str, str]:

@@ -66,7 +66,7 @@ And let's populate it with the fake data:
     datafaker create-tables
     datafaker create-data
 
-``create-generators`` creates a Python file called ``datafaker.py``.
+``create-generators`` creates a Python file called ``df.py``.
 You can edit this file if you want, but it is much easier to edit ``config.yaml`` and call ``datafaker create-generators --force`` to regenerate this file.
 
 You will notice that ``create-tables`` produces a couple of warnings, and PostgreSQL complains when ``datafaker`` tries to create the data.
@@ -298,7 +298,7 @@ We can also use the ``orm.py`` file to make a Python module that generates synth
 
     $ datafaker create-generators
 
-This creates an ``datafaker.py`` file that contains one generator class (not to be confused with Python generator functions) per source database table.
+This creates an ``df.py`` file that contains one generator class (not to be confused with Python generator functions) per source database table.
 By default, without any user configuration, the data produced by these generators fulfills the schema of the original data:
 the data types are correct and the foreign key and uniqueness constraints are respected.
 

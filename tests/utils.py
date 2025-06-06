@@ -169,7 +169,7 @@ class GeneratesDBTestCase(RequiresDBTestCase):
             stats_fh.write(yaml.dump(src_stats))
 
     def create_generators(self, config) -> None:
-        """ ``create-generators`` with ``src-stats.yaml`` and the rest, producing ``datafaker.py`` """
+        """ ``create-generators`` with ``src-stats.yaml`` and the rest, producing ``df.py`` """
         datafaker_content = make_table_generators(
             self.metadata,
             config,
@@ -181,10 +181,13 @@ class GeneratesDBTestCase(RequiresDBTestCase):
         with os.fdopen(generators_fd, "w", encoding="utf-8") as datafaker_fh:
             datafaker_fh.write(datafaker_content)
 
-    def create_data(self, config, num_passes=1):
-        """ Remove source data from the DB and create fake data in its place. """
+    def remove_data(self, config):
+        """ Remove source data from the DB. """
         # `remove-data` so we don't have to use a separate database for the destination
         remove_db_data_from(self.metadata, config, self.dsn, self.schema_name)
+
+    def create_data(self, config, num_passes=1):
+        """ Create fake data in the DB. """
         # `create-data` with all this stuff
         datafaker_module = import_file(self.generators_file_path)
         table_generator_dict = datafaker_module.table_generator_dict
@@ -206,5 +209,6 @@ class GeneratesDBTestCase(RequiresDBTestCase):
         self.set_configuration(config)
         src_stats = self.get_src_stats(config)
         self.create_generators(config)
+        self.remove_data(config)
         self.create_data(config, num_passes)
         return src_stats
