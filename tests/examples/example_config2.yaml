@@ -103,7 +103,7 @@ tables:
   # This one can't be ignored at ORM creation time, because the below table fk
   # refs it. We thus ignore it at the later stages when loading the ORM.
   unignorable_table:
-    ignore: true
+    vocabulary_table: true
 
   ref_to_unignorable_table:
     vocabulary_table: true

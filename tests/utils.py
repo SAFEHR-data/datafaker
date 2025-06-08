@@ -7,6 +7,7 @@ import shutil
 from sqlalchemy.schema import MetaData
 from subprocess import run
 import testing.postgresql
+import traceback
 from typing import Any
 from unittest import TestCase, skipUnless
 import yaml
@@ -62,6 +63,12 @@ class DatafakerTestCase(TestCase):
     def assertFailure(self, result: Any) -> None:  # pylint: disable=invalid-name
         """Give details for a subprocess result and raise if the result isn't bad."""
         self.assertReturnCode(result, 1)
+
+    def assertNoException(self, result: Any) -> None:  # pylint: disable=invalid-name
+        """ Assert that the result has no exception. """
+        if result.exception is None:
+            return
+        self.fail(''.join(traceback.format_exception(result.exception)))
 
 
 @skipUnless(shutil.which("psql"), "need to find 'psql': install PostgreSQL to enable")

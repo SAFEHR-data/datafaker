@@ -10,7 +10,7 @@ from typing import Final, Optional
 import yaml
 from jsonschema.exceptions import ValidationError
 from jsonschema.validators import validate
-from typer import Argument, Option, Typer
+from typer import Argument, Exit, Option, Typer
 
 from datafaker.create import create_db_data, create_db_tables, create_db_vocab
 from datafaker.dump import dump_db_tables
@@ -128,22 +128,27 @@ def create_data(
     df_module = import_file(df_file)
     table_generator_dict = df_module.table_generator_dict
     story_generator_list = df_module.story_generator_list
-    row_counts = create_db_data(
-        sorted_non_vocabulary_tables(orm_metadata, config),
-        table_generator_dict,
-        story_generator_list,
-        num_passes,
-    )
-    logger.debug(
-        "Data created in %s %s.", num_passes, "pass" if num_passes == 1 else "passes"
-    )
-    for table_name, row_count in row_counts.items():
-        logger.debug(
-            "%s: %s %s created.",
-            table_name,
-            row_count,
-            "row" if row_count == 1 else "rows",
+    try:
+        row_counts = create_db_data(
+            sorted_non_vocabulary_tables(orm_metadata, config),
+            table_generator_dict,
+            story_generator_list,
+            num_passes,
         )
+        logger.debug(
+            "Data created in %s %s.", num_passes, "pass" if num_passes == 1 else "passes"
+        )
+        for table_name, row_count in row_counts.items():
+            logger.debug(
+                "%s: %s %s created.",
+                table_name,
+                row_count,
+                "row" if row_count == 1 else "rows",
+            )
+        return
+    except RuntimeError as e:
+        logger.error(e.args[0])
+    raise Exit(1)
 
 
 @app.command()
@@ -226,7 +231,7 @@ def create_generators(
 def make_vocab(
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
     config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
-    force: bool = Option(True, "--force", "-f", help="Overwrite any existing vocabulary file."),
+    force: bool = Option(False, "--force/--no-force", "-f/+f", help="Overwrite any existing vocabulary file."),
     compress: bool = Option(False, help="Compress file to .gz"),
     only: list[str] = Option([], help="Only download this table."),
 ) -> None:
