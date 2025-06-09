@@ -32,6 +32,12 @@ import {{ row_generator_module_name }}
 import {{ story_generator_module_name }}
 {% endif %}
 
+{% for name, inst in object_instantiation.items() %}
+{{name}} = {{inst["class"]}}({%- if "kwargs" in inst %}{% for n, v in inst["kwargs"].items() %}
+{{n}}={{v}},{% endfor %}
+{%- endif %})
+{% endfor %}
+
 {% if src_stats_filename %}
 import yaml
 with open("{{ src_stats_filename }}", "r", encoding="utf-8") as f:

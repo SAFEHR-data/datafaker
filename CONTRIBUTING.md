@@ -47,12 +47,6 @@ Executing unit tests is straightforward:
 python -m unittest discover --verbose tests/
 ```
 
-Although currently not many tests actually work, so try:
-
-```bash
-python -m unittest -k Config -k Dump -k Remove -k Make -k Vocab
-```
-
 for tests that are currently maintained.
 
 ## Running functional tests

@@ -564,6 +564,7 @@ def make_table_generators(  # pylint: disable=too-many-locals
     """
     row_generator_module_name: str = config.get("row_generators_module", None)
     story_generator_module_name = config.get("story_generators_module", None)
+    object_instantiation: dict[str, dict] = config.get("object_instantiation", {})
     tables_config = config.get("tables", {})
 
     tables: list[TableGeneratorInfo] = []
@@ -599,6 +600,7 @@ def make_table_generators(  # pylint: disable=too-many-locals
             "config_file_name": config_filename,
             "row_generator_module_name": row_generator_module_name,
             "story_generator_module_name": story_generator_module_name,
+            "object_instantiation": object_instantiation,
             "src_stats_filename": src_stats_filename,
             "tables": tables,
             "vocabulary_tables": vocabulary_tables,
