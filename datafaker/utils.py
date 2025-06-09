@@ -273,9 +273,11 @@ def conf_logger(verbose: bool) -> None:
         level=logging.DEBUG if verbose else logging.INFO,
         format=log_format,
         handlers=[stdout_handler, stderr_handler],
+        force=True,
     )
     logging.getLogger('asyncio').setLevel(logging.WARNING)
     logging.getLogger('blib2to3.pgen2.driver').setLevel(logging.WARNING)
+
 
 def get_flag(maybe_dict, key):
     """Returns maybe_dict[key] or False if that doesn't exist"""

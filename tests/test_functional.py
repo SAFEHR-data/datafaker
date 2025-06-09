@@ -12,9 +12,6 @@ from datafaker.main import app
 
 # pylint: disable=subprocess-run-check
 
-runner = CliRunner(mix_stderr=False)
-
-
 class DBFunctionalTestCase(RequiresDBTestCase):
     """End-to-end tests that require a database."""
     dump_file_path = "src.dump"
@@ -45,13 +42,16 @@ class DBFunctionalTestCase(RequiresDBTestCase):
     def setUp(self) -> None:
         """Pre-test setup."""
         super().setUp()
-
         self.env = {
             "src_dsn": self.dsn,
             "src_schema": self.schema_name,
             "dst_dsn": self.dsn,
             "dst_schema": "dstschema",
         }
+        self.runner = CliRunner(
+            mix_stderr=False,
+            env=self.env,
+        )
 
         # Copy some of the example files over to the workspace.
         for file in self.generator_file_paths + (self.config_file_path,):
@@ -71,37 +71,35 @@ class DBFunctionalTestCase(RequiresDBTestCase):
     def test_workflow_minimal_args(self) -> None:
         """Test the recommended CLI workflow runs without errors."""
         shutil.copy(self.config_file_path, "config.yaml")
-        completed_process = runner.invoke(
-            app,
-            ["make-tables", "--force"],
-            env=self.env,
+        completed_process = self.invoke(
+            "make-tables",
+            "--force",
+        )
+        self.assertNoException(completed_process)
+        self.assertSuccess(completed_process)
+        self.assertEqual(completed_process.stderr, "")
+        self.assertEqual(completed_process.stdout, "")
+
+        completed_process = self.invoke(
+            "make-vocab",
+            "--force",
         )
         self.assertNoException(completed_process)
         self.assertSuccess(completed_process)
         self.assertEqual(completed_process.stdout, "")
 
-        completed_process = runner.invoke(
-            app,
-            ["make-vocab", "--force"],
-            env=self.env,
+        completed_process = self.invoke(
+            "make-stats",
+            "--force",
         )
         self.assertNoException(completed_process)
         self.assertSuccess(completed_process)
         self.assertEqual(completed_process.stdout, "")
 
-        completed_process = runner.invoke(
-            app,
-            ["make-stats", "--force"],
-            env=self.env,
-        )
-        self.assertNoException(completed_process)
-        self.assertSuccess(completed_process)
-        self.assertEqual(completed_process.stdout, "")
-
-        completed_process = runner.invoke(
-            app,
-            ["create-generators", "--force", "--stats-file=src-stats.yaml"],
-            env=self.env,
+        completed_process = self.invoke(
+            "create-generators",
+            "--force",
+            "--stats-file=src-stats.yaml",
         )
         self.assertNoException(completed_process)
         self.assertEqual(
@@ -114,41 +112,32 @@ class DBFunctionalTestCase(RequiresDBTestCase):
         self.assertSuccess(completed_process)
         self.assertEqual("", completed_process.stdout)
 
-        completed_process = runner.invoke(
-            app,
-            ["create-tables"],
-            env=self.env,
+        completed_process = self.invoke(
+            "create-tables",
         )
         self.assertNoException(completed_process)
         self.assertEqual("", completed_process.stderr)
         self.assertSuccess(completed_process)
         self.assertEqual("", completed_process.stdout)
 
-        completed_process = runner.invoke(
-            app,
-            ["create-vocab"],
-            env=self.env,
+        completed_process = self.invoke(
+            "create-vocab",
         )
         self.assertNoException(completed_process)
         self.assertEqual("", completed_process.stderr)
         self.assertSuccess(completed_process)
         self.assertEqual("", completed_process.stdout)
 
-        completed_process = runner.invoke(
-            app,
-            ["make-stats", "--force"],
-            env=self.env,
+        completed_process = self.invoke(
+            "make-stats",
+            "--force",
         )
         self.assertNoException(completed_process)
         self.assertEqual("", completed_process.stderr)
         self.assertSuccess(completed_process)
         self.assertEqual("", completed_process.stdout)
 
-        completed_process = runner.invoke(
-            app,
-            ["create-data"],
-            env=self.env,
-        )
+        completed_process = self.invoke("create-data")
         self.assertNoException(completed_process)
         self.assertEqual("", completed_process.stderr)
         self.assertSuccess(completed_process)
@@ -162,10 +151,9 @@ class DBFunctionalTestCase(RequiresDBTestCase):
             completed_process.stdout,
         )
 
-        completed_process = runner.invoke(
+        completed_process = self.runner.invoke(
             app,
             ["remove-data"],
-            env=self.env,
             input="\n",  # To select the default prompt option
         )
         self.assertNoException(completed_process)
@@ -177,10 +165,9 @@ class DBFunctionalTestCase(RequiresDBTestCase):
             completed_process.stdout,
         )
 
-        completed_process = runner.invoke(
+        completed_process = self.runner.invoke(
             app,
             ["remove-vocab"],
-            env=self.env,
             input=b"\n",  # To select the default prompt option
         )
         self.assertEqual("", completed_process.stderr)
@@ -191,10 +178,9 @@ class DBFunctionalTestCase(RequiresDBTestCase):
             completed_process.stdout,
         )
 
-        completed_process = runner.invoke(
+        completed_process = self.runner.invoke(
             app,
             ["remove-tables"],
-            env=self.env,
             input=b"\n",  # To select the default prompt option
         )
         self.assertEqual("", completed_process.stderr)
@@ -206,16 +192,12 @@ class DBFunctionalTestCase(RequiresDBTestCase):
 
     def test_workflow_maximal_args(self) -> None:
         """Test the CLI workflow runs with optional arguments."""
-        completed_process = runner.invoke(
-            app,
-            [
-                "--verbose",
-                "make-tables",
-                f"--config-file={self.config_file_path}",
-                f"--orm-file={self.alt_orm_file_path}",
-                "--force",
-            ],
-            env=self.env,
+        completed_process = self.invoke(
+            "--verbose",
+            "make-tables",
+            f"--config-file={self.config_file_path}",
+            f"--orm-file={self.alt_orm_file_path}",
+            "--force",
         )
         self.assertNoException(completed_process)
         self.assertEqual("", completed_process.stderr)
@@ -225,16 +207,12 @@ class DBFunctionalTestCase(RequiresDBTestCase):
             completed_process.stdout,
         )
 
-        completed_process = runner.invoke(
-            app,
-            [
-                "--verbose",
-                "make-stats",
-                f"--stats-file={self.stats_file_path}",
-                f"--config-file={self.config_file_path}",
-                "--force",
-            ],
-            env=self.env,
+        completed_process = self.invoke(
+            "--verbose",
+            "make-stats",
+            f"--stats-file={self.stats_file_path}",
+            f"--config-file={self.config_file_path}",
+            "--force",
         )
         self.assertEqual("", completed_process.stderr)
         self.assertSuccess(completed_process)
@@ -267,18 +245,14 @@ class DBFunctionalTestCase(RequiresDBTestCase):
             set(completed_process.stdout.split("\n")) - {""},
         )
 
-        completed_process = runner.invoke(
-            app,
-            [
-                "--verbose",
-                "create-generators",
-                f"--orm-file={self.alt_orm_file_path}",
-                f"--df-file={self.alt_datafaker_file_path}",
-                f"--config-file={self.config_file_path}",
-                f"--stats-file={self.stats_file_path}",
-                "--force",
-            ],
-            env=self.env,
+        completed_process = self.invoke(
+            "--verbose",
+            "create-generators",
+            f"--orm-file={self.alt_orm_file_path}",
+            f"--df-file={self.alt_datafaker_file_path}",
+            f"--config-file={self.config_file_path}",
+            f"--stats-file={self.stats_file_path}",
+            "--force",
         )
         self.assertEqual(
             "Unsupported SQLAlchemy type CIDR "
@@ -298,15 +272,11 @@ class DBFunctionalTestCase(RequiresDBTestCase):
             completed_process.stdout,
         )
 
-        completed_process = runner.invoke(
-            app,
-            [
-                "--verbose",
-                "create-tables",
-                f"--orm-file={self.alt_orm_file_path}",
-                f"--config-file={self.config_file_path}",
-            ],
-            env=self.env,
+        completed_process = self.invoke(
+            "--verbose",
+            "create-tables",
+            f"--orm-file={self.alt_orm_file_path}",
+            f"--config-file={self.config_file_path}",
         )
         self.assertEqual("", completed_process.stderr)
         self.assertSuccess(completed_process)
@@ -406,16 +376,12 @@ class DBFunctionalTestCase(RequiresDBTestCase):
             set(completed_process.stdout.split("\n")) - {""},
         )
 
-        completed_process = runner.invoke(
-            app,
-            [
-                "--verbose",
-                "remove-vocab",
-                "--yes",
-                f"--orm-file={self.alt_orm_file_path}",
-                f"--config-file={self.config_file_path}",
-            ],
-            env=self.env,
+        completed_process = self.invoke(
+            "--verbose",
+            "remove-vocab",
+            "--yes",
+            f"--orm-file={self.alt_orm_file_path}",
+            f"--config-file={self.config_file_path}",
         )
         self.assertEqual("", completed_process.stderr)
         self.assertSuccess(completed_process)
@@ -439,16 +405,12 @@ class DBFunctionalTestCase(RequiresDBTestCase):
             set(completed_process.stdout.split("\n")) - {""},
         )
 
-        completed_process = runner.invoke(
-            app,
-            [
-                "--verbose",
-                "remove-tables",
-                "--yes",
-                f"--orm-file={self.alt_orm_file_path}",
-                f"--config-file={self.config_file_path}",
-            ],
-            env=self.env,
+        completed_process = self.invoke(
+            "--verbose",
+            "remove-tables",
+            "--yes",
+            f"--orm-file={self.alt_orm_file_path}",
+            f"--config-file={self.config_file_path}",
         )
         self.assertEqual("", completed_process.stderr)
         self.assertSuccess(completed_process)
@@ -457,10 +419,8 @@ class DBFunctionalTestCase(RequiresDBTestCase):
             completed_process.stdout,
         )
 
-    def invoke(self, *args, expected_error: str=None, env=None):
-        if env is None:
-            env = self.env
-        res = runner.invoke(app, args, env=env)
+    def invoke(self, *args, expected_error: str=None, env={}):
+        res = self.runner.invoke(app, args, env=env)
         if expected_error is None:
             self.assertNoException(res)
             self.assertSuccess(res)
@@ -559,18 +519,17 @@ class DBFunctionalTestCase(RequiresDBTestCase):
             f"--df-file={self.alt_datafaker_file_path}",
             "--num-passes=1",
             expected_error = (
-                "Failed to satisfy unique constraints for "
-                "table unique_constraint_test after 50 attempts."
+                "Failed to satisfy unique constraints for table unique_constraint_test"
             ),
         )
         self.assertFailure(completed_process)
+        self.assertIn("after 50 attempts", completed_process.stderr)
 
     def test_create_schema(self) -> None:
         """Check that we create a destination schema if it doesn't exist."""
-        env = self.env.copy()
-        env["dst_schema"] = "doesntexistyetschema"
+        env = { "dst_schema": "doesntexistyetschema" }
 
-        engine = create_engine(env["dst_dsn"])
+        engine = create_engine(self.env["dst_dsn"])
         inspector = inspect(engine)
         self.assertFalse(inspector.has_schema(env["dst_schema"]))
 
@@ -588,6 +547,6 @@ class DBFunctionalTestCase(RequiresDBTestCase):
         )
         self.assertEqual("", completed_process.stderr)
 
-        engine = create_engine(env["dst_dsn"])
+        engine = create_engine(self.env["dst_dsn"])
         inspector = inspect(engine)
         self.assertTrue(inspector.has_schema(env["dst_schema"]))

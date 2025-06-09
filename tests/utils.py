@@ -46,6 +46,9 @@ class DatafakerTestCase(TestCase):
         self.maxDiff = None  # pylint: disable=invalid-name
         super().__init__(*args, **kwargs)
 
+    def setUp(self):
+        settings.get_settings.cache_clear()
+
     def assertReturnCode(  # pylint: disable=invalid-name
         self, result: Any, expected_code: int
     ) -> None:
