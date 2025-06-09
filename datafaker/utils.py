@@ -278,6 +278,7 @@ def conf_logger(verbose: bool) -> None:
     logging.getLogger('asyncio').setLevel(logging.WARNING)
     logging.getLogger('blib2to3.pgen2.driver').setLevel(logging.WARNING)
 
+
 def get_flag(maybe_dict, key):
     """Returns maybe_dict[key] or False if that doesn't exist"""
     return type(maybe_dict) is dict and maybe_dict.get(key, False)

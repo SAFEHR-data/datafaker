@@ -59,6 +59,10 @@ class DBFunctionalTestCase(RequiresDBTestCase):
             "dst_dsn": self.dsn,
             "dst_schema": "dstschema",
         }
+        self.runner = CliRunner(
+            mix_stderr=False,
+            env=self.env,
+        )
 
         # Copy some of the example files over to the workspace.
         for file in self.generator_file_paths + (self.config_file_path,):
