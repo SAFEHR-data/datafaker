@@ -1,5 +1,6 @@
 """Functions and classes to create and populate the target database."""
 from collections import Counter
+import pathlib
 import random
 from typing import Any, Generator, Iterable, Iterator, Mapping, Sequence, Tuple
 
@@ -51,7 +52,12 @@ def create_db_tables(metadata: MetaData) -> None:
     metadata.create_all(engine)
 
 
-def create_db_vocab(metadata: MetaData, meta_dict: dict[str, Any], config: Mapping) -> int:
+def create_db_vocab(
+    metadata: MetaData,
+    meta_dict: dict[str, Any],
+    config: Mapping,
+    base_path: pathlib.Path | None=pathlib.Path(".")
+) -> int:
     """
     Load vocabulary tables from files.
     
@@ -79,7 +85,7 @@ def create_db_vocab(metadata: MetaData, meta_dict: dict[str, Any], config: Mappi
             uploader = FileUploader(table=vocab_table)
             with Session(dst_engine) as session:
                 session.begin()
-                uploader.load(session.connection())
+                uploader.load(session.connection(), base_path = base_path)
             session.commit()
             tables_loaded.append(vocab_table_name)
         except IntegrityError:
@@ -263,7 +269,7 @@ def populate(
         table_generator = table_generator_dict[table.name]
         if table_generator.num_rows_per_pass == 0:
             continue
-        logger.debug('Generating data for table "%s".', table.name)
+        logger.debug("Generating data for table '%s'", table.name)
         # Run all the inserts for one table in a transaction
         try:
             with dst_conn.begin():
@@ -279,7 +285,8 @@ def populate(
     # Insert any remaining stories
     while not story_iterator.is_ended():
         story_iterator.insert()
-        row_counts[table.name] = row_counts.get(table.name, 0) + 1
+        t = story_iterator.table_name()
+        row_counts[t] = row_counts.get(t, 0) + 1
         story_iterator.next()
 
     return row_counts

@@ -16,8 +16,7 @@ from sqlalchemy.types import Date, DateTime, Integer, Numeric, String, Time
 from typing import Callable
 
 from datafaker.base import DistributionGenerator
-
-logger = logging.getLogger(__name__)
+from datafaker.utils import logger
 
 # How many distinct values can we have before we consider a
 # choice distribution to be infeasible?
@@ -41,7 +40,7 @@ class Generator(ABC):
     """
     @abstractmethod
     def function_name(self) -> str:
-        """ The name of the generator function to put into datafaker.py. """
+        """ The name of the generator function to put into df.py. """
 
     @abstractmethod
     def nominal_kwargs(self) -> dict[str, str]:

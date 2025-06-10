@@ -144,7 +144,7 @@ docs/temp/*
 *.swp
 
 # tool outputs
-datafaker.py
+df.py
 ssg.py
 orm.yaml
 src-stats.yaml

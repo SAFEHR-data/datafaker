@@ -17,6 +17,27 @@
       "description": "The name of a local Python module of story generators (excluding .py).",
       "type": "string"
     },
+    "object_instantiation": {
+      "description": "Objects that need to be instantiated from the row and story generators modules.",
+      "type": "object",
+      "items": {
+        "type": "object",
+        "items": {
+          "additionalProperties": false,
+          "required": ["class"],
+          "properties": {
+            "class": {
+              "description": "The qualified name of the class to instantiate, such as row_gen_module.MyGenerator",
+              "type": "string"
+            },
+            "kwargs": {
+              "description": "Arguments to provide to the class constructor.",
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
     "src-stats": {
       "description": "An array of source statistics queries.",
       "type": "array",

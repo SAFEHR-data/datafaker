@@ -10,7 +10,7 @@ from typing import Final, Optional
 import yaml
 from jsonschema.exceptions import ValidationError
 from jsonschema.validators import validate
-from typer import Argument, Option, Typer
+from typer import Argument, Exit, Option, Typer
 
 from datafaker.create import create_db_data, create_db_tables, create_db_vocab
 from datafaker.dump import dump_db_tables
@@ -43,7 +43,7 @@ from .serialize_metadata import dict_to_metadata
 
 ORM_FILENAME: Final[str] = "orm.yaml"
 CONFIG_FILENAME: Final[str] = "config.yaml"
-DF_FILENAME: Final[str] = "datafaker.py"
+DF_FILENAME: Final[str] = "df.py"
 STATS_FILENAME: Final[str] = "src-stats.yaml"
 
 app = Typer(no_args_is_help=True)
@@ -128,22 +128,27 @@ def create_data(
     df_module = import_file(df_file)
     table_generator_dict = df_module.table_generator_dict
     story_generator_list = df_module.story_generator_list
-    row_counts = create_db_data(
-        sorted_non_vocabulary_tables(orm_metadata, config),
-        table_generator_dict,
-        story_generator_list,
-        num_passes,
-    )
-    logger.debug(
-        "Data created in %s %s.", num_passes, "pass" if num_passes == 1 else "passes"
-    )
-    for table_name, row_count in row_counts.items():
-        logger.debug(
-            "%s: %s %s created.",
-            table_name,
-            row_count,
-            "row" if row_count == 1 else "rows",
+    try:
+        row_counts = create_db_data(
+            sorted_non_vocabulary_tables(orm_metadata, config),
+            table_generator_dict,
+            story_generator_list,
+            num_passes,
         )
+        logger.debug(
+            "Data created in %s %s.", num_passes, "pass" if num_passes == 1 else "passes"
+        )
+        for table_name, row_count in row_counts.items():
+            logger.debug(
+                "%s: %s %s created.",
+                table_name,
+                row_count,
+                "row" if row_count == 1 else "rows",
+            )
+        return
+    except RuntimeError as e:
+        logger.error(e.args[0])
+    raise Exit(1)
 
 
 @app.command()
@@ -191,7 +196,7 @@ def create_generators(
     df_file: str = Option(DF_FILENAME, help="Path to write Python generators to."),
     config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
     stats_file: Optional[str] = Option(None, help="Statistics file (output of make-stats)"),
-    force: bool = Option(False, help="Overwrite any existing Python generators file."),
+    force: bool = Option(False, "--force", "-f", help="Overwrite any existing Python generators file."),
 ) -> None:
     """Make a datafaker file of generator classes.
 
@@ -226,7 +231,7 @@ def create_generators(
 def make_vocab(
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
     config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
-    force: bool = Option(True, help="Overwrite any existing vocabulary file."),
+    force: bool = Option(False, "--force/--no-force", "-f/+f", help="Overwrite any existing vocabulary file."),
     compress: bool = Option(False, help="Compress file to .gz"),
     only: list[str] = Option([], help="Only download this table."),
 ) -> None:
@@ -256,7 +261,7 @@ def make_stats(
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
     config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
     stats_file: str = Option(STATS_FILENAME),
-    force: bool = Option(False, help="Overwrite any existing vocabulary file."),
+    force: bool = Option(False, "--force", "-f", help="Overwrite any existing vocabulary file."),
 ) -> None:
     """Compute summary statistics from the source database.
 
@@ -288,7 +293,7 @@ def make_stats(
 def make_tables(
     config_file: Optional[str] = Option(None, help="The configuration file, used if you want an orm.yaml lacking data for the ignored tables"),
     orm_file: str = Option(ORM_FILENAME, help="Path to write the ORM yaml file to"),
-    force: bool = Option(False, help="Overwrite any existing orm yaml file."),
+    force: bool = Option(False, "--force", "-f", help="Overwrite any existing orm yaml file."),
 ) -> None:
     """Make a YAML file representing the tables in the schema.
 

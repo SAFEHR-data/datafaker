@@ -71,7 +71,7 @@ tables:
   hospital_visit:
     num_rows_per_pass: 3
     row_generators:
-      - name: utc.timespan_generator
+      - name: uct.timespan_generator
         args: [generic, 2021, 2022]
         kwargs:
           min_dt_days: 1
@@ -84,7 +84,7 @@ tables:
   unique_constraint_test:
     num_rows_per_pass: 1
     row_generators:
-      - name: utc.boolean_pair
+      - name: uct.boolean_pair
         args: [generic]
         columns_assigned:
           - a
@@ -94,7 +94,7 @@ tables:
     ignore: false
     num_rows_per_pass: 1
     row_generators:
-      - name: utc.unique_constraint_test2
+      - name: uct.unique_constraint_test2
         columns_assigned:
           - a
           - b
@@ -106,7 +106,7 @@ tables:
   # This one can't be ignored at ORM creation time, because the below table fk
   # refs it. We thus ignore it at the later stages when loading the ORM.
   unignorable_table:
-    ignore: true
+    vocabulary_table: true
 
   ref_to_unignorable_table:
     vocabulary_table: true

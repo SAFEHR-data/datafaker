@@ -42,12 +42,12 @@ for entry_name, entry in inspect.getmembers(providers, inspect.isclass):
         PROVIDER_IMPORTS.append(entry_name)
 
 TEMPLATE_DIRECTORY: Final[Path] = Path(__file__).parent / "templates/"
-DF_TEMPLATE_FILENAME: Final[str] = "datafaker.py.j2"
+DF_TEMPLATE_FILENAME: Final[str] = "df.py.j2"
 
 
 @dataclass
 class VocabularyTableGeneratorInfo:
-    """Contains the datafaker.py content related to vocabulary tables."""
+    """Contains the df.py content related to vocabulary tables."""
 
     variable_name: str
     table_name: str
@@ -56,7 +56,7 @@ class VocabularyTableGeneratorInfo:
 
 @dataclass
 class FunctionCall:
-    """Contains the datafaker.py content related function calls."""
+    """Contains the df.py content related function calls."""
 
     function_name: str
     argument_values: list[str]
@@ -64,7 +64,7 @@ class FunctionCall:
 
 @dataclass
 class RowGeneratorInfo:
-    """Contains the datafaker.py content related to row generators of a table."""
+    """Contains the df.py content related to row generators of a table."""
 
     variable_names: list[str]
     function_call: FunctionCall
@@ -96,7 +96,7 @@ def make_column_choices(
 
 @dataclass
 class TableGeneratorInfo:
-    """Contains the datafaker.py content related to regular tables."""
+    """Contains the df.py content related to regular tables."""
 
     class_name: str
     table_name: str
@@ -109,7 +109,7 @@ class TableGeneratorInfo:
 
 @dataclass
 class StoryGeneratorInfo:
-    """Contains the datafaker.py content related to story generators."""
+    """Contains the df.py content related to story generators."""
 
     wrapper_name: str
     function_call: FunctionCall
@@ -427,7 +427,7 @@ class _PrimaryConstraint:
     """
     Describes a Uniqueness constraint for when multiple
     columns in a table comprise the primary key. Not a
-    real constraint, but enough to write datafaker.py.
+    real constraint, but enough to write df.py.
     """
     def __init__(self, *columns: Column, name: str):
         self.name = name
@@ -564,6 +564,7 @@ def make_table_generators(  # pylint: disable=too-many-locals
     """
     row_generator_module_name: str = config.get("row_generators_module", None)
     story_generator_module_name = config.get("story_generators_module", None)
+    object_instantiation: dict[str, dict] = config.get("object_instantiation", {})
     tables_config = config.get("tables", {})
 
     tables: list[TableGeneratorInfo] = []
@@ -599,6 +600,7 @@ def make_table_generators(  # pylint: disable=too-many-locals
             "config_file_name": config_filename,
             "row_generator_module_name": row_generator_module_name,
             "story_generator_module_name": story_generator_module_name,
+            "object_instantiation": object_instantiation,
             "src_stats_filename": src_stats_filename,
             "tables": tables,
             "vocabulary_tables": vocabulary_tables,
@@ -609,7 +611,7 @@ def make_table_generators(  # pylint: disable=too-many-locals
 
 
 def generate_df_content(template_context: Mapping[str, Any]) -> str:
-    """Generate the content of the datafaker.py file as a string."""
+    """Generate the content of the df.py file as a string."""
     environment: Environment = Environment(
         loader=FileSystemLoader(TEMPLATE_DIRECTORY),
         trim_blocks=True,
@@ -789,14 +791,14 @@ async def make_src_stats_connection(config: Mapping, db_conn: DbConnection, meta
                 "date": date_string,
                 "query": query_block["query"],
             },
-            "comments": query_block["comments"],
+            "comments": query_block.get("comments", []),
             "results": fix_types(result),
         }
         for query_block, result in zip(query_blocks, results)
     }
 
     for name, result in src_stats.items():
-        if not result:
+        if not result["results"]:
             logger.warning("src-stats query %s returned no results", name)
 
     return src_stats

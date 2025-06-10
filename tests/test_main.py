@@ -1,4 +1,5 @@
 """Tests for the main module."""
+import os
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
@@ -16,9 +17,11 @@ runner = CliRunner(mix_stderr=False)
 class TestCLI(DatafakerTestCase):
     """Tests for the command-line interface."""
 
-    @patch("datafaker.main.import_file")
+    @patch("datafaker.main.read_config_file")
+    @patch("datafaker.main.dict_to_metadata")
+    @patch("datafaker.main.load_metadata_config")
     @patch("datafaker.main.create_db_vocab")
-    def test_create_vocab(self, mock_create: MagicMock, mock_import: MagicMock) -> None:
+    def test_create_vocab(self, mock_create: MagicMock, mock_mdict: MagicMock, mock_meta: MagicMock, mock_config: MagicMock) -> None:
         """Test the create-vocab sub-command."""
         result = runner.invoke(
             app,
@@ -28,19 +31,21 @@ class TestCLI(DatafakerTestCase):
             catch_exceptions=False,
         )
 
-        mock_create.assert_called_once_with(mock_import.return_value.vocab_dict)
+        mock_create.assert_called_once_with(mock_meta.return_value, mock_mdict.return_value, mock_config.return_value)
         self.assertSuccess(result)
 
+    @patch("datafaker.main.read_config_file")
+    @patch("datafaker.main.load_metadata")
     @patch("datafaker.main.get_settings")
-    @patch("datafaker.main.import_file")
     @patch("datafaker.main.Path")
     @patch("datafaker.main.make_table_generators")
     def test_create_generators(
         self,
         mock_make: MagicMock,
         mock_path: MagicMock,
-        mock_import: MagicMock,
         mock_settings: MagicMock,
+        mock_load_meta: MagicMock,
+        mock_config: MagicMock,
     ) -> None:
         """Test the create-generators sub-command."""
         mock_path.return_value.exists.return_value = False
@@ -56,7 +61,11 @@ class TestCLI(DatafakerTestCase):
         )
 
         mock_make.assert_called_once_with(
-            mock_import.return_value, {}, None, overwrite_files=False
+            mock_load_meta.return_value,
+            mock_config.return_value,
+            "orm.yaml",
+            "config.yaml",
+            None,
         )
         mock_path.return_value.write_text.assert_called_once_with(
             "some text", encoding="utf-8"
@@ -71,7 +80,7 @@ class TestCLI(DatafakerTestCase):
         """Test the create-generators sub-command doesn't overwrite."""
 
         mock_path.return_value.exists.return_value = True
-        mock_path.return_value.__str__.return_value = "datafaker.py"
+        mock_path.return_value.__str__.return_value = "df.py"
 
         result = runner.invoke(
             app,
@@ -85,33 +94,18 @@ class TestCLI(DatafakerTestCase):
         )
         self.assertEqual(1, result.exit_code)
 
-    @patch("datafaker.main.logger")
-    def test_create_generators_errors_if_src_dsn_missing(
-        self, mock_logger: MagicMock
-    ) -> None:
-        """Test the create-generators sub-command with missing db params."""
-        result = runner.invoke(
-            app,
-            [
-                "create-generators",
-            ],
-            catch_exceptions=False,
-        )
-        mock_logger.error.assert_called_once_with(
-            "Missing source database connection details."
-        )
-        self.assertEqual(1, result.exit_code)
-
+    @patch("datafaker.main.read_config_file")
+    @patch("datafaker.main.load_metadata")
     @patch("datafaker.main.get_settings")
     @patch("datafaker.main.Path")
-    @patch("datafaker.main.import_file")
     @patch("datafaker.main.make_table_generators")
     def test_create_generators_with_force_enabled(
         self,
         mock_make: MagicMock,
-        mock_import: MagicMock,
         mock_path: MagicMock,
         mock_settings: MagicMock,
+        mock_load_meta: MagicMock,
+        mock_config: MagicMock,
     ) -> None:
         """Tests the create-generators sub-commands overwrite files when instructed."""
 
@@ -121,10 +115,17 @@ class TestCLI(DatafakerTestCase):
 
         for force_option in ["--force", "-f"]:
             with self.subTest(f"Using option {force_option}"):
-                result: Result = runner.invoke(app, ["create-generators", force_option])
+                result: Result = runner.invoke(app, [
+                    "create-generators",
+                    force_option,
+                ])
 
                 mock_make.assert_called_once_with(
-                    mock_import.return_value, {}, None, overwrite_files=True
+                    mock_load_meta.return_value,
+                    mock_config.return_value,
+                    "orm.yaml",
+                    "config.yaml",
+                    None,
                 )
                 mock_path.return_value.write_text.assert_called_once_with(
                     "make result", encoding="utf-8"
@@ -135,9 +136,10 @@ class TestCLI(DatafakerTestCase):
                 mock_path.reset_mock()
 
     @patch("datafaker.main.create_db_tables")
-    @patch("datafaker.main.import_file")
+    @patch("datafaker.main.read_config_file")
+    @patch("datafaker.main.load_metadata")
     def test_create_tables(
-        self, mock_import: MagicMock, mock_create: MagicMock
+        self, mock_load_meta: MagicMock, mock_config: MagicMock, mock_create: MagicMock
     ) -> None:
         """Test the create-tables sub-command."""
 
@@ -149,14 +151,19 @@ class TestCLI(DatafakerTestCase):
             catch_exceptions=False,
         )
 
-        mock_create.assert_called_once_with(mock_import.return_value.Base.metadata)
+        mock_create.assert_called_once_with(mock_load_meta.return_value)
         self.assertSuccess(result)
 
+    @patch("datafaker.main.sorted_non_vocabulary_tables")
     @patch("datafaker.main.logger")
     @patch("datafaker.main.import_file")
     @patch("datafaker.main.create_db_data")
     def test_create_data(
-        self, mock_create: MagicMock, mock_import: MagicMock, mock_logger: MagicMock
+        self,
+        mock_create: MagicMock,
+        mock_import: MagicMock,
+        mock_logger: MagicMock,
+        mock_tables: MagicMock,
     ) -> None:
         """Test the create-data sub-command."""
 
@@ -165,19 +172,15 @@ class TestCLI(DatafakerTestCase):
             app,
             [
                 "create-data",
+                "--config-file=tests/examples/example_config.yaml",
+                "--orm-file=tests/examples/example_orm.yaml",
             ],
             catch_exceptions=False,
         )
-        self.assertListEqual(
-            [
-                call("orm.py"),
-                call("datafaker.py"),
-            ],
-            mock_import.call_args_list,
-        )
+        self.assertListEqual([call("df.py")], mock_import.call_args_list)
 
         mock_create.assert_called_once_with(
-            mock_import.return_value.Base.metadata.sorted_tables,
+            mock_tables.return_value,
             mock_import.return_value.table_generator_dict,
             mock_import.return_value.story_generator_list,
             1,
@@ -250,16 +253,18 @@ class TestCLI(DatafakerTestCase):
         )
         self.assertEqual(1, result.exit_code)
 
+    @patch.dict(os.environ, {"SRC_SCHEMA": "myschema"}, clear=True)
     @patch("datafaker.main.logger")
     def test_make_tables_errors_if_src_dsn_missing(
         self, mock_logger: MagicMock
     ) -> None:
-        """Test the make-tables sub-command doesn't overwrite."""
+        """Test the make-tables sub-command refuses to work if SRC_DSN is not set."""
 
         result = runner.invoke(
             app,
             [
                 "make-tables",
+                "--orm-file=tests/examples/does-not-exist.yaml",
             ],
             catch_exceptions=False,
         )
@@ -269,30 +274,33 @@ class TestCLI(DatafakerTestCase):
         self.assertEqual(1, result.exit_code)
 
     @patch("datafaker.main.make_tables_file")
-    @patch("datafaker.main.get_settings")
     @patch("datafaker.main.Path")
+    @patch("datafaker.main.get_settings")
     def test_make_tables_with_force_enabled(
         self,
-        mock_path: MagicMock,
         mock_get_settings: MagicMock,
+        mock_path: MagicMock,
         mock_make_tables: MagicMock,
     ) -> None:
-        """Test the make-table sub-command, when the force option is activated."""
-
+        """Test the make-tables sub-command, when the force option is activated."""
+        mock_get_settings.return_value = get_test_settings()
         mock_path.return_value.exists.return_value = True
-
-        test_settings: Settings = get_test_settings()
         mock_tables_output: str = "make_tables_file output"
 
-        mock_get_settings.return_value = test_settings
         mock_make_tables.return_value = mock_tables_output
 
         for force_option in ["--force", "-f"]:
             with self.subTest(f"Using option {force_option}"):
-                result: Result = runner.invoke(app, ["make-tables", force_option])
+                result: Result = runner.invoke(app, [
+                    "make-tables",
+                    force_option,
+                    "--orm-file=tests/examples/example_orm.yaml",
+                ])
 
                 mock_make_tables.assert_called_once_with(
-                    test_settings.src_dsn, test_settings.src_schema, {}
+                    mock_get_settings.return_value.src_dsn,
+                    mock_get_settings.return_value.src_schema,
+                    {},
                 )
                 mock_path.return_value.write_text.assert_called_once_with(
                     mock_tables_output, encoding="utf-8"
@@ -305,8 +313,9 @@ class TestCLI(DatafakerTestCase):
     @patch("datafaker.main.Path")
     @patch("datafaker.main.make_src_stats")
     @patch("datafaker.main.get_settings")
+    @patch("datafaker.main.load_metadata", side_effect=["ms"])
     def test_make_stats(
-        self, mock_get_settings: MagicMock, mock_make: MagicMock, mock_path: MagicMock
+        self, _lm: MagicMock, mock_get_settings: MagicMock, mock_make: MagicMock, mock_path: MagicMock
     ) -> None:
         """Test the make-stats sub-command."""
         example_conf_path = "tests/examples/example_config.yaml"
@@ -326,7 +335,7 @@ class TestCLI(DatafakerTestCase):
         self.assertSuccess(result)
         with open(example_conf_path, "r", encoding="utf8") as f:
             config = yaml.safe_load(f)
-        mock_make.assert_called_once_with(get_test_settings().src_dsn, config, None)
+        mock_make.assert_called_once_with(get_test_settings().src_dsn, config, "ms", None)
         mock_path.return_value.write_text.assert_called_once_with(
             "a: 1\n", encoding="utf-8"
         )
@@ -357,6 +366,7 @@ class TestCLI(DatafakerTestCase):
         self.assertEqual(1, result.exit_code)
 
     @patch("datafaker.main.logger")
+    @patch.dict(os.environ, {"SRC_SCHEMA": "myschema"}, clear=True)
     def test_make_stats_errors_if_no_src_dsn(self, mock_logger: MagicMock) -> None:
         """Test the make-stats sub-command with missing settings."""
         example_conf_path = "tests/examples/example_config.yaml"
@@ -366,6 +376,7 @@ class TestCLI(DatafakerTestCase):
             [
                 "make-stats",
                 f"--config-file={example_conf_path}",
+                "--stats-file=tests/examples/does-not-exist.yaml",
             ],
             catch_exceptions=False,
         )
@@ -377,8 +388,9 @@ class TestCLI(DatafakerTestCase):
     @patch("datafaker.main.Path")
     @patch("datafaker.main.make_src_stats")
     @patch("datafaker.main.get_settings")
+    @patch("datafaker.main.load_metadata")
     def test_make_stats_with_force_enabled(
-        self, mock_get_settings: MagicMock, mock_make: MagicMock, mock_path: MagicMock
+        self, mock_meta: MagicMock, mock_get_settings: MagicMock, mock_make: MagicMock, mock_path: MagicMock
     ) -> None:
         """Tests that the make-stats command overwrite files when instructed."""
         test_config_file: str = "tests/examples/example_config.yaml"
@@ -399,12 +411,13 @@ class TestCLI(DatafakerTestCase):
                         "make-stats",
                         "--stats-file=stats_file.yaml",
                         f"--config-file={test_config_file}",
+                        "--orm-file=tests/examples/example_config.yaml",
                         force_option,
                     ],
                 )
 
                 mock_make.assert_called_once_with(
-                    test_settings.src_dsn, config_file_content, None
+                    test_settings.src_dsn, config_file_content, mock_meta.return_value, None
                 )
                 mock_path.return_value.write_text.assert_called_once_with(
                     "some_stat: 0\n", encoding="utf-8"
@@ -435,8 +448,14 @@ class TestCLI(DatafakerTestCase):
         self.assertEqual(1, result.exit_code)
 
     @patch("datafaker.main.remove_db_data")
-    @patch("datafaker.main.import_file", side_effect=(1, 2))
-    def test_remove_data(self, _: MagicMock, mock_remove: MagicMock) -> None:
+    @patch("datafaker.main.read_config_file")
+    @patch("datafaker.main.load_metadata")
+    def test_remove_data(
+        self,
+        mock_meta: MagicMock,
+        mock_config: MagicMock,
+        mock_remove: MagicMock,
+    ) -> None:
         """Test the remove-data command."""
         result = runner.invoke(
             app,
@@ -444,11 +463,19 @@ class TestCLI(DatafakerTestCase):
             catch_exceptions=False,
         )
         self.assertEqual(0, result.exit_code)
-        mock_remove.assert_called_once_with(1, 2, {})
+        mock_remove.assert_called_once_with(mock_meta.return_value, mock_config.return_value)
 
+    @patch("datafaker.main.read_config_file")
     @patch("datafaker.main.remove_db_vocab")
-    @patch("datafaker.main.import_file", side_effect=(1, 2))
-    def test_remove_vocab(self, _: MagicMock, mock_remove: MagicMock) -> None:
+    @patch("datafaker.main.load_metadata_config")
+    @patch("datafaker.main.dict_to_metadata")
+    def test_remove_vocab(
+        self,
+        mock_d2m: MagicMock,
+        mock_load_metadata: MagicMock,
+        mock_remove: MagicMock,
+        mock_read_config: MagicMock,
+    ) -> None:
         """Test the remove-vocab command."""
         result = runner.invoke(
             app,
@@ -456,11 +483,13 @@ class TestCLI(DatafakerTestCase):
             catch_exceptions=False,
         )
         self.assertEqual(0, result.exit_code)
-        mock_remove.assert_called_once_with(1, 2, {})
+        mock_read_config.assert_called_once_with("config.yaml")
+        mock_remove.assert_called_once_with(mock_d2m.return_value, mock_load_metadata.return_value, mock_read_config.return_value)
 
     @patch("datafaker.main.remove_db_tables")
-    @patch("datafaker.main.import_file", side_effect=(1,))
-    def test_remove_tables(self, _: MagicMock, mock_remove: MagicMock) -> None:
+    @patch("datafaker.main.load_metadata")
+    @patch("datafaker.main.read_config_file")
+    def test_remove_tables(self, _: MagicMock, mock_meta: MagicMock, mock_remove: MagicMock) -> None:
         """Test the remove-tables command."""
         result = runner.invoke(
             app,
@@ -468,4 +497,4 @@ class TestCLI(DatafakerTestCase):
             catch_exceptions=False,
         )
         self.assertEqual(0, result.exit_code)
-        mock_remove.assert_called_once_with(1, {})
+        mock_remove.assert_called_once_with(mock_meta.return_value)

@@ -273,6 +273,12 @@ Set and unset
 Say we decide on generator 2, we can set this with ``set 2``.
 ``unset`` removes any previously set generator.
 
+Short commands
+^^^^^^^^^^^^^^
+
+In case you couldn't get tab completion working on your favourite terminal on your machine, there are single letter commands for the most common operations of ``configure-generators``:
+``n`` and ``b`` are synonymns for ``next`` and ``previous`` ("back"), and ``p``, ``c`` and ``s`` are synonymns for ``propose``, ``compare`` and ``set`` respectively.
+
 Configuring missingness
 -----------------------
 
@@ -350,7 +356,7 @@ Whichever we chose, now we can create the generators Python file:
 
 The first of these uses ``orm.yaml`` to create the destination database.
 The second uses all the ``.yaml.gz`` (or ``.yaml``) files representing the vocabulary tables (this can take hours, too).
-The third uses ``config.yaml`` to create a file ``datafaker.py`` file containing code to call the generators as configured.
+The third uses ``config.yaml`` to create a file ``df.py`` file containing code to call the generators as configured.
 The last one actually generates the data. ``--num-passes`` controls how many rows are generated.
 At present the only ways to generate different numbers of rows for different tables is to configure ``num_rows_per_pass`` in ``config.yaml``:
 

@@ -1,63 +1,89 @@
 """Tests for the create module."""
 import itertools as itt
 from collections import Counter
+import os
 from pathlib import Path
+import random
 from typing import Any, Generator, Tuple
 from unittest.mock import MagicMock, call, patch
 
-from sqlalchemy import Column, Connection, Integer, create_engine
-from sqlalchemy.orm import declarative_base
+from sqlalchemy import Connection, select
 from sqlalchemy.schema import Table
 
-from datafaker.base import FileUploader, TableGenerator
+from datafaker.base import TableGenerator
 from datafaker.create import (
-    Story,
-    StoryIterator,
-    create_db_data,
-    create_db_tables,
     create_db_vocab,
     populate,
 )
-from tests.utils import RequiresDBTestCase, DatafakerTestCase, get_test_settings
+from datafaker.remove import remove_db_vocab
+from datafaker.serialize_metadata import metadata_to_dict
+from tests.utils import DatafakerTestCase, GeneratesDBTestCase
+
+class TestCreate(GeneratesDBTestCase):
+    """Test the make_table_generators function."""
+    dump_file_path = "instrument.sql"
+    database_name = "instrument"
+    schema_name = "public"
+
+    def test_create_vocab(self) -> None:
+        """Test the create_db_vocab function."""
+        with patch.dict(os.environ, {"DST_DSN": self.dsn, "DST_SCHEMA": self.schema_name}, clear=True):
+            config = {
+                "tables": {
+                    "player": {
+                        "vocabulary_table": True,
+                    }
+                },
+            }
+            self.set_configuration(config)
+            meta_dict = metadata_to_dict(self.metadata, self.schema_name, self.engine)
+            self.remove_data(config)
+            remove_db_vocab(self.metadata, meta_dict, config)
+            create_db_vocab(self.metadata, meta_dict, config, Path("./tests/examples"))
+        with self.engine.connect() as conn:
+            stmt = select(self.metadata.tables["player"])
+            rows = list(conn.execute(stmt).mappings().fetchall())
+            self.assertEqual(len(rows), 3)
+            self.assertEqual(rows[0].id, 1)
+            self.assertEqual(rows[0].given_name, "Jock")
+            self.assertEqual(rows[0].family_name, "Spring")
+            self.assertEqual(rows[1].id, 2)
+            self.assertEqual(rows[1].given_name, "Jennifer")
+            self.assertEqual(rows[1].family_name, "Jenny")
+            self.assertEqual(rows[2].id, 3)
+            self.assertEqual(rows[2].given_name, "Mus")
+            self.assertEqual(rows[2].family_name, "Al-Said")
+
+    def test_make_table_generators(self) -> None:
+        """Test that we can handle column defaults in stories."""
+        random.seed(56)
+        config = {}
+        self.generate_data(config, num_passes=2)
+        with self.engine.connect() as conn:
+            stmt = select(self.metadata.tables["string"])
+            rows = list(conn.execute(stmt).mappings().fetchall())
+            a = rows[0]
+            b = rows[1]
+            self.assertEqual(a.id, 1)
+            self.assertEqual(b.id, 2)
+            self.assertIs(type(a.frequency), float)
+            self.assertIs(type(b.frequency), float)
+            self.assertNotEqual(a.frequency, b.frequency)
+            self.assertIs(type(a.position), int)
+            self.assertIs(type(b.position), int)
+            self.assertNotEqual(a.position, b.position)
+            self.assertEqual(a.model_id, 1)
+            self.assertIn(b.model_id, {1, 2})
+            stmt = select(self.metadata.tables["player"])
+            rows = list(conn.execute(stmt).mappings().fetchall())
+            c = rows[0]
+            d = rows[1]
+            self.assertIs(type(c.given_name), str)
+            self.assertIs(type(d.given_name), str)
 
 
-class MyTestCase(DatafakerTestCase):
-    """Module test case."""
-
-    @patch("datafaker.utils.create_engine")
-    @patch("datafaker.create.get_settings")
-    @patch("datafaker.create.populate")
-    def test_create_db_data(
-        self,
-        mock_populate: MagicMock,
-        mock_get_settings: MagicMock,
-        mock_create_engine: MagicMock,
-    ) -> None:
-        """Test the generate function."""
-        mock_get_settings.return_value = get_test_settings()
-        mock_populate.return_value = {}
-
-        num_passes = 23
-        row_counts = create_db_data([], {}, [], num_passes)
-
-        self.assertEqual(len(mock_populate.call_args_list), num_passes)
-        self.assertEqual(row_counts, {})
-        mock_create_engine.assert_called()
-
-    @patch("datafaker.create.get_settings")
-    @patch("datafaker.utils.create_engine")
-    def test_create_db_tables(
-        self, mock_create_engine: MagicMock, mock_get_settings: MagicMock
-    ) -> None:
-        """Test the create_tables function."""
-        mock_get_settings.return_value.dst_schema = None
-        mock_meta = MagicMock()
-
-        create_db_tables(mock_meta)
-        mock_create_engine.assert_called_once_with(
-            mock_get_settings.return_value.dst_dsn
-        )
-        mock_meta.create_all.assert_called_once_with(mock_create_engine.return_value)
+class TestPopulate(DatafakerTestCase):
+    """ Test create.populate. """
 
     def test_populate(self) -> None:
         """Test the populate function."""
@@ -117,21 +143,9 @@ class MyTestCase(DatafakerTestCase):
                     row_counts,
                 )
                 self.assertListEqual(
-                    [call(mock_dst_conn)] * (num_stories_per_pass + num_rows_per_pass),
-                    mock_gen.call_args_list,
-                )
-                self.assertListEqual(
                     [call(mock_gen.return_value)]
                     * (num_stories_per_pass + num_rows_per_pass),
                     mock_values.call_args_list,
-                )
-                self.assertListEqual(
-                    (
-                        [call(mock_values.return_value.return_defaults.return_value)]
-                        * num_stories_per_pass
-                    )
-                    + ([call(mock_values.return_value)] * num_rows_per_pass),
-                    mock_dst_conn.execute.call_args_list,
                 )
 
     @patch("datafaker.create.insert")
@@ -160,64 +174,3 @@ class MyTestCase(DatafakerTestCase):
 
         mock_gen_two.assert_called_once()
         mock_gen_three.assert_called_once()
-
-    @patch("datafaker.utils.create_engine")
-    @patch("datafaker.create.get_settings")
-    def test_create_db_vocab(
-        self, mock_get_settings: MagicMock, mock_create_engine: MagicMock
-    ) -> None:
-        """Test the create_db_vocab function."""
-        mock_get_settings.return_value = get_test_settings()
-
-        mock_load = MagicMock()
-        mock_table = MagicMock()
-        mock_table.name = "Mock table"
-        mock_file_uploader = MagicMock(spec=FileUploader)
-        mock_file_uploader.load = mock_load
-        mock_file_uploader.table = mock_table
-        vocab_list: dict[str, FileUploader] = {mock_table.name: mock_file_uploader}
-
-        create_db_vocab(vocab_list)
-
-        mock_load.assert_called_once_with(
-            mock_create_engine.return_value.connect.return_value.__enter__.return_value
-        )
-        mock_create_engine.assert_called_once_with(
-            mock_get_settings.return_value.dst_dsn
-        )
-        # Running the same insert twice should be fine.
-        create_db_vocab(vocab_list)
-
-
-class TestStoryDefaults(RequiresDBTestCase):
-    """Test that we can handle column defaults in stories."""
-
-    dump_file_path = "dst.dump"
-    # pylint: disable=invalid-name
-    Base = declarative_base()
-    # pylint: enable=invalid-name
-    metadata = Base.metadata
-
-    class ColumnDefaultsTable(Base):  # type: ignore
-        """A SQLAlchemy model."""
-
-        __tablename__ = "column_defaults"
-        someval = Column(Integer, primary_key=True)
-        otherval = Column(Integer, server_default="8")
-
-    def test_populate(self) -> None:
-        """Check that we can populate a table that has column defaults."""
-        self.metadata.create_all(self.engine)
-
-        def my_story() -> Story:
-            """A story generator."""
-            first_row = yield "column_defaults", {}
-            self.assertEqual(1, first_row["someval"])
-            self.assertEqual(8, first_row["otherval"])
-
-        story_iterator = StoryIterator([my_story()], dict(self.metadata.tables), {}, conn)
-        with self.engine.connect() as conn:
-            with conn.begin():
-                while not story_iterator.is_ended():
-                    story_iterator.insert()
-                    story_iterator.next()

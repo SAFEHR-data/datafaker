@@ -194,7 +194,7 @@ def get_orm_metadata(
 
 # This is the main logger that the other modules of datafaker should use for output.
 # conf_logger() should be called once, as early as possible, to configure this logger.
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("datafaker")
 
 
 def info_or_lower(record: logging.LogRecord) -> bool:
@@ -207,6 +207,52 @@ def warning_or_higher(record: logging.LogRecord) -> bool:
     return record.levelno in (logging.WARNING, logging.ERROR, logging.CRITICAL)
 
 
+class StdoutHandler(logging.Handler):
+    """
+    A handler that writes to stdout.
+    We aren't using StreamHandler because that confuses typer.testing.CliRunner
+    """
+    def flush(self):
+        self.acquire()
+        try:
+            sys.stdout.flush()
+        finally:
+            self.release()
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            sys.stdout.write(msg + "\n")
+            sys.stdout.flush()
+        except RecursionError:
+            raise
+        except Exception:
+            self.handleError(record)
+
+
+class StderrHandler(logging.Handler):
+    """
+    A handler that writes to stderr.
+    We aren't using StreamHandler because that confuses typer.testing.CliRunner
+    """
+    def flush(self):
+        self.acquire()
+        try:
+            sys.stderr.flush()
+        finally:
+            self.release()
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            sys.stderr.write(msg + "\n")
+            sys.stderr.flush()
+        except RecursionError:
+            raise
+        except Exception:
+            self.handleError(record)
+
+
 def conf_logger(verbose: bool) -> None:
     """Configure the logger."""
     # Note that this function modifies the global `logger`.
@@ -214,12 +260,12 @@ def conf_logger(verbose: bool) -> None:
 
     # info will always be printed to stdout
     # debug will be printed to stdout only if verbose=True
-    stdout_handler = logging.StreamHandler(sys.stdout)
+    stdout_handler = StdoutHandler()
     stdout_handler.setFormatter(logging.Formatter(log_format))
     stdout_handler.addFilter(info_or_lower)
 
     # warning and error will always be printed to stderr
-    stderr_handler = logging.StreamHandler(sys.stderr)
+    stderr_handler = StderrHandler()
     stderr_handler.setFormatter(logging.Formatter(log_format))
     stderr_handler.addFilter(warning_or_higher)
 
@@ -227,7 +273,10 @@ def conf_logger(verbose: bool) -> None:
         level=logging.DEBUG if verbose else logging.INFO,
         format=log_format,
         handlers=[stdout_handler, stderr_handler],
+        force=True,
     )
+    logging.getLogger('asyncio').setLevel(logging.WARNING)
+    logging.getLogger('blib2to3.pgen2.driver').setLevel(logging.WARNING)
 
 
 def get_flag(maybe_dict, key):

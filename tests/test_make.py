@@ -5,126 +5,51 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import yaml
-from pydantic import PostgresDsn
-from pydantic.tools import parse_obj_as
-from sqlalchemy import BigInteger, Column, String
+from sqlalchemy import BigInteger, Column, String, select
 from sqlalchemy.dialects.mysql.types import INTEGER
 from sqlalchemy.dialects.postgresql import UUID
 
 from datafaker.make import (
     _get_provider_for_column,
     make_src_stats,
-    make_table_generators,
-    make_tables_file,
 )
-from tests.examples import example_orm
-from tests.utils import RequiresDBTestCase, DatafakerTestCase, get_test_settings
+from tests.utils import RequiresDBTestCase, GeneratesDBTestCase
 
 
-class TestMakeGenerators(DatafakerTestCase):
+class TestMakeGenerators(GeneratesDBTestCase):
     """Test the make_table_generators function."""
+    dump_file_path = "instrument.sql"
+    database_name = "instrument"
+    schema_name = "public"
 
-    test_dir = Path("tests/examples")
-    start_dir = os.getcwd()
-
-    def setUp(self) -> None:
-        """Pre-test setup."""
-        os.chdir(self.test_dir)
-
-    def tearDown(self) -> None:
-        """Post-test cleanup."""
-        os.chdir(self.start_dir)
-
-    @patch("datafaker.make.Path")
-    @patch("datafaker.make.get_settings")
-    @patch("datafaker.utils.create_engine")
-    @patch("datafaker.make.download_table")
-    def test_make_table_generators(
-        self,
-        mock_download: MagicMock,
-        mock_create: MagicMock,
-        #... and orm_file_name and config_file
-        mock_get_settings: MagicMock,
-        mock_path: MagicMock,
-    ) -> None:
-        """Check that we can make a generators file from a tables module."""
-
-        mock_path.return_value.exists.return_value = False
-
-        mock_get_settings.return_value = get_test_settings()
-        with open("expected_datafaker.py", encoding="utf-8") as expected_output:
-            expected = expected_output.read()
-        conf_path = "example_config.yaml"
-        with open(conf_path, "r", encoding="utf8") as f:
-            config = yaml.safe_load(f)
-        stats_path = "example_stats.yaml"
-
-        actual = make_table_generators(example_orm, config, stats_path) #... and orm_file_name and config_file_name
-        # 5 because there are 5 vocabulary tables in the example orm.
-        self.assertEqual(mock_path.call_count, 5)
-        self.assertEqual(mock_download.call_count, 5)
-        mock_create.assert_called_once()
-        self.assertEqual(expected, actual)
-
-    @patch("datafaker.make.logger")
-    @patch("datafaker.make.Path")
-    @patch("datafaker.make.get_settings")
-    @patch("datafaker.utils.create_engine")
-    def test_create_generators_do_not_overwrite(
-        self,
-        mock_create: MagicMock,
-        mock_get_settings: MagicMock,
-        mock_path: MagicMock,
-        mock_logger: MagicMock,
-    ) -> None:
-        """Tests that the making generators do not overwrite files."""
-        mock_path.return_value.exists.return_value = True
-        mock_get_settings.return_value = get_test_settings()
-        configuration_file: str = "example_config.yaml"
-        with open(configuration_file, "r", encoding="utf8") as f:
-            configuration: dict = yaml.safe_load(f)
-        stats_path = "example_stats.yaml"
-
-        try:
-            make_table_generators(example_orm, configuration, stats_path) #... and orm_file_name and config_file_name
-        except SystemExit:
-            pass
-
-        mock_create.assert_called_once()
-        mock_logger.error.assert_called_with(
-            "%s already exists. Exiting...", "empty_vocabulary.yaml"
-        )
-
-    @patch("datafaker.make.download_table")
-    @patch("datafaker.utils.create_engine")
-    @patch("datafaker.make.get_settings")
-    @patch("datafaker.make.Path")
-    def test_create_generators_force_overwrite(
-        self,
-        mock_path: MagicMock,
-        mock_get_settings: MagicMock,
-        mock_create: MagicMock,
-        mock_download: MagicMock,
-    ) -> None:
-        """Tests that making generators overwrite files, when instructed."""
-        mock_path.return_value.exists.return_value = True
-
-        mock_get_settings.return_value = get_test_settings()
-        with open("expected_datafaker.py", encoding="utf-8") as expected_output:
-            expected: str = expected_output.read()
-        conf_path = "example_config.yaml"
-        with open(conf_path, "r", encoding="utf8") as f:
-            config: dict = yaml.safe_load(f)
-        stats_path: str = "example_stats.yaml"
-
-        actual: str = make_table_generators(
-            example_orm, config, stats_path, overwrite_files=True #... and orm_file_name and config_file_name
-        )
-
-        mock_create.assert_called_once()
-        self.assertEqual(mock_download.call_count, 5)
-
-        self.assertEqual(expected, actual)
+    def test_make_table_generators(self) -> None:
+        """ Check that we can make a generators file. """
+        config = {
+            "tables": {
+                "player": {
+                    "row_generators": [{
+                        "name": "dist_gen.constant",
+                        "kwargs": {
+                            "value": '"Cave"',
+                        },
+                        "columns_assigned": "given_name",
+                    }, {
+                        "name": "dist_gen.constant",
+                        "kwargs": {
+                            "value": '"Johnson"',
+                        },
+                        "columns_assigned": "family_name",
+                    }],
+                },
+            },
+        }
+        self.generate_data(config, num_passes=3)
+        with self.engine.connect() as conn:
+            stmt = select(self.metadata.tables["player"])
+            rows = conn.execute(stmt).mappings().fetchall()
+            for row in rows:
+                self.assertEqual(row.given_name, "Cave")
+                self.assertEqual(row.family_name, "Johnson")
 
     def test_get_provider_for_column(self) -> None:
         """Test the _get_provider_for_column function."""
@@ -145,7 +70,7 @@ class TestMakeGenerators(DatafakerTestCase):
         )
         self.assertEqual(
             generator_arguments,
-            [],
+            {},
         )
 
         # Column type from another dialect
@@ -171,7 +96,7 @@ class TestMakeGenerators(DatafakerTestCase):
         )
         self.assertEqual(
             generator_arguments,
-            ["100"],
+            { "length": "100" },
         )
 
         # UUID
@@ -186,70 +111,12 @@ class TestMakeGenerators(DatafakerTestCase):
         )
 
 
-class TestMakeTables(DatafakerTestCase):
-    """Test the make_tables function."""
-
-    test_dir = Path("tests/examples")
-    start_dir = os.getcwd()
-
-    def setUp(self) -> None:
-        """Pre-test setup."""
-        os.chdir(self.test_dir)
-
-    def tearDown(self) -> None:
-        """Post-test cleanup."""
-        os.chdir(self.start_dir)
-
-    @patch("datafaker.make.MetaData")
-    @patch("datafaker.make.DeclarativeGenerator")
-    def test_make_tables_file(self, mock_declarative: MagicMock, _: MagicMock) -> None:
-        """Test the make_tables_file function."""
-        mock_declarative.return_value.generate.return_value = "pass\n"
-
-        self.assertEqual(
-            "pass\n",
-            make_tables_file(
-                parse_obj_as(PostgresDsn, "postgresql://postgres@1.2.3.4/db"), None, {}
-            ),
-        )
-
-    @patch("datafaker.make.MetaData")
-    @patch("datafaker.make.DeclarativeGenerator")
-    def test_make_tables_file_with_schema(
-        self, mock_declarative: MagicMock, _: MagicMock
-    ) -> None:
-        """Check that the function handles the schema setting."""
-        mock_declarative.return_value.generate.return_value = "pass\n"
-
-        self.assertEqual(
-            "pass\n",
-            make_tables_file(
-                parse_obj_as(PostgresDsn, "postgresql://postgres@1.2.3.4/db"),
-                "myschema",
-                {},
-            ),
-        )
-
-    @patch("datafaker.make.MetaData")
-    @patch("datafaker.make.logger")
-    @patch("datafaker.make.DeclarativeGenerator")
-    def test_make_tables_warns_no_pk(
-        self, mock_declarative: MagicMock, mock_logger: MagicMock, _: MagicMock
-    ) -> None:
-        """Test the make-tables sub-command warns about Tables()."""
-        mock_declarative.return_value.generate.return_value = "t_nopk_table = Table()"
-
-        make_tables_file(
-            parse_obj_as(PostgresDsn, "postgresql://postgres@127.0.0.1:5432"), None, {}
-        )
-
-        mock_logger.warning.assert_called_with(
-            "Table without PK detected. datafaker may not be able to continue.",
-        )
-
-
 class TestMakeStats(RequiresDBTestCase):
     """Test the make_src_stats function."""
+
+    dump_file_path = "src.dump"
+    database_name = "src"
+    schema_name = "public"
 
     test_dir = Path("tests/examples")
     start_dir = os.getcwd()
@@ -273,19 +140,23 @@ class TestMakeStats(RequiresDBTestCase):
             {"count_opt_outs", "avg_person_id", "count_names"},
             set(src_stats.keys()),
         )
-        count_opt_outs = src_stats["count_opt_outs"]
+        count_opt_outs = src_stats["count_opt_outs"]["results"]
         self.assertEqual(len(count_opt_outs), 2)
         self.assertIsInstance(count_opt_outs[0]["num"], int)
         self.assertIs(count_opt_outs[0]["research_opt_out"], False)
         self.assertIsInstance(count_opt_outs[1]["num"], int)
         self.assertIs(count_opt_outs[1]["research_opt_out"], True)
 
-        count_names = src_stats["count_names"]
-        self.assertEqual(len(count_names), 1)
-        self.assertEqual(count_names[0]["num"], 1000)
-        self.assertEqual(count_names[0]["name"], "Randy Random")
+        count_names = src_stats["count_names"]["results"]
+        count_names.sort(key=lambda c: c["name"])
+        self.assertListEqual(count_names, [
+            {"num": 1, "name": "Miranda Rando-Generata"},
+            {"num": 997, "name": "Randy Random"},
+            {"num": 1, "name": "Testfried Testermann"},
+            {"num": 1, "name": "Veronica Fyre"},
+        ])
 
-        avg_person_id = src_stats["avg_person_id"]
+        avg_person_id = src_stats["avg_person_id"]["results"]
         self.assertEqual(len(avg_person_id), 1)
         self.assertEqual(avg_person_id[0]["avg_id"], 500.5)
 
@@ -295,14 +166,14 @@ class TestMakeStats(RequiresDBTestCase):
     def test_make_stats_no_asyncio_schema(self) -> None:
         """Test that make_src_stats works when explicitly naming a schema."""
         src_stats = asyncio.get_event_loop().run_until_complete(
-            make_src_stats(self.dsn, self.config, "public")
+            make_src_stats(self.dsn, self.config, self.metadata, self.schema_name)
         )
         self.check_make_stats_output(src_stats)
 
     def test_make_stats_no_asyncio(self) -> None:
         """Test that make_src_stats works using the example configuration."""
         src_stats = asyncio.get_event_loop().run_until_complete(
-            make_src_stats(self.dsn, self.config)
+            make_src_stats(self.dsn, self.config, self.metadata, self.schema_name)
         )
         self.check_make_stats_output(src_stats)
 
@@ -310,9 +181,11 @@ class TestMakeStats(RequiresDBTestCase):
         """Test that make_src_stats errors if we use asyncio when some of the queries
         also use snsql.
         """
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         config_asyncio = {**self.config, "use-asyncio": True}
         src_stats = asyncio.get_event_loop().run_until_complete(
-            make_src_stats(self.dsn, config_asyncio)
+            make_src_stats(self.dsn, config_asyncio, self.metadata, self.schema_name)
         )
         self.check_make_stats_output(src_stats)
 
@@ -343,10 +216,10 @@ class TestMakeStats(RequiresDBTestCase):
             ]
         }
         src_stats = asyncio.get_event_loop().run_until_complete(
-            make_src_stats(self.dsn, config, "public")
+            make_src_stats(self.dsn, config, self.metadata, self.schema_name)
         )
-        self.assertEqual(src_stats[query_name1], [])
-        self.assertEqual(src_stats[query_name2], [])
+        self.assertEqual(src_stats[query_name1]["results"], [])
+        self.assertEqual(src_stats[query_name2]["results"], [])
         warning_template = "src-stats query %s returned no results"
         mock_logger.warning.assert_any_call(warning_template, query_name1)
         mock_logger.warning.assert_any_call(warning_template, query_name2)
