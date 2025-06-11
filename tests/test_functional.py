@@ -53,6 +53,17 @@ class DBFunctionalTestCase(RequiresDBTestCase):
             env=self.env,
         )
 
+        self.env = {
+            "src_dsn": self.dsn,
+            "src_schema": self.schema_name,
+            "dst_dsn": self.dsn,
+            "dst_schema": "dstschema",
+        }
+        self.runner = CliRunner(
+            mix_stderr=False,
+            env=self.env,
+        )
+
         # Copy some of the example files over to the workspace.
         for file in self.generator_file_paths + (self.config_file_path,):
             src = self.examples_dir / file
