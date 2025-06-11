@@ -2,13 +2,14 @@
 import os
 import sys
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock, call
 
 from sqlalchemy import Column, Integer, insert
 from sqlalchemy.orm import declarative_base
 
 from datafaker.utils import (
     download_table,
+    generators_require_stats,
     import_file,
     read_config_file,
 )
@@ -106,3 +107,125 @@ class TestReadConfig(DatafakerTestCase):
             mock_logger.error.assert_called_with(
                 "The config file is invalid: %s", "'a' is not of type 'integer'"
             )
+
+class TestUtils(DatafakerTestCase):
+    """ Miscellaneous tests. """
+    def test_generators_require_stats(self) -> None:
+        """ Test that we can tell if a configuration requires SRC_STATS or not. """
+        self.assertTrue(generators_require_stats({
+            "object_instantiation": {
+                "mygen": {"name": "MyGen", "kwargs": {"a": '1 + SRC_STATS["my"]["results"][0]'}}
+            }
+        }))
+        self.assertTrue(generators_require_stats({
+            "story_generators": [{
+                "name": "msg",
+                "kwargs": {"a": '[None] + SRC_STATS["my"]["results"]'},
+            }]
+        }))
+        self.assertTrue(generators_require_stats({
+            "story_generators": [{
+                "name": "msg",
+                "args": ['(SRC_STATS["my"]["results"])'],
+            }]
+        }))
+        self.assertTrue(generators_require_stats({
+            "tables": {
+                "things": {
+                    "missingness_generators":[{
+                        "name": "msg",
+                        "kwargs": {"a": '[SRC_STATS["my"], SRC_STATS["theirs"]]'},
+                        "columns_assigned": ["a"],
+                    }]
+                }
+            }
+        }))
+        self.assertTrue(generators_require_stats({
+            "tables": {
+                "things": {
+                    "row_generators": [{
+                        "name": "MyGen",
+                        "kwargs": {"a": 'SRC_STATS["ifu"]["results"]'},
+                        "columns_assigned": ["a"],
+                    }]
+                }
+            }
+        }))
+        self.assertTrue(generators_require_stats({
+            "tables": {
+                "things": {
+                    "row_generators": [{
+                        "name": "MyGen",
+                        "args": ['SRC_STATS'],
+                        "columns_assigned": ["a"],
+                    }]
+                }
+            }
+        }))
+        self.assertFalse(generators_require_stats({
+            "object_instantiation": {
+                "mygen": {"name": "MyGen", "kwargs": {"a": 1}}
+            }
+        }))
+        self.assertFalse(generators_require_stats({
+            "story_generators": [{
+                "name": "msg",
+                "kwargs": {"a": '[None]'},
+            }]
+        }))
+        self.assertFalse(generators_require_stats({
+            "story_generators": [{
+                "name": "msg",
+                "args": ['(SRC_STATS_["my"]["results"])'],
+            }]
+        }))
+        self.assertFalse(generators_require_stats({
+            "missingness_generators": [{
+                "name": "msg",
+                "kwargs": {"a": '"SRC_STATS"'},
+                "columns_assigned": ["a"],
+            }]
+        }))
+        self.assertFalse(generators_require_stats({
+            "tables": {
+                "things": {
+                    "row_generators": [{
+                        "name": "MyGen",
+                        "kwargs": {"a": 'SRC_STAT["ifu"]["results"]'},
+                        "columns_assigned": ["a"],
+                    }]
+                }
+            }
+        }))
+        self.assertFalse(generators_require_stats({
+            "tables": {
+                "things": {
+                    "row_generators": [{
+                        "name": "MyGen",
+                        "args": ['SRC_STATSS'],
+                        "columns_assigned": ["a"],
+                    }]
+                }
+            }
+        }))
+
+    @patch("datafaker.utils.logger")
+    def test_testing_generators_finds_syntax_errors(self, logger: MagicMock):
+        generators_require_stats({
+            "story_generators": [
+                {"name": "my_story_gen", "kwargs": {"b": "'unclosed"}}
+            ],
+            "tables": {
+                "things": {
+                    "row_generators": [{
+                        "name": "MyGen",
+                        "args": ['1 2'],
+                        "columns_assigned": ["a"],
+                    }]
+                }
+            }
+        })
+        logger.error.assert_has_calls([
+            call("Syntax error in argument %s of %s: %s\n%s\n%s", "b", "story_generators[0]", "unterminated string literal (detected at line 1)", "'unclosed", " ^"),
+            call("Syntax error in argument %d of %s: %s\n%s\n%s", 1, "tables.things.row_generators[0]", "invalid syntax", "1 2", "   ^"),
+        ])

@@ -39,8 +39,10 @@ class TestCLI(DatafakerTestCase):
     @patch("datafaker.main.get_settings")
     @patch("datafaker.main.Path")
     @patch("datafaker.main.make_table_generators")
+    @patch("datafaker.main.generators_require_stats")
     def test_create_generators(
         self,
+        mock_require_stats: MagicMock,
         mock_make: MagicMock,
         mock_path: MagicMock,
         mock_settings: MagicMock,
@@ -48,6 +50,7 @@ class TestCLI(DatafakerTestCase):
         mock_config: MagicMock,
     ) -> None:
         """Test the create-generators sub-command."""
+        mock_require_stats.return_value = False
         mock_path.return_value.exists.return_value = False
         mock_make.return_value = "some text"
         mock_settings.return_value.src_postges_dsn = ""
@@ -66,6 +69,47 @@ class TestCLI(DatafakerTestCase):
             "orm.yaml",
             "config.yaml",
             None,
+        )
+        mock_path.return_value.write_text.assert_called_once_with(
+            "some text", encoding="utf-8"
+        )
+        self.assertSuccess(result)
+
+    @patch("datafaker.main.read_config_file")
+    @patch("datafaker.main.load_metadata")
+    @patch("datafaker.main.get_settings")
+    @patch("datafaker.main.Path")
+    @patch("datafaker.main.make_table_generators")
+    @patch("datafaker.main.generators_require_stats")
+    def test_create_generators_uses_default_stats_file_if_necessary(
+        self,
+        mock_require_stats: MagicMock,
+        mock_make: MagicMock,
+        mock_path: MagicMock,
+        mock_settings: MagicMock,
+        mock_load_meta: MagicMock,
+        mock_config: MagicMock,
+    ) -> None:
+        """Test the create-generators sub-command."""
+        mock_require_stats.return_value = True
+        mock_path.return_value.exists.return_value = False
+        mock_make.return_value = "some text"
+        mock_settings.return_value.src_postges_dsn = ""
+
+        result = runner.invoke(
+            app,
+            [
+                "create-generators",
+            ],
+            catch_exceptions=False,
+        )
+
+        mock_make.assert_called_once_with(
+            mock_load_meta.return_value,
+            mock_config.return_value,
+            "orm.yaml",
+            "config.yaml",
+            "src-stats.yaml",
         )
         mock_path.return_value.write_text.assert_called_once_with(
             "some text", encoding="utf-8"

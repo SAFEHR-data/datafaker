@@ -53,39 +53,9 @@ for tests that are currently maintained.
 
 These tests do not currently work, and will be replaced by unit tests.
 
-Functional tests require a PostgreSQL service running. Perform the following steps on your local server:
-
-1. Set the password of user `postgres` to `password`:
-
-   ```bash
-    psql -p5432 "postgres"
-    postgres=# \password postgres
-    Enter new password: <password>
-    postgres=# \q
-    ```
-
-1. From the shell, create and load the `src` database:
-
-    ```bash
-    createdb src
-    cd datafaker
-    PGPASSWORD=password psql --host=localhost --username=postgres --file=tests/examples/src.dump
-    ```
+Functional tests require PostgreSQL to be installed.
 
     *WARNING: Some MacOS systems [do not recognise the 'en_US.utf8' locale](https://apple.stackexchange.com/questions/206495/load-a-locale-from-usr-local-share-locale-in-os-x). As a workaround, replace `en_US.utf8` with `en_US.UTF-8` on every `*.dump` file.*
-
-1. Also, create `dst` database:
-
-    ```bash
-    createdb dst
-    PGPASSWORD=password psql --host=localhost --username=postgres --file=tests/examples/dst.dump
-    ```
-
-1. Finally, run the functional tests. You will need the environment variable `REQUIRES_DB` with a value of `1`.
-
-    ```bash
-    REQUIRES_DB=1 poetry run python -m unittest discover --verbose tests
-    ```
 
 ## Building documentation locally
 

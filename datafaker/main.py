@@ -30,6 +30,7 @@ from datafaker.settings import Settings, get_settings
 from datafaker.utils import (
     CONFIG_SCHEMA_PATH,
     conf_logger,
+    generators_require_stats,
     get_flag,
     import_file,
     logger,
@@ -195,7 +196,14 @@ def create_generators(
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
     df_file: str = Option(DF_FILENAME, help="Path to write Python generators to."),
     config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
-    stats_file: Optional[str] = Option(None, help="Statistics file (output of make-stats)"),
+    stats_file: Optional[str] = Option(
+        None,
+        help=(
+            "Statistics file (output of make-stats); default is src-stats.yaml if the "
+            "config file references SRC_STATS, or None otherwise."
+        ),
+        show_default=False
+    ),
     force: bool = Option(False, "--force", "-f", help="Overwrite any existing Python generators file."),
 ) -> None:
     """Make a datafaker file of generator classes.
@@ -213,6 +221,8 @@ def create_generators(
         _check_file_non_existence(df_file_path)
 
     generator_config = read_config_file(config_file) if config_file is not None else {}
+    if stats_file is None and generators_require_stats(generator_config):
+        stats_file = STATS_FILENAME
     orm_metadata = load_metadata(orm_file, generator_config)
     result: str = make_table_generators(
         orm_metadata,

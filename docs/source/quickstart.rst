@@ -345,13 +345,13 @@ Running from the ready-built Docker container, from within a directory holding o
 
 (Windows users will need to modify this docker command, perhaps removing the `--user` option and its argument?)
 
-Whichever we chose, now we can create the generators Python file:
+Whichever we chose, now we can create the generators Python file and generate the data:
 
 .. code-block:: console
 
    $ datafaker create-tables
    $ datafaker create-vocab
-   $ datafaker create-generators --stats-file src-stats.yaml
+   $ datafaker create-generators
    $ datafaker create-data --num-passes 10
 
 The first of these uses ``orm.yaml`` to create the destination database.

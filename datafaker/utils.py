@@ -1,8 +1,8 @@
 """Utility functions."""
+import ast
 import json
 import logging
 import sys
-from importlib import import_module
 import importlib.util
 from pathlib import Path
 from types import ModuleType
@@ -470,3 +470,65 @@ def sorted_non_vocabulary_tables(metadata: MetaData, config: Mapping) -> list[Ta
     for cycle in cycles:
         logger.warning(f"Cycle detected between tables: {cycle}")
     return [ metadata.tables[tn] for tn in sorted ]
+
+def generators_require_stats(config: Mapping) -> bool:
+    """
+    Returns true if any of the arguments for any of the generators reference SRC_STATS.
+    """
+    ois = {
+        f"object_instantiation.{k}": call
+        for k, call in config.get("object_instantiation", {}).items()
+    }
+    sgs = {
+        f"story_generators[{n}]": call
+        for n, call in enumerate(config.get("story_generators", []))
+    }
+    table_calls = {
+        f"tables.{table_name}.{call_type}[{n}]": call
+        for table_name, table in config.get("tables", {}).items()
+        for call_type in ("row_generators", "missingness_generators")
+        for n, call in enumerate(table.get(call_type, []))
+    }
+    errors = []
+    stats_required = False
+    for where, call in (ois | sgs | table_calls).items():
+        for n, arg in enumerate(call.get("args", [])):
+            try:
+                names = (
+                    node.id
+                    for node in ast.walk(ast.parse(arg))
+                    if type(node) is ast.Name
+                )
+                if any(name == "SRC_STATS" for name in names):
+                    stats_required = True
+            except SyntaxError as e:
+                errors.append((
+                    "Syntax error in argument %d of %s: %s\n%s\n%s",
+                    n + 1,
+                    where,
+                    e.msg,
+                    arg,
+                    " " * e.offset + "^" * max(1, e.end_offset - e.offset),
+                ))
+        for k, arg in call.get("kwargs", {}).items():
+            if type(arg) is str:
+                try:
+                    names = (
+                        node.id
+                        for node in ast.walk(ast.parse(arg))
+                        if type(node) is ast.Name
+                    )
+                    if any(name == "SRC_STATS" for name in names):
+                        stats_required = True
+                except SyntaxError as e:
+                    errors.append((
+                        "Syntax error in argument %s of %s: %s\n%s\n%s",
+                        k,
+                        where,
+                        e.msg,
+                        arg,
+                        " " * e.offset + "^" * max(1, e.end_offset - e.offset),
+                    ))
+    for error in errors:
+        logger.error(*error)
+    return stats_required
