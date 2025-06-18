@@ -671,16 +671,16 @@ class ChoiceGenerator(Generator):
                 self._comment = f"All the values that appear in column {column_name} of table {table_name}"
                 self._annotation = None
             else:
-                self._query = f"SELECT value FROM (SELECT {column_name} AS value FROM {table_name} ORDER BY RANDOM() LIMIT {sample_count}) GROUP BY value"
+                self._query = f"SELECT value FROM (SELECT {column_name} AS value FROM {table_name} ORDER BY RANDOM() LIMIT {sample_count}) AS _inner GROUP BY value"
                 self._comment = f"The values that appear in column {column_name} of a random sample of {sample_count} rows of table {table_name}"
                 self._annotation = "sampled"
         else:
             if sample_count is None:
-                self._query = f"SELECT value FROM (SELECT {column_name} AS value, COUNT({column_name}) AS count FROM {table_name} GROUP BY value) WHERE {suppress_count} < count"
+                self._query = f"SELECT value FROM (SELECT {column_name} AS value, COUNT({column_name}) AS count FROM {table_name} GROUP BY value) AS _inner WHERE {suppress_count} < count"
                 self._comment = f"All the values that appear in column {column_name} of table {table_name} more than {suppress_count} times"
                 self._annotation = "suppressed"
             else:
-                self._query = f"SELECT value FROM (SELECT value, COUNT(value) AS count FROM (SELECT {column_name} AS value FROM {table_name} ORDER BY RANDOM() LIMIT {sample_count}) GROUP BY value) WHERE {suppress_count} < count"
+                self._query = f"SELECT value FROM (SELECT value, COUNT(value) AS count FROM (SELECT {column_name} AS value FROM {table_name} ORDER BY RANDOM() LIMIT {sample_count}) AS _inner GROUP BY value) AS _inner WHERE {suppress_count} < count"
                 self._comment = f"The values that appear more than {suppress_count} times in column {column_name}, out of a random sample of {sample_count} rows of table {table_name}"
                 self._annotation = "sampled and suppressed"
     def nominal_kwargs(self):
@@ -776,7 +776,7 @@ class ChoiceGeneratorFactory(GeneratorFactory):
                         UniformChoiceGenerator(table_name, column_name, values, counts),
                     ]
             results = connection.execute(
-                text("SELECT v, COUNT(v) AS f FROM (SELECT {column} as v FROM {table} ORDER BY RANDOM() LIMIT {sample_count}) GROUP BY v ORDER BY f DESC".format(
+                text("SELECT v, COUNT(v) AS f FROM (SELECT {column} as v FROM {table} ORDER BY RANDOM() LIMIT {sample_count}) AS _inner GROUP BY v ORDER BY f DESC".format(
                     table=table_name,
                     column=column_name,
                     sample_count=self.SAMPLE_COUNT,
