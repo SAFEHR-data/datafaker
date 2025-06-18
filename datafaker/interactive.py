@@ -1365,7 +1365,7 @@ information about the columns in the current table. Use 'peek',
             self.print(
                 self.PROPOSE_GENERATOR_SAMPLE_TEXT,
                 index=index + 1,
-                name=gen.function_name(),
+                name=gen.name(),
                 fit=fit_s,
                 sample=", ".join(map(repr, gen.generate_data(limit)))
             )

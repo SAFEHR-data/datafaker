@@ -676,6 +676,72 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertNotIn("string", table_names)
 
 
+class GeneratorsOutputTests(GeneratesDBTestCase):
+    """ Testing configure-missing with generation. """
+    dump_file_path = "choice.sql"
+    database_name = "numbers"
+    schema_name = "public"
+
+    def _get_cmd(self, config) -> TestGeneratorCmd:
+        return TestGeneratorCmd(self.dsn, self.schema_name, self.metadata, config)
+
+    def test_create_with_sampled_choice(self):
+        """ Test that we can sample real missingness and reproduce it. """
+        table_name = "number_table"
+        with self._get_cmd({}) as gc:
+            gc.do_next("number_table.one")
+            gc.reset()
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            self.assertIn("dist_gen.choice", proposals)
+            self.assertIn("dist_gen.zipf_choice", proposals)
+            self.assertIn("dist_gen.choice [sampled]", proposals)
+            self.assertIn("dist_gen.zipf_choice [sampled]", proposals)
+            self.assertIn("dist_gen.choice [sampled and suppressed]", proposals)
+            self.assertIn("dist_gen.zipf_choice [sampled and suppressed]", proposals)
+            gc.do_set(str(proposals["dist_gen.choice [sampled and suppressed]"][0]))
+            gc.do_next("number_table.two")
+            gc.reset()
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            self.assertIn("dist_gen.choice", proposals)
+            self.assertIn("dist_gen.zipf_choice", proposals)
+            self.assertIn("dist_gen.choice [sampled]", proposals)
+            self.assertIn("dist_gen.zipf_choice [sampled]", proposals)
+            self.assertIn("dist_gen.choice [sampled and suppressed]", proposals)
+            self.assertIn("dist_gen.zipf_choice [sampled and suppressed]", proposals)
+            gc.do_set(str(proposals["dist_gen.zipf_choice [sampled and suppressed]"][0]))
+            gc.do_next("number_table.three")
+            gc.reset()
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            self.assertIn("dist_gen.choice", proposals)
+            self.assertIn("dist_gen.zipf_choice", proposals)
+            self.assertIn("dist_gen.choice [sampled]", proposals)
+            self.assertIn("dist_gen.zipf_choice [sampled]", proposals)
+            self.assertNotIn("dist_gen.choice [sampled and suppressed]", proposals)
+            self.assertNotIn("dist_gen.zipf_choice [sampled and suppressed]", proposals)
+            gc.do_set(str(proposals["dist_gen.choice [sampled]"][0]))
+            gc.do_quit("")
+            config = gc.config
+            self.generate_data(config, num_passes=200)
+        # Test that each missingness pattern is present in the database
+        with self.engine.connect() as conn:
+            stmt = select(self.metadata.tables[table_name])
+            rows = conn.execute(stmt).fetchall()
+            ones = set()
+            twos = set()
+            threes = set()
+            for row in rows:
+                ones.add(row.one)
+                twos.add(row.two)
+                threes.add(row.three)
+            # all pattern possibilities should be present
+            self.assertSetEqual(ones, {1, 4})
+            self.assertSetEqual(twos, {2, 3})
+            self.assertSetEqual(threes, {1, 2, 3, 4, 5})
+
+
 class TestMissingnessCmd(MissingnessCmd, TestDbCmdMixin):
     """ MissingnessCmd but mocked """
 
