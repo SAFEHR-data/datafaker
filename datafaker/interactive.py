@@ -967,7 +967,7 @@ information about the columns in the current table. Use 'peek',
             self.prompt = "({table}.{column} ({generator})) ".format(
                 table=table_name,
                 column=column,
-                generator=gen_info.new_gen.function_name(),
+                generator=gen_info.new_gen.name(),
             )
         else:
             self.prompt = "({table}.{column}) ".format(
@@ -1037,8 +1037,8 @@ information about the columns in the current table. Use 'peek',
                     self.print(
                         "...changing {0} from {1} to {2}",
                         gen.column,
-                        gen.old_gen.function_name() if gen.old_gen else "nothing",
-                        gen.new_gen.function_name() if gen.new_gen else "nothing",
+                        gen.old_gen.name() if gen.old_gen else "nothing",
+                        gen.new_gen.name() if gen.new_gen else "nothing",
                     )
         if count == 0:
             self.print("You have made no changes.")
@@ -1063,7 +1063,7 @@ information about the columns in the current table. Use 'peek',
             self.print("Error: no table {0}", self.table_index)
             return
         for gen in self.table_entries[self.table_index].generators:
-            old = "" if gen.old_gen is None else gen.old_gen.function_name()
+            old = "" if gen.old_gen is None else gen.old_gen.name()
             if gen.old_gen == gen.new_gen:
                 becomes = ""
                 if old == "":
@@ -1071,7 +1071,7 @@ information about the columns in the current table. Use 'peek',
             elif gen.new_gen is None:
                 becomes = "(delete)"
             else:
-                becomes = f"->{gen.new_gen.function_name()}"
+                becomes = f"->{gen.new_gen.name()}"
             primary = "[primary-key]" if gen.is_primary_key else ""
             self.print("{0}{1}{2} {3}", old, becomes, primary, gen.column)
 
@@ -1239,7 +1239,7 @@ information about the columns in the current table. Use 'peek',
                 n = int(argument)
                 if 0 < n and n <= len(gens):
                     gen = gens[n - 1]
-                    comparison[f"{n}. {gen.function_name()}"] = gen.generate_data(limit)
+                    comparison[f"{n}. {gen.name()}"] = gen.generate_data(limit)
                     self._print_values_queried(table_name, n, gen)
         self.print_table_by_columns(comparison)
 
@@ -1255,13 +1255,13 @@ information about the columns in the current table. Use 'peek',
             self.print(
                 "{0}. {1} requires no data from the source database.",
                 n,
-                gen.function_name(),
+                gen.name(),
             )
         else:
             self.print(
                 "{0}. {1} requires the following data from the source database:",
                 n,
-                gen.function_name(),
+                gen.name(),
             )
             self._print_select_aggregate_query(table_name, gen)
             self._print_custom_queries(gen)
@@ -1314,9 +1314,9 @@ information about the columns in the current table. Use 'peek',
                 if ak in kwa:
                     vals.append(kwa[ak])
                 else:
-                    logger.warning("actual_kwargs for %s does not report %s", gen.function_name(), ak)
+                    logger.warning("actual_kwargs for %s does not report %s", gen.name(), ak)
             else:
-                logger.warning('nominal_kwargs for %s does not have a value SRC_STATS["auto__%s"]["results"][0]["%s"]', gen.function_name(), table_name, n)
+                logger.warning('nominal_kwargs for %s does not have a value SRC_STATS["auto__%s"]["results"][0]["%s"]', gen.name(), table_name, n)
         select_q = self._get_aggregate_query([gen], table_name)
         self.print("{0}; providing the following values: {1}", select_q, vals)
 
@@ -1365,7 +1365,7 @@ information about the columns in the current table. Use 'peek',
             self.print(
                 self.PROPOSE_GENERATOR_SAMPLE_TEXT,
                 index=index + 1,
-                name=gen.function_name(),
+                name=gen.name(),
                 fit=fit_s,
                 sample=", ".join(map(repr, gen.generate_data(limit)))
             )

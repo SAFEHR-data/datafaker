@@ -5,7 +5,6 @@ Generator factories for making generators for single columns.
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 import decimal
-import logging
 import math
 import mimesis
 import mimesis.locales
@@ -41,6 +40,15 @@ class Generator(ABC):
     @abstractmethod
     def function_name(self) -> str:
         """ The name of the generator function to put into df.py. """
+
+    def name(self) -> str:
+        """
+        The name of the generator.
+
+        Usually the same as the function name, but can be different to distinguish
+        between generators that have the same function but different queries.
+        """
+        return self.function_name()
 
     @abstractmethod
     def nominal_kwargs(self) -> dict[str, str]:
@@ -642,30 +650,59 @@ def zipf_distribution(total, bins):
 
 
 class ChoiceGenerator(Generator):
-    def __init__(self, table_name, column_name, values, counts):
+    def __init__(
+        self,
+        table_name,
+        column_name,
+        values,
+        counts,
+        sample_count = None,
+        suppress_count = 0,
+    ):
         super().__init__()
         self.table_name = table_name
         self.column_name = column_name
         self.values = values
         estimated_counts = self.get_estimated_counts(counts)
         self._fit = fit_from_buckets(counts, estimated_counts)
+        if suppress_count == 0:
+            if sample_count is None:
+                self._query = f"SELECT {column_name} AS value FROM {table_name} GROUP BY value ORDER BY COUNT({column_name}) DESC"
+                self._comment = f"All the values that appear in column {column_name} of table {table_name}"
+                self._annotation = None
+            else:
+                self._query = f"SELECT value FROM (SELECT {column_name} AS value FROM {table_name} ORDER BY RANDOM() LIMIT {sample_count}) AS _inner GROUP BY value"
+                self._comment = f"The values that appear in column {column_name} of a random sample of {sample_count} rows of table {table_name}"
+                self._annotation = "sampled"
+        else:
+            if sample_count is None:
+                self._query = f"SELECT value FROM (SELECT {column_name} AS value, COUNT({column_name}) AS count FROM {table_name} GROUP BY value) AS _inner WHERE {suppress_count} < count"
+                self._comment = f"All the values that appear in column {column_name} of table {table_name} more than {suppress_count} times"
+                self._annotation = "suppressed"
+            else:
+                self._query = f"SELECT value FROM (SELECT value, COUNT(value) AS count FROM (SELECT {column_name} AS value FROM {table_name} ORDER BY RANDOM() LIMIT {sample_count}) AS _inner GROUP BY value) AS _inner WHERE {suppress_count} < count"
+                self._comment = f"The values that appear more than {suppress_count} times in column {column_name}, out of a random sample of {sample_count} rows of table {table_name}"
+                self._annotation = "sampled and suppressed"
     def nominal_kwargs(self):
         return {
             "a": f'SRC_STATS["auto__{self.table_name}__{self.column_name}"]["results"]',
         }
+    def name(self):
+        n = super().name()
+        if self._annotation is None:
+            return n
+        return f"{n} [{self._annotation}]"
     def actual_kwargs(self):
         return {
             "a": self.values,
         }
     def custom_queries(self) -> dict[str, dict[str, str]]:
         qs = super().custom_queries()
-        t = self.table_name
-        c = self.column_name
         return {
             **qs,
-            f"auto__{t}__{c}": {
-                "query": f"SELECT {c} AS value FROM {t} GROUP BY value ORDER BY COUNT({c}) DESC",
-                "comment": f"All the values that appear in column {c} of table {t}",
+            f"auto__{self.table_name}__{self.column_name}": {
+                "query": self._query,
+                "comment": self._comment,
             }
         }
     def fit(self, default=None):
@@ -708,9 +745,12 @@ class ChoiceGeneratorFactory(GeneratorFactory):
     """
     All generators that want an average and standard deviation.
     """
+    SAMPLE_COUNT = MAXIMUM_CHOICES
+    SUPPRESS_COUNT = 5
     def get_generators(self, column: Column, engine: Engine):
         column_name = column.name
         table_name = column.table.name
+        generators = []
         with engine.connect() as connection:
             results = connection.execute(
                 text("SELECT {column} AS v, COUNT({column}) AS f FROM {table} GROUP BY v ORDER BY f DESC LIMIT {limit}".format(
@@ -719,26 +759,73 @@ class ChoiceGeneratorFactory(GeneratorFactory):
                     limit=MAXIMUM_CHOICES+1,
                 ))
             )
-            if results is None or MAXIMUM_CHOICES < results.rowcount:
-                return []
-            values = []  # The values found
-            counts = []  # The number or each value
-            total = 0  # total number of non-NULL results
-            for result in results:
-                c = result.f
-                if c != 0:
-                    total += c
-                    counts.append(c)
-                    v = result.v
-                    if type(v) is decimal.Decimal:
-                        v = float(v)
-                    values.append(v)
-        if not counts:
-            return []
-        return [
-            ZipfChoiceGenerator(table_name, column_name, values, counts),
-            UniformChoiceGenerator(table_name, column_name, values, counts),
-        ]
+            if results is not None and results.rowcount <= MAXIMUM_CHOICES:
+                values = []  # The values found
+                counts = []  # The number or each value
+                for result in results:
+                    c = result.f
+                    if c != 0:
+                        counts.append(c)
+                        v = result.v
+                        if type(v) is decimal.Decimal:
+                            v = float(v)
+                        values.append(v)
+                if counts:
+                    generators += [
+                        ZipfChoiceGenerator(table_name, column_name, values, counts),
+                        UniformChoiceGenerator(table_name, column_name, values, counts),
+                    ]
+            results = connection.execute(
+                text("SELECT v, COUNT(v) AS f FROM (SELECT {column} as v FROM {table} ORDER BY RANDOM() LIMIT {sample_count}) AS _inner GROUP BY v ORDER BY f DESC".format(
+                    table=table_name,
+                    column=column_name,
+                    sample_count=self.SAMPLE_COUNT,
+                ))
+            )
+            if results is not None:
+                values = []  # All values found
+                counts = []  # The number or each value
+                values_not_suppressed = []  # All values found more than SUPPRESS_COUNT times
+                counts_not_suppressed = []  # The number for each value not suppressed
+                for result in results:
+                    c = result.f
+                    if c != 0:
+                        counts.append(c)
+                        v = result.v
+                        if type(v) is decimal.Decimal:
+                            v = float(v)
+                        values.append(v)
+                    if self.SUPPRESS_COUNT < c:
+                        counts_not_suppressed.append(c)
+                        v = result.v
+                        if type(v) is decimal.Decimal:
+                            v = float(v)
+                        values_not_suppressed.append(v)
+                if counts:
+                    generators += [
+                        ZipfChoiceGenerator(table_name, column_name, values, counts, sample_count=self.SAMPLE_COUNT),
+                        UniformChoiceGenerator(table_name, column_name, values, counts, sample_count=self.SAMPLE_COUNT),
+                    ]
+                if counts_not_suppressed:
+                    generators += [
+                        ZipfChoiceGenerator(
+                            table_name,
+                            column_name,
+                            values_not_suppressed,
+                            counts_not_suppressed,
+                            sample_count=self.SAMPLE_COUNT,
+                            suppress_count=self.SUPPRESS_COUNT,
+                        ),
+                        UniformChoiceGenerator(
+                            table_name,
+                            column_name,
+                            values_not_suppressed,
+                            counts_not_suppressed,
+                            sample_count=self.SAMPLE_COUNT,
+                            suppress_count=self.SUPPRESS_COUNT,
+                        ),
+                    ]
+        return generators
 
 
 class NullGenerator(Generator):
