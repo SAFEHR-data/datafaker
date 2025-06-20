@@ -380,6 +380,7 @@ def configure_missing(
 def configure_generators(
     config_file: Optional[str] = Option(CONFIG_FILENAME, help="Path of the configuration file to alter"),
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
+    spec: Path = Option(None, help="CSV file (headerless) with fields table-name, column-name, generator-name to set non-interactively")
 ):
     """
     Interactively set generators for column data.
@@ -392,7 +393,7 @@ def configure_generators(
     if config_file_path.exists():
         config = yaml.load(config_file_path.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader)
     metadata = load_metadata(orm_file, config)
-    config_updated = update_config_generators(src_dsn, settings.src_schema, metadata, config)
+    config_updated = update_config_generators(src_dsn, settings.src_schema, metadata, config, spec_path=spec)
     if config_updated is None:
         logger.debug("Cancelled")
         return
