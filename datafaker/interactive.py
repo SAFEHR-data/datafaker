@@ -1,8 +1,10 @@
 from abc import ABC, abstractmethod
 import cmd
 from collections.abc import Mapping
+import csv
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from prettytable import PrettyTable
 import re
 import sqlalchemy
@@ -1022,7 +1024,7 @@ information about the columns in the current table. Use 'peek',
             self.set_table_config(entry.name, table_config)
         self.config["src-stats"] = src_stats
 
-    def do_quit(self, _arg):
+    def do_quit(self, arg):
         "Check the updates, save them if desired and quit the configurer."
         count = 0
         for entry in self.table_entries:
@@ -1042,7 +1044,10 @@ information about the columns in the current table. Use 'peek',
                     )
         if count == 0:
             self.print("You have made no changes.")
-        reply = self.ask_save()
+        if arg in {"yes", "no"}:
+            reply = arg
+        else:
+            reply = self.ask_save()
         if reply == "yes":
             self._copy_entries()
             return True
@@ -1112,6 +1117,24 @@ information about the columns in the current table. Use 'peek',
                 return n
         return None
 
+    def go_to(self, target):
+        parts = target.split(".", 1)
+        table_index = self._get_table_index(parts[0])
+        if table_index is None:
+            self.print("No such (non-vocabulary, non-ignored) table name {0}", parts[0])
+            return False
+        gen_index = None
+        if 1 < len(parts) and parts[1]:
+            gen_index = self._get_generator_index(table_index, parts[1])
+            if gen_index is None:
+                self.print("we cannot set the generator for column {0}", parts[1])
+                return False
+        self.set_table_index(table_index)
+        if gen_index is not None:
+            self.generator_index = gen_index
+            self.set_prompt()
+        return True
+
     def do_next(self, arg):
         """
         Go to the next generator.
@@ -1119,23 +1142,9 @@ information about the columns in the current table. Use 'peek',
         Or go to a column: 'next tablename.columnname'.
         """
         if arg:
-            parts = arg.split(".", 1)
-            table_index = self._get_table_index(parts[0])
-            if table_index is None:
-                self.print("No such (non-vocabulary, non-ignored) table name {0}", parts[0])
-                return
-            gen_index = None
-            if 1 < len(parts) and parts[1]:
-                gen_index = self._get_generator_index(table_index, parts[1])
-                if gen_index is None:
-                    self.print("we cannot set the generator for column {0}", parts[1])
-                    return
-            self.set_table_index(table_index)
-            if gen_index is not None:
-                self.generator_index = gen_index
-                self.set_prompt()
-            return
-        self._go_next()
+            self.go_to(arg)
+        else:
+            self._go_next()
 
     def do_n(self, arg):
         """ Synonym for next """
@@ -1374,25 +1383,35 @@ information about the columns in the current table. Use 'peek',
         """ Synonym for propose """
         self.do_propose(arg)
 
+    def _get_proposed_generator_by_name(self, gen_name: str) -> Generator | None:
+        for gen in self._get_generator_proposals():
+            if gen.name() == gen_name:
+                return gen
+        return None
+
     def do_set(self, arg: str):
         """
         Set one of the proposals as a generator.
         Takes a single integer argument.
         """
-        if not arg.isdigit():
-            self.print("set requires a single integer argument; 'set 3' sets the third generator that 'propose' lists.")
-            return
-        if not self._generators_valid():
-            self.print("Please run 'propose' before 'set'")
+        if arg.isdigit() and not self._generators_valid():
+            self.print("Please run 'propose' before 'set <number>'")
             return
         gens = self._get_generator_proposals()
-        index = int(arg)
-        if index < 1:
-            self.print("set's argument must be at least 1")
-            return
-        if len(gens) < index:
-            self.print("There are currently only {0} generators proposed, please select one of them.", index)
-            return
+        if arg.isdigit():
+            index = int(arg)
+            if index < 1:
+                self.print("set's integer argument must be at least 1")
+                return
+            if len(gens) < index:
+                self.print("There are currently only {0} generators proposed, please select one of them.", index)
+                return
+            new_gen = gens[index - 1]
+        else:
+            new_gen = self._get_proposed_generator_by_name(arg)
+            if new_gen is None:
+                self.print("'{0}' is not an appropriate generator for this column", arg)
+                return
         (table, gen_info) = self.get_table_and_generator()
         if table is None:
             self.print("Error: no table")
@@ -1400,7 +1419,7 @@ information about the columns in the current table. Use 'peek',
         if gen_info is None:
             self.print("Error: no column")
             return
-        gen_info.new_gen = gens[index - 1]
+        gen_info.new_gen = new_gen
         self._go_next()
 
     def do_s(self, arg):
@@ -1421,7 +1440,26 @@ information about the columns in the current table. Use 'peek',
         gen_info.new_gen = None
         self._go_next()
 
-def update_config_generators(src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping):
+
+def update_config_generators(
+    src_dsn: str,
+    src_schema: str,
+    metadata: MetaData,
+    config: Mapping,
+    spec_path: Path | None,
+):
     with GeneratorCmd(src_dsn, src_schema, metadata, config) as gc:
-        gc.cmdloop()
+        if spec_path is None:
+            gc.cmdloop()
+            return gc.config
+        spec = spec_path.open()
+        line_no = 0
+        for line in csv.reader(spec):
+            line_no += 1
+            if line:
+                if len(line) != 3:
+                    logger.error("line {0} of file {1} does not have three values", line_no, spec_path)
+                if gc.go_to(f"{line[0]}.{line[1]}"):
+                    gc.do_set(line[2])
+        gc.do_quit("yes")
         return gc.config

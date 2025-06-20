@@ -438,6 +438,25 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
                 f"SELECT AVG({COLUMN}) AS mean__{COLUMN}, STDDEV({COLUMN}) AS stddev__{COLUMN} FROM {TABLE}",
             )
 
+    def test_set_generator_distribution_directly(self):
+        """ Test that we can set one generator to gaussian without going through propose. """
+        with self._get_cmd({}) as gc:
+            TABLE = "string"
+            COLUMN = "frequency"
+            GENERATOR = "dist_gen.normal"
+            gc.do_next(f"{TABLE}.{COLUMN}")
+            gc.reset()
+            gc.do_set(GENERATOR)
+            self.assertListEqual(gc.messages, [])
+            gc.do_quit("")
+            self.assertEqual(len(gc.config["src-stats"]), 1)
+            self.assertSetEqual(set(gc.config["src-stats"][0].keys()), {"comments", "name", "query"})
+            self.assertEqual(gc.config["src-stats"][0]["name"], f"auto__{TABLE}")
+            self.assertEqual(
+                gc.config["src-stats"][0]["query"],
+                f"SELECT AVG({COLUMN}) AS mean__{COLUMN}, STDDEV({COLUMN}) AS stddev__{COLUMN} FROM {TABLE}",
+            )
+
     def test_set_generator_choice(self):
         """ Test that we can set one generator to uniform choice. """
         with self._get_cmd({}) as gc:
