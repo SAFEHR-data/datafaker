@@ -177,6 +177,7 @@ class GeneratesDBTestCase(RequiresDBTestCase):
         (self.stats_fd, self.stats_file_path) = mkstemp(".yaml", "src_stats_", text=True)
         with os.fdopen(self.stats_fd, "w", encoding="utf-8") as stats_fh:
             stats_fh.write(yaml.dump(src_stats))
+        return src_stats
 
     def create_generators(self, config) -> None:
         """ ``create-generators`` with ``src-stats.yaml`` and the rest, producing ``df.py`` """
