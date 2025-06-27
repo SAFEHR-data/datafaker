@@ -828,17 +828,19 @@ class ChoiceGeneratorFactory(GeneratorFactory):
         return generators
 
 
-class NullGenerator(Generator):
-    def __init__(self):
+class ConstantGenerator(Generator):
+    def __init__(self, value):
         super().__init__()
+        self.value = value
+        self.repr = repr(value)
     def function_name(self) -> str:
         return "dist_gen.constant"
     def nominal_kwargs(self) -> dict[str, str]:
-        return {"value": "None"}
+        return {"value": self.repr}
     def actual_kwargs(self) -> dict[str, any]:
-        return {"value": None}
+        return {"value": self.value}
     def generate_data(self, count) -> list[any]:
-        return [None for _ in range(count)]
+        return [self.value for _ in range(count)]
 
 
 class ConstantGeneratorFactory(GeneratorFactory):
@@ -847,7 +849,14 @@ class ConstantGeneratorFactory(GeneratorFactory):
     """
     def get_generators(self, column: Column, _engine: Engine):
         if column.nullable:
-            return [NullGenerator()]
+            return [ConstantGenerator(None)]
+        c_type = get_column_type(column)
+        if isinstance(c_type, String):
+            return [ConstantGenerator("")]
+        if isinstance(c_type, Numeric):
+            return [ConstantGenerator(0.0)]
+        if isinstance(c_type, Integer):
+            return [ConstantGenerator(0)]
         return []
 
 
