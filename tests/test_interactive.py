@@ -831,3 +831,55 @@ class ConfigureMissingnessTests(GeneratesDBTestCase):
                 patterns.add(p + b)
             # all pattern possibilities should be present
             self.assertSetEqual(patterns, {0, 1, 2, 3})
+
+
+class GeneratorTests(GeneratesDBTestCase):
+    """ Testing configure-missing with generation. """
+    dump_file_path = "instrument.sql"
+    database_name = "instrument"
+    schema_name = "public"
+
+    def _get_cmd(self, config) -> TestGeneratorCmd:
+        return TestGeneratorCmd(self.dsn, self.schema_name, self.metadata, config)
+
+    def test_set_null(self):
+        """ Test that we can sample real missingness and reproduce it. """
+        with self._get_cmd({}) as gc:
+            gc.do_next("string.position")
+            gc.do_set("dist_gen.constant")
+            self.assertListEqual(gc.messages, [])
+            gc.reset()
+            gc.do_next("string.frequency")
+            gc.do_set("dist_gen.constant")
+            self.assertListEqual(gc.messages, [])
+            gc.reset()
+            gc.do_next("signature_model.name")
+            gc.do_set("dist_gen.constant")
+            self.assertListEqual(gc.messages, [])
+            gc.reset()
+            gc.do_next("signature_model.based_on")
+            gc.do_set("dist_gen.constant")
+            # we have got to the end of the columns, but shouldn't have any errors
+            self.assertListEqual(gc.messages, [("No more tables", (), {})])
+            gc.reset()
+            gc.do_quit("")
+            config = gc.config
+            self.generate_data(config, num_passes=3)
+        # Test that each missingness pattern is present in the database
+        with self.engine.connect() as conn:
+            stmt = select(self.metadata.tables["string"].c["position", "frequency"])
+            rows = conn.execute(stmt).fetchall()
+            count = 0
+            for row in rows:
+                count += 1
+                self.assertEqual(row.position, 0)
+                self.assertEqual(row.frequency, 0.0)
+            self.assertEqual(count, 3)
+            stmt = select(self.metadata.tables["signature_model"].c["name", "based_on"])
+            rows = conn.execute(stmt).fetchall()
+            count = 0
+            for row in rows:
+                count += 1
+                self.assertEqual(row.name, "")
+                self.assertIsNone(row.based_on)
+            self.assertEqual(count, 3)
