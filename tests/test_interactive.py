@@ -393,6 +393,37 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             gc.do_quit("")
             self.assertEqual(len(gc.config["tables"][TABLE]["row_generators"]), 1)
 
+    def test_prompts(self) -> None:
+        """Test that the prompts follow the names of the columns and assigned generators."""
+        config = {}
+        with self._get_cmd(config) as gc:
+            for table_name, table_meta in self.metadata.tables.items():
+                for column_name, column_meta in table_meta.columns.items():
+                    self.assertIn(table_name, gc.prompt)
+                    self.assertIn(column_name, gc.prompt)
+                    if column_meta.primary_key:
+                        self.assertIn("[pk]", gc.prompt)
+                    else:
+                        self.assertNotIn("[pk]", gc.prompt)
+                    gc.do_next("")
+            self.assertListEqual(gc.messages, [(GeneratorCmd.ERROR_NO_MORE_TABLES, (), {})])
+            gc.reset()
+            for table_name, table_meta in reversed(list(self.metadata.tables.items())):
+                for column_name, column_meta in reversed(list(table_meta.columns.items())):
+                    self.assertIn(table_name, gc.prompt)
+                    self.assertIn(column_name, gc.prompt)
+                    if column_meta.primary_key:
+                        self.assertIn("[pk]", gc.prompt)
+                    else:
+                        self.assertNotIn("[pk]", gc.prompt)
+                    gc.do_previous("")
+            self.assertListEqual(gc.messages, [(GeneratorCmd.ERROR_ALREADY_AT_START, (), {})])
+            gc.reset()
+            bad_table_name = "notarealtable"
+            gc.do_next(bad_table_name)
+            self.assertListEqual(gc.messages, [(GeneratorCmd.ERROR_NO_SUCH_TABLE, (bad_table_name,), {})])
+            gc.reset()
+
     def test_set_generator_mimesis(self):
         """ Test that we can set one generator to a mimesis generator. """
         with self._get_cmd({}) as gc:

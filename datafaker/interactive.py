@@ -846,6 +846,7 @@ information about the columns in the current table. Use 'peek',
     PRIMARY_PRIVATE_TEXT = "Primary Private"
     SECONDARY_PRIVATE_TEXT = "Secondary Private on columns {0}"
     NOT_PRIVATE_TEXT = "Not private"
+    ERROR_NO_SUCH_TABLE = "No such (non-vocabulary, non-ignored) table name {0}"
 
     def make_table_entry(self, table_name: str, table: Mapping) -> TableEntry | None:
         if table.get("ignore", False):
@@ -927,6 +928,8 @@ information about the columns in the current table. Use 'peek',
                 self.print("Internal error! table {0} does not have any generators!", self.table_index)
                 return False
             self.generator_index = len(table.generators) - 1
+        else:
+            self.print(self.ERROR_ALREADY_AT_START)
         return ret
 
     def get_table(self) -> GeneratorCmdTableEntry | None:
@@ -1121,7 +1124,7 @@ information about the columns in the current table. Use 'peek',
         parts = target.split(".", 1)
         table_index = self._get_table_index(parts[0])
         if table_index is None:
-            self.print("No such (non-vocabulary, non-ignored) table name {0}", parts[0])
+            self.print(self.ERROR_NO_SUCH_TABLE, parts[0])
             return False
         gen_index = None
         if 1 < len(parts) and parts[1]:
@@ -1156,7 +1159,7 @@ information about the columns in the current table. Use 'peek',
             self.print("No more tables")
         next_gi = self.generator_index + 1
         if next_gi == len(table.generators):
-            self.next_table()
+            self.next_table(self.ERROR_NO_MORE_TABLES)
             return
         self.generator_index = next_gi
         self.set_prompt()
