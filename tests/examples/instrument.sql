@@ -99,3 +99,7 @@ INSERT INTO public.signature_model VALUES (3, 'Veleno', 2, 2);
 INSERT INTO public.signature_model VALUES (4, 'Grifter', NULL, NULL);
 INSERT INTO public.signature_model VALUES (5, 'Proton', 3, 1);
 INSERT INTO public.signature_model VALUES (6, 'Isabelle', NULL, 3);
+INSERT INTO public.signature_model VALUES (7, 'Natalia', NULL, 1);
+INSERT INTO public.signature_model VALUES (8, 'Ray', 2, NULL);
+INSERT INTO public.signature_model VALUES (9, 'DamageControl', 2, 3);
+INSERT INTO public.signature_model VALUES (10, 'Lucy', 3, 1);

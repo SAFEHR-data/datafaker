@@ -667,20 +667,20 @@ class ChoiceGenerator(Generator):
         self._fit = fit_from_buckets(counts, estimated_counts)
         if suppress_count == 0:
             if sample_count is None:
-                self._query = f"SELECT {column_name} AS value FROM {table_name} GROUP BY value ORDER BY COUNT({column_name}) DESC"
+                self._query = f"SELECT {column_name} AS value FROM {table_name} WHERE {column_name} IS NOT NULL GROUP BY value ORDER BY COUNT({column_name}) DESC"
                 self._comment = f"All the values that appear in column {column_name} of table {table_name}"
                 self._annotation = None
             else:
-                self._query = f"SELECT value FROM (SELECT {column_name} AS value FROM {table_name} ORDER BY RANDOM() LIMIT {sample_count}) AS _inner GROUP BY value"
+                self._query = f"SELECT value FROM (SELECT {column_name} AS value FROM {table_name} WHERE {column_name} IS NOT NULL ORDER BY RANDOM() LIMIT {sample_count}) AS _inner GROUP BY value ORDER BY COUNT(value) DESC"
                 self._comment = f"The values that appear in column {column_name} of a random sample of {sample_count} rows of table {table_name}"
                 self._annotation = "sampled"
         else:
             if sample_count is None:
-                self._query = f"SELECT value FROM (SELECT {column_name} AS value, COUNT({column_name}) AS count FROM {table_name} GROUP BY value) AS _inner WHERE {suppress_count} < count"
+                self._query = f"SELECT value FROM (SELECT {column_name} AS value, COUNT({column_name}) AS count FROM {table_name} WHERE {column_name} IS NOT NULL GROUP BY value ORDER BY count DESC) AS _inner WHERE {suppress_count} < count"
                 self._comment = f"All the values that appear in column {column_name} of table {table_name} more than {suppress_count} times"
                 self._annotation = "suppressed"
             else:
-                self._query = f"SELECT value FROM (SELECT value, COUNT(value) AS count FROM (SELECT {column_name} AS value FROM {table_name} ORDER BY RANDOM() LIMIT {sample_count}) AS _inner GROUP BY value) AS _inner WHERE {suppress_count} < count"
+                self._query = f"SELECT value FROM (SELECT value, COUNT(value) AS count FROM (SELECT {column_name} AS value FROM {table_name} WHERE {column_name} IS NOT NULL ORDER BY RANDOM() LIMIT {sample_count}) AS _inner GROUP BY value ORDER BY count DESC) AS _inner WHERE {suppress_count} < count"
                 self._comment = f"The values that appear more than {suppress_count} times in column {column_name}, out of a random sample of {sample_count} rows of table {table_name}"
                 self._annotation = "sampled and suppressed"
     def nominal_kwargs(self):

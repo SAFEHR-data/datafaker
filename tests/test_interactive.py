@@ -481,7 +481,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertEqual(gc.config["src-stats"][0]["name"], f"auto__{TABLE}__{COLUMN}")
             self.assertEqual(
                 gc.config["src-stats"][0]["query"],
-                f"SELECT {COLUMN} AS value FROM {TABLE} GROUP BY value ORDER BY COUNT({COLUMN}) DESC",
+                f"SELECT {COLUMN} AS value FROM {TABLE} WHERE {COLUMN} IS NOT NULL GROUP BY value ORDER BY COUNT({COLUMN}) DESC",
             )
 
     def test_old_generators_remain(self):
@@ -834,7 +834,7 @@ class ConfigureMissingnessTests(GeneratesDBTestCase):
 
 
 class GeneratorTests(GeneratesDBTestCase):
-    """ Testing configure-missing with generation. """
+    """ Testing configure-generators with generation. """
     dump_file_path = "instrument.sql"
     database_name = "instrument"
     schema_name = "public"
@@ -883,3 +883,25 @@ class GeneratorTests(GeneratesDBTestCase):
                 self.assertEqual(row.name, "")
                 self.assertIsNone(row.based_on)
             self.assertEqual(count, 3)
+
+    def test_dist_gen_sampled_produces_ordered_src_stats(self):
+        """ Tests that choosing a sampled choice generator produces ordered src stats """
+        with self._get_cmd({}) as gc:
+            gc.do_next("signature_model.player_id")
+            gc.do_set("dist_gen.zipf_choice [sampled]")
+            gc.do_next("signature_model.based_on")
+            gc.do_set("dist_gen.zipf_choice [sampled]")
+            gc.do_quit("")
+            config = gc.config
+            self.set_configuration(config)
+            src_stats = self.get_src_stats(config)
+        player_ids = [
+            s["value"]
+            for s in src_stats["auto__signature_model__player_id"]["results"]
+        ]
+        self.assertListEqual(player_ids, [2, 3, 1])
+        based_ons = [
+            s["value"]
+            for s in src_stats["auto__signature_model__based_on"]["results"]
+        ]
+        self.assertListEqual(based_ons, [1, 3, 2])
