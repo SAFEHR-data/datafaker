@@ -891,7 +891,7 @@ class GeneratorTests(GeneratesDBTestCase):
             gc.do_next("signature_model.based_on")
             gc.do_set("dist_gen.constant")
             # we have got to the end of the columns, but shouldn't have any errors
-            self.assertListEqual(gc.messages, [("No more tables", (), {})])
+            self.assertListEqual(gc.messages, [(GeneratorCmd.ERROR_NO_MORE_TABLES, (), {})])
             gc.reset()
             gc.do_quit("")
             config = gc.config

@@ -216,7 +216,7 @@ class GeneratorFactory(ABC):
     A factory for making generators appropriate for a database column.
    """
     @abstractmethod
-    def get_generators(self, column: Column, engine: Engine) -> list[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
         """
         Returns all the generators that might be appropriate for this column.
         """
@@ -295,11 +295,11 @@ class MultiGeneratorFactory(GeneratorFactory):
         super().__init__()
         self.factories = factories
 
-    def get_generators(self, column: Column, engine: Engine) -> list[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
         return [
             generator
             for factory in self.factories
-            for generator in factory.get_generators(column, engine)
+            for generator in factory.get_generators(columns, engine)
         ]
 
 
@@ -444,7 +444,10 @@ class MimesisStringGeneratorFactory(GeneratorFactory):
     """
     All Mimesis generators that return strings.
     """
-    def get_generators(self, column: Column, engine: Engine):
+    def get_generators(self, columns: list[Column], engine: Engine):
+        if len(columns) != 1:
+            return []
+        column = columns[0]
         if not isinstance(get_column_type(column), String):
             return []
         try:
@@ -499,7 +502,10 @@ class MimesisFloatGeneratorFactory(GeneratorFactory):
     """
     All Mimesis generators that return floating point numbers.
     """
-    def get_generators(self, column: Column, _engine: Engine):
+    def get_generators(self, columns: list[Column], engine: Engine):
+        if len(columns) != 1:
+            return []
+        column = columns[0]
         if not isinstance(get_column_type(column), Numeric):
             return []
         return list(map(MimesisGenerator, [
@@ -511,7 +517,10 @@ class MimesisDateGeneratorFactory(GeneratorFactory):
     """
     All Mimesis generators that return dates.
     """
-    def get_generators(self, column: Column, engine: Engine):
+    def get_generators(self, columns: list[Column], engine: Engine):
+        if len(columns) != 1:
+            return []
+        column = columns[0]
         ct = get_column_type(column)
         if not isinstance(ct, Date):
             return []
@@ -522,7 +531,10 @@ class MimesisDateTimeGeneratorFactory(GeneratorFactory):
     """
     All Mimesis generators that return datetimes.
     """
-    def get_generators(self, column: Column, engine: Engine):
+    def get_generators(self, columns: list[Column], engine: Engine):
+        if len(columns) != 1:
+            return []
+        column = columns[0]
         ct = get_column_type(column)
         if not isinstance(ct, DateTime):
             return []
@@ -533,7 +545,10 @@ class MimesisTimeGeneratorFactory(GeneratorFactory):
     """
     All Mimesis generators that return times.
     """
-    def get_generators(self, column: Column, _engine: Engine):
+    def get_generators(self, columns: list[Column], engine: Engine):
+        if len(columns) != 1:
+            return []
+        column = columns[0]
         ct = get_column_type(column)
         if not isinstance(ct, Time):
             return []
@@ -544,7 +559,10 @@ class MimesisIntegerGeneratorFactory(GeneratorFactory):
     """
     All Mimesis generators that return integers.
     """
-    def get_generators(self, column: Column, _engine: Engine):
+    def get_generators(self, columns: list[Column], engine: Engine):
+        if len(columns) != 1:
+            return []
+        column = columns[0]
         ct = get_column_type(column)
         if not isinstance(ct, Numeric) and not isinstance(ct, Integer):
             return []
@@ -620,7 +638,10 @@ class ContinuousDistributionGeneratorFactory(GeneratorFactory):
     """
     All generators that want an average and standard deviation.
     """
-    def get_generators(self, column: Column, engine: Engine):
+    def get_generators(self, columns: list[Column], engine: Engine):
+        if len(columns) != 1:
+            return []
+        column = columns[0]
         ct = get_column_type(column)
         if not isinstance(ct, Numeric) and not isinstance(ct, Integer):
             return []
@@ -747,7 +768,10 @@ class ChoiceGeneratorFactory(GeneratorFactory):
     """
     SAMPLE_COUNT = MAXIMUM_CHOICES
     SUPPRESS_COUNT = 5
-    def get_generators(self, column: Column, engine: Engine):
+    def get_generators(self, columns: list[Column], engine: Engine):
+        if len(columns) != 1:
+            return []
+        column = columns[0]
         column_name = column.name
         table_name = column.table.name
         generators = []
@@ -847,7 +871,10 @@ class ConstantGeneratorFactory(GeneratorFactory):
     """
     Just the null generator
     """
-    def get_generators(self, column: Column, _engine: Engine):
+    def get_generators(self, columns: list[Column], engine: Engine):
+        if len(columns) != 1:
+            return []
+        column = columns[0]
         if column.nullable:
             return [ConstantGenerator(None)]
         c_type = get_column_type(column)
