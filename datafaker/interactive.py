@@ -4,6 +4,7 @@ from collections.abc import Mapping
 import csv
 from dataclasses import dataclass
 from enum import Enum
+import functools
 from pathlib import Path
 from prettytable import PrettyTable
 import re
@@ -848,6 +849,8 @@ information about the columns in the current table. Use 'peek',
     SECONDARY_PRIVATE_TEXT = "Secondary Private on columns {0}"
     NOT_PRIVATE_TEXT = "Not private"
     ERROR_NO_SUCH_TABLE = "No such (non-vocabulary, non-ignored) table name {0}"
+    ERROR_NO_SUCH_COLUMN = "No such column {0} in this table"
+    ERROR_COLUMN_ALREADY_MERGED = "Column {0} is already merged"
 
     def make_table_entry(self, table_name: str, table: Mapping) -> TableEntry | None:
         if table.get("ignore", False):
@@ -906,7 +909,7 @@ information about the columns in the current table. Use 'peek',
     def __init__(self, src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping):
         super().__init__(src_dsn, src_schema, metadata, config)
         self.generator_index = 0
-        self.generators_valid_indices = None
+        self.generators_valid_columns = None
         self.set_prompt()
 
     def set_table_index(self, index):
@@ -1156,6 +1159,9 @@ information about the columns in the current table. Use 'peek',
         """ Synonym for next """
         self.do_next(arg)
 
+    def complete_n(self, text: str, line: str, begidx: int, endidx: int):
+        return self.complete_next(text, line, begidx, endidx)
+
     def _go_next(self):
         table = self.get_table()
         if table is None:
@@ -1204,7 +1210,7 @@ information about the columns in the current table. Use 'peek',
         self.do_previous(arg)
 
     def _generators_valid(self) -> bool:
-        return self.generators_valid_indices == (self.table_index, self.generator_index)
+        return self.generators_valid_columns == (self.table_index, self.get_column_names())
 
     def _get_generator_proposals(self) -> list[Generator]:
         if not self._generators_valid():
@@ -1214,7 +1220,7 @@ information about the columns in the current table. Use 'peek',
             gens = everything_factory.get_generators(columns, self.engine)
             gens.sort(key=lambda g: g.fit(9999))
             self.generators = gens
-            self.generators_valid_indices = (self.table_index, self.generator_index)
+            self.generators_valid_columns = (self.table_index, self.get_column_names().copy())
         return self.generators
 
     def _print_privacy(self):
@@ -1341,7 +1347,10 @@ information about the columns in the current table. Use 'peek',
             result = connection.execute(
                 text(f"SELECT {columns_string} FROM {self.table_name()} WHERE {pred} ORDER BY RANDOM() LIMIT {count}")
             )
-            return [to_str(x) for xs in result.all() for x in xs]
+            return [
+                [to_str(x) for x in xs]
+                for xs in result.all()
+            ]
 
     def do_propose(self, _arg):
         """
@@ -1356,10 +1365,10 @@ information about the columns in the current table. Use 'peek',
         sample = self._get_column_data(limit)
         if sample:
             rep = [
-                x[0] if len(x) == 1 else x
+                x[0] if len(x) == 1 else ",".join(x)
                 for x in sample
             ]
-            self.print(self.PROPOSE_SOURCE_SAMPLE_TEXT, ",".join(rep))
+            self.print(self.PROPOSE_SOURCE_SAMPLE_TEXT, "; ".join(rep))
         else:
             self.print(self.PROPOSE_SOURCE_EMPTY_TEXT)
         for index, gen in enumerate(gens):
@@ -1375,7 +1384,7 @@ information about the columns in the current table. Use 'peek',
                 index=index + 1,
                 name=gen.name(),
                 fit=fit_s,
-                sample=", ".join(map(repr, gen.generate_data(limit)))
+                sample="; ".join(map(repr, gen.generate_data(limit)))
             )
 
     def do_p(self, arg):
@@ -1427,7 +1436,7 @@ information about the columns in the current table. Use 'peek',
 
     def do_unset(self, _arg):
         """
-        Removes any generator set for this column.
+        Remove any generator set for this column.
         """
         (table, gen_info) = self.get_table_and_generator()
         if table is None:
@@ -1438,6 +1447,60 @@ information about the columns in the current table. Use 'peek',
             return
         gen_info.gen = None
         self._go_next()
+
+    def do_merge(self, arg: str):
+        """ Add this column(s) to the specified column(s), so one generator covers them all. """
+        cols = arg.split()
+        if not cols:
+            self.print("Error: merge requires a column argument")
+        table_entry: GeneratorCmdTableEntry = self.get_table()
+        if table_entry is None:
+            self.print(self.ERROR_NO_SUCH_TABLE)
+            return
+        cols_available = functools.reduce(lambda x, y: x | y, [
+            frozenset(gen.columns)
+            for gen in table_entry.new_generators
+        ])
+        cols_to_merge = frozenset(cols)
+        unknown_cols = cols_to_merge - cols_available
+        if unknown_cols:
+            for uc in unknown_cols:
+                self.print(self.ERROR_NO_SUCH_COLUMN, uc)
+            return
+        (_, gen_info) = self.get_table_and_generator()
+        current_columns = frozenset(gen_info.columns)
+        stated_current_columns = cols_to_merge & current_columns
+        if stated_current_columns:
+            for c in stated_current_columns:
+                self.print(self.ERROR_COLUMN_ALREADY_MERGED, c)
+            return
+        # Remove cols_to_merge from each generator
+        for gen in table_entry.new_generators:
+            to_remove = frozenset(gen.columns) & cols_to_merge
+            if to_remove:
+                for tr in to_remove:
+                    gen.columns.remove(tr)
+                # The existing generator (if any) will no longer work
+                gen.gen = None
+                # If we have deleted the last column, remove the entire generator entry
+                if not gen.columns:
+                    table_entry.new_generators.remove(gen)
+        # Add cols_to_merge to this generator
+        gen_info.columns += cols
+        gen_info.gen = None
+        self.set_prompt()
+
+    def complete_merge(self, text: str, _line: str, _begidx: int, _endidx: int):
+        last_arg = text.split()[-1]
+        table_entry: GeneratorCmdTableEntry = self.get_table()
+        if table_entry is None:
+            return []
+        return [
+            f"{column}"
+            for gen in table_entry.new_generators
+            for column in gen.columns
+            if column.startswith(last_arg)
+        ]
 
 
 def update_config_generators(
