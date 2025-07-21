@@ -4,6 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 import functools
 import math
+import numpy as np
 import os
 from pathlib import Path
 import random
@@ -34,6 +35,9 @@ def zipf_weights(size):
 class DistributionGenerator:
     root3 = math.sqrt(3)
 
+    def __init__(self):
+        self.np_gen = np.random.default_rng()
+
     def uniform(self, low, high) -> float:
         return random.uniform(float(low), float(high))
 
@@ -57,6 +61,32 @@ class DistributionGenerator:
 
     def constant(self, value):
         return value
+
+    def multivariate_normal(self, cov):
+        """
+        Produce a list of values pulled from a multivariate distribution.
+
+        :param cov: A dict with various keys: ``rank`` is the number of
+        output values, ``m0``, ``m1``, ... are the means of the
+        distributions (``rank`` of them). ``c0_0``, ``c0_1``, ``c1_1``, ...
+        are the covariates, ``cN_M`` is the covariate of the ``N``th and
+        ``M``th varaibles, with 0 <= ``N`` <= ``M`` < ``rank``.
+        :return: list of ``rank`` floating point values
+        """
+        rank = int(cov["rank"])
+        mean = [
+            float(cov[f"m{i}"])
+            for i in range(rank)
+        ]
+        covs = [
+            [
+                float(cov[f"c{i}_{j}"] if i <= j else cov[f"c{j}_{i}"])
+                for i in range(rank)
+            ]
+            for j in range(rank)
+        ]
+        out = self.np_gen.multivariate_normal(mean, covs)
+        return out.tolist()
 
 
 class TableGenerator(ABC):

@@ -851,6 +851,7 @@ information about the columns in the current table. Use 'peek',
     ERROR_NO_SUCH_TABLE = "No such (non-vocabulary, non-ignored) table name {0}"
     ERROR_NO_SUCH_COLUMN = "No such column {0} in this table"
     ERROR_COLUMN_ALREADY_MERGED = "Column {0} is already merged"
+    PROPOSE_NOTHING = "No proposed generators, sorry."
 
     def make_table_entry(self, table_name: str, table: Mapping) -> TableEntry | None:
         if table.get("ignore", False):
@@ -1371,6 +1372,8 @@ information about the columns in the current table. Use 'peek',
             self.print(self.PROPOSE_SOURCE_SAMPLE_TEXT, "; ".join(rep))
         else:
             self.print(self.PROPOSE_SOURCE_EMPTY_TEXT)
+        if not gens:
+            self.print(self.PROPOSE_NOTHING)
         for index, gen in enumerate(gens):
             fit = gen.fit()
             if fit is None:

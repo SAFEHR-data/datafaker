@@ -887,6 +887,110 @@ class ConstantGeneratorFactory(GeneratorFactory):
         return []
 
 
+class MultivariateNormalGenerator(Generator):
+    def __init__(
+        self,
+        table_name: list[str],
+        column_names: list[str],
+        query: str,
+        covariates: dict[str, float],
+    ):
+        self._table = table_name
+        self._columns = column_names
+        self._query = query
+        self._covariates = covariates
+
+    def function_name(self):
+        return "dist_gen.multivariate_normal"
+
+    def nominal_kwargs(self):
+        return {
+            "cov": f'SRC_STATS["auto__cov__{self._table}"]["results"][0]',
+        }
+
+    def custom_queries(self):
+        cols = ", ".join(self._columns)
+        return {
+            f"auto__cov__{self._table}": {
+                "comment": f"Means and covariate matrix for the columns {cols}, so that we can produce the relatedness between these in the fake data.",
+                "query": self._query,
+            }
+        }
+
+    def actual_kwargs(self) -> dict[str, any]:
+        """
+        The kwargs (summary statistics) this generator is instantiated with.
+        """
+        return { "cov": self._covariates }
+
+    def generate_data(self, count) -> list[any]:
+        """
+        Generate 'count' random data points for this column.
+        """
+        return [
+            dist_gen.multivariate_normal(self._covariates)
+            for _ in range(count)
+        ]
+
+    def fit(self, default=None) -> float | None:
+        return default
+
+
+class MultivariateNormalGeneratorFactory(GeneratorFactory):
+    @classmethod
+    def query(_cls, table: str, columns: str):
+        preds = " AND ".join(
+            f"{col} IS NOT NULL"
+            for col in columns
+        )
+        avgs = ", ".join(
+            f"AVG({col}) AS m{i}"
+            for i, col in enumerate(columns)
+        )
+        multiples = ", ".join(
+            f"SUM({colx} * {coly}) AS s{ix}_{iy}"
+            for iy, coly in enumerate(columns)
+            for ix, colx in enumerate(columns[:iy+1])
+        )
+        means = ", ".join(
+            f"q.m{i}" for i in range(len(columns))
+        )
+        covs = ", ".join(
+            f"(q.s{ix}_{iy} - q.count * q.m{ix} * q.m{iy})/(q.count - 1) AS c{ix}_{iy}"
+            for iy in range(len(columns))
+            for ix in range(iy+1)
+        )
+        return (
+            f"SELECT {means}, {covs}, {len(columns)}"
+            f" AS rank FROM (SELECT COUNT(*) AS count, {multiples}, {avgs}"
+            f" FROM {table} WHERE {preds}) AS q"
+        )
+
+    def get_generators(self, columns: list[Column], engine: Engine):
+        # For the case of one column we'll use GaussianGenerator
+        if len(columns) < 2:
+            return []
+        # All columns must be numeric
+        for c in columns:
+            if not isinstance(get_column_type(c), Numeric):
+                return []
+        column_names = [c.name for c in columns]
+        table = columns[0].table.name
+        query = self.query(table, column_names)
+        with engine.connect() as connection:
+            covariates = connection.execute(text(
+                query
+            )).mappings().first()
+            if not covariates:
+                return []
+            return [MultivariateNormalGenerator(
+                table,
+                column_names,
+                query,
+                covariates,
+            )]
+
+
 everything_factory = MultiGeneratorFactory([
     MimesisStringGeneratorFactory(),
     MimesisIntegerGeneratorFactory(),
@@ -897,4 +1001,5 @@ everything_factory = MultiGeneratorFactory([
     ContinuousDistributionGeneratorFactory(),
     ChoiceGeneratorFactory(),
     ConstantGeneratorFactory(),
+    MultivariateNormalGeneratorFactory(),
 ])
