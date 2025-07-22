@@ -851,6 +851,8 @@ information about the columns in the current table. Use 'peek',
     ERROR_NO_SUCH_TABLE = "No such (non-vocabulary, non-ignored) table name {0}"
     ERROR_NO_SUCH_COLUMN = "No such column {0} in this table"
     ERROR_COLUMN_ALREADY_MERGED = "Column {0} is already merged"
+    ERROR_COLUMN_ALREADY_UNMERGED = "Column {0} is not merged"
+    ERROR_CANNOT_UNMERGE_ALL = "You cannot unmerge all the generator's columns"
     PROPOSE_NOTHING = "No proposed generators, sorry."
 
     def make_table_entry(self, table_name: str, table: Mapping) -> TableEntry | None:
@@ -1470,7 +1472,7 @@ information about the columns in the current table. Use 'peek',
             for uc in unknown_cols:
                 self.print(self.ERROR_NO_SUCH_COLUMN, uc)
             return
-        (_, gen_info) = self.get_table_and_generator()
+        gen_info = table_entry.new_generators[self.generator_index]
         current_columns = frozenset(gen_info.columns)
         stated_current_columns = cols_to_merge & current_columns
         if stated_current_columns:
@@ -1499,9 +1501,57 @@ information about the columns in the current table. Use 'peek',
         if table_entry is None:
             return []
         return [
-            f"{column}"
-            for gen in table_entry.new_generators
+            column
+            for i, gen in enumerate(table_entry.new_generators)
+            if i != self.generator_index
             for column in gen.columns
+            if column.startswith(last_arg)
+        ]
+
+    def do_unmerge(self, arg: str):
+        """ Remove this column(s) from this generator, make them a separate generator. """
+        cols = arg.split()
+        if not cols:
+            self.print("Error: merge requires a column argument")
+        table_entry: GeneratorCmdTableEntry = self.get_table()
+        if table_entry is None:
+            self.print(self.ERROR_NO_SUCH_TABLE)
+            return
+        gen_info = table_entry.new_generators[self.generator_index]
+        current_columns = frozenset(gen_info.columns)
+        cols_to_unmerge = frozenset(cols)
+        unknown_cols = cols_to_unmerge - current_columns
+        if unknown_cols:
+            for uc in unknown_cols:
+                self.print(self.ERROR_NO_SUCH_COLUMN, uc)
+            return
+        stated_unmerged_columns = cols_to_unmerge - current_columns
+        if stated_unmerged_columns:
+            for c in stated_unmerged_columns:
+                self.print(self.ERROR_COLUMN_ALREADY_UNMERGED, c)
+            return
+        if cols_to_unmerge == current_columns:
+            self.print(self.ERROR_CANNOT_UNMERGE_ALL)
+            return
+        # Remove unmerged columns
+        for um in cols_to_unmerge:
+            gen_info.columns.remove(um)
+        # The existing generator will not work
+        gen_info.gen = None
+        # And put them into a new (empty) generator
+        table_entry.new_generators.insert(self.generator_index + 1, GeneratorInfo(
+            columns=cols,
+            gen=None,
+        ))
+
+    def complete_unmerge(self, text: str, _line: str, _begidx: int, _endidx: int):
+        last_arg = text.split()[-1]
+        table_entry: GeneratorCmdTableEntry = self.get_table()
+        if table_entry is None:
+            return []
+        return [
+            column
+            for column in table_entry.new_generators[self.generator_index].columns
             if column.startswith(last_arg)
         ]
 
