@@ -972,7 +972,8 @@ class MultivariateNormalGeneratorFactory(GeneratorFactory):
             return []
         # All columns must be numeric
         for c in columns:
-            if not isinstance(get_column_type(c), Numeric):
+            ct = get_column_type(c)
+            if not isinstance(ct, Numeric) and not isinstance(ct, Integer):
                 return []
         column_names = [c.name for c in columns]
         table = columns[0].table.name

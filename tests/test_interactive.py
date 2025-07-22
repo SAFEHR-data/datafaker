@@ -515,6 +515,85 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
                 f"SELECT {COLUMN} AS value FROM {TABLE} WHERE {COLUMN} IS NOT NULL GROUP BY value ORDER BY COUNT({COLUMN}) DESC",
             )
 
+    def test_merge_columns(self):
+        """ Test that we can merge columns and set a multivariate generator """
+        TABLE = "string"
+        COLUMN_1 = "frequency"
+        COLUMN_2 = "position"
+        GENERATOR_TO_DISCARD = "dist_gen.choice"
+        GENERATOR = "dist_gen.multivariate_normal"
+        with self._get_cmd({}) as gc:
+            gc.do_next(f"{TABLE}.{COLUMN_2}")
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            # set a generator, but this should not exist after merging
+            gc.do_set(str(proposals[GENERATOR_TO_DISCARD][0]))
+            gc.do_next(f"{TABLE}.{COLUMN_1}")
+            self.assertIn(TABLE, gc.prompt)
+            self.assertIn(COLUMN_1, gc.prompt)
+            self.assertNotIn(COLUMN_2, gc.prompt)
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            # set a generator, but this should not exist either
+            gc.do_set(str(proposals[GENERATOR_TO_DISCARD][0]))
+            gc.do_previous("")
+            self.assertIn(TABLE, gc.prompt)
+            self.assertIn(COLUMN_1, gc.prompt)
+            self.assertNotIn(COLUMN_2, gc.prompt)
+            gc.do_merge(COLUMN_2)
+            self.assertIn(TABLE, gc.prompt)
+            self.assertIn(COLUMN_1, gc.prompt)
+            self.assertIn(COLUMN_2, gc.prompt)
+            gc.reset()
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            gc.do_set(str(proposals[GENERATOR][0]))
+            gc.do_quit("")
+            row_gens = gc.config["tables"][TABLE]["row_generators"]
+            self.assertEqual(len(row_gens), 1)
+            row_gen = row_gens[0]
+            self.assertEqual(row_gen["name"], GENERATOR)
+            self.assertListEqual(row_gen["columns_assigned"], [COLUMN_1, COLUMN_2])
+
+    def test_unmerge_columns(self):
+        """ Test that we can unmerge columns and generators are removed """
+        TABLE = "string"
+        COLUMN_1 = "frequency"
+        COLUMN_2 = "position"
+        COLUMN_3 = "model_id"
+        REMAINING_GEN = "gen3"
+        config = {
+            "tables": {
+                TABLE: {
+                    "row_generators": [
+                        {"name": "gen1", "columns_assigned": [COLUMN_1, COLUMN_2]},
+                        { "name": REMAINING_GEN, "columns_assigned": [COLUMN_3] },
+                    ]
+                }
+            }
+        }
+        with self._get_cmd(config) as gc:
+            gc.do_next(f"{TABLE}.{COLUMN_2}")
+            self.assertIn(TABLE, gc.prompt)
+            self.assertIn(COLUMN_1, gc.prompt)
+            self.assertIn(COLUMN_2, gc.prompt)
+            gc.do_unmerge(COLUMN_1)
+            self.assertIn(TABLE, gc.prompt)
+            self.assertNotIn(COLUMN_1, gc.prompt)
+            self.assertIn(COLUMN_2, gc.prompt)
+            # Next generator should be the unmerged one
+            gc.do_next("")
+            self.assertIn(TABLE, gc.prompt)
+            self.assertIn(COLUMN_1, gc.prompt)
+            self.assertNotIn(COLUMN_2, gc.prompt)
+            gc.do_quit("")
+            # Both generators should have disappeared
+            row_gens = gc.config["tables"][TABLE]["row_generators"]
+            self.assertEqual(len(row_gens), 1)
+            row_gen = row_gens[0]
+            self.assertEqual(row_gen["name"], REMAINING_GEN)
+            self.assertListEqual(row_gen["columns_assigned"], [COLUMN_3])
+
     def test_old_generators_remain(self):
         """ Test that we can set one generator and keep an old one. """
         config = {

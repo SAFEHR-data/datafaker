@@ -1487,9 +1487,20 @@ information about the columns in the current table. Use 'peek',
                     gen.columns.remove(tr)
                 # The existing generator (if any) will no longer work
                 gen.gen = None
-                # If we have deleted the last column, remove the entire generator entry
-                if not gen.columns:
-                    table_entry.new_generators.remove(gen)
+        # and remove any emptied generator entries
+        ng = table_entry.new_generators
+        i = 0
+        while i < self.generator_index:
+            if ng[i].columns:
+                i += 1
+            else:
+                ng = ng[:i] + ng[i + 1:]
+                self.generator_index -= 1
+        while i < len(ng):
+            if not ng[i].columns:
+                ng = ng[:i] + ng[i + 1:]
+            i += 1
+        table_entry.new_generators = ng
         # Add cols_to_merge to this generator
         gen_info.columns += cols
         gen_info.gen = None
@@ -1543,6 +1554,7 @@ information about the columns in the current table. Use 'peek',
             columns=cols,
             gen=None,
         ))
+        self.set_prompt()
 
     def complete_unmerge(self, text: str, _line: str, _begidx: int, _endidx: int):
         last_arg = text.split()[-1]
