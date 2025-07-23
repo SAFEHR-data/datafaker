@@ -246,6 +246,12 @@ class Buckets:
     def make_buckets(_cls, engine: Engine, table_name: str, column_name: str):
         """
         Construct a Buckets object.
+        
+        Calculates the mean and standard deviation of the values in the column
+        specified and makes ten buckets, centered on the mean and each half
+        a standard deviation wide (except for the end two that extend to
+        infinity). Each bucket will be set to the count of the number of values
+        in the column within that bucket.
         """
         with engine.connect() as connection:
             result = connection.execute(
@@ -638,7 +644,19 @@ class ContinuousDistributionGeneratorFactory(GeneratorFactory):
     """
     All generators that want an average and standard deviation.
     """
-    def get_generators(self, columns: list[Column], engine: Engine):
+    def _get_generators_from_buckets(
+        self,
+        _engine: Engine,
+        table_name: str,
+        column_name: str,
+        buckets: Buckets,
+    ) -> list[Generator]:
+        return [
+            GaussianGenerator(table_name, column_name, buckets),
+            UniformGenerator(table_name, column_name, buckets),
+        ]
+
+    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
         if len(columns) != 1:
             return []
         column = columns[0]
@@ -650,9 +668,83 @@ class ContinuousDistributionGeneratorFactory(GeneratorFactory):
         buckets = Buckets.make_buckets(engine, table_name, column_name)
         if buckets is None:
             return []
+        return self._get_generators_from_buckets(engine, table_name, column_name, buckets)
+
+
+class LogNormalGenerator(Generator):
+    #TODO: figure out the real buckets here (this was from a random sample in R)
+    expected_buckets = [0, 0, 0, 0.28627, 0.40607, 0.14937, 0.06735, 0.03492, 0.01918, 0.03684]
+    def __init__(self, table_name: str, column_name: str, buckets: Buckets, logmean: float, logstddev: float):
+        super().__init__()
+        self.table_name = table_name
+        self.column_name = column_name
+        self.buckets = buckets
+        self.logmean = logmean
+        self.logstddev = logstddev
+    def function_name(self):
+        return "dist_gen.lognormal"
+    def generate_data(self, count):
         return [
-            GaussianGenerator(table_name, column_name, buckets),
-            UniformGenerator(table_name, column_name, buckets),
+            dist_gen.lognormal(self.logmean, self.logstddev)
+            for _ in range(count)
+        ]
+    def nominal_kwargs(self):
+        return {
+            "logmean": f'SRC_STATS["auto__{self.table_name}"]["results"][0]["logmean__{self.column_name}"]',
+            "logsd": f'SRC_STATS["auto__{self.table_name}"]["results"][0]["logstddev__{self.column_name}"]',
+        }
+    def actual_kwargs(self):
+        return {
+            "logmean": self.logmean,
+            "logsd": self.logstddev,
+        }
+    def select_aggregate_clauses(self) -> dict[str, dict[str, str]]:
+        clauses = super().select_aggregate_clauses()
+        return {
+            **clauses,
+            f"logmean__{self.column_name}": {
+                "clause": f"AVG(LN({self.column_name}))",
+                "comment": f"Mean of logs of {self.column_name} from table {self.table_name}",
+            },
+            f"logstddev__{self.column_name}": {
+                "clause": f"STDDEV(LN({self.column_name}))",
+                "comment": f"Standard deviation of logs of {self.column_name} from table {self.table_name}",
+            },
+        }
+    def fit(self, default=None):
+        if self.buckets is None:
+            return default
+        return self.buckets.fit_from_counts(self.expected_buckets)
+
+
+class ContinuousLogDistributionGeneratorFactory(ContinuousDistributionGeneratorFactory):
+    """
+    All generators that want an average and standard deviation of log data.
+    """
+    def _get_generators_from_buckets(
+        self,
+        engine: Engine,
+        table_name: str,
+        column_name: str,
+        buckets: Buckets,
+    ) -> list[Generator]:
+        with engine.connect() as connection:
+            result = connection.execute(
+                text("SELECT AVG(LN({column})) AS logmean, STDDEV(LN({column})) AS logstddev FROM {table}".format(
+                    table=table_name,
+                    column=column_name,
+                ))
+            ).first()
+            if result is None or result.logstddev is None:
+                return None
+        return [
+            LogNormalGenerator(
+                table_name,
+                column_name,
+                buckets,
+                float(result.logmean),
+                float(result.logstddev),
+            )
         ]
 
 
@@ -894,14 +986,16 @@ class MultivariateNormalGenerator(Generator):
         column_names: list[str],
         query: str,
         covariates: dict[str, float],
+        function_name: str,
     ):
         self._table = table_name
         self._columns = column_names
         self._query = query
         self._covariates = covariates
+        self._function_name = function_name
 
     def function_name(self):
-        return "dist_gen.multivariate_normal"
+        return "dist_gen." + self._function_name
 
     def nominal_kwargs(self):
         return {
@@ -928,7 +1022,7 @@ class MultivariateNormalGenerator(Generator):
         Generate 'count' random data points for this column.
         """
         return [
-            dist_gen.multivariate_normal(self._covariates)
+            getattr(dist_gen, self._function_name)(self._covariates)
             for _ in range(count)
         ]
 
@@ -937,18 +1031,26 @@ class MultivariateNormalGenerator(Generator):
 
 
 class MultivariateNormalGeneratorFactory(GeneratorFactory):
-    @classmethod
-    def query(_cls, table: str, columns: str):
+    def function_name(self) -> str:
+        return "multivariate_normal"
+
+    def query_predicate(self, column: str) -> str:
+        return column + " IS NOT NULL"
+
+    def query_var(self, column: str) -> str:
+        return column
+
+    def query(self, table: str, columns: str) -> str:
         preds = " AND ".join(
-            f"{col} IS NOT NULL"
+            self.query_predicate(col)
             for col in columns
         )
         avgs = ", ".join(
-            f"AVG({col}) AS m{i}"
+            f"AVG({self.query_var(col)}) AS m{i}"
             for i, col in enumerate(columns)
         )
         multiples = ", ".join(
-            f"SUM({colx} * {coly}) AS s{ix}_{iy}"
+            f"SUM({self.query_var(colx)} * {self.query_var(coly)}) AS s{ix}_{iy}"
             for iy, coly in enumerate(columns)
             for ix, colx in enumerate(columns[:iy+1])
         )
@@ -956,13 +1058,13 @@ class MultivariateNormalGeneratorFactory(GeneratorFactory):
             f"q.m{i}" for i in range(len(columns))
         )
         covs = ", ".join(
-            f"(q.s{ix}_{iy} - q.count * q.m{ix} * q.m{iy})/(q.count - 1) AS c{ix}_{iy}"
+            f"(q.s{ix}_{iy} - q.count * q.m{ix} * q.m{iy})/NULLIF(q.count - 1, 0) AS c{ix}_{iy}"
             for iy in range(len(columns))
             for ix in range(iy+1)
         )
         return (
-            f"SELECT {means}, {covs}, {len(columns)}"
-            f" AS rank FROM (SELECT COUNT(*) AS count, {multiples}, {avgs}"
+            f"SELECT {means}, {covs}, {len(columns)} AS rank"
+            f" FROM (SELECT COUNT(*) AS count, {multiples}, {avgs}"
             f" FROM {table} WHERE {preds}) AS q"
         )
 
@@ -982,14 +1084,26 @@ class MultivariateNormalGeneratorFactory(GeneratorFactory):
             covariates = connection.execute(text(
                 query
             )).mappings().first()
-            if not covariates:
+            if not covariates or covariates["c0_0"] is None:
                 return []
             return [MultivariateNormalGenerator(
                 table,
                 column_names,
                 query,
                 covariates,
+                self.function_name(),
             )]
+
+
+class MultivariateLogNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
+    def function_name(self) -> str:
+        return "multivariate_lognormal"
+
+    def query_predicate(self, column: str) -> str:
+        return f"{column} IS NOT NULL AND 0 < {column}"
+
+    def query_var(self, column: str) -> str:
+        return f"LN({column})"
 
 
 everything_factory = MultiGeneratorFactory([
@@ -1000,7 +1114,9 @@ everything_factory = MultiGeneratorFactory([
     MimesisDateTimeGeneratorFactory(),
     MimesisTimeGeneratorFactory(),
     ContinuousDistributionGeneratorFactory(),
+    ContinuousLogDistributionGeneratorFactory(),
     ChoiceGeneratorFactory(),
     ConstantGeneratorFactory(),
     MultivariateNormalGeneratorFactory(),
+    MultivariateLogNormalGeneratorFactory(),
 ])

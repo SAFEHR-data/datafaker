@@ -49,6 +49,9 @@ class DistributionGenerator:
     def normal(self, mean, sd) -> float:
         return random.normalvariate(float(mean), float(sd))
 
+    def lognormal(self, logmean, logsd) -> float:
+        return random.lognormvariate(float(logmean), float(logsd))
+
     def choice(self, a):
         c = random.choice(a)
         return c["value"] if type(c) is dict and "value" in c else c
@@ -62,17 +65,7 @@ class DistributionGenerator:
     def constant(self, value):
         return value
 
-    def multivariate_normal(self, cov):
-        """
-        Produce a list of values pulled from a multivariate distribution.
-
-        :param cov: A dict with various keys: ``rank`` is the number of
-        output values, ``m0``, ``m1``, ... are the means of the
-        distributions (``rank`` of them). ``c0_0``, ``c0_1``, ``c1_1``, ...
-        are the covariates, ``cN_M`` is the covariate of the ``N``th and
-        ``M``th varaibles, with 0 <= ``N`` <= ``M`` < ``rank``.
-        :return: list of ``rank`` floating point values
-        """
+    def multivariate_normal_np(self, cov):
         rank = int(cov["rank"])
         mean = [
             float(cov[f"m{i}"])
@@ -85,8 +78,34 @@ class DistributionGenerator:
             ]
             for j in range(rank)
         ]
-        out = self.np_gen.multivariate_normal(mean, covs)
-        return out.tolist()
+        return self.np_gen.multivariate_normal(mean, covs)
+
+    def multivariate_normal(self, cov):
+        """
+        Produce a list of values pulled from a multivariate distribution.
+
+        :param cov: A dict with various keys: ``rank`` is the number of
+        output values, ``m0``, ``m1``, ... are the means of the
+        distributions (``rank`` of them). ``c0_0``, ``c0_1``, ``c1_1``, ...
+        are the covariates, ``cN_M`` is the covariate of the ``N``th and
+        ``M``th varaibles, with 0 <= ``N`` <= ``M`` < ``rank``.
+        :return: list of ``rank`` floating point values
+        """
+        return self.multivariate_normal_np(cov).tolist()
+
+    def multivariate_lognormal(self, cov):
+        """
+        Produce a list of values pulled from a multivariate distribution.
+
+        :param cov: A dict with various keys: ``rank`` is the number of
+        output values, ``m0``, ``m1``, ... are the means of the
+        distributions (``rank`` of them). ``c0_0``, ``c0_1``, ``c1_1``, ...
+        are the covariates, ``cN_M`` is the covariate of the ``N``th and
+        ``M``th varaibles, with 0 <= ``N`` <= ``M`` < ``rank``. These
+        are all the means and covariants of the logs of the data.
+        :return: list of ``rank`` floating point values
+        """
+        return np.exp(self.multivariate_normal_np(cov)).tolist()
 
 
 class TableGenerator(ABC):
