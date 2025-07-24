@@ -56,7 +56,7 @@ class ConfigureTablesSrcTests(ConfigureTablesTests):
             for t in table_names:
                 self.assertIn(t, tc.prompt)
                 tc.do_next("")
-            self.assertListEqual(tc.messages, [(TableCmd.ERROR_NO_MORE_TABLES, (), {})])
+            self.assertListEqual(tc.messages, [(TableCmd.INFO_NO_MORE_TABLES, (), {})])
             tc.reset()
             for t in reversed(table_names):
                 self.assertIn(t, tc.prompt)
@@ -406,7 +406,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
                     else:
                         self.assertNotIn("[pk]", gc.prompt)
                     gc.do_next("")
-            self.assertListEqual(gc.messages, [(GeneratorCmd.ERROR_NO_MORE_TABLES, (), {})])
+            self.assertListEqual(gc.messages, [(GeneratorCmd.INFO_NO_MORE_TABLES, (), {})])
             gc.reset()
             for table_name, table_meta in reversed(list(self.metadata.tables.items())):
                 for column_name, column_meta in reversed(list(table_meta.columns.items())):
@@ -970,7 +970,7 @@ class GeneratorTests(GeneratesDBTestCase):
             gc.do_next("signature_model.based_on")
             gc.do_set("dist_gen.constant")
             # we have got to the end of the columns, but shouldn't have any errors
-            self.assertListEqual(gc.messages, [(GeneratorCmd.ERROR_NO_MORE_TABLES, (), {})])
+            self.assertListEqual(gc.messages, [(GeneratorCmd.INFO_NO_MORE_TABLES, (), {})])
             gc.reset()
             gc.do_quit("")
             config = gc.config

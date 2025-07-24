@@ -5,6 +5,7 @@ Generator factories for making generators for single columns.
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 import decimal
+from functools import lru_cache
 import math
 import mimesis
 import mimesis.locales
@@ -703,11 +704,11 @@ class LogNormalGenerator(Generator):
         return {
             **clauses,
             f"logmean__{self.column_name}": {
-                "clause": f"AVG(LN({self.column_name}))",
+                "clause": f"AVG(CASE WHEN 0<{self.column_name} THEN LN({self.column_name}) ELSE NULL END)",
                 "comment": f"Mean of logs of {self.column_name} from table {self.table_name}",
             },
             f"logstddev__{self.column_name}": {
-                "clause": f"STDDEV(LN({self.column_name}))",
+                "clause": f"STDDEV(CASE WHEN 0<{self.column_name} THEN LN({self.column_name}) ELSE NULL END)",
                 "comment": f"Standard deviation of logs of {self.column_name} from table {self.table_name}",
             },
         }
@@ -730,7 +731,7 @@ class ContinuousLogDistributionGeneratorFactory(ContinuousDistributionGeneratorF
     ) -> list[Generator]:
         with engine.connect() as connection:
             result = connection.execute(
-                text("SELECT AVG(LN({column})) AS logmean, STDDEV(LN({column})) AS logstddev FROM {table}".format(
+                text("SELECT AVG(CASE WHEN 0<{column} THEN LN({column}) ELSE NULL END) AS logmean, STDDEV(CASE WHEN 0<{column} THEN LN({column}) ELSE NULL END) AS logstddev FROM {table}".format(
                     table=table_name,
                     column=column_name,
                 ))
@@ -763,6 +764,7 @@ def zipf_distribution(total, bins):
 
 
 class ChoiceGenerator(Generator):
+    STORE_COUNTS = False
     def __init__(
         self,
         table_name,
@@ -778,24 +780,38 @@ class ChoiceGenerator(Generator):
         self.values = values
         estimated_counts = self.get_estimated_counts(counts)
         self._fit = fit_from_buckets(counts, estimated_counts)
+
+        extra_results = ""
+        extra_expo = ""
+        extra_comment = ""
+        if self.STORE_COUNTS:
+            extra_results = f", COUNT({column_name}) AS count"
+            extra_expo = ", count"
+            extra_comment = " and their counts"
         if suppress_count == 0:
             if sample_count is None:
-                self._query = f"SELECT {column_name} AS value FROM {table_name} WHERE {column_name} IS NOT NULL GROUP BY value ORDER BY COUNT({column_name}) DESC"
-                self._comment = f"All the values that appear in column {column_name} of table {table_name}"
+                self._query = f"SELECT {column_name} AS value{extra_results} FROM {table_name} WHERE {column_name} IS NOT NULL GROUP BY value ORDER BY COUNT({column_name}) DESC"
+                self._comment = f"All the values{extra_comment} that appear in column {column_name} of table {table_name}"
                 self._annotation = None
             else:
-                self._query = f"SELECT value FROM (SELECT {column_name} AS value FROM {table_name} WHERE {column_name} IS NOT NULL ORDER BY RANDOM() LIMIT {sample_count}) AS _inner GROUP BY value ORDER BY COUNT(value) DESC"
-                self._comment = f"The values that appear in column {column_name} of a random sample of {sample_count} rows of table {table_name}"
+                self._query = f"SELECT {column_name} AS value{extra_results} FROM (SELECT {column_name} FROM {table_name} WHERE {column_name} IS NOT NULL ORDER BY RANDOM() LIMIT {sample_count}) AS _inner GROUP BY value ORDER BY COUNT({column_name}) DESC"
+                self._comment = f"The values{extra_comment} that appear in column {column_name} of a random sample of {sample_count} rows of table {table_name}"
                 self._annotation = "sampled"
         else:
             if sample_count is None:
-                self._query = f"SELECT value FROM (SELECT {column_name} AS value, COUNT({column_name}) AS count FROM {table_name} WHERE {column_name} IS NOT NULL GROUP BY value ORDER BY count DESC) AS _inner WHERE {suppress_count} < count"
-                self._comment = f"All the values that appear in column {column_name} of table {table_name} more than {suppress_count} times"
+                self._query = f"SELECT value{extra_expo} FROM (SELECT {column_name} AS value, COUNT({column_name}) AS count FROM {table_name} WHERE {column_name} IS NOT NULL GROUP BY value ORDER BY count DESC) AS _inner WHERE {suppress_count} < count"
+                self._comment = f"All the values{extra_comment} that appear in column {column_name} of table {table_name} more than {suppress_count} times"
                 self._annotation = "suppressed"
             else:
-                self._query = f"SELECT value FROM (SELECT value, COUNT(value) AS count FROM (SELECT {column_name} AS value FROM {table_name} WHERE {column_name} IS NOT NULL ORDER BY RANDOM() LIMIT {sample_count}) AS _inner GROUP BY value ORDER BY count DESC) AS _inner WHERE {suppress_count} < count"
-                self._comment = f"The values that appear more than {suppress_count} times in column {column_name}, out of a random sample of {sample_count} rows of table {table_name}"
+                self._query = f"SELECT value{extra_expo} FROM (SELECT value, COUNT(value) AS count FROM (SELECT {column_name} AS value FROM {table_name} WHERE {column_name} IS NOT NULL ORDER BY RANDOM() LIMIT {sample_count}) AS _inner GROUP BY value ORDER BY count DESC) AS _inner WHERE {suppress_count} < count"
+                self._comment = f"The values{extra_comment} that appear more than {suppress_count} times in column {column_name}, out of a random sample of {sample_count} rows of table {table_name}"
                 self._annotation = "sampled and suppressed"
+
+    @abstractmethod
+    def get_estimated_counts(counts):
+        """
+        The counts that we would expect if this distribution was the correct one.
+        """
     def nominal_kwargs(self):
         return {
             "a": f'SRC_STATS["auto__{self.table_name}__{self.column_name}"]["results"]',
@@ -836,9 +852,9 @@ class ZipfChoiceGenerator(ChoiceGenerator):
 def uniform_distribution(total, bins):
     p = total // bins
     n = total % bins
-    for i in range(0, n):
+    for _ in range(0, n):
         yield p + 1
-    for i in range(n, bins):
+    for _ in range(n, bins):
         yield p
 
 
@@ -850,6 +866,19 @@ class UniformChoiceGenerator(ChoiceGenerator):
     def generate_data(self, count):
         return [
             dist_gen.choice(self.values)
+            for _ in range(count)
+        ]
+
+
+class WeightedChoiceGenerator(ChoiceGenerator):
+    STORE_COUNTS = True
+    def get_estimated_counts(self, counts):
+        return counts
+    def function_name(self):
+        return "dist_gen.weighted_choice"
+    def generate_data(self, count):
+        return [
+            dist_gen.weighted_choice(self.values)
             for _ in range(count)
         ]
 
@@ -878,6 +907,7 @@ class ChoiceGeneratorFactory(GeneratorFactory):
             if results is not None and results.rowcount <= MAXIMUM_CHOICES:
                 values = []  # The values found
                 counts = []  # The number or each value
+                cvs: list[dict[str, any]] = []  # list of dicts with keys "v" and "count"
                 for result in results:
                     c = result.f
                     if c != 0:
@@ -886,10 +916,12 @@ class ChoiceGeneratorFactory(GeneratorFactory):
                         if type(v) is decimal.Decimal:
                             v = float(v)
                         values.append(v)
+                        cvs.append({"v": v, "count": c})
                 if counts:
                     generators += [
                         ZipfChoiceGenerator(table_name, column_name, values, counts),
                         UniformChoiceGenerator(table_name, column_name, values, counts),
+                        WeightedChoiceGenerator(table_name, column_name, cvs, counts),
                     ]
             results = connection.execute(
                 text("SELECT v, COUNT(v) AS f FROM (SELECT {column} as v FROM {table} ORDER BY RANDOM() LIMIT {sample_count}) AS _inner GROUP BY v ORDER BY f DESC".format(
@@ -901,8 +933,10 @@ class ChoiceGeneratorFactory(GeneratorFactory):
             if results is not None:
                 values = []  # All values found
                 counts = []  # The number or each value
+                cvs: list[dict[str, any]] = []  # list of dicts with keys "v" and "count"
                 values_not_suppressed = []  # All values found more than SUPPRESS_COUNT times
                 counts_not_suppressed = []  # The number for each value not suppressed
+                cvs_not_suppressed: list[dict[str, any]] = []  # list of dicts with keys "v" and "count"
                 for result in results:
                     c = result.f
                     if c != 0:
@@ -911,16 +945,19 @@ class ChoiceGeneratorFactory(GeneratorFactory):
                         if type(v) is decimal.Decimal:
                             v = float(v)
                         values.append(v)
+                        cvs.append({"v": v, "count": c})
                     if self.SUPPRESS_COUNT < c:
                         counts_not_suppressed.append(c)
                         v = result.v
                         if type(v) is decimal.Decimal:
                             v = float(v)
                         values_not_suppressed.append(v)
+                        cvs_not_suppressed.append({"v": v, "count": c})
                 if counts:
                     generators += [
                         ZipfChoiceGenerator(table_name, column_name, values, counts, sample_count=self.SAMPLE_COUNT),
                         UniformChoiceGenerator(table_name, column_name, values, counts, sample_count=self.SAMPLE_COUNT),
+                        WeightedChoiceGenerator(table_name, column_name, cvs, counts, sample_count=self.SAMPLE_COUNT),
                     ]
                 if counts_not_suppressed:
                     generators += [
@@ -937,6 +974,14 @@ class ChoiceGeneratorFactory(GeneratorFactory):
                             column_name,
                             values_not_suppressed,
                             counts_not_suppressed,
+                            sample_count=self.SAMPLE_COUNT,
+                            suppress_count=self.SUPPRESS_COUNT,
+                        ),
+                        WeightedChoiceGenerator(
+                            table_name=table_name,
+                            column_name=column_name,
+                            values=cvs_not_suppressed,
+                            counts=counts,
                             sample_count=self.SAMPLE_COUNT,
                             suppress_count=self.SUPPRESS_COUNT,
                         ),
@@ -1106,17 +1151,19 @@ class MultivariateLogNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
         return f"LN({column})"
 
 
-everything_factory = MultiGeneratorFactory([
-    MimesisStringGeneratorFactory(),
-    MimesisIntegerGeneratorFactory(),
-    MimesisFloatGeneratorFactory(),
-    MimesisDateGeneratorFactory(),
-    MimesisDateTimeGeneratorFactory(),
-    MimesisTimeGeneratorFactory(),
-    ContinuousDistributionGeneratorFactory(),
-    ContinuousLogDistributionGeneratorFactory(),
-    ChoiceGeneratorFactory(),
-    ConstantGeneratorFactory(),
-    MultivariateNormalGeneratorFactory(),
-    MultivariateLogNormalGeneratorFactory(),
-])
+@lru_cache(1)
+def everything_factory():
+    return MultiGeneratorFactory([
+        MimesisStringGeneratorFactory(),
+        MimesisIntegerGeneratorFactory(),
+        MimesisFloatGeneratorFactory(),
+        MimesisDateGeneratorFactory(),
+        MimesisDateTimeGeneratorFactory(),
+        MimesisTimeGeneratorFactory(),
+        ContinuousDistributionGeneratorFactory(),
+        ContinuousLogDistributionGeneratorFactory(),
+        ChoiceGeneratorFactory(),
+        ConstantGeneratorFactory(),
+        MultivariateNormalGeneratorFactory(),
+        MultivariateLogNormalGeneratorFactory(),
+    ])

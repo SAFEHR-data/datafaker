@@ -75,7 +75,7 @@ class AskSaveCmd(cmd.Cmd):
 
 
 class DbCmd(ABC, cmd.Cmd):
-    ERROR_NO_MORE_TABLES = "Error: There are no more tables"
+    INFO_NO_MORE_TABLES = "There are no more tables"
     ERROR_ALREADY_AT_START = "Error: Already at the start"
     ERROR_NO_SUCH_TABLE = "Error: '{0}' is not the name of a table in this database"
     ROW_COUNT_MSG = "Total row count: {}"
@@ -443,7 +443,7 @@ to exit this program."""
                 return
             self.set_table_index(index)
             return
-        self.next_table(self.ERROR_NO_MORE_TABLES)
+        self.next_table(self.INFO_NO_MORE_TABLES)
     def complete_next(self, text, line, begidx, endidx):
         return [
             entry.name
@@ -749,7 +749,7 @@ data from the database. Use 'quit' to exit this tool."""
                 return
             self.set_table_index(index)
             return
-        self.next_table(self.ERROR_NO_MORE_TABLES)
+        self.next_table(self.INFO_NO_MORE_TABLES)
     def complete_next(self, text, line, begidx, endidx):
         return [
             entry.name
@@ -1171,7 +1171,7 @@ information about the columns in the current table. Use 'peek',
             self.print("No more tables")
         next_gi = self.generator_index + 1
         if next_gi == len(table.new_generators):
-            self.next_table(self.ERROR_NO_MORE_TABLES)
+            self.next_table(self.INFO_NO_MORE_TABLES)
             return
         self.generator_index = next_gi
         self.set_prompt()
@@ -1220,7 +1220,7 @@ information about the columns in the current table. Use 'peek',
             self.generators = None
         if self.generators is None:
             columns = self.column_metadata()
-            gens = everything_factory.get_generators(columns, self.engine)
+            gens = everything_factory().get_generators(columns, self.engine)
             gens.sort(key=lambda g: g.fit(9999))
             self.generators = gens
             self.generators_valid_columns = (self.table_index, self.get_column_names().copy())
@@ -1252,7 +1252,10 @@ information about the columns in the current table. Use 'peek',
         args = arg.split()
         limit = 20
         comparison = {
-            "source": self._get_column_data(limit, to_str=str),
+            "source": [
+                x[0] if len(x) == 1 else ", ".join(x)
+                for x in self._get_column_data(limit, to_str=str)
+            ]
         }
         gens: list[Generator] = self._get_generator_proposals()
         table_name = self.table_name()

@@ -62,6 +62,23 @@ class DistributionGenerator:
         c = random.choices(a, weights=zipf_weights(n))[0]
         return c["value"] if type(c) is dict and "value" in c else c
 
+    def weighted_choice(self, a: list[dict[str, any]]) -> list[any]:
+        """
+        Choice weighted by the count in the original dataset.
+        :param a: a list of dicts, each with a ``v`` key
+        holding the value to be returned and a ``count`` key holding the
+        number of that value found in the original dataset
+        """
+        vs = []
+        counts = []
+        for vc in a:
+            count = vc.get("count", 0)
+            if count:
+                counts.append(count)
+                vs.append(vc.get("v", None))
+        c = random.choices(vs, weights=counts)[0]
+        return c
+
     def constant(self, value):
         return value
 
