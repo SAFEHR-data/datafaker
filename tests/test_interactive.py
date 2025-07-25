@@ -56,7 +56,7 @@ class ConfigureTablesSrcTests(ConfigureTablesTests):
             for t in table_names:
                 self.assertIn(t, tc.prompt)
                 tc.do_next("")
-            self.assertListEqual(tc.messages, [(TableCmd.ERROR_NO_MORE_TABLES, (), {})])
+            self.assertListEqual(tc.messages, [(TableCmd.INFO_NO_MORE_TABLES, (), {})])
             tc.reset()
             for t in reversed(table_names):
                 self.assertIn(t, tc.prompt)
@@ -393,6 +393,37 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             gc.do_quit("")
             self.assertEqual(len(gc.config["tables"][TABLE]["row_generators"]), 1)
 
+    def test_prompts(self) -> None:
+        """Test that the prompts follow the names of the columns and assigned generators."""
+        config = {}
+        with self._get_cmd(config) as gc:
+            for table_name, table_meta in self.metadata.tables.items():
+                for column_name, column_meta in table_meta.columns.items():
+                    self.assertIn(table_name, gc.prompt)
+                    self.assertIn(column_name, gc.prompt)
+                    if column_meta.primary_key:
+                        self.assertIn("[pk]", gc.prompt)
+                    else:
+                        self.assertNotIn("[pk]", gc.prompt)
+                    gc.do_next("")
+            self.assertListEqual(gc.messages, [(GeneratorCmd.INFO_NO_MORE_TABLES, (), {})])
+            gc.reset()
+            for table_name, table_meta in reversed(list(self.metadata.tables.items())):
+                for column_name, column_meta in reversed(list(table_meta.columns.items())):
+                    self.assertIn(table_name, gc.prompt)
+                    self.assertIn(column_name, gc.prompt)
+                    if column_meta.primary_key:
+                        self.assertIn("[pk]", gc.prompt)
+                    else:
+                        self.assertNotIn("[pk]", gc.prompt)
+                    gc.do_previous("")
+            self.assertListEqual(gc.messages, [(GeneratorCmd.ERROR_ALREADY_AT_START, (), {})])
+            gc.reset()
+            bad_table_name = "notarealtable"
+            gc.do_next(bad_table_name)
+            self.assertListEqual(gc.messages, [(GeneratorCmd.ERROR_NO_SUCH_TABLE, (bad_table_name,), {})])
+            gc.reset()
+
     def test_set_generator_mimesis(self):
         """ Test that we can set one generator to a mimesis generator. """
         with self._get_cmd({}) as gc:
@@ -483,6 +514,85 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
                 gc.config["src-stats"][0]["query"],
                 f"SELECT {COLUMN} AS value FROM {TABLE} WHERE {COLUMN} IS NOT NULL GROUP BY value ORDER BY COUNT({COLUMN}) DESC",
             )
+
+    def test_merge_columns(self):
+        """ Test that we can merge columns and set a multivariate generator """
+        TABLE = "string"
+        COLUMN_1 = "frequency"
+        COLUMN_2 = "position"
+        GENERATOR_TO_DISCARD = "dist_gen.choice"
+        GENERATOR = "dist_gen.multivariate_normal"
+        with self._get_cmd({}) as gc:
+            gc.do_next(f"{TABLE}.{COLUMN_2}")
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            # set a generator, but this should not exist after merging
+            gc.do_set(str(proposals[GENERATOR_TO_DISCARD][0]))
+            gc.do_next(f"{TABLE}.{COLUMN_1}")
+            self.assertIn(TABLE, gc.prompt)
+            self.assertIn(COLUMN_1, gc.prompt)
+            self.assertNotIn(COLUMN_2, gc.prompt)
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            # set a generator, but this should not exist either
+            gc.do_set(str(proposals[GENERATOR_TO_DISCARD][0]))
+            gc.do_previous("")
+            self.assertIn(TABLE, gc.prompt)
+            self.assertIn(COLUMN_1, gc.prompt)
+            self.assertNotIn(COLUMN_2, gc.prompt)
+            gc.do_merge(COLUMN_2)
+            self.assertIn(TABLE, gc.prompt)
+            self.assertIn(COLUMN_1, gc.prompt)
+            self.assertIn(COLUMN_2, gc.prompt)
+            gc.reset()
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            gc.do_set(str(proposals[GENERATOR][0]))
+            gc.do_quit("")
+            row_gens = gc.config["tables"][TABLE]["row_generators"]
+            self.assertEqual(len(row_gens), 1)
+            row_gen = row_gens[0]
+            self.assertEqual(row_gen["name"], GENERATOR)
+            self.assertListEqual(row_gen["columns_assigned"], [COLUMN_1, COLUMN_2])
+
+    def test_unmerge_columns(self):
+        """ Test that we can unmerge columns and generators are removed """
+        TABLE = "string"
+        COLUMN_1 = "frequency"
+        COLUMN_2 = "position"
+        COLUMN_3 = "model_id"
+        REMAINING_GEN = "gen3"
+        config = {
+            "tables": {
+                TABLE: {
+                    "row_generators": [
+                        {"name": "gen1", "columns_assigned": [COLUMN_1, COLUMN_2]},
+                        { "name": REMAINING_GEN, "columns_assigned": [COLUMN_3] },
+                    ]
+                }
+            }
+        }
+        with self._get_cmd(config) as gc:
+            gc.do_next(f"{TABLE}.{COLUMN_2}")
+            self.assertIn(TABLE, gc.prompt)
+            self.assertIn(COLUMN_1, gc.prompt)
+            self.assertIn(COLUMN_2, gc.prompt)
+            gc.do_unmerge(COLUMN_1)
+            self.assertIn(TABLE, gc.prompt)
+            self.assertNotIn(COLUMN_1, gc.prompt)
+            self.assertIn(COLUMN_2, gc.prompt)
+            # Next generator should be the unmerged one
+            gc.do_next("")
+            self.assertIn(TABLE, gc.prompt)
+            self.assertIn(COLUMN_1, gc.prompt)
+            self.assertNotIn(COLUMN_2, gc.prompt)
+            gc.do_quit("")
+            # Both generators should have disappeared
+            row_gens = gc.config["tables"][TABLE]["row_generators"]
+            self.assertEqual(len(row_gens), 1)
+            row_gen = row_gens[0]
+            self.assertEqual(row_gen["name"], REMAINING_GEN)
+            self.assertListEqual(row_gen["columns_assigned"], [COLUMN_3])
 
     def test_old_generators_remain(self):
         """ Test that we can set one generator and keep an old one. """
@@ -696,7 +806,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
 
 
 class GeneratorsOutputTests(GeneratesDBTestCase):
-    """ Testing configure-missing with generation. """
+    """ Testing choice generation. """
     dump_file_path = "choice.sql"
     database_name = "numbers"
     schema_name = "public"
@@ -705,7 +815,7 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
         return TestGeneratorCmd(self.dsn, self.schema_name, self.metadata, config)
 
     def test_create_with_sampled_choice(self):
-        """ Test that we can sample real missingness and reproduce it. """
+        """ Test that suppression works for choice and zipf_choice. """
         table_name = "number_table"
         with self._get_cmd({}) as gc:
             gc.do_next("number_table.one")
@@ -742,9 +852,7 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
             self.assertNotIn("dist_gen.zipf_choice [sampled and suppressed]", proposals)
             gc.do_set(str(proposals["dist_gen.choice [sampled]"][0]))
             gc.do_quit("")
-            config = gc.config
-            self.generate_data(config, num_passes=200)
-        # Test that each missingness pattern is present in the database
+            self.generate_data(gc.config, num_passes=200)
         with self.engine.connect() as conn:
             stmt = select(self.metadata.tables[table_name])
             rows = conn.execute(stmt).fetchall()
@@ -755,9 +863,82 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
                 ones.add(row.one)
                 twos.add(row.two)
                 threes.add(row.three)
-            # all pattern possibilities should be present
+            # all generation possibilities should be present
             self.assertSetEqual(ones, {1, 4})
             self.assertSetEqual(twos, {2, 3})
+            self.assertSetEqual(threes, {1, 2, 3, 4, 5})
+
+    def test_create_with_choice(self):
+        """ Smoke test normal choice works. """
+        table_name = "number_table"
+        with self._get_cmd({}) as gc:
+            gc.do_next("number_table.one")
+            gc.reset()
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            gc.do_set(str(proposals["dist_gen.choice"][0]))
+            gc.do_next("number_table.two")
+            gc.reset()
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            gc.do_set(str(proposals["dist_gen.zipf_choice"][0]))
+            gc.do_quit("")
+            self.generate_data(gc.config, num_passes=200)
+        with self.engine.connect() as conn:
+            stmt = select(self.metadata.tables[table_name])
+            rows = conn.execute(stmt).fetchall()
+            ones = set()
+            twos = set()
+            for row in rows:
+                ones.add(row.one)
+                twos.add(row.two)
+            # all generation possibilities should be present
+            self.assertSetEqual(ones, {1, 2, 3, 4, 5})
+            self.assertSetEqual(twos, {1, 2, 3, 4, 5})
+
+    def test_create_with_weighted_choice(self):
+        """ Smoke test weighted choice. """
+        table_name = "number_table"
+        with self._get_cmd({}) as gc:
+            gc.do_next("number_table.one")
+            gc.reset()
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            self.assertIn("dist_gen.weighted_choice", proposals)
+            self.assertIn("dist_gen.weighted_choice [sampled]", proposals)
+            self.assertIn("dist_gen.weighted_choice [sampled and suppressed]", proposals)
+            gc.do_set(str(proposals["dist_gen.weighted_choice [sampled and suppressed]"][0]))
+            gc.do_next("number_table.two")
+            gc.reset()
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            self.assertIn("dist_gen.weighted_choice", proposals)
+            self.assertIn("dist_gen.weighted_choice [sampled]", proposals)
+            self.assertIn("dist_gen.weighted_choice [sampled and suppressed]", proposals)
+            gc.do_set(str(proposals["dist_gen.weighted_choice"][0]))
+            gc.do_next("number_table.three")
+            gc.reset()
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            self.assertIn("dist_gen.weighted_choice", proposals)
+            self.assertIn("dist_gen.weighted_choice [sampled]", proposals)
+            self.assertNotIn("dist_gen.weighted_choice [sampled and suppressed]", proposals)
+            gc.do_set(str(proposals["dist_gen.weighted_choice [sampled]"][0]))
+            gc.do_quit("")
+            self.generate_data(gc.config, num_passes=200)
+        with self.engine.connect() as conn:
+            stmt = select(self.metadata.tables[table_name])
+            rows = conn.execute(stmt).fetchall()
+            ones = set()
+            twos = set()
+            threes = set()
+            for row in rows:
+                ones.add(row.one)
+                twos.add(row.two)
+                threes.add(row.three)
+            # all generation possibilities should be present
+            self.assertSetEqual(ones, {1, 4})
+            self.assertSetEqual(twos, {1, 2, 3, 4, 5})
             self.assertSetEqual(threes, {1, 2, 3, 4, 5})
 
 
@@ -860,7 +1041,7 @@ class GeneratorTests(GeneratesDBTestCase):
             gc.do_next("signature_model.based_on")
             gc.do_set("dist_gen.constant")
             # we have got to the end of the columns, but shouldn't have any errors
-            self.assertListEqual(gc.messages, [("No more tables", (), {})])
+            self.assertListEqual(gc.messages, [(GeneratorCmd.INFO_NO_MORE_TABLES, (), {})])
             gc.reset()
             gc.do_quit("")
             config = gc.config
