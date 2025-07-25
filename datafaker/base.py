@@ -65,7 +65,7 @@ class DistributionGenerator:
     def weighted_choice(self, a: list[dict[str, any]]) -> list[any]:
         """
         Choice weighted by the count in the original dataset.
-        :param a: a list of dicts, each with a ``v`` key
+        :param a: a list of dicts, each with a ``value`` key
         holding the value to be returned and a ``count`` key holding the
         number of that value found in the original dataset
         """
@@ -75,7 +75,7 @@ class DistributionGenerator:
             count = vc.get("count", 0)
             if count:
                 counts.append(count)
-                vs.append(vc.get("v", None))
+                vs.append(vc.get("value", None))
         c = random.choices(vs, weights=counts)[0]
         return c
 
