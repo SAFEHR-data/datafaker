@@ -4,6 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 import functools
 import math
+import numpy as np
 import os
 from pathlib import Path
 import random
@@ -34,6 +35,9 @@ def zipf_weights(size):
 class DistributionGenerator:
     root3 = math.sqrt(3)
 
+    def __init__(self):
+        self.np_gen = np.random.default_rng()
+
     def uniform(self, low, high) -> float:
         return random.uniform(float(low), float(high))
 
@@ -45,6 +49,9 @@ class DistributionGenerator:
     def normal(self, mean, sd) -> float:
         return random.normalvariate(float(mean), float(sd))
 
+    def lognormal(self, logmean, logsd) -> float:
+        return random.lognormvariate(float(logmean), float(logsd))
+
     def choice(self, a):
         c = random.choice(a)
         return c["value"] if type(c) is dict and "value" in c else c
@@ -55,8 +62,67 @@ class DistributionGenerator:
         c = random.choices(a, weights=zipf_weights(n))[0]
         return c["value"] if type(c) is dict and "value" in c else c
 
+    def weighted_choice(self, a: list[dict[str, any]]) -> list[any]:
+        """
+        Choice weighted by the count in the original dataset.
+        :param a: a list of dicts, each with a ``value`` key
+        holding the value to be returned and a ``count`` key holding the
+        number of that value found in the original dataset
+        """
+        vs = []
+        counts = []
+        for vc in a:
+            count = vc.get("count", 0)
+            if count:
+                counts.append(count)
+                vs.append(vc.get("value", None))
+        c = random.choices(vs, weights=counts)[0]
+        return c
+
     def constant(self, value):
         return value
+
+    def multivariate_normal_np(self, cov):
+        rank = int(cov["rank"])
+        mean = [
+            float(cov[f"m{i}"])
+            for i in range(rank)
+        ]
+        covs = [
+            [
+                float(cov[f"c{i}_{j}"] if i <= j else cov[f"c{j}_{i}"])
+                for i in range(rank)
+            ]
+            for j in range(rank)
+        ]
+        return self.np_gen.multivariate_normal(mean, covs)
+
+    def multivariate_normal(self, cov):
+        """
+        Produce a list of values pulled from a multivariate distribution.
+
+        :param cov: A dict with various keys: ``rank`` is the number of
+        output values, ``m0``, ``m1``, ... are the means of the
+        distributions (``rank`` of them). ``c0_0``, ``c0_1``, ``c1_1``, ...
+        are the covariates, ``cN_M`` is the covariate of the ``N``th and
+        ``M``th varaibles, with 0 <= ``N`` <= ``M`` < ``rank``.
+        :return: list of ``rank`` floating point values
+        """
+        return self.multivariate_normal_np(cov).tolist()
+
+    def multivariate_lognormal(self, cov):
+        """
+        Produce a list of values pulled from a multivariate distribution.
+
+        :param cov: A dict with various keys: ``rank`` is the number of
+        output values, ``m0``, ``m1``, ... are the means of the
+        distributions (``rank`` of them). ``c0_0``, ``c0_1``, ``c1_1``, ...
+        are the covariates, ``cN_M`` is the covariate of the ``N``th and
+        ``M``th varaibles, with 0 <= ``N`` <= ``M`` < ``rank``. These
+        are all the means and covariants of the logs of the data.
+        :return: list of ``rank`` floating point values
+        """
+        return np.exp(self.multivariate_normal_np(cov)).tolist()
 
 
 class TableGenerator(ABC):

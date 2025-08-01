@@ -125,6 +125,8 @@ Note that the prompt here is ``(table: myfirsttable)``. This will be different o
 Tab completion
 ^^^^^^^^^^^^^^
 
+For the following examples we will be using the `Pagila <https://github.com/devrimgunduz/pagila>`_ database.
+
 You can use the Tab key on your keyboard to shorten these commands. Try typing h-tab-space-v-tab-return, and you will get ``help vocabulary`` again.
 Some commands require a little more. Try typing h-tab-p-tab and you will see that the ``p`` does not get expanded to ``private`` because there is more than one possibility (it could be ``peek`` or ``previous``).
 Press the Tab key again to see these options:
@@ -278,6 +280,54 @@ Short commands
 
 In case you couldn't get tab completion working on your favourite terminal on your machine, there are single letter commands for the most common operations of ``configure-generators``:
 ``n`` and ``b`` are synonymns for ``next`` and ``previous`` ("back"), and ``p``, ``c`` and ``s`` are synonymns for ``propose``, ``compare`` and ``set`` respectively.
+
+Multivariate generators
+^^^^^^^^^^^^^^^^^^^^^^^
+
+So far we have been talking about generators that generate one column in isolation.
+If we want columns that are not independent we will need to merge generators.
+Let us merge the width and height of the artwork so that we can generate larger widths when we have larger heights.
+
+For this example we will use the `database of artworks from the Museam of Modern Art in New York<https://github.com/MuseumofModernArt/collection>`_.
+
+.. code-block:: console
+
+   (artist.artist_bio) next artwork.width_cm
+   (artwork.width_cm) merge height_cm
+   (artwork.width_cm,height_cm) propose
+   Sample of actual source data: Decimal('16.2'),Decimal('22.4'); Decimal('116.8402336805'),Decimal('86.3601727203'); Decimal('22.5'),Decimal('16.7'); Decimal('14.8'),Decimal('12.0'); Decimal('33.0'),Decimal('41.0')...
+   1. dist_gen.multivariate_normal: (no fit) [24.218647620979098, 7.360975395642008]; [-25.66672699079883, 6.305174473450588]; [51.9325078591789, 50.400909869916106]; [-36.8172785399614, -8.764753035274687]; [-6.686185021449695, -4.329031921751557] ...
+   (artwork.width_cm,height_cm) compare 1
+   Not private
+   2. dist_gen.multivariate_normal requires the following data from the source database:
+   {'comment': 'Means and covariate matrix for the columns width_cm, height_cm, so that we can produce the relatedness between these in the fake data.', 'query': 'SELECT q.m0, q.m1, (q.s0_0 - q.count * q.m0 * q.m0)/(q.count - 1) AS c0_0, (q.s0_1 - q.count * q.m0 * q.m1)/(q.count - 1) AS c0_1, (q.s1_1 - q.count * q.m1 * q.m1)/(q.count - 1) AS c1_1, 2 AS rank FROM (SELECT COUNT(*) AS count, SUM(width_cm * width_cm) AS s0_0, SUM(width_cm * height_cm) AS s0_1, SUM(height_cm * height_cm) AS s1_1, AVG(width_cm) AS m0, AVG(height_cm) AS m1 FROM artwork WHERE width_cm IS NOT NULL AND height_cm IS NOT NULL) AS q'}; providing the following values: [{'m0': Decimal('39.8408881695503020'), 'm1': Decimal('37.8942602940080112'), 'c0_0': Decimal('8566.13996292591607014145908725748824'), 'c0_1': Decimal('1771.51432112064062574103021748260967'), 'c1_1': Decimal('2434.30506961622772921636781436857116'), 'rank': 2}]
+   +------------------------------------+--------------------------------------------+
+   |               source               |      1. dist_gen.multivariate_normal       |
+   +------------------------------------+--------------------------------------------+
+   |          ['51.0', '25.3']          |  [107.62299759565568, 37.35577315694575]   |
+   |          ['44.5', '30.5']          |  [152.92767947123627, 58.16764808196753]   |
+   |           ['2.7', '1.4']           |  [56.330025279386106, -33.96974465059194]  |
+   |          ['22.9', '30.0']          |  [107.26687687006478, -3.97940090777724]   |
+   |          ['63.0', '47.0']          |  [2.3866753797989446, 12.881616830761228]  |
+   |          ['76.7', '56.1']          |  [64.25340675261016, -29.273930592763726]  |
+   |          ['20.8', '23.4']          |  [-8.995270515356808, -7.705664324666984]  |
+   |          ['12.6', '17.6']          |  [34.178077659717836, 94.70620393166871]   |
+   |          ['25.2', '16.1']          | [-123.37431991776657, -28.507489258163467] |
+   |          ['56.4', '76.0']          |  [6.060190508953035, 107.64705861417013]   |
+   |          ['47.0', '60.3']          |   [42.1814314824603, 25.618930675417985]   |
+   |     ['28.8925577851', '38.4']      |    [-2.5661114817431, 42.6582049225207]    |
+   |          ['13.8', '17.8']          |  [-68.31635612312357, 71.04694634347027]   |
+   |          ['25.0', '35.1']          |  [-22.950164218800843, 71.28958248545288]  |
+   | ['76.2001524003', '50.8001016002'] |  [47.8174777970675, -25.945373592062154]   |
+   |          ['58.0', '39.0']          |  [45.99046685957763, 23.657508524854045]   |
+   |          ['22.3', '30.2']          |  [-34.78167099385892, -83.23940863318586]  |
+   |          ['20.3', '19.7']          |  [63.65436136383347, 23.447379421706685]   |
+   | ['28.4163068326', '21.7487934976'] |  [158.41474989518605, 74.15055440725314]   |
+   |          ['17.9', '23.8']          |   [100.0788055327166, 46.13183648219197]   |
+   +------------------------------------+--------------------------------------------+
+
+And now we can ``set 1`` as usual.
+We can see that large widths and heights generally go together, but unfortunately we get many negative lengths and widths.
 
 Configuring missingness
 -----------------------
