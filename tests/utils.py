@@ -73,6 +73,33 @@ class DatafakerTestCase(TestCase):
             return
         self.fail(''.join(traceback.format_exception(result.exception)))
 
+    def assertSubset(self, set1, set2, msg=None):
+        """Assert a set is a (non-strict) subset.
+
+        Args:
+            set1: The asserted subset.
+            set2: The asserted superset.
+            msg: Optional message to use on failure instead of a list of
+                    differences.
+        """
+        try:
+            difference = set1.difference(set2)
+        except TypeError as e:
+            self.fail('invalid type when attempting set difference: %s' % e)
+        except AttributeError as e:
+            self.fail('first argument does not support set difference: %s' % e)
+
+        if not difference:
+            return
+
+        lines = []
+        if difference:
+            lines.append('Items in the first set but not the second:')
+            for item in difference:
+                lines.append(repr(item))
+
+        standardMsg = '\n'.join(lines)
+        self.fail(self._formatMessage(msg, standardMsg))
 
 @skipUnless(shutil.which("psql"), "need to find 'psql': install PostgreSQL to enable")
 class RequiresDBTestCase(DatafakerTestCase):

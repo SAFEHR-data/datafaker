@@ -916,7 +916,7 @@ class ChoiceGeneratorFactory(GeneratorFactory):
                         if type(v) is decimal.Decimal:
                             v = float(v)
                         values.append(v)
-                        cvs.append({"v": v, "count": c})
+                        cvs.append({"value": v, "count": c})
                 if counts:
                     generators += [
                         ZipfChoiceGenerator(table_name, column_name, values, counts),

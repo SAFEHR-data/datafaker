@@ -349,7 +349,7 @@ class TestGeneratorCmd(GeneratorCmd, TestDbCmdMixin):
         """
         Returns a dict of generator name to a tuple of (index, fit_string, [list,of,samples])"""
         return {
-            kw["name"]: (kw["index"], kw["fit"], kw["sample"].split(", "))
+            kw["name"]: (kw["index"], kw["fit"], kw["sample"].split("; "))
             for (s, _, kw) in self.messages
             if s == self.PROPOSE_GENERATOR_SAMPLE_TEXT
         }
@@ -514,6 +514,23 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
                 gc.config["src-stats"][0]["query"],
                 f"SELECT {COLUMN} AS value FROM {TABLE} WHERE {COLUMN} IS NOT NULL GROUP BY value ORDER BY COUNT({COLUMN}) DESC",
             )
+
+    def test_weighted_choice_generator_generates_choices(self):
+        """ Test that propose and compare show weighted_choice's values. """
+        with self._get_cmd({}) as gc:
+            TABLE = "string"
+            COLUMN = "position"
+            GENERATOR = "dist_gen.weighted_choice"
+            VALUES = {1, 2, 3, 4, 5, 6}
+            gc.do_next(f"{TABLE}.{COLUMN}")
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            gen_proposal = proposals[GENERATOR]
+            self.assertSubset(set(gen_proposal[2]), {str(v) for v in VALUES})
+            gc.do_compare(str(gen_proposal[0]))
+            col_heading = f"{gen_proposal[0]}. {GENERATOR}"
+            self.assertIn(col_heading, gc.columns)
+            self.assertSubset(set(gc.columns[col_heading]), VALUES)
 
     def test_merge_columns(self):
         """ Test that we can merge columns and set a multivariate generator """
