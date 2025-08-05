@@ -737,7 +737,7 @@ class ContinuousLogDistributionGeneratorFactory(ContinuousDistributionGeneratorF
                 ))
             ).first()
             if result is None or result.logstddev is None:
-                return None
+                return []
         return [
             LogNormalGenerator(
                 table_name,
@@ -1126,9 +1126,13 @@ class MultivariateNormalGeneratorFactory(GeneratorFactory):
         table = columns[0].table.name
         query = self.query(table, column_names)
         with engine.connect() as connection:
-            covariates = connection.execute(text(
-                query
-            )).mappings().first()
+            try:
+                covariates = connection.execute(text(
+                    query
+                )).mappings().first()
+            except Exception as e:
+                logger.debug("SQL query %s failed with error %s", query, e)
+                return []
             if not covariates or covariates["c0_0"] is None:
                 return []
             return [MultivariateNormalGenerator(

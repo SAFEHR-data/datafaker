@@ -1,18 +1,24 @@
-from abc import ABC, abstractmethod
 import cmd
-from collections.abc import Mapping
 import csv
+import functools
+import re
+from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
-import functools
 from pathlib import Path
-from prettytable import PrettyTable
-import re
+
 import sqlalchemy
+from prettytable import PrettyTable
 from sqlalchemy import Column, MetaData, Table, text
 
-from datafaker.generators import everything_factory, Generator, PredefinedGenerator
-from datafaker.utils import create_db_engine, primary_private_fks, table_is_private, logger
+from datafaker.generators import Generator, PredefinedGenerator, everything_factory
+from datafaker.utils import (
+    create_db_engine,
+    logger,
+    primary_private_fks,
+    table_is_private,
+)
 
 # Monkey patch pyreadline3 v3.5 so that it works with Python 3.13
 # Windows users can install pyreadline3 to get tab completion working.
@@ -1150,8 +1156,9 @@ information about the columns in the current table. Use 'peek',
     def do_next(self, arg):
         """
         Go to the next generator.
-        Or, go to a named table: 'next tablename'.
+        Or go to a named table: 'next tablename'.
         Or go to a column: 'next tablename.columnname'.
+        Or go to a column within this table 'next columnname'.
         """
         if arg:
             self.go_to(arg)
@@ -1178,15 +1185,15 @@ information about the columns in the current table. Use 'peek',
 
     def complete_next(self, text: str, _line: str, _begidx: int, _endidx: int):
         parts = text.split(".", 1)
-        table_name = parts[0]
+        first_part = parts[0]
         if 1 < len(parts):
             column_name = parts[1]
-            table_index = self._get_table_index(table_name)
+            table_index = self._get_table_index(first_part)
             if table_index is None:
                 return []
             table_entry: GeneratorCmdTableEntry = self.table_entries[table_index]
             return [
-                f"{table_name}.{column}"
+                f"{first_part}.{column}"
                 for gen in table_entry.new_generators
                 for column in gen.columns
                 if column.startswith(column_name)
@@ -1194,11 +1201,21 @@ information about the columns in the current table. Use 'peek',
         table_names = [
             entry.name
             for entry in self.table_entries
-            if entry.name.startswith(table_name)
+            if entry.name.startswith(first_part)
         ]
-        if table_name in table_names:
-            table_names.append(f"{table_name}.")
-        return table_names
+        if first_part in table_names:
+            table_names.append(f"{first_part}.")
+        current_table = self.get_table()
+        if current_table:
+            column_names = [
+                col
+                for gen in current_table.new_generators
+                for col in gen.columns
+                if col.startswith(first_part)
+            ]
+        else:
+            column_names = []
+        return table_names + column_names
 
     def do_previous(self, _arg):
         """ Go to the previous generator """
@@ -1483,30 +1500,30 @@ information about the columns in the current table. Use 'peek',
                 self.print(self.ERROR_COLUMN_ALREADY_MERGED, c)
             return
         # Remove cols_to_merge from each generator
+        new_new_generators: list[GeneratorInfo] = []
         for gen in table_entry.new_generators:
-            to_remove = frozenset(gen.columns) & cols_to_merge
-            if to_remove:
-                for tr in to_remove:
-                    gen.columns.remove(tr)
-                # The existing generator (if any) will no longer work
-                gen.gen = None
-        # and remove any emptied generator entries
-        ng = table_entry.new_generators
-        i = 0
-        while i < self.generator_index:
-            if ng[i].columns:
-                i += 1
+            if gen is gen_info:
+                # Add columns to this generator
+                self.generator_index = len(new_new_generators)
+                new_new_generators.append(
+                    GeneratorInfo(
+                        columns=gen.columns + cols,
+                        gen=None,
+                    )
+                )
             else:
-                ng = ng[:i] + ng[i + 1:]
-                self.generator_index -= 1
-        while i < len(ng):
-            if not ng[i].columns:
-                ng = ng[:i] + ng[i + 1:]
-            i += 1
-        table_entry.new_generators = ng
-        # Add cols_to_merge to this generator
-        gen_info.columns += cols
-        gen_info.gen = None
+                # Remove columns if applicable
+                new_columns = [c for c in gen.columns if c not in cols_to_merge]
+                is_changed = len(new_columns) != len(gen.columns)
+                if new_columns:
+                    # We have not removed this generator completely
+                    new_new_generators.append(
+                        GeneratorInfo(
+                            columns=new_columns,
+                            gen=None if is_changed else gen.gen,
+                        )
+                    )
+        table_entry.new_generators = new_new_generators
         self.set_prompt()
 
     def complete_merge(self, text: str, _line: str, _begidx: int, _endidx: int):
