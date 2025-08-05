@@ -924,7 +924,14 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
             self.assertIn("dist_gen.weighted_choice", proposals)
             self.assertIn("dist_gen.weighted_choice [sampled]", proposals)
             self.assertIn("dist_gen.weighted_choice [sampled and suppressed]", proposals)
-            gc.do_set(str(proposals["dist_gen.weighted_choice [sampled and suppressed]"][0]))
+            prop = proposals["dist_gen.weighted_choice [sampled and suppressed]"]
+            self.assertSubset(set(prop[2]), {"1", "4"})
+            gc.reset()
+            gc.do_compare(str(prop[0]))
+            col_heading = f"{prop[0]}. dist_gen.weighted_choice [sampled and suppressed]"
+            self.assertIn(col_heading, set(gc.columns.keys()))
+            self.assertSubset(set(gc.columns[col_heading]), {1, 4})
+            gc.do_set(str(prop[0]))
             gc.do_next("number_table.two")
             gc.reset()
             gc.do_propose("")
@@ -932,7 +939,14 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
             self.assertIn("dist_gen.weighted_choice", proposals)
             self.assertIn("dist_gen.weighted_choice [sampled]", proposals)
             self.assertIn("dist_gen.weighted_choice [sampled and suppressed]", proposals)
-            gc.do_set(str(proposals["dist_gen.weighted_choice"][0]))
+            prop = proposals["dist_gen.weighted_choice"]
+            self.assertSubset(set(prop[2]), {"1", "2", "3", "4", "5"})
+            gc.reset()
+            gc.do_compare(str(prop[0]))
+            col_heading = f"{prop[0]}. dist_gen.weighted_choice"
+            self.assertIn(col_heading, set(gc.columns.keys()))
+            self.assertSubset(set(gc.columns[col_heading]), {1, 2, 3, 4, 5})
+            gc.do_set(str(prop[0]))
             gc.do_next("number_table.three")
             gc.reset()
             gc.do_propose("")
@@ -940,7 +954,13 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
             self.assertIn("dist_gen.weighted_choice", proposals)
             self.assertIn("dist_gen.weighted_choice [sampled]", proposals)
             self.assertNotIn("dist_gen.weighted_choice [sampled and suppressed]", proposals)
-            gc.do_set(str(proposals["dist_gen.weighted_choice [sampled]"][0]))
+            prop = proposals["dist_gen.weighted_choice [sampled]"]
+            self.assertSubset(set(prop[2]), {"1", "2", "3", "4", "5"})
+            gc.do_compare(str(prop[0]))
+            col_heading = f"{prop[0]}. dist_gen.weighted_choice [sampled]"
+            self.assertIn(col_heading, set(gc.columns.keys()))
+            self.assertSubset(set(gc.columns[col_heading]), {1, 2, 3, 4, 5})
+            gc.do_set(str(prop[0]))
             gc.do_quit("")
             self.generate_data(gc.config, num_passes=200)
         with self.engine.connect() as conn:
