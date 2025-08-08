@@ -5,6 +5,7 @@ Generator factories for making generators for single columns.
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 import decimal
+from functools import lru_cache
 import math
 import mimesis
 import mimesis.locales
@@ -216,7 +217,7 @@ class GeneratorFactory(ABC):
     A factory for making generators appropriate for a database column.
    """
     @abstractmethod
-    def get_generators(self, column: Column, engine: Engine) -> list[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
         """
         Returns all the generators that might be appropriate for this column.
         """
@@ -246,6 +247,12 @@ class Buckets:
     def make_buckets(_cls, engine: Engine, table_name: str, column_name: str):
         """
         Construct a Buckets object.
+        
+        Calculates the mean and standard deviation of the values in the column
+        specified and makes ten buckets, centered on the mean and each half
+        a standard deviation wide (except for the end two that extend to
+        infinity). Each bucket will be set to the count of the number of values
+        in the column within that bucket.
         """
         with engine.connect() as connection:
             result = connection.execute(
@@ -295,11 +302,11 @@ class MultiGeneratorFactory(GeneratorFactory):
         super().__init__()
         self.factories = factories
 
-    def get_generators(self, column: Column, engine: Engine) -> list[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
         return [
             generator
             for factory in self.factories
-            for generator in factory.get_generators(column, engine)
+            for generator in factory.get_generators(columns, engine)
         ]
 
 
@@ -444,7 +451,10 @@ class MimesisStringGeneratorFactory(GeneratorFactory):
     """
     All Mimesis generators that return strings.
     """
-    def get_generators(self, column: Column, engine: Engine):
+    def get_generators(self, columns: list[Column], engine: Engine):
+        if len(columns) != 1:
+            return []
+        column = columns[0]
         if not isinstance(get_column_type(column), String):
             return []
         try:
@@ -499,7 +509,10 @@ class MimesisFloatGeneratorFactory(GeneratorFactory):
     """
     All Mimesis generators that return floating point numbers.
     """
-    def get_generators(self, column: Column, _engine: Engine):
+    def get_generators(self, columns: list[Column], engine: Engine):
+        if len(columns) != 1:
+            return []
+        column = columns[0]
         if not isinstance(get_column_type(column), Numeric):
             return []
         return list(map(MimesisGenerator, [
@@ -511,7 +524,10 @@ class MimesisDateGeneratorFactory(GeneratorFactory):
     """
     All Mimesis generators that return dates.
     """
-    def get_generators(self, column: Column, engine: Engine):
+    def get_generators(self, columns: list[Column], engine: Engine):
+        if len(columns) != 1:
+            return []
+        column = columns[0]
         ct = get_column_type(column)
         if not isinstance(ct, Date):
             return []
@@ -522,7 +538,10 @@ class MimesisDateTimeGeneratorFactory(GeneratorFactory):
     """
     All Mimesis generators that return datetimes.
     """
-    def get_generators(self, column: Column, engine: Engine):
+    def get_generators(self, columns: list[Column], engine: Engine):
+        if len(columns) != 1:
+            return []
+        column = columns[0]
         ct = get_column_type(column)
         if not isinstance(ct, DateTime):
             return []
@@ -533,7 +552,10 @@ class MimesisTimeGeneratorFactory(GeneratorFactory):
     """
     All Mimesis generators that return times.
     """
-    def get_generators(self, column: Column, _engine: Engine):
+    def get_generators(self, columns: list[Column], engine: Engine):
+        if len(columns) != 1:
+            return []
+        column = columns[0]
         ct = get_column_type(column)
         if not isinstance(ct, Time):
             return []
@@ -544,7 +566,10 @@ class MimesisIntegerGeneratorFactory(GeneratorFactory):
     """
     All Mimesis generators that return integers.
     """
-    def get_generators(self, column: Column, _engine: Engine):
+    def get_generators(self, columns: list[Column], engine: Engine):
+        if len(columns) != 1:
+            return []
+        column = columns[0]
         ct = get_column_type(column)
         if not isinstance(ct, Numeric) and not isinstance(ct, Integer):
             return []
@@ -620,7 +645,22 @@ class ContinuousDistributionGeneratorFactory(GeneratorFactory):
     """
     All generators that want an average and standard deviation.
     """
-    def get_generators(self, column: Column, engine: Engine):
+    def _get_generators_from_buckets(
+        self,
+        _engine: Engine,
+        table_name: str,
+        column_name: str,
+        buckets: Buckets,
+    ) -> list[Generator]:
+        return [
+            GaussianGenerator(table_name, column_name, buckets),
+            UniformGenerator(table_name, column_name, buckets),
+        ]
+
+    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
+        if len(columns) != 1:
+            return []
+        column = columns[0]
         ct = get_column_type(column)
         if not isinstance(ct, Numeric) and not isinstance(ct, Integer):
             return []
@@ -629,9 +669,83 @@ class ContinuousDistributionGeneratorFactory(GeneratorFactory):
         buckets = Buckets.make_buckets(engine, table_name, column_name)
         if buckets is None:
             return []
+        return self._get_generators_from_buckets(engine, table_name, column_name, buckets)
+
+
+class LogNormalGenerator(Generator):
+    #TODO: figure out the real buckets here (this was from a random sample in R)
+    expected_buckets = [0, 0, 0, 0.28627, 0.40607, 0.14937, 0.06735, 0.03492, 0.01918, 0.03684]
+    def __init__(self, table_name: str, column_name: str, buckets: Buckets, logmean: float, logstddev: float):
+        super().__init__()
+        self.table_name = table_name
+        self.column_name = column_name
+        self.buckets = buckets
+        self.logmean = logmean
+        self.logstddev = logstddev
+    def function_name(self):
+        return "dist_gen.lognormal"
+    def generate_data(self, count):
         return [
-            GaussianGenerator(table_name, column_name, buckets),
-            UniformGenerator(table_name, column_name, buckets),
+            dist_gen.lognormal(self.logmean, self.logstddev)
+            for _ in range(count)
+        ]
+    def nominal_kwargs(self):
+        return {
+            "logmean": f'SRC_STATS["auto__{self.table_name}"]["results"][0]["logmean__{self.column_name}"]',
+            "logsd": f'SRC_STATS["auto__{self.table_name}"]["results"][0]["logstddev__{self.column_name}"]',
+        }
+    def actual_kwargs(self):
+        return {
+            "logmean": self.logmean,
+            "logsd": self.logstddev,
+        }
+    def select_aggregate_clauses(self) -> dict[str, dict[str, str]]:
+        clauses = super().select_aggregate_clauses()
+        return {
+            **clauses,
+            f"logmean__{self.column_name}": {
+                "clause": f"AVG(CASE WHEN 0<{self.column_name} THEN LN({self.column_name}) ELSE NULL END)",
+                "comment": f"Mean of logs of {self.column_name} from table {self.table_name}",
+            },
+            f"logstddev__{self.column_name}": {
+                "clause": f"STDDEV(CASE WHEN 0<{self.column_name} THEN LN({self.column_name}) ELSE NULL END)",
+                "comment": f"Standard deviation of logs of {self.column_name} from table {self.table_name}",
+            },
+        }
+    def fit(self, default=None):
+        if self.buckets is None:
+            return default
+        return self.buckets.fit_from_counts(self.expected_buckets)
+
+
+class ContinuousLogDistributionGeneratorFactory(ContinuousDistributionGeneratorFactory):
+    """
+    All generators that want an average and standard deviation of log data.
+    """
+    def _get_generators_from_buckets(
+        self,
+        engine: Engine,
+        table_name: str,
+        column_name: str,
+        buckets: Buckets,
+    ) -> list[Generator]:
+        with engine.connect() as connection:
+            result = connection.execute(
+                text("SELECT AVG(CASE WHEN 0<{column} THEN LN({column}) ELSE NULL END) AS logmean, STDDEV(CASE WHEN 0<{column} THEN LN({column}) ELSE NULL END) AS logstddev FROM {table}".format(
+                    table=table_name,
+                    column=column_name,
+                ))
+            ).first()
+            if result is None or result.logstddev is None:
+                return []
+        return [
+            LogNormalGenerator(
+                table_name,
+                column_name,
+                buckets,
+                float(result.logmean),
+                float(result.logstddev),
+            )
         ]
 
 
@@ -650,6 +764,7 @@ def zipf_distribution(total, bins):
 
 
 class ChoiceGenerator(Generator):
+    STORE_COUNTS = False
     def __init__(
         self,
         table_name,
@@ -665,24 +780,38 @@ class ChoiceGenerator(Generator):
         self.values = values
         estimated_counts = self.get_estimated_counts(counts)
         self._fit = fit_from_buckets(counts, estimated_counts)
+
+        extra_results = ""
+        extra_expo = ""
+        extra_comment = ""
+        if self.STORE_COUNTS:
+            extra_results = f", COUNT({column_name}) AS count"
+            extra_expo = ", count"
+            extra_comment = " and their counts"
         if suppress_count == 0:
             if sample_count is None:
-                self._query = f"SELECT {column_name} AS value FROM {table_name} WHERE {column_name} IS NOT NULL GROUP BY value ORDER BY COUNT({column_name}) DESC"
-                self._comment = f"All the values that appear in column {column_name} of table {table_name}"
+                self._query = f"SELECT {column_name} AS value{extra_results} FROM {table_name} WHERE {column_name} IS NOT NULL GROUP BY value ORDER BY COUNT({column_name}) DESC"
+                self._comment = f"All the values{extra_comment} that appear in column {column_name} of table {table_name}"
                 self._annotation = None
             else:
-                self._query = f"SELECT value FROM (SELECT {column_name} AS value FROM {table_name} WHERE {column_name} IS NOT NULL ORDER BY RANDOM() LIMIT {sample_count}) AS _inner GROUP BY value ORDER BY COUNT(value) DESC"
-                self._comment = f"The values that appear in column {column_name} of a random sample of {sample_count} rows of table {table_name}"
+                self._query = f"SELECT {column_name} AS value{extra_results} FROM (SELECT {column_name} FROM {table_name} WHERE {column_name} IS NOT NULL ORDER BY RANDOM() LIMIT {sample_count}) AS _inner GROUP BY value ORDER BY COUNT({column_name}) DESC"
+                self._comment = f"The values{extra_comment} that appear in column {column_name} of a random sample of {sample_count} rows of table {table_name}"
                 self._annotation = "sampled"
         else:
             if sample_count is None:
-                self._query = f"SELECT value FROM (SELECT {column_name} AS value, COUNT({column_name}) AS count FROM {table_name} WHERE {column_name} IS NOT NULL GROUP BY value ORDER BY count DESC) AS _inner WHERE {suppress_count} < count"
-                self._comment = f"All the values that appear in column {column_name} of table {table_name} more than {suppress_count} times"
+                self._query = f"SELECT value{extra_expo} FROM (SELECT {column_name} AS value, COUNT({column_name}) AS count FROM {table_name} WHERE {column_name} IS NOT NULL GROUP BY value ORDER BY count DESC) AS _inner WHERE {suppress_count} < count"
+                self._comment = f"All the values{extra_comment} that appear in column {column_name} of table {table_name} more than {suppress_count} times"
                 self._annotation = "suppressed"
             else:
-                self._query = f"SELECT value FROM (SELECT value, COUNT(value) AS count FROM (SELECT {column_name} AS value FROM {table_name} WHERE {column_name} IS NOT NULL ORDER BY RANDOM() LIMIT {sample_count}) AS _inner GROUP BY value ORDER BY count DESC) AS _inner WHERE {suppress_count} < count"
-                self._comment = f"The values that appear more than {suppress_count} times in column {column_name}, out of a random sample of {sample_count} rows of table {table_name}"
+                self._query = f"SELECT value{extra_expo} FROM (SELECT value, COUNT(value) AS count FROM (SELECT {column_name} AS value FROM {table_name} WHERE {column_name} IS NOT NULL ORDER BY RANDOM() LIMIT {sample_count}) AS _inner GROUP BY value ORDER BY count DESC) AS _inner WHERE {suppress_count} < count"
+                self._comment = f"The values{extra_comment} that appear more than {suppress_count} times in column {column_name}, out of a random sample of {sample_count} rows of table {table_name}"
                 self._annotation = "sampled and suppressed"
+
+    @abstractmethod
+    def get_estimated_counts(counts):
+        """
+        The counts that we would expect if this distribution was the correct one.
+        """
     def nominal_kwargs(self):
         return {
             "a": f'SRC_STATS["auto__{self.table_name}__{self.column_name}"]["results"]',
@@ -723,9 +852,9 @@ class ZipfChoiceGenerator(ChoiceGenerator):
 def uniform_distribution(total, bins):
     p = total // bins
     n = total % bins
-    for i in range(0, n):
+    for _ in range(0, n):
         yield p + 1
-    for i in range(n, bins):
+    for _ in range(n, bins):
         yield p
 
 
@@ -741,13 +870,29 @@ class UniformChoiceGenerator(ChoiceGenerator):
         ]
 
 
+class WeightedChoiceGenerator(ChoiceGenerator):
+    STORE_COUNTS = True
+    def get_estimated_counts(self, counts):
+        return counts
+    def function_name(self):
+        return "dist_gen.weighted_choice"
+    def generate_data(self, count):
+        return [
+            dist_gen.weighted_choice(self.values)
+            for _ in range(count)
+        ]
+
+
 class ChoiceGeneratorFactory(GeneratorFactory):
     """
     All generators that want an average and standard deviation.
     """
     SAMPLE_COUNT = MAXIMUM_CHOICES
     SUPPRESS_COUNT = 5
-    def get_generators(self, column: Column, engine: Engine):
+    def get_generators(self, columns: list[Column], engine: Engine):
+        if len(columns) != 1:
+            return []
+        column = columns[0]
         column_name = column.name
         table_name = column.table.name
         generators = []
@@ -762,6 +907,7 @@ class ChoiceGeneratorFactory(GeneratorFactory):
             if results is not None and results.rowcount <= MAXIMUM_CHOICES:
                 values = []  # The values found
                 counts = []  # The number or each value
+                cvs: list[dict[str, any]] = []  # list of dicts with keys "v" and "count"
                 for result in results:
                     c = result.f
                     if c != 0:
@@ -770,10 +916,12 @@ class ChoiceGeneratorFactory(GeneratorFactory):
                         if type(v) is decimal.Decimal:
                             v = float(v)
                         values.append(v)
+                        cvs.append({"value": v, "count": c})
                 if counts:
                     generators += [
                         ZipfChoiceGenerator(table_name, column_name, values, counts),
                         UniformChoiceGenerator(table_name, column_name, values, counts),
+                        WeightedChoiceGenerator(table_name, column_name, cvs, counts),
                     ]
             results = connection.execute(
                 text("SELECT v, COUNT(v) AS f FROM (SELECT {column} as v FROM {table} ORDER BY RANDOM() LIMIT {sample_count}) AS _inner GROUP BY v ORDER BY f DESC".format(
@@ -785,8 +933,10 @@ class ChoiceGeneratorFactory(GeneratorFactory):
             if results is not None:
                 values = []  # All values found
                 counts = []  # The number or each value
+                cvs: list[dict[str, any]] = []  # list of dicts with keys "v" and "count"
                 values_not_suppressed = []  # All values found more than SUPPRESS_COUNT times
                 counts_not_suppressed = []  # The number for each value not suppressed
+                cvs_not_suppressed: list[dict[str, any]] = []  # list of dicts with keys "v" and "count"
                 for result in results:
                     c = result.f
                     if c != 0:
@@ -795,16 +945,19 @@ class ChoiceGeneratorFactory(GeneratorFactory):
                         if type(v) is decimal.Decimal:
                             v = float(v)
                         values.append(v)
+                        cvs.append({"value": v, "count": c})
                     if self.SUPPRESS_COUNT < c:
                         counts_not_suppressed.append(c)
                         v = result.v
                         if type(v) is decimal.Decimal:
                             v = float(v)
                         values_not_suppressed.append(v)
+                        cvs_not_suppressed.append({"value": v, "count": c})
                 if counts:
                     generators += [
                         ZipfChoiceGenerator(table_name, column_name, values, counts, sample_count=self.SAMPLE_COUNT),
                         UniformChoiceGenerator(table_name, column_name, values, counts, sample_count=self.SAMPLE_COUNT),
+                        WeightedChoiceGenerator(table_name, column_name, cvs, counts, sample_count=self.SAMPLE_COUNT),
                     ]
                 if counts_not_suppressed:
                     generators += [
@@ -821,6 +974,14 @@ class ChoiceGeneratorFactory(GeneratorFactory):
                             column_name,
                             values_not_suppressed,
                             counts_not_suppressed,
+                            sample_count=self.SAMPLE_COUNT,
+                            suppress_count=self.SUPPRESS_COUNT,
+                        ),
+                        WeightedChoiceGenerator(
+                            table_name=table_name,
+                            column_name=column_name,
+                            values=cvs_not_suppressed,
+                            counts=counts,
                             sample_count=self.SAMPLE_COUNT,
                             suppress_count=self.SUPPRESS_COUNT,
                         ),
@@ -847,7 +1008,10 @@ class ConstantGeneratorFactory(GeneratorFactory):
     """
     Just the null generator
     """
-    def get_generators(self, column: Column, _engine: Engine):
+    def get_generators(self, columns: list[Column], engine: Engine):
+        if len(columns) != 1:
+            return []
+        column = columns[0]
         if column.nullable:
             return [ConstantGenerator(None)]
         c_type = get_column_type(column)
@@ -860,14 +1024,150 @@ class ConstantGeneratorFactory(GeneratorFactory):
         return []
 
 
-everything_factory = MultiGeneratorFactory([
-    MimesisStringGeneratorFactory(),
-    MimesisIntegerGeneratorFactory(),
-    MimesisFloatGeneratorFactory(),
-    MimesisDateGeneratorFactory(),
-    MimesisDateTimeGeneratorFactory(),
-    MimesisTimeGeneratorFactory(),
-    ContinuousDistributionGeneratorFactory(),
-    ChoiceGeneratorFactory(),
-    ConstantGeneratorFactory(),
-])
+class MultivariateNormalGenerator(Generator):
+    def __init__(
+        self,
+        table_name: list[str],
+        column_names: list[str],
+        query: str,
+        covariates: dict[str, float],
+        function_name: str,
+    ):
+        self._table = table_name
+        self._columns = column_names
+        self._query = query
+        self._covariates = covariates
+        self._function_name = function_name
+
+    def function_name(self):
+        return "dist_gen." + self._function_name
+
+    def nominal_kwargs(self):
+        return {
+            "cov": f'SRC_STATS["auto__cov__{self._table}"]["results"][0]',
+        }
+
+    def custom_queries(self):
+        cols = ", ".join(self._columns)
+        return {
+            f"auto__cov__{self._table}": {
+                "comment": f"Means and covariate matrix for the columns {cols}, so that we can produce the relatedness between these in the fake data.",
+                "query": self._query,
+            }
+        }
+
+    def actual_kwargs(self) -> dict[str, any]:
+        """
+        The kwargs (summary statistics) this generator is instantiated with.
+        """
+        return { "cov": self._covariates }
+
+    def generate_data(self, count) -> list[any]:
+        """
+        Generate 'count' random data points for this column.
+        """
+        return [
+            getattr(dist_gen, self._function_name)(self._covariates)
+            for _ in range(count)
+        ]
+
+    def fit(self, default=None) -> float | None:
+        return default
+
+
+class MultivariateNormalGeneratorFactory(GeneratorFactory):
+    def function_name(self) -> str:
+        return "multivariate_normal"
+
+    def query_predicate(self, column: str) -> str:
+        return column + " IS NOT NULL"
+
+    def query_var(self, column: str) -> str:
+        return column
+
+    def query(self, table: str, columns: str) -> str:
+        preds = " AND ".join(
+            self.query_predicate(col)
+            for col in columns
+        )
+        avgs = ", ".join(
+            f"AVG({self.query_var(col)}) AS m{i}"
+            for i, col in enumerate(columns)
+        )
+        multiples = ", ".join(
+            f"SUM({self.query_var(colx)} * {self.query_var(coly)}) AS s{ix}_{iy}"
+            for iy, coly in enumerate(columns)
+            for ix, colx in enumerate(columns[:iy+1])
+        )
+        means = ", ".join(
+            f"q.m{i}" for i in range(len(columns))
+        )
+        covs = ", ".join(
+            f"(q.s{ix}_{iy} - q.count * q.m{ix} * q.m{iy})/NULLIF(q.count - 1, 0) AS c{ix}_{iy}"
+            for iy in range(len(columns))
+            for ix in range(iy+1)
+        )
+        return (
+            f"SELECT {means}, {covs}, {len(columns)} AS rank"
+            f" FROM (SELECT COUNT(*) AS count, {multiples}, {avgs}"
+            f" FROM {table} WHERE {preds}) AS q"
+        )
+
+    def get_generators(self, columns: list[Column], engine: Engine):
+        # For the case of one column we'll use GaussianGenerator
+        if len(columns) < 2:
+            return []
+        # All columns must be numeric
+        for c in columns:
+            ct = get_column_type(c)
+            if not isinstance(ct, Numeric) and not isinstance(ct, Integer):
+                return []
+        column_names = [c.name for c in columns]
+        table = columns[0].table.name
+        query = self.query(table, column_names)
+        with engine.connect() as connection:
+            try:
+                covariates = connection.execute(text(
+                    query
+                )).mappings().first()
+            except Exception as e:
+                logger.debug("SQL query %s failed with error %s", query, e)
+                return []
+            if not covariates or covariates["c0_0"] is None:
+                return []
+            return [MultivariateNormalGenerator(
+                table,
+                column_names,
+                query,
+                covariates,
+                self.function_name(),
+            )]
+
+
+class MultivariateLogNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
+    def function_name(self) -> str:
+        return "multivariate_lognormal"
+
+    def query_predicate(self, column: str) -> str:
+        return f"{column} IS NOT NULL AND 0 < {column}"
+
+    def query_var(self, column: str) -> str:
+        return f"LN({column})"
+
+
+@lru_cache(1)
+def everything_factory():
+    return MultiGeneratorFactory([
+        MimesisStringGeneratorFactory(),
+        MimesisIntegerGeneratorFactory(),
+        MimesisFloatGeneratorFactory(),
+        MimesisDateGeneratorFactory(),
+        MimesisDateTimeGeneratorFactory(),
+        MimesisTimeGeneratorFactory(),
+        ContinuousDistributionGeneratorFactory(),
+        ContinuousLogDistributionGeneratorFactory(),
+        ChoiceGeneratorFactory(),
+        ConstantGeneratorFactory(),
+        MultivariateNormalGeneratorFactory(),
+        MultivariateLogNormalGeneratorFactory(),
+    ])

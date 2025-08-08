@@ -1,17 +1,24 @@
-from abc import ABC, abstractmethod
 import cmd
-from collections.abc import Mapping
 import csv
+import functools
+import re
+from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from prettytable import PrettyTable
-import re
+
 import sqlalchemy
+from prettytable import PrettyTable
 from sqlalchemy import Column, MetaData, Table, text
 
-from datafaker.generators import everything_factory, Generator, PredefinedGenerator
-from datafaker.utils import create_db_engine, primary_private_fks, table_is_private, logger
+from datafaker.generators import Generator, PredefinedGenerator, everything_factory
+from datafaker.utils import (
+    create_db_engine,
+    logger,
+    primary_private_fks,
+    table_is_private,
+)
 
 # Monkey patch pyreadline3 v3.5 so that it works with Python 3.13
 # Windows users can install pyreadline3 to get tab completion working.
@@ -74,7 +81,7 @@ class AskSaveCmd(cmd.Cmd):
 
 
 class DbCmd(ABC, cmd.Cmd):
-    ERROR_NO_MORE_TABLES = "Error: There are no more tables"
+    INFO_NO_MORE_TABLES = "There are no more tables"
     ERROR_ALREADY_AT_START = "Error: Already at the start"
     ERROR_NO_SUCH_TABLE = "Error: '{0}' is not the name of a table in this database"
     ROW_COUNT_MSG = "Total row count: {}"
@@ -146,7 +153,9 @@ class DbCmd(ABC, cmd.Cmd):
         return self.metadata.tables[self.table_name()]
     def report_columns(self):
         self.print_table(["name", "type", "primary", "nullable", "foreign key"], [
-            [name, str(col.type), col.primary_key, col.nullable, ", ".join([fk.column.name for fk in col.foreign_keys])]
+            [name, str(col.type), col.primary_key, col.nullable, ", ".join(
+                [f"{fk.column.table.name}.{fk.column.name}" for fk in col.foreign_keys]
+            )]
             for name, col in self.table_metadata().columns.items()
         ])
     def get_table_config(self, table_name: str) -> dict[str, any]:
@@ -423,7 +432,7 @@ to exit this program."""
         if reply == "no":
             return True
         return False
-    def do_tables(self, arg):
+    def do_tables(self, _arg):
         "list the tables with their types"
         for entry in self.table_entries:
             old = entry.old_type
@@ -440,7 +449,7 @@ to exit this program."""
                 return
             self.set_table_index(index)
             return
-        self.next_table(self.ERROR_NO_MORE_TABLES)
+        self.next_table(self.INFO_NO_MORE_TABLES)
     def complete_next(self, text, line, begidx, endidx):
         return [
             entry.name
@@ -746,7 +755,7 @@ data from the database. Use 'quit' to exit this tool."""
                 return
             self.set_table_index(index)
             return
-        self.next_table(self.ERROR_NO_MORE_TABLES)
+        self.next_table(self.INFO_NO_MORE_TABLES)
     def complete_next(self, text, line, begidx, endidx):
         return [
             entry.name
@@ -816,14 +825,13 @@ def update_missingness(src_dsn: str, src_schema: str, metadata: MetaData, config
 
 @dataclass
 class GeneratorInfo:
-    column: str
-    is_primary_key: bool
-    old_gen: Generator | None
-    new_gen: Generator | None
+    columns: list[str]
+    gen: Generator | None
 
 @dataclass
 class GeneratorCmdTableEntry(TableEntry):
-    generators: list[GeneratorInfo]
+    old_generators: list[GeneratorInfo]
+    new_generators: list[GeneratorInfo]
 
 class GeneratorCmd(DbCmd):
     intro = "Interactive generator configuration. Type ? for help.\n"
@@ -846,6 +854,12 @@ information about the columns in the current table. Use 'peek',
     PRIMARY_PRIVATE_TEXT = "Primary Private"
     SECONDARY_PRIVATE_TEXT = "Secondary Private on columns {0}"
     NOT_PRIVATE_TEXT = "Not private"
+    ERROR_NO_SUCH_TABLE = "No such (non-vocabulary, non-ignored) table name {0}"
+    ERROR_NO_SUCH_COLUMN = "No such column {0} in this table"
+    ERROR_COLUMN_ALREADY_MERGED = "Column {0} is already merged"
+    ERROR_COLUMN_ALREADY_UNMERGED = "Column {0} is not merged"
+    ERROR_CANNOT_UNMERGE_ALL = "You cannot unmerge all the generator's columns"
+    PROPOSE_NOTHING = "No proposed generators, sorry."
 
     def make_table_entry(self, table_name: str, table: Mapping) -> TableEntry | None:
         if table.get("ignore", False):
@@ -855,61 +869,56 @@ information about the columns in the current table. Use 'peek',
         if table.get("num_rows_per_pass", 1) == 0:
             return None
         metadata_table = self.metadata.tables[table_name]
-        columns = frozenset(metadata_table.columns.keys())
-        col2gen: dict[str, Generator] = {}
-        multiple_columns_assigned: dict[str, list[str]] = {}
+        columns = [str(colname) for colname in metadata_table.columns.keys()]
+        column_set = frozenset(columns)
+        columns_assigned_so_far = set()
+        new_generator_infos: list[GeneratorInfo] = []
+        old_generator_infos: list[GeneratorInfo] = []
         for rg in table.get("row_generators", []):
             gen_name = rg.get("name", None)
             if gen_name:
                 ca = rg.get("columns_assigned", [])
-                single_ca = None
-                if isinstance(ca, str):
-                    if ca not in columns:
-                        logger.warning(
-                            "table '%s' has '%s' assigned to column '%s' which is not in this table",
-                            table_name, gen_name, ca,
-                        )
-                    elif ca in col2gen:
-                        logger.warning(
-                            "table '%s' has column '%s' assigned to multiple times",
-                            table_name, ca,
-                        )
-                    else:
-                        single_ca = ca
-                else:
-                    if len(ca) == 1:
-                        single_ca = str(ca[0])
-                if single_ca is not None:
-                    col2gen[single_ca] = PredefinedGenerator(table, rg, self.config)
-                else:
-                    multiple_columns_assigned[gen_name] = ca
-        generator_infos: list[GeneratorInfo] = []
-        for name, col in metadata_table.columns.items():
-            gen = col2gen.get(name, None)
-            generator_infos.append(GeneratorInfo(
-                column=str(name),
-                is_primary_key=col.primary_key,
-                old_gen=gen,
-                new_gen=gen,
-            ))
-        if multiple_columns_assigned:
-            self.print(
-                "The following mulit-column generators for table {0} are defined in the configuration file and cannot be configured with this command",
-                table_name,
-            )
-            for (gen_name, cols) in multiple_columns_assigned.items():
-                self.print("   {0}: {1}", gen_name, cols)
-        if len(generator_infos) == 0:
+                collist: list[str] = [ca] if isinstance(ca, str) else [str(c) for c in ca]
+                colset: set[str] = set(collist)
+                for unknown in colset - column_set:
+                    logger.warning(
+                        "table '%s' has '%s' assigned to column '%s' which is not in this table",
+                        table_name, gen_name, unknown
+                    )
+                for mult in columns_assigned_so_far & colset:
+                    logger.warning(
+                        "table '%s' has column '%s' assigned to multiple times", table_name, mult
+                    )
+                actual_collist = [c for c in collist if c in columns]
+                if actual_collist:
+                    gen = PredefinedGenerator(table, rg, self.config)
+                    new_generator_infos.append(GeneratorInfo(
+                        columns=actual_collist.copy(),
+                        gen=gen,
+                    ))
+                    old_generator_infos.append(GeneratorInfo(
+                        columns=actual_collist.copy(),
+                        gen=gen,
+                    ))
+                    columns_assigned_so_far |= colset
+        for colname in columns:
+            if colname not in columns_assigned_so_far:
+                new_generator_infos.append(GeneratorInfo(
+                    columns=[colname],
+                    gen=None,
+                ))
+        if len(new_generator_infos) == 0:
             return None
         return GeneratorCmdTableEntry(
             name=table_name,
-            generators=generator_infos
+            old_generators=old_generator_infos,
+            new_generators=new_generator_infos,
         )
 
     def __init__(self, src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping):
         super().__init__(src_dsn, src_schema, metadata, config)
         self.generator_index = 0
-        self.generators_valid_indices = None
+        self.generators_valid_columns = None
         self.set_prompt()
 
     def set_table_index(self, index):
@@ -926,7 +935,9 @@ information about the columns in the current table. Use 'peek',
             if table is None:
                 self.print("Internal error! table {0} does not have any generators!", self.table_index)
                 return False
-            self.generator_index = len(table.generators) - 1
+            self.generator_index = len(table.new_generators) - 1
+        else:
+            self.print(self.ERROR_ALREADY_AT_START)
         return ret
 
     def get_table(self) -> GeneratorCmdTableEntry | None:
@@ -936,22 +947,24 @@ information about the columns in the current table. Use 'peek',
 
     def get_table_and_generator(self) -> tuple[str | None, GeneratorInfo | None]:
         if self.table_index < len(self.table_entries):
-            entry = self.table_entries[self.table_index]
-            if self.generator_index < len(entry.generators):
-                return (entry.name, entry.generators[self.generator_index])
+            entry: GeneratorCmdTableEntry = self.table_entries[self.table_index]
+            if self.generator_index < len(entry.new_generators):
+                return (entry.name, entry.new_generators[self.generator_index])
             return (entry.name, None)
         return (None, None)
 
-    def get_column_name(self) -> str | None:
+    def get_column_names(self) -> list[str]:
         (_, generator_info) = self.get_table_and_generator()
-        return generator_info.column if generator_info else None
+        return generator_info.columns if generator_info else []
 
-    def column_metadata(self) -> Column | None:
+    def column_metadata(self) -> list[Column]:
         table = self.table_metadata()
-        column_name = self.get_column_name()
-        if table is None or column_name is None:
-            return None
-        return table.columns[column_name]
+        if table is None:
+            return []
+        return [
+            table.columns[name]
+            for name in self.get_column_names()
+        ]
 
     def set_prompt(self):
         (table_name, gen_info) = self.get_table_and_generator()
@@ -961,21 +974,13 @@ information about the columns in the current table. Use 'peek',
         if gen_info is None:
             self.prompt = "({table}) ".format(table=table_name)
             return
-        if gen_info.is_primary_key:
-            column = f"{gen_info.column}[pk]"
-        else:
-            column = gen_info.column
-        if gen_info.new_gen:
-            self.prompt = "({table}.{column} ({generator})) ".format(
-                table=table_name,
-                column=column,
-                generator=gen_info.new_gen.name(),
-            )
-        else:
-            self.prompt = "({table}.{column}) ".format(
-                table=table_name,
-                column=column,
-            )
+        table = self.table_metadata()
+        columns = [
+            c + "[pk]" if table.columns[c].primary_key else c
+            for c in gen_info.columns
+        ]
+        gen = f" ({gen_info.gen.name()})" if gen_info.gen else ""
+        self.prompt = f"({table_name}.{','.join(columns)}{gen}) "
 
     def _remove_auto_src_stats(self) -> list[dict[str, any]]:
         return self._remove_prefix_src_stats("auto__")
@@ -986,10 +991,10 @@ information about the columns in the current table. Use 'peek',
         for entry in tes:
             rgs = []
             new_gens: list[Generator] = []
-            for generator in entry.generators:
-                if generator.new_gen is not None:
-                    new_gens.append(generator.new_gen)
-                    cqs = generator.new_gen.custom_queries()
+            for generator in entry.new_generators:
+                if generator.gen is not None:
+                    new_gens.append(generator.gen)
+                    cqs = generator.gen.custom_queries()
                     for cq_key, cq in cqs.items():
                         src_stats.append({
                             "name": cq_key,
@@ -997,10 +1002,10 @@ information about the columns in the current table. Use 'peek',
                             "comments": [cq["comment"]] if "comment" in cq and cq["comment"] else [],
                         })
                     rg = {
-                        "name": generator.new_gen.function_name(),
-                        "columns_assigned": [generator.column],
+                        "name": generator.gen.function_name(),
+                        "columns_assigned": generator.columns,
                     }
-                    kwn = generator.new_gen.nominal_kwargs()
+                    kwn = generator.gen.nominal_kwargs()
                     if kwn:
                         rg["kwargs"] = kwn
                     rgs.append(rg)
@@ -1024,23 +1029,33 @@ information about the columns in the current table. Use 'peek',
             self.set_table_config(entry.name, table_config)
         self.config["src-stats"] = src_stats
 
+    def _find_old_generator(self, entry: GeneratorCmdTableEntry, columns) -> Generator | None:
+        """ Find any generator that previously assigned to these exact same columns. """
+        fc = frozenset(columns)
+        for gen in entry.old_generators:
+            if frozenset(gen.columns) == fc:
+                return gen.gen
+        return None
+
     def do_quit(self, arg):
         "Check the updates, save them if desired and quit the configurer."
         count = 0
         for entry in self.table_entries:
             header_shown = False
             g_entry: GeneratorCmdTableEntry = entry
-            for gen in g_entry.generators:
-                if gen.old_gen != gen.new_gen:
+            for gen in g_entry.new_generators:
+                old_gen = self._find_old_generator(g_entry, gen.columns)
+                new_gen = None if gen is None else gen.gen
+                if old_gen != new_gen:
                     if not header_shown:
                         header_shown = True
                         self.print("Table {0}:", entry.name)
                     count += 1
                     self.print(
                         "...changing {0} from {1} to {2}",
-                        gen.column,
-                        gen.old_gen.name() if gen.old_gen else "nothing",
-                        gen.new_gen.name() if gen.new_gen else "nothing",
+                        ", ".join(gen.columns),
+                        old_gen.name() if old_gen else "nothing",
+                        gen.gen.name() if gen.gen else "nothing",
                     )
         if count == 0:
             self.print("You have made no changes.")
@@ -1058,7 +1073,7 @@ information about the columns in the current table. Use 'peek',
     def do_tables(self, arg):
         "list the tables"
         for entry in self.table_entries:
-            gen_count = len(entry.generators)
+            gen_count = len(entry.new_generators)
             how_many = "one generator" if gen_count == 1 else f"{gen_count} generators"
             self.print("{0} ({1})", entry.name, how_many)
 
@@ -1067,18 +1082,23 @@ information about the columns in the current table. Use 'peek',
         if len(self.table_entries) <= self.table_index:
             self.print("Error: no table {0}", self.table_index)
             return
-        for gen in self.table_entries[self.table_index].generators:
-            old = "" if gen.old_gen is None else gen.old_gen.name()
-            if gen.old_gen == gen.new_gen:
+        g_entry: GeneratorCmdTableEntry = self.table_entries[self.table_index]
+        table = self.table_metadata()
+        for gen in g_entry.new_generators:
+            old_gen = self._find_old_generator(g_entry, gen.columns)
+            old = "" if old_gen is None else old_gen.name()
+            if old_gen == gen.gen:
                 becomes = ""
                 if old == "":
                     old = "(not set)"
-            elif gen.new_gen is None:
+            elif gen.gen is None:
                 becomes = "(delete)"
             else:
-                becomes = f"->{gen.new_gen.name()}"
-            primary = "[primary-key]" if gen.is_primary_key else ""
-            self.print("{0}{1}{2} {3}", old, becomes, primary, gen.column)
+                becomes = f"->{gen.gen.name()}"
+            primary = ""
+            if len(gen.columns) == 1 and table.columns[gen.columns[0]].primary_key:
+                primary = "[primary-key]"
+            self.print("{0}{1}{2} {3}", old, becomes, primary, gen.columns)
 
     def do_columns(self, _arg):
         "Report the column names and metadata"
@@ -1086,23 +1106,21 @@ information about the columns in the current table. Use 'peek',
 
     def do_info(self, _arg):
         "Show information about the current column"
-        cm = self.column_metadata()
-        if cm is None:
-            return
-        self.print(
-            "Column {0} in table {1} has type {2} ({3}).",
-            cm.name,
-            cm.table.name,
-            str(cm.type),
-            "nullable" if cm.nullable else "not nullable",
-        )
-        if cm.primary_key:
-            self.print("It is a primary key, which usually does not need a generator")
-        elif cm.foreign_keys:
-            fk_names = [fk.column.name for fk in cm.foreign_keys]
-            self.print("It is a foreign key referencing table {0}", ", ".join(fk_names))
-            if len(fk_names) == 1:
-                self.print("You do not need a generator if you just want a uniform choice over the referenced table's rows")
+        for cm in self.column_metadata():
+            self.print(
+                "Column {0} in table {1} has type {2} ({3}).",
+                cm.name,
+                cm.table.name,
+                str(cm.type),
+                "nullable" if cm.nullable else "not nullable",
+            )
+            if cm.primary_key:
+                self.print("It is a primary key, which usually does not need a generator")
+            elif cm.foreign_keys:
+                fk_names = [fk.column.name for fk in cm.foreign_keys]
+                self.print("It is a foreign key referencing table {0}", ", ".join(fk_names))
+                if len(fk_names) == 1:
+                    self.print("You do not need a generator if you just want a uniform choice over the referenced table's rows")
 
     def _get_table_index(self, table_name: str) -> int | None:
         for n, entry in enumerate(self.table_entries):
@@ -1112,8 +1130,8 @@ information about the columns in the current table. Use 'peek',
 
     def _get_generator_index(self, table_index, column_name):
         entry: GeneratorCmdTableEntry = self.table_entries[table_index]
-        for n, gen in enumerate(entry.generators):
-            if gen.column == column_name:
+        for n, gen in enumerate(entry.new_generators):
+            if column_name in gen.columns:
                 return n
         return None
 
@@ -1121,7 +1139,7 @@ information about the columns in the current table. Use 'peek',
         parts = target.split(".", 1)
         table_index = self._get_table_index(parts[0])
         if table_index is None:
-            self.print("No such (non-vocabulary, non-ignored) table name {0}", parts[0])
+            self.print(self.ERROR_NO_SUCH_TABLE, parts[0])
             return False
         gen_index = None
         if 1 < len(parts) and parts[1]:
@@ -1138,8 +1156,9 @@ information about the columns in the current table. Use 'peek',
     def do_next(self, arg):
         """
         Go to the next generator.
-        Or, go to a named table: 'next tablename'.
+        Or go to a named table: 'next tablename'.
         Or go to a column: 'next tablename.columnname'.
+        Or go to a column within this table 'next columnname'.
         """
         if arg:
             self.go_to(arg)
@@ -1150,39 +1169,53 @@ information about the columns in the current table. Use 'peek',
         """ Synonym for next """
         self.do_next(arg)
 
+    def complete_n(self, text: str, line: str, begidx: int, endidx: int):
+        return self.complete_next(text, line, begidx, endidx)
+
     def _go_next(self):
         table = self.get_table()
         if table is None:
             self.print("No more tables")
         next_gi = self.generator_index + 1
-        if next_gi == len(table.generators):
-            self.next_table()
+        if next_gi == len(table.new_generators):
+            self.next_table(self.INFO_NO_MORE_TABLES)
             return
         self.generator_index = next_gi
         self.set_prompt()
 
     def complete_next(self, text: str, _line: str, _begidx: int, _endidx: int):
         parts = text.split(".", 1)
-        table_name = parts[0]
+        first_part = parts[0]
         if 1 < len(parts):
             column_name = parts[1]
-            table_index = self._get_table_index(table_name)
+            table_index = self._get_table_index(first_part)
             if table_index is None:
                 return []
             table_entry: GeneratorCmdTableEntry = self.table_entries[table_index]
             return [
-                f"{table_name}.{gen.column}"
-                for gen in table_entry.generators
-                if gen.column.startswith(column_name)
+                f"{first_part}.{column}"
+                for gen in table_entry.new_generators
+                for column in gen.columns
+                if column.startswith(column_name)
             ]
         table_names = [
             entry.name
             for entry in self.table_entries
-            if entry.name.startswith(table_name)
+            if entry.name.startswith(first_part)
         ]
-        if table_name in table_names:
-            table_names.append(f"{table_name}.")
-        return table_names
+        if first_part in table_names:
+            table_names.append(f"{first_part}.")
+        current_table = self.get_table()
+        if current_table:
+            column_names = [
+                col
+                for gen in current_table.new_generators
+                for col in gen.columns
+                if col.startswith(first_part)
+            ]
+        else:
+            column_names = []
+        return table_names + column_names
 
     def do_previous(self, _arg):
         """ Go to the previous generator """
@@ -1197,20 +1230,17 @@ information about the columns in the current table. Use 'peek',
         self.do_previous(arg)
 
     def _generators_valid(self) -> bool:
-        return self.generators_valid_indices == (self.table_index, self.generator_index)
+        return self.generators_valid_columns == (self.table_index, self.get_column_names())
 
     def _get_generator_proposals(self) -> list[Generator]:
         if not self._generators_valid():
             self.generators = None
         if self.generators is None:
-            column = self.column_metadata()
-            if column is None:
-                logger.error("No such column")
-                return []
-            gens = everything_factory.get_generators(column, self.engine)
+            columns = self.column_metadata()
+            gens = everything_factory().get_generators(columns, self.engine)
             gens.sort(key=lambda g: g.fit(9999))
             self.generators = gens
-            self.generators_valid_indices = (self.table_index, self.generator_index)
+            self.generators_valid_columns = (self.table_index, self.get_column_names().copy())
         return self.generators
 
     def _print_privacy(self):
@@ -1239,7 +1269,10 @@ information about the columns in the current table. Use 'peek',
         args = arg.split()
         limit = 20
         comparison = {
-            "source": self._get_column_data(limit, to_str=str),
+            "source": [
+                x[0] if len(x) == 1 else ", ".join(x)
+                for x in self._get_column_data(limit, to_str=str)
+            ]
         }
         gens: list[Generator] = self._get_generator_proposals()
         table_name = self.table_name()
@@ -1329,24 +1362,18 @@ information about the columns in the current table. Use 'peek',
         select_q = self._get_aggregate_query([gen], table_name)
         self.print("{0}; providing the following values: {1}", select_q, vals)
 
-    def _get_column_data(self, count: int, to_str=repr, min_length: int = 0):
-        column = str(self.get_column_name())
-        where = f"WHERE {column} IS NOT NULL"
-        if 0 < min_length:
-            where = "WHERE LENGTH({column}) >= {len}".format(
-                column=column,
-                len=min_length,
-            )
+    def _get_column_data(self, count: int, to_str=repr):
+        columns = self.get_column_names()
+        columns_string = ", ".join(columns)
+        pred = " AND ".join(f"{column} IS NOT NULL" for column in columns)
         with self.engine.connect() as connection:
             result = connection.execute(
-                text("SELECT {column} FROM {table} {where} ORDER BY RANDOM() LIMIT {count}".format(
-                    table=self.table_name(),
-                    column=column,
-                    count=count,
-                    where=where,
-                ))
+                text(f"SELECT {columns_string} FROM {self.table_name()} WHERE {pred} ORDER BY RANDOM() LIMIT {count}")
             )
-            return [to_str(x[0]) for x in result.all()]
+            return [
+                [to_str(x) for x in xs]
+                for xs in result.all()
+            ]
 
     def do_propose(self, _arg):
         """
@@ -1360,9 +1387,15 @@ information about the columns in the current table. Use 'peek',
         gens = self._get_generator_proposals()
         sample = self._get_column_data(limit)
         if sample:
-            self.print(self.PROPOSE_SOURCE_SAMPLE_TEXT, ",".join(sample))
+            rep = [
+                x[0] if len(x) == 1 else ",".join(x)
+                for x in sample
+            ]
+            self.print(self.PROPOSE_SOURCE_SAMPLE_TEXT, "; ".join(rep))
         else:
             self.print(self.PROPOSE_SOURCE_EMPTY_TEXT)
+        if not gens:
+            self.print(self.PROPOSE_NOTHING)
         for index, gen in enumerate(gens):
             fit = gen.fit()
             if fit is None:
@@ -1376,7 +1409,7 @@ information about the columns in the current table. Use 'peek',
                 index=index + 1,
                 name=gen.name(),
                 fit=fit_s,
-                sample=", ".join(map(repr, gen.generate_data(limit)))
+                sample="; ".join(map(repr, gen.generate_data(limit)))
             )
 
     def do_p(self, arg):
@@ -1419,7 +1452,7 @@ information about the columns in the current table. Use 'peek',
         if gen_info is None:
             self.print("Error: no column")
             return
-        gen_info.new_gen = new_gen
+        gen_info.gen = new_gen
         self._go_next()
 
     def do_s(self, arg):
@@ -1428,7 +1461,7 @@ information about the columns in the current table. Use 'peek',
 
     def do_unset(self, _arg):
         """
-        Removes any generator set for this column.
+        Remove any generator set for this column.
         """
         (table, gen_info) = self.get_table_and_generator()
         if table is None:
@@ -1437,8 +1470,122 @@ information about the columns in the current table. Use 'peek',
         if gen_info is None:
             self.print("Error: no column")
             return
-        gen_info.new_gen = None
+        gen_info.gen = None
         self._go_next()
+
+    def do_merge(self, arg: str):
+        """ Add this column(s) to the specified column(s), so one generator covers them all. """
+        cols = arg.split()
+        if not cols:
+            self.print("Error: merge requires a column argument")
+        table_entry: GeneratorCmdTableEntry = self.get_table()
+        if table_entry is None:
+            self.print(self.ERROR_NO_SUCH_TABLE)
+            return
+        cols_available = functools.reduce(lambda x, y: x | y, [
+            frozenset(gen.columns)
+            for gen in table_entry.new_generators
+        ])
+        cols_to_merge = frozenset(cols)
+        unknown_cols = cols_to_merge - cols_available
+        if unknown_cols:
+            for uc in unknown_cols:
+                self.print(self.ERROR_NO_SUCH_COLUMN, uc)
+            return
+        gen_info = table_entry.new_generators[self.generator_index]
+        current_columns = frozenset(gen_info.columns)
+        stated_current_columns = cols_to_merge & current_columns
+        if stated_current_columns:
+            for c in stated_current_columns:
+                self.print(self.ERROR_COLUMN_ALREADY_MERGED, c)
+            return
+        # Remove cols_to_merge from each generator
+        new_new_generators: list[GeneratorInfo] = []
+        for gen in table_entry.new_generators:
+            if gen is gen_info:
+                # Add columns to this generator
+                self.generator_index = len(new_new_generators)
+                new_new_generators.append(
+                    GeneratorInfo(
+                        columns=gen.columns + cols,
+                        gen=None,
+                    )
+                )
+            else:
+                # Remove columns if applicable
+                new_columns = [c for c in gen.columns if c not in cols_to_merge]
+                is_changed = len(new_columns) != len(gen.columns)
+                if new_columns:
+                    # We have not removed this generator completely
+                    new_new_generators.append(
+                        GeneratorInfo(
+                            columns=new_columns,
+                            gen=None if is_changed else gen.gen,
+                        )
+                    )
+        table_entry.new_generators = new_new_generators
+        self.set_prompt()
+
+    def complete_merge(self, text: str, _line: str, _begidx: int, _endidx: int):
+        last_arg = text.split()[-1]
+        table_entry: GeneratorCmdTableEntry = self.get_table()
+        if table_entry is None:
+            return []
+        return [
+            column
+            for i, gen in enumerate(table_entry.new_generators)
+            if i != self.generator_index
+            for column in gen.columns
+            if column.startswith(last_arg)
+        ]
+
+    def do_unmerge(self, arg: str):
+        """ Remove this column(s) from this generator, make them a separate generator. """
+        cols = arg.split()
+        if not cols:
+            self.print("Error: merge requires a column argument")
+        table_entry: GeneratorCmdTableEntry = self.get_table()
+        if table_entry is None:
+            self.print(self.ERROR_NO_SUCH_TABLE)
+            return
+        gen_info = table_entry.new_generators[self.generator_index]
+        current_columns = frozenset(gen_info.columns)
+        cols_to_unmerge = frozenset(cols)
+        unknown_cols = cols_to_unmerge - current_columns
+        if unknown_cols:
+            for uc in unknown_cols:
+                self.print(self.ERROR_NO_SUCH_COLUMN, uc)
+            return
+        stated_unmerged_columns = cols_to_unmerge - current_columns
+        if stated_unmerged_columns:
+            for c in stated_unmerged_columns:
+                self.print(self.ERROR_COLUMN_ALREADY_UNMERGED, c)
+            return
+        if cols_to_unmerge == current_columns:
+            self.print(self.ERROR_CANNOT_UNMERGE_ALL)
+            return
+        # Remove unmerged columns
+        for um in cols_to_unmerge:
+            gen_info.columns.remove(um)
+        # The existing generator will not work
+        gen_info.gen = None
+        # And put them into a new (empty) generator
+        table_entry.new_generators.insert(self.generator_index + 1, GeneratorInfo(
+            columns=cols,
+            gen=None,
+        ))
+        self.set_prompt()
+
+    def complete_unmerge(self, text: str, _line: str, _begidx: int, _endidx: int):
+        last_arg = text.split()[-1]
+        table_entry: GeneratorCmdTableEntry = self.get_table()
+        if table_entry is None:
+            return []
+        return [
+            column
+            for column in table_entry.new_generators[self.generator_index].columns
+            if column.startswith(last_arg)
+        ]
 
 
 def update_config_generators(
