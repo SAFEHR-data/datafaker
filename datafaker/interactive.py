@@ -1158,7 +1158,7 @@ information about the columns in the current table. Use 'peek',
         Go to the next generator.
         Or go to a named table: 'next tablename'.
         Or go to a column: 'next tablename.columnname'.
-        Or go to a column within this table 'next columnname'.
+        Or go to a column within this table: 'next columnname'.
         """
         if arg:
             self.go_to(arg)
@@ -1586,6 +1586,16 @@ information about the columns in the current table. Use 'peek',
             for column in table_entry.new_generators[self.generator_index].columns
             if column.startswith(last_arg)
         ]
+
+    def do_condition(self, arg: str):
+        """
+        Add a condition, so we can set a complex generator that uses different parameters
+        depending on the results of the condition.
+        "condition columnname is null" splits on whether the column is null or not.
+        "condition columnname" splits on the value of the column.
+        "condition column1name < column2name" splits on which of these columns has the greater value.
+        "condition age < 18" splits on whether the patient is an adult or child.
+        """
 
 
 def update_config_generators(
