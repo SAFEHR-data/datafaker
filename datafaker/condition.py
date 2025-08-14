@@ -113,6 +113,8 @@ class UnaryExpression(Expression):
 
     @classmethod
     def re_operator(cls) -> str:
+        if self.OPERATOR[-1].isalpha():
+            return self.OPERATOR + r"\b"
         return self.OPERATOR
 
 
@@ -287,6 +289,10 @@ class Concatenate(BinaryExpression):
     def calculate(self, lvalue, rvalue):
         return lvalue + rvalue
 
+    @classmethod
+    def re_operator(cls) -> str:
+        return r"\|\|"
+
 
 class Times(BinaryExpression):
     OPERATOR = "*"
@@ -339,14 +345,14 @@ integer = parsy.regex(r"-?[0-9]+").map(lambda s: Constant(int(s)))
 column_name = parsy.alt(
     parsy.regex(r'"([^"]*)"', group=1),
     parsy.regex(r"[a-zA-Z_][0-9a-zA-Z_]*"),
-)
+).map(ColumnReference)
 
 """
 Parses a literal string, beginning and ending with an apostrophe.
 """
 literal_string = parsy.regex(r"'([^']*(''[^']*)*)'", group=1).map(
     lambda s: s.replace("''", "'")
-)
+).map(Constant)
 
 """ Parses a unary prefix operator """
 prefix_operator = parsy.alt(
@@ -380,7 +386,7 @@ BINARY_EXPRESSIONS = [
 
 """ Parses a binary operator """
 binary_operator = parsy.alt(*(
-    parsy.regex(exp.re_operator() + r"\b").result(exp)
+    parsy.regex(exp.re_operator()).result(exp)
     for exp in BINARY_EXPRESSIONS
 ))
 
@@ -426,14 +432,14 @@ class ExpressionBuilder:
             return self.op.PRECEDENCE
 
         def combine(self, t: Expression):
-            return self.op(exp, t)
+            return self.op(self.exp, t)
 
     def __init__(self):
         self._stack: list[ItemBase] = []
 
     def add_prefix(self, p: type[PrefixExpression]) -> None:
         """ Stack a prefix operator """
-        self._stack.append(ItemPrefix(p))
+        self._stack.append(self.ItemPrefix(p))
 
     def add_prefixes(self, ps: list[type[PrefixExpression]]) -> None:
         """ Stack some prefix operators """
@@ -472,7 +478,7 @@ class ExpressionBuilder:
         """
         Add this expression and the binary operator on its right to the stack.
         """
-        self._stack.append(ItemBinary(t, bop))
+        self._stack.append(self.ItemBinary(t, bop))
 
 
 @parsy.generate
@@ -487,13 +493,13 @@ def expression():
 
     for (bop, next_term) in rest:
         builder.add_prefixes(prefixes)
-        t = builder.combine_postfixes(postfixes)
+        t = builder.combine_postfixes(t, postfixes)
         t = builder.combine(t, bop.PRECEDENCE)
         builder.add_binary(t, bop)
         (prefixes, t, postfixes) = next_term
 
     builder.add_prefixes(prefixes)
-    t = builder.combine_postfixes(postfixes)
+    t = builder.combine_postfixes(t, postfixes)
     t = builder.combine(t, 0)
 
     return t
