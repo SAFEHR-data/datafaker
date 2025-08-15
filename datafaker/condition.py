@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from functools import reduce
 import parsy
+import re
 from typing import Self
 
 class Expression(ABC):
@@ -48,8 +49,11 @@ class Expression(ABC):
 
 
 class ColumnReference(Expression):
+    NEEDS_NO_QUOTES = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
     def __init__(self, columnname: str):
         self._columnname = columnname
+        self._needs_quotes = not self.NEEDS_NO_QUOTES.fullmatch(columnname)
 
     def column_names(self) -> set[str]:
         return {self._columnname}
@@ -58,9 +62,12 @@ class ColumnReference(Expression):
         return column_values[self._columnname]
 
     def to_sql(self, qualified: str=None) -> str:
+        cn = self._columnname
+        if self._needs_quotes:
+            cn = '"' + cn + '"'
         if qualified is None:
-            return self.qn_to_sql(self._columnname)
-        return self.qn_to_sql(f'{qualified}.{self._columnname}')
+            return cn
+        return f'{qualified}.{cn}'
 
     def precedence(self) -> int:
         return 5
@@ -203,7 +210,7 @@ class BinaryExpression(Expression):
         """
 
     def to_sql(self, qualified: str=None) -> str:
-        subsqls = [self.expr_to_sql(self._exprs[0])] + list(map(
+        subsqls = [self.expr_to_sql(self._exprs[0], qualified)] + list(map(
             lambda x: self.expr_right_to_sql(x, qualified),
             self._exprs[1:],
         ))
@@ -486,8 +493,10 @@ def expression():
     """
     Parse an expression, which is terms linked by binary operators.
     """
+    yield parsy.whitespace.optional()
     (prefixes, t, postfixes) = yield unaries
     rest = yield parsy.seq(binary_operator, unaries).many()
+    yield parsy.whitespace.optional()
 
     builder = ExpressionBuilder()
 
@@ -506,7 +515,7 @@ def expression():
 
 
 """ Parse an expression in brackets """
-bracketed_expression.become(parsy.regex(r"\( *") >> expression << parsy.regex(r" *\)"))
+bracketed_expression.become(parsy.string("(") >> expression << parsy.string(")"))
 
 def parse_expression(expression_string: str) -> Expression:
     """ Parse a SQL-like expression, returning an Expression object """
