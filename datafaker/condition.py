@@ -7,7 +7,7 @@ from typing import Self
 class Expression(ABC):
     """ Base type for any evaluatable expression """
     @abstractmethod
-    def column_names(self) -> list[str]:
+    def column_names(self) -> set[str]:
         """ List of column names referenced by this expression. """
 
     @abstractmethod
@@ -51,8 +51,8 @@ class ColumnReference(Expression):
     def __init__(self, columnname: str):
         self._columnname = columnname
 
-    def column_names(self) -> list[str]:
-        return [self._columnname]
+    def column_names(self) -> set[str]:
+        return {self._columnname}
 
     def evaluate(self, column_values: dict[str, any]):
         return column_values[self._columnname]
@@ -67,8 +67,8 @@ class ColumnReference(Expression):
 
 
 class ConstantBase(Expression):
-    def column_names(self) -> list[str]:
-        return []
+    def column_names(self) -> set[str]:
+        return set()
 
     def precedence(self) -> int:
         return 99
@@ -91,7 +91,7 @@ class UnaryExpression(Expression):
     def __init__(self, expr: Expression):
         self._expr = expr
 
-    def column_names(self) -> list[str]:
+    def column_names(self) -> set[str]:
         return self._expr.column_names()
 
     def evaluate(self, column_values: dict[str, any]):
@@ -113,9 +113,10 @@ class UnaryExpression(Expression):
 
     @classmethod
     def re_operator(cls) -> str:
-        if self.OPERATOR[-1].isalpha():
-            return self.OPERATOR + r"\b"
-        return self.OPERATOR
+        if cls.OPERATOR[-1].isalpha():
+            op = cls.OPERATOR.replace(" ", r"\s+")
+            return f"\\s*({op}|{op.lower()})\\b\\s*"
+        return f"\\s*{cls.OPERATOR}\\s*"
 
 
 class PrefixExpression(UnaryExpression):
@@ -175,12 +176,8 @@ class BinaryExpression(Expression):
     def __init__(self, *exprs: list[Expression]):
         self._exprs = exprs
 
-    def column_names(self) -> list[str]:
-        return reduce(
-            lambda x, y: x | y,
-            map(lambda z: set(z.column_names()), self._exprs),
-            set(),
-        )
+    def column_names(self) -> set[str]:
+        return set.union(*(ex.column_names() for ex in self._exprs))
 
     def evaluate(self, column_values: dict[str, any]):
         return reduce(
@@ -217,7 +214,10 @@ class BinaryExpression(Expression):
 
     @classmethod
     def re_operator(cls) -> str:
-        return cls.OPERATOR
+        op = cls.OPERATOR
+        if op[-1].isalpha():
+            return f"\\s*({op}|{op.lower()})\\b\\s*"
+        return f"\\s*{op}\\s*"
 
 
 class Equals(BinaryExpression):
@@ -271,7 +271,7 @@ class Plus(BinaryExpression):
 
     @classmethod
     def re_operator(cls) -> str:
-        return r"\+"
+        return r"\s*\+\s*"
 
 
 class Minus(BinaryExpression):
@@ -291,7 +291,7 @@ class Concatenate(BinaryExpression):
 
     @classmethod
     def re_operator(cls) -> str:
-        return r"\|\|"
+        return r"\s*\|\|\s*"
 
 
 class Times(BinaryExpression):
@@ -303,7 +303,7 @@ class Times(BinaryExpression):
 
     @classmethod
     def re_operator(cls) -> str:
-        return r"\*"
+        return r"\s*\*\s*"
 
 
 class Divide(BinaryExpression):
@@ -355,16 +355,16 @@ literal_string = parsy.regex(r"'([^']*(''[^']*)*)'", group=1).map(
 ).map(Constant)
 
 """ Parses a unary prefix operator """
-prefix_operator = parsy.alt(
-    parsy.regex(r"NOT\b\s*").result(Not),
-    parsy.regex(r"-").result(Negate)
-)
+prefix_operator = parsy.alt(*(
+    parsy.regex(exp.re_operator()).result(exp)
+    for exp in (Negate, Not)
+))
 
 """ Parses a unary postfix operator """
-postfix_operator = parsy.alt(
-    parsy.regex(r"IS\s+NOT\s+NULL\b\s*").result(IsNotNull),
-    parsy.regex(r"IS\s+NULL\b\s*").result(IsNull)
-)
+postfix_operator = parsy.alt(*(
+    parsy.regex(exp.re_operator()).result(exp)
+    for exp in (IsNull, IsNotNull)
+))
 
 BINARY_EXPRESSIONS = [
     Equals,
@@ -463,7 +463,7 @@ class ExpressionBuilder:
         having combined `t` with any tighter expressions on its left
         """
         t = self.combine(t, postfix.PRECEDENCE)
-        return post(t)
+        return postfix(t)
 
     def combine_postfixes(self, t: Expression, postfixes: list[type[PostfixExpression]]) -> Expression:
         """
@@ -507,3 +507,7 @@ def expression():
 
 """ Parse an expression in brackets """
 bracketed_expression.become(parsy.regex(r"\( *") >> expression << parsy.regex(r" *\)"))
+
+def parse_expression(expression_string: str) -> Expression:
+    """ Parse a SQL-like expression, returning an Expression object """
+    return expression.parse(expression_string)
