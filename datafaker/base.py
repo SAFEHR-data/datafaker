@@ -124,6 +124,102 @@ class DistributionGenerator:
         """
         return np.exp(self.multivariate_normal_np(cov)).tolist()
 
+    PERMITTED_SUBGENS = {
+        "constant",
+        "multivariate_lognormal",
+        "multivariate_normal",
+        "weighted_choice",
+    }
+    def composite(self, subgen_configs: list[dict[str, any]]):
+        """
+        Many distributions.
+
+        :param config: A list of sub-generations. Each one is a dict with
+        the following keys: ``output`` -- list of indices of the return values
+        into which this sub-generation's outputs should be placed;
+        ``name`` -- sub-generation name, such as "constant",
+        "multivariate_normal", "multivariate_lognormal" or
+        "weighted_choice"; ``params`` -- the parameters for the
+        sub-generation.
+        :return: list of values
+        """
+        outputs = set()
+        multiples = set()
+        for subgen in subgen_configs:
+            so = set(["output"])
+            multiples |= outputs & so
+            outputs |= so
+        if not outputs:
+            return
+        omin = min(*outputs)
+        omax = max(*outputs)
+        if omin != 0 or omax + 1 != len(outputs):
+            logger.error(
+                "the outputs in the subgenerator should be integers"
+                " from 0 to one less than the number of columns assigned"
+                " to (with no gaps), instead we have %s",
+                sorted(list(outputs)),
+            )
+            return
+        if multiples:
+            logger.error(
+                "%s outputs assigned more than once",
+                multiples,
+            )
+            return
+        output = [None] * len(outputs)
+        for subgen in subgen_configs:
+            if subgen["name"] not in self.PERMITTED_SUBGENS:
+                logger.error(
+                    "subgenerator %s is not a valid name. Valid names are %s.",
+                    subgen["name"],
+                    self.PERMITTED_SUBGENS,
+                )
+            else:
+                # Actually run the subgenerator
+                subout = getattr(self, subgen["name"])(subgen["params"])
+                if len(subout) != len(subgen["output"]):
+                    logger.error(
+                        "subgenerator %s produced %d results when %d were required",
+                        len(subout),
+                        len(subgen["output"]),
+                    )
+                else:
+                    for (in_index, out_index) in enumerate(subgen["output"]):
+                        output[out_index] = subout[in_index]
+        return output
+
+    def alternatives(self, alternative_configs: list[dict[str, any]]):
+        """
+        A generator that picks between other generators.
+
+        :param partition_configs: List of alternative generators.
+        Each alternative has the following keys: "count" -- a weight for
+        how often to use this alternative; "name" -- which generator
+        for this partition, for example "composite"; "params" -- the
+        parameters for this alternative.
+        :return: list of values
+        """
+        total = 0
+        for alt in alternative_configs:
+            if alt["count"] <= 0:
+                logger.warning("Alternative count should be positive, not %s", alt["count"])
+            else:
+                total += alt["count"]
+            if alt["name"] != "composite" and alt["name"] not in self.PERMITTED_SUBGENS:
+                logger.error("Alternative %s is not a permitted generator", alt["name"])
+                return
+        if total == 0:
+            logger.error("No actual alternatives")
+            return None
+        choice = random.randrange(total)
+        for alt in alternative_configs:
+            count = alt["count"]
+            if choice < count:
+                # Actually run the generator
+                return getattr(self, alt["name"])(alt["params"])
+            choice -= count
+        logger.error("Internal error: out of alternatives! %s", alternative_configs)
 
 class TableGenerator(ABC):
     """Abstract base class for table generator classes."""
