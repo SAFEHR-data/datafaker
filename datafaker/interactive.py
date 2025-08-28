@@ -254,15 +254,18 @@ class DbCmd(ABC, cmd.Cmd):
         col_names = arg.split()
         nonnulls = [cn + " IS NOT NULL" for cn in col_names]
         with self.engine.connect() as connection:
-            result = connection.execute(
-                text("SELECT {cols} FROM {table} {where} {nonnull} LIMIT {max}".format(
+            query = "SELECT {cols} FROM {table} {where} {nonnull} LIMIT {max}".format(
                     cols=",".join(col_names),
                     table=table_name,
                     where="WHERE" if nonnulls else "",
                     nonnull=" AND ".join(nonnulls),
                     max=MAX_PEEK_ROWS,
-                ))
-            )
+                )
+            try:
+                result = connection.execute(text(query))
+            except Exception as exc:
+                self.print(f'SQL query "{query}" caused exception {exc}')
+                return
             rows = [
                 row._tuple()
                 for row in result.fetchmany(MAX_PEEK_ROWS)
@@ -861,6 +864,8 @@ information about the columns in the current table. Use 'peek',
     ERROR_CANNOT_UNMERGE_ALL = "You cannot unmerge all the generator's columns"
     PROPOSE_NOTHING = "No proposed generators, sorry."
 
+    SRC_STAT_RE = re.compile(r'SRC_STATS\["([^"]+)"\](\["results"\]\[0\]\["([^"]+)"\])?')
+
     def make_table_entry(self, table_name: str, table: Mapping) -> TableEntry | None:
         if table.get("ignore", False):
             return None
@@ -1315,19 +1320,34 @@ information about the columns in the current table. Use 'peek',
         cqs = gen.custom_queries()
         if not cqs:
             return
-        kwa = gen.actual_kwargs()
         cq_key2args = {}
-        src_stat_re = re.compile(f'SRC_STATS\\["([^"]+)"\\]')
-        for argname, src_stat in gen.nominal_kwargs().items():
-            if argname in kwa:
-                src_stat_groups = src_stat_re.match(src_stat)
-                if src_stat_groups:
-                    cq_key = src_stat_groups.group(1)
-                    if cq_key not in cq_key2args:
-                        cq_key2args[cq_key] = []
-                    cq_key2args[cq_key].append(kwa[argname])
+        self._get_custom_queries_from(
+            cq_key2args,
+            gen.nominal_kwargs(),
+            gen.actual_kwargs(),
+        )
         for cq_key, cq in cqs.items():
-            self.print("{0}; providing the following values: {1}", cq, cq_key2args[cq_key])
+            self.print("{0}; providing the following values: {1}", cq["query"], cq_key2args[cq_key])
+
+    def _get_custom_queries_from(self, out, nominal, actual):
+        if type(nominal) is str:
+            src_stat_groups = self.SRC_STAT_RE.match(nominal)
+            if src_stat_groups:
+                cq_key = src_stat_groups.group(1)
+                if cq_key not in out:
+                    out[cq_key] = []
+                sub = src_stat_groups.group(3)
+                if sub:
+                    actual = {sub: actual}
+                out[cq_key].append(actual)
+                return
+        if type(nominal) is list and type(actual) is list:
+            for i in range(min(len(nominal), len(actual))):
+                self._get_custom_queries_from(out, nominal[i], actual[i])
+        if type(nominal) is dict and type(actual) is dict:
+            for k, v in nominal.items():
+                if k in actual:
+                    self._get_custom_queries_from(out, v, actual[k])
 
     def _get_aggregate_query(self, gens: list[Generator], table_name: str) -> str | None:
         clauses = [

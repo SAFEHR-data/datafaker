@@ -31,6 +31,21 @@ def zipf_weights(size):
         for n in range(1, size + 1)
     ]
 
+def merge_with_constants(xs: list, constants_at: dict[int, any]):
+    outi = 0
+    xi = 0
+    constant_count = len(constants_at)
+    while constant_count != 0:
+        if outi in constants_at:
+            yield constants_at[outi]
+            constant_count -= 1
+        else:
+            if xi == len(xs):
+                return
+            yield xs[xi]
+            xi += 1
+        outi += 1
+
 
 class DistributionGenerator:
     root3 = math.sqrt(3)
@@ -125,10 +140,12 @@ class DistributionGenerator:
         return np.exp(self.multivariate_normal_np(cov)).tolist()
 
     PERMITTED_SUBGENS = {
+        "composite",
         "constant",
         "multivariate_lognormal",
         "multivariate_normal",
         "weighted_choice",
+        "with_constants_at",
     }
     def composite(self, subgen_configs: list[dict[str, any]]):
         """
@@ -177,7 +194,7 @@ class DistributionGenerator:
                 )
             else:
                 # Actually run the subgenerator
-                subout = getattr(self, subgen["name"])(subgen["params"])
+                subout = getattr(self, subgen["name"])(**subgen["params"])
                 if len(subout) != len(subgen["output"]):
                     logger.error(
                         "subgenerator %s produced %d results when %d were required",
@@ -193,7 +210,7 @@ class DistributionGenerator:
         """
         A generator that picks between other generators.
 
-        :param partition_configs: List of alternative generators.
+        :param alternative_configs: List of alternative generators.
         Each alternative has the following keys: "count" -- a weight for
         how often to use this alternative; "name" -- which generator
         for this partition, for example "composite"; "params" -- the
@@ -202,11 +219,11 @@ class DistributionGenerator:
         """
         total = 0
         for alt in alternative_configs:
-            if alt["count"] <= 0:
-                logger.warning("Alternative count should be positive, not %s", alt["count"])
+            if alt["count"] < 0:
+                logger.warning("Alternative count is %d, but should not be negative", alt["count"])
             else:
                 total += alt["count"]
-            if alt["name"] != "composite" and alt["name"] not in self.PERMITTED_SUBGENS:
+            if alt["name"] not in self.PERMITTED_SUBGENS:
                 logger.error("Alternative %s is not a permitted generator", alt["name"])
                 return
         if total == 0:
@@ -217,9 +234,20 @@ class DistributionGenerator:
             count = alt["count"]
             if choice < count:
                 # Actually run the generator
-                return getattr(self, alt["name"])(alt["params"])
+                return getattr(self, alt["name"])(**alt["params"])
             choice -= count
         logger.error("Internal error: out of alternatives! %s", alternative_configs)
+
+    def with_constants_at(self, constants_at: list[int], subgen: str, params: dict[str, any]):
+        if subgen not in self.PERMITTED_SUBGENS:
+            logger.error(
+                "subgenerator %s is not a valid name. Valid names are %s.",
+                subgen,
+                self.PERMITTED_SUBGENS,
+            )
+        subout = getattr(self, subgen)(**params)
+        return list(merge_with_constants(subout, constants_at))
+
 
 class TableGenerator(ABC):
     """Abstract base class for table generator classes."""

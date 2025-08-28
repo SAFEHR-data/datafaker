@@ -4,6 +4,7 @@ Generator factories for making generators for single columns.
 
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
+from dataclasses import dataclass
 import decimal
 from functools import lru_cache
 import math
@@ -132,6 +133,24 @@ class PredefinedGenerator(Generator):
     AS_CLAUSE_RE = re.compile(r" *(.+) +AS +([A-Za-z_][A-Za-z0-9_]*) *")
     SRC_STAT_NAME_RE = re.compile(r'SRC_STATS\["([^]]*)"\].*')
 
+    def _get_src_stats_mentioned(self, val) -> set[str]:
+        if not val:
+            return set()
+        if type(val) is str:
+            ss = self.SRC_STAT_NAME_RE.match(val)
+            if ss:
+                ss_name = ss.group(1)
+                logger.debug("Found SRC_STATS reference %s", ss_name)
+                return set([ss_name])
+            else:
+                logger.debug("Value %s does not seem to be a SRC_STATS reference", val)
+                return set()
+        if type(val) is list:
+            return set.union(*(self._get_src_stats_mentioned(v) for v in val))
+        if type(val) is dict:
+            return set.union(*(self._get_src_stats_mentioned(v) for v in val.values()))
+        return set()
+
     def __init__(self, table_name: str, generator_object: Mapping[str, any], config: Mapping[str, any]):
         """
         Initialise a generator from a config.yaml.
@@ -142,15 +161,7 @@ class PredefinedGenerator(Generator):
         self._table_name = table_name
         self._name: str = generator_object["name"]
         self._kwn: dict[str, str] = generator_object.get("kwargs", {})
-        self._src_stats_mentioned = set()
-        for kwnv in self._kwn.values():
-            ss = self.SRC_STAT_NAME_RE.match(kwnv)
-            if ss:
-                ss_name = ss.group(1)
-                self._src_stats_mentioned.add(ss_name)
-                logger.debug("Found SRC_STATS reference %s", ss_name)
-            else:
-                logger.debug("Value %s does not seem to be a SRC_STATS reference", kwnv)
+        self._src_stats_mentioned = self._get_src_stats_mentioned(self._kwn)
         # Need to deal with this somehow (or remove it from the schema)
         self._argn: list[str] = generator_object.get("args", [])
         self._select_aggregate_clauses = {}
@@ -1085,7 +1096,15 @@ class MultivariateNormalGeneratorFactory(GeneratorFactory):
     def query_var(self, column: str) -> str:
         return column
 
-    def query(self, table: str, columns: str) -> str:
+    def query(self, table: str, columns: list[str], and_where: str="") -> str:
+        """
+        Gets a query for the basics for multivariate normal/lognormal parameters.
+        :param table: The name of the table to be queried.
+        :param columns: The columns in the multivariate distribution, must be at least one.
+        :param and_where: Additional where clause. If not ``""`` should begin with ``" AND "``.
+        """
+        if not columns:
+            return f"SELECT COUNT(*) AS count, 0 AS rank FROM {table} WHERE TRUE{and_where}"
         preds = " AND ".join(
             self.query_predicate(col)
             for col in columns
@@ -1108,9 +1127,9 @@ class MultivariateNormalGeneratorFactory(GeneratorFactory):
             for ix in range(iy+1)
         )
         return (
-            f"SELECT {means}, {covs}, {len(columns)} AS rank"
+            f"SELECT {means}, {covs}, q.count AS count, {len(columns)} AS rank"
             f" FROM (SELECT COUNT(*) AS count, {multiples}, {avgs}"
-            f" FROM {table} WHERE {preds}) AS q"
+            f" FROM {table} WHERE {preds}{and_where}) AS q"
         )
 
     def get_generators(self, columns: list[Column], engine: Engine):
@@ -1155,6 +1174,235 @@ class MultivariateLogNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
         return f"LN({column})"
 
 
+def combination(n: int):
+    """
+    A generator of all combinations of n booleans.
+
+    :param n: The length of the lists of booleans.
+    :return: A generator of all possible lists of n booleans.
+    """
+    current = [False] * n
+    while True:
+        yield current.copy()
+        i = 0
+        while current[i]:
+            current[i] = False
+            i += 1
+            if i == n:
+                return
+        current[i] = True
+
+
+def text_list(items: list[str]) -> str:
+    """
+    Concatenate the items with commas and one "and".
+    """
+    if not hasattr(items, "__getitem__"):
+        items = list(items)
+    if len(items) == 0:
+        return ""
+    if len(items) == 1:
+        return items[0]
+    return ", ".join(items[:-1]) + " and " + items[-1]
+
+
+@dataclass
+class RowPartition:
+    query: str
+    included_columns: list[str]
+    # map of column names to clause that defines the partition
+    # such as "mycolumn IS NULL"
+    excluded_columns: dict[str, str]
+    # map of constant outputs that need to be inserted into the
+    # outputs from the generator: {index: value}
+    constant_outputs: dict[int, any]
+    # The actual covariates from the source database
+    covariates: dict[str, float]
+
+    def comment(self) -> str:
+        if not self.included_columns:
+            return "Number of rows for which {0}".format(text_list(self.excluded_columns.values()))
+        if not self.excluded_columns:
+            where = ""
+        else:
+            where = f" where {text_list(self.excluded_columns.values())}"
+        if len(self.included_columns) == 1:
+            return f"Mean and variance for column {self.included_columns[0]}{where}."
+        return (
+            "Means and covariate matrix for the columns "
+            f"{text_list(self.included_columns)}{where} so that we can"
+            " produce the relatedness between these in the fake data."
+        )
+
+
+class NullPartitionedNormalGenerator(Generator):
+    def __init__(
+        self,
+        table_name: list[str],
+        partitions: list[RowPartition],
+        function_name: str="multivariate_lognormal",
+    ):
+        self._table = table_name
+        self._partitions = partitions
+        self._function_name = function_name
+
+    def name(self):
+        return "null-partitioned " + self._function_name
+
+    def function_name(self):
+        return "dist_gen.alternatives"
+
+    def _nominal_kwargs_with_combinations(self, index: int, partition: RowPartition):
+        count = f'SRC_STATS["auto__cov__{self._table}__alt_{index}"]["results"][0]["count"]'
+        if not partition.included_columns:
+            return {
+                "count": count,
+                "name": '"constant"',
+                "params": {"value": [None] * len(partition.excluded_columns)},
+            }
+        covariates = {
+            "cov": f'SRC_STATS["auto__cov__{self._table}__alt_{index}"]["results"][0]'
+        }
+        if not partition.excluded_columns:
+            return {
+                "count": count,
+                "name": f'"{self._function_name}"',
+                "params": covariates,
+            }
+        return {
+            "count": count,
+            "name": '"with_constants_at"',
+            "params": {
+                "constants_at": partition.constant_outputs,
+                "subgen": f'"{self._function_name}"',
+                "params": covariates,
+            }
+        }
+
+    def nominal_kwargs(self):
+        return {
+            "alternative_configs": [
+                self._nominal_kwargs_with_combinations(index, partition)
+                for index, partition in enumerate(self._partitions)
+            ],
+        }
+
+    def custom_queries(self):
+        return {
+            f"auto__cov__{self._table}__alt_{index}": {
+                "comment": partition.comment(),
+                "query": partition.query,
+            }
+            for index, partition in enumerate(self._partitions)
+        }
+
+    def _actual_kwargs_with_combinations(self, partition: RowPartition):
+        count = partition.covariates["count"]
+        if not partition.included_columns:
+            return {
+                "count": count,
+                "name": "constant",
+                "params": {"value": [None] * len(partition.included_columns)},
+            }
+        if not partition.excluded_columns:
+            return {
+                "count": count,
+                "name": self._function_name,
+                "params": partition.covariates,
+            }
+        return {
+            "count": count,
+            "name": "with_constants_at",
+            "params": {
+                "constants_at": partition.constant_outputs,
+                "subgen": self._function_name,
+                "params": {
+                    "cov": partition.covariates,
+                },
+            }
+        }
+
+    def actual_kwargs(self) -> dict[str, any]:
+        """
+        The kwargs (summary statistics) this generator is instantiated with.
+        """
+        return {
+            "alternative_configs": [
+                self._actual_kwargs_with_combinations(partition)
+                for partition in self._partitions
+            ],
+        }
+
+    def generate_data(self, count) -> list[any]:
+        """
+        Generate 'count' random data points for this column.
+        """
+        kwargs = self.actual_kwargs()
+        return [
+            dist_gen.alternatives(**kwargs)
+            for _ in range(count)
+        ]
+
+    def fit(self, default=None) -> float | None:
+        return default
+
+
+class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
+    def function_name(self) -> str:
+        return "multivariate_normal"
+
+    def query_predicate(self, column: str) -> str:
+        return column + " IS NOT NULL"
+
+    def query_var(self, column: str) -> str:
+        return column
+
+    def get_generators(self, columns: list[Column], engine: Engine):
+        # All columns must be numeric
+        for c in columns:
+            ct = get_column_type(c)
+            if not isinstance(ct, Numeric) and not isinstance(ct, Integer):
+                return []
+        table = columns[0].table.name
+        row_partitions: list[RowPartition] = []
+        for com in combination(len(columns)):
+            included: list[str] = []
+            excluded: dict[str, str] = {}
+            and_where: str = ""
+            nones: dict[int, None] = {}
+            for i, c in enumerate(com):
+                col_name = columns[i].name
+                if c:
+                    included.append(col_name)
+                else:
+                    excluded[col_name] = f"{col_name} IS NULL"
+                    and_where += f" AND {col_name} IS NULL"
+                    nones[i] = None
+            row_partitions.append(RowPartition(
+                self.query(table, included, and_where),
+                included,
+                excluded,
+                nones,
+                {},
+            ))
+        with engine.connect() as connection:
+            for rp in row_partitions:
+                try:
+                    rp.covariates = connection.execute(text(
+                        rp.query
+                    )).mappings().first()
+                except Exception as e:
+                    logger.debug("SQL query %s failed with error %s", rp.query, e)
+                    return []
+                if not rp.covariates or rp.covariates["count"] is None:
+                    return []
+        return [NullPartitionedNormalGenerator(
+            table,
+            row_partitions,
+            self.function_name(),
+        )]
+
+
 @lru_cache(1)
 def everything_factory():
     return MultiGeneratorFactory([
@@ -1170,4 +1418,5 @@ def everything_factory():
         ConstantGeneratorFactory(),
         MultivariateNormalGeneratorFactory(),
         MultivariateLogNormalGeneratorFactory(),
+        NullPartitionedNormalGeneratorFactory(),
     ])

@@ -116,6 +116,18 @@ class StoryGeneratorInfo:
     num_stories_per_pass: int
 
 
+def _render_value(v) -> str:
+    if type(v) is list:
+        return "[" + ", ".join(_render_value(x) for x in v) + "]"
+    if type(v) is set:
+        return "{" + ", ".join(_render_value(x) for x in v) + "}"
+    if type(v) is dict:
+        return "{" + ", ".join(f"{repr(k)}:{_render_value(x)}" for k, x in v.items()) + "}"
+    if type(v) is str:
+        return v
+    return str(v)
+
+
 def _get_function_call(
     function_name: str,
     positional_arguments: Optional[Sequence[Any]] = None,
@@ -128,7 +140,9 @@ def _get_function_call(
         keyword_arguments = {}
 
     argument_values: list[str] = [str(value) for value in positional_arguments]
-    argument_values += [f"{key}={value}" for key, value in keyword_arguments.items()]
+    argument_values += [
+        f"{key}={_render_value(value)}" for key, value in keyword_arguments.items()
+    ]
 
     return FunctionCall(function_name=function_name, argument_values=argument_values)
 
