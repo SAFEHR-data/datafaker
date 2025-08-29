@@ -32,6 +32,16 @@ def zipf_weights(size):
     ]
 
 def merge_with_constants(xs: list, constants_at: dict[int, any]):
+    """
+    Merge a list of items with other items that must be placed at certain indices.
+    :param constants_at: A map of indices to objects that must be placed at
+    those indices.
+    :param xs: Items that fill in the gaps left by ``constants_at``.
+    :return: ``xs`` with ``constants_at`` inserted at the appropriate
+    points. If there are not enough elements in ``xs`` to fill in the gaps
+    in ``constants_at``, the elements of ``constants_at`` after the gap
+    are dropped.
+    """
     outi = 0
     xi = 0
     constant_count = len(constants_at)
@@ -101,6 +111,8 @@ class DistributionGenerator:
 
     def multivariate_normal_np(self, cov):
         rank = int(cov["rank"])
+        if rank == 0:
+            return np.empty(shape=(0,))
         mean = [
             float(cov[f"m{i}"])
             for i in range(rank)
@@ -113,6 +125,47 @@ class DistributionGenerator:
             for j in range(rank)
         ]
         return self.np_gen.multivariate_normal(mean, covs)
+
+    def _select_group(self, alts: list[dict[str, any]]):
+        """
+        Choose one of the ``alts`` weighted by their "count" elements.
+        """
+        total = 0
+        for alt in alts:
+            if alt["count"] < 0:
+                logger.warning("Alternative count is %d, but should not be negative", alt["count"])
+            else:
+                total += alt["count"]
+        choice = random.randrange(total)
+        for alt in alts:
+            choice -= alt["count"]
+            if choice <= 0:
+                return alt
+        raise Exception("Internal error: ran out of choices in _select_group")
+
+    def _find_constants(result: dict[str, any]):
+        """
+        Find all keys ``kN``, returning a dictionary of ``N: kNN``.
+
+        This can be passed into ``merge_with_constants`` as the
+        ``constants_at`` argument.
+        """
+        out: dict[int, any] = {}
+        for k, v in result.items():
+            if k.startswith("k") and k[1:].isnumeric():
+                out[int(k[1:])] = v
+        return out
+
+    PERMITTED_SUBGENS = {
+        "multivariate_lognormal",
+        "multivariate_normal",
+        "grouped_multivariate_lognormal",
+        "grouped_multivariate_normal",
+        "composite",
+        "constant",
+        "weighted_choice",
+        "with_constants_at",
+    }
 
     def multivariate_normal(self, cov):
         """
@@ -141,14 +194,18 @@ class DistributionGenerator:
         """
         return np.exp(self.multivariate_normal_np(cov)).tolist()
 
-    PERMITTED_SUBGENS = {
-        "composite",
-        "constant",
-        "multivariate_lognormal",
-        "multivariate_normal",
-        "weighted_choice",
-        "with_constants_at",
-    }
+    def grouped_multivariate_normal(self, covs):
+        cov = self._select_group(covs)
+        constants = self._find_constants(cov)
+        nums = self.multivariate_normal(cov).tolist()
+        return list(merge_with_constants(nums, constants))
+
+    def grouped_multivariate_lognormal(self, covs):
+        cov = self._select_group(covs)
+        constants = self._find_constants(cov)
+        nums = np.exp(self.multivariate_normal(cov)).tolist()
+        return list(merge_with_constants(nums, constants))
+
     def composite(self, subgen_configs: list[dict[str, any]]):
         """
         Many distributions.
@@ -219,26 +276,11 @@ class DistributionGenerator:
         parameters for this alternative.
         :return: list of values
         """
-        total = 0
-        for alt in alternative_configs:
-            if alt["count"] < 0:
-                logger.warning("Alternative count is %d, but should not be negative", alt["count"])
-            else:
-                total += alt["count"]
-            if alt["name"] not in self.PERMITTED_SUBGENS:
-                logger.error("Alternative %s is not a permitted generator", alt["name"])
-                return
-        if total == 0:
-            logger.error("No actual alternatives")
-            return None
-        choice = random.randrange(total)
-        for alt in alternative_configs:
-            count = alt["count"]
-            if choice < count:
-                # Actually run the generator
-                return getattr(self, alt["name"])(**alt["params"])
-            choice -= count
-        logger.error("Internal error: out of alternatives! %s", alternative_configs)
+        alt = self._select_group(alternative_configs)
+        if alt["name"] not in self.PERMITTED_SUBGENS:
+            logger.error("Alternative %s is not a permitted generator", alt["name"])
+            return
+        return getattr(self, alt["name"])(**alt["params"])
 
     def with_constants_at(self, constants_at: list[int], subgen: str, params: dict[str, any]):
         if subgen not in self.PERMITTED_SUBGENS:

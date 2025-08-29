@@ -1096,15 +1096,34 @@ class MultivariateNormalGeneratorFactory(GeneratorFactory):
     def query_var(self, column: str) -> str:
         return column
 
-    def query(self, table: str, columns: list[str], and_where: str="") -> str:
+    def query(
+        self,
+        table: str,
+        columns: list[str],
+        and_where: str="",
+        group_by_clause: str="",
+        constant_clauses: str="",
+        constants: str = "",
+    ) -> str:
         """
         Gets a query for the basics for multivariate normal/lognormal parameters.
         :param table: The name of the table to be queried.
-        :param columns: The columns in the multivariate distribution, must be at least one.
+        :param columns: The columns in the multivariate distribution.
         :param and_where: Additional where clause. If not ``""`` should begin with ``" AND "``.
+        :param group_by_clause: Any GROUP BY clause (starting with " GROUP BY " if not "").
+        :param constant_clauses: Extra output columns in the outer SELECT clause, such
+        as ", q.column_one AS k1, q.column_two AS k2"
+        :param constants: Extra output columns in the inner SELECT clause. Used to
+        deliver columns to the outer select, such as ", column_one, column_two"
         """
+        if not and_where:
+            where = ""
+        elif and_where.startswith(" AND "):
+            where = " WHERE" + and_where[4:]
+        else:
+            where = " WHERE TRUE " + and_where
         if not columns:
-            return f"SELECT COUNT(*) AS count, 0 AS rank FROM {table} WHERE TRUE{and_where}"
+            return f"SELECT COUNT(*) AS count, 0 AS rank FROM {table}{where}"
         preds = " AND ".join(
             self.query_predicate(col)
             for col in columns
@@ -1127,9 +1146,10 @@ class MultivariateNormalGeneratorFactory(GeneratorFactory):
             for ix in range(iy+1)
         )
         return (
-            f"SELECT {means}, {covs}, q.count AS count, {len(columns)} AS rank"
-            f" FROM (SELECT COUNT(*) AS count, {multiples}, {avgs}"
-            f" FROM {table} WHERE {preds}{and_where}) AS q"
+            f"SELECT {means}, {covs}, q.count AS count,"
+            f" {len(columns)} AS rank{constant_clauses}"
+            f" FROM (SELECT COUNT(*) AS count, {multiples}, {avgs}{constants}"
+            f" FROM {table} WHERE {preds}{and_where}{group_by_clause}) AS q"
         )
 
     def get_generators(self, columns: list[Column], engine: Engine):
@@ -1209,28 +1229,38 @@ def text_list(items: list[str]) -> str:
 @dataclass
 class RowPartition:
     query: str
-    included_columns: list[str]
+    # list of numeric columns
+    included_numeric: list[str]
+    # map of indices to column names that are being grouped by.
+    # The indices are indices of where they need to be inserted into
+    # the generator outputs.
+    included_choice: dict[int, str]
     # map of column names to clause that defines the partition
     # such as "mycolumn IS NULL"
     excluded_columns: dict[str, str]
     # map of constant outputs that need to be inserted into the
-    # outputs from the generator: {index: value}
+    # list of included column values (so once the generator has
+    # been run and the included_choice values have been
+    # added): {index: value}
     constant_outputs: dict[int, any]
     # The actual covariates from the source database
     covariates: dict[str, float]
 
     def comment(self) -> str:
-        if not self.included_columns:
-            return "Number of rows for which {0}".format(text_list(self.excluded_columns.values()))
+        caveat = ""
+        if self.included_choice:
+            caveat = f" (for each possible value of {text_list(self.included_choice)})"
+        if not self.included_numeric:
+            return f"Number of rows for which {text_list(self.excluded_columns.values())}{caveat}"
         if not self.excluded_columns:
             where = ""
         else:
             where = f" where {text_list(self.excluded_columns.values())}"
-        if len(self.included_columns) == 1:
-            return f"Mean and variance for column {self.included_columns[0]}{where}."
+        if len(self.included_numeric) == 1:
+            return f"Mean and variance for column {self.included_numeric[0]}{where}."
         return (
             "Means and covariate matrix for the columns "
-            f"{text_list(self.included_columns)}{where} so that we can"
+            f"{text_list(self.included_numeric)}{where}{caveat} so that we can"
             " produce the relatedness between these in the fake data."
         )
 
@@ -1240,7 +1270,7 @@ class NullPartitionedNormalGenerator(Generator):
         self,
         table_name: list[str],
         partitions: list[RowPartition],
-        function_name: str="multivariate_lognormal",
+        function_name: str="grouped_multivariate_lognormal",
     ):
         self._table = table_name
         self._partitions = partitions
@@ -1253,15 +1283,15 @@ class NullPartitionedNormalGenerator(Generator):
         return "dist_gen.alternatives"
 
     def _nominal_kwargs_with_combinations(self, index: int, partition: RowPartition):
-        count = f'SRC_STATS["auto__cov__{self._table}__alt_{index}"]["results"][0]["count"]'
-        if not partition.included_columns:
+        count = f'sum(r["count"] for r in SRC_STATS["auto__cov__{self._table}__alt_{index}"]["results"])'
+        if not partition.included_numeric and not partition.included_choice:
             return {
                 "count": count,
                 "name": '"constant"',
                 "params": {"value": [None] * len(partition.excluded_columns)},
             }
         covariates = {
-            "cov": f'SRC_STATS["auto__cov__{self._table}__alt_{index}"]["results"][0]'
+            "covs": f'SRC_STATS["auto__cov__{self._table}__alt_{index}"]["results"]'
         }
         if not partition.excluded_columns:
             return {
@@ -1298,17 +1328,19 @@ class NullPartitionedNormalGenerator(Generator):
 
     def _actual_kwargs_with_combinations(self, partition: RowPartition):
         count = partition.covariates["count"]
-        if not partition.included_columns:
+        if not partition.included_numeric and not partition.included_choice:
             return {
                 "count": count,
                 "name": "constant",
-                "params": {"value": [None] * len(partition.included_columns)},
+                "params": {"value": [None] * len(partition.excluded_columns)},
             }
         if not partition.excluded_columns:
             return {
                 "count": count,
                 "name": self._function_name,
-                "params": partition.covariates,
+                "params": {
+                    "covs": partition.covariates,
+                }
             }
         return {
             "count": count,
@@ -1317,7 +1349,7 @@ class NullPartitionedNormalGenerator(Generator):
                 "constants_at": partition.constant_outputs,
                 "subgen": self._function_name,
                 "params": {
-                    "cov": partition.covariates,
+                    "covs": partition.covariates,
                 },
             }
         }
@@ -1347,6 +1379,13 @@ class NullPartitionedNormalGenerator(Generator):
         return default
 
 
+def is_numeric(col: Column) -> bool:
+    ct = get_column_type(col)
+    return (
+        isinstance(ct, Numeric) or isinstance(ct, Integer)
+    ) and not col.foreign_keys
+
+
 class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
     def function_name(self) -> str:
         return "multivariate_normal"
@@ -1358,29 +1397,53 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
         return column
 
     def get_generators(self, columns: list[Column], engine: Engine):
-        # All columns must be numeric
-        for c in columns:
-            ct = get_column_type(c)
-            if not isinstance(ct, Numeric) and not isinstance(ct, Integer):
-                return []
+        if len(columns) < 2:
+            return []
+        nullable_count = sum(1 for col in columns if col.nullable)
+        if nullable_count == 0:
+            return []
         table = columns[0].table.name
         row_partitions: list[RowPartition] = []
-        for com in combination(len(columns)):
-            included: list[str] = []
+        for index, com in enumerate(combination(nullable_count)):
+            included_numeric: list[str] = []
+            included_choice: dict[int, str] = {}
+            group_by_clause = ""
+            constant_clauses = ""
+            constants = ""
             excluded: dict[str, str] = {}
             and_where: str = ""
             nones: dict[int, None] = {}
-            for i, c in enumerate(com):
-                col_name = columns[i].name
-                if c:
-                    included.append(col_name)
-                else:
-                    excluded[col_name] = f"{col_name} IS NULL"
-                    and_where += f" AND {col_name} IS NULL"
-                    nones[i] = None
+            for column in columns:
+                col_name = column.name
+                if column.nullable:
+                    if com.pop():
+                        if is_numeric(column):
+                            included_numeric.append(col_name)
+                        else:
+                            index = len(included_numeric) + len(included_choice)
+                            included_choice[index] = col_name
+                            if group_by_clause:
+                                group_by_clause += ", " + col_name
+                            else:
+                                group_by_clause = " GROUP BY " + col_name
+                            constant_clauses += f", q.{col_name} AS k{index}"
+                            constants += ", " + col_name
+                    else:
+                        excluded[col_name] = f"{col_name} IS NULL"
+                        and_where += f" AND {col_name} IS NULL"
+                        nones[index] = None
+            query = self.query(
+                table=table,
+                columns=included_numeric,
+                and_where=and_where,
+                group_by_clause=group_by_clause,
+                constants = constants,
+                constant_clauses=constant_clauses,
+            )
             row_partitions.append(RowPartition(
-                self.query(table, included, and_where),
-                included,
+                query,
+                included_numeric,
+                included_choice,
                 excluded,
                 nones,
                 {},
