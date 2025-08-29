@@ -84,6 +84,7 @@ class DbCmd(ABC, cmd.Cmd):
     INFO_NO_MORE_TABLES = "There are no more tables"
     ERROR_ALREADY_AT_START = "Error: Already at the start"
     ERROR_NO_SUCH_TABLE = "Error: '{0}' is not the name of a table in this database"
+    ERROR_NO_SUCH_TABLE_OR_COLUMN = "Error: '{0}' is not the name of a table in this database or a column in this table"
     ROW_COUNT_MSG = "Total row count: {}"
 
     @abstractmethod
@@ -1144,7 +1145,13 @@ information about the columns in the current table. Use 'peek',
         parts = target.split(".", 1)
         table_index = self._get_table_index(parts[0])
         if table_index is None:
-            self.print(self.ERROR_NO_SUCH_TABLE, parts[0])
+            if len(parts) == 1:
+                gen_index = self._get_generator_index(self.table_index, parts[0])
+                if gen_index is not None:
+                    self.generator_index = gen_index
+                    self.set_prompt()
+                    return True
+            self.print(self.ERROR_NO_SUCH_TABLE_OR_COLUMN, parts[0])
             return False
         gen_index = None
         if 1 < len(parts) and parts[1]:
