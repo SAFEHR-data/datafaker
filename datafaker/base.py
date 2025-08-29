@@ -45,6 +45,8 @@ def merge_with_constants(xs: list, constants_at: dict[int, any]):
             yield xs[xi]
             xi += 1
         outi += 1
+    for x in xs[xi:]:
+        yield x
 
 
 class DistributionGenerator:
