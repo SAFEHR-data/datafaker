@@ -16,7 +16,7 @@ from sqlalchemy import Column, Engine, text
 from sqlalchemy.types import Date, DateTime, Integer, Numeric, String, Time
 from typing import Callable
 
-from datafaker.base import DistributionGenerator
+from datafaker.base import DistributionGenerator, merge_with_constants
 from datafaker.utils import logger
 
 # How many distinct values can we have before we consider a
@@ -131,7 +131,7 @@ class PredefinedGenerator(Generator):
     """
     SELECT_AGGREGATE_RE = re.compile(r"SELECT (.*) FROM ([A-Za-z_][A-Za-z0-9_]*)")
     AS_CLAUSE_RE = re.compile(r" *(.+) +AS +([A-Za-z_][A-Za-z0-9_]*) *")
-    SRC_STAT_NAME_RE = re.compile(r'SRC_STATS\["([^]]*)"\].*')
+    SRC_STAT_NAME_RE = re.compile(r'\bSRC_STATS\["([^]]*)"\].*')
 
     def _get_src_stats_mentioned(self, val) -> set[str]:
         if not val:
@@ -1103,7 +1103,8 @@ class MultivariateNormalGeneratorFactory(GeneratorFactory):
         and_where: str="",
         group_by_clause: str="",
         constant_clauses: str="",
-        constants: str = "",
+        constants: str="",
+        suppress_count: int | None=None,
     ) -> str:
         """
         Gets a query for the basics for multivariate normal/lognormal parameters.
@@ -1122,8 +1123,18 @@ class MultivariateNormalGeneratorFactory(GeneratorFactory):
             where = " WHERE" + and_where[4:]
         else:
             where = " WHERE TRUE " + and_where
+        if suppress_count is None and group_by_clause:
+            # We need more than one for each row, otherwise the cI_J entries
+            # will be NULL and the multivariate generator will fail.
+            suppress_count = 1
+        suppress_condition = f" WHERE {suppress_count} < q.count" if suppress_count else ""
         if not columns:
-            return f"SELECT COUNT(*) AS count, 0 AS rank FROM {table}{where}"
+            return (
+                f"SELECT q.count AS count, 0 AS rank{constant_clauses}"
+                f" FROM (SELECT COUNT(*) AS count{constants}"
+                f" FROM {table}{where}{group_by_clause}"
+                f") AS q{suppress_condition}"
+            )
         preds = " AND ".join(
             self.query_predicate(col)
             for col in columns
@@ -1149,7 +1160,8 @@ class MultivariateNormalGeneratorFactory(GeneratorFactory):
             f"SELECT {means}, {covs}, q.count AS count,"
             f" {len(columns)} AS rank{constant_clauses}"
             f" FROM (SELECT COUNT(*) AS count, {multiples}, {avgs}{constants}"
-            f" FROM {table} WHERE {preds}{and_where}{group_by_clause}) AS q"
+            f" FROM {table} WHERE {preds}{and_where}{group_by_clause}"
+            f") AS q{suppress_condition}"
         )
 
     def get_generators(self, columns: list[Column], engine: Engine):
@@ -1249,7 +1261,7 @@ class RowPartition:
     def comment(self) -> str:
         caveat = ""
         if self.included_choice:
-            caveat = f" (for each possible value of {text_list(self.included_choice)})"
+            caveat = f" (for each possible value of {text_list(self.included_choice.values())})"
         if not self.included_numeric:
             return f"Number of rows for which {text_list(self.excluded_columns.values())}{caveat}"
         if not self.excluded_columns:
@@ -1288,12 +1300,12 @@ class NullPartitionedNormalGenerator(Generator):
             return {
                 "count": count,
                 "name": '"constant"',
-                "params": {"value": [None] * len(partition.excluded_columns)},
+                "params": {"value": [None] * len(partition.constant_outputs)},
             }
         covariates = {
             "covs": f'SRC_STATS["auto__cov__{self._table}__alt_{index}"]["results"]'
         }
-        if not partition.excluded_columns:
+        if not partition.constant_outputs:
             return {
                 "count": count,
                 "name": f'"{self._function_name}"',
@@ -1327,7 +1339,7 @@ class NullPartitionedNormalGenerator(Generator):
         }
 
     def _actual_kwargs_with_combinations(self, partition: RowPartition):
-        count = partition.covariates["count"]
+        count = sum(row["count"] for row in partition.covariates)
         if not partition.included_numeric and not partition.included_choice:
             return {
                 "count": count,
@@ -1388,7 +1400,7 @@ def is_numeric(col: Column) -> bool:
 
 class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
     def function_name(self) -> str:
-        return "multivariate_normal"
+        return "grouped_multivariate_normal"
 
     def query_predicate(self, column: str) -> str:
         return column + " IS NOT NULL"
@@ -1413,7 +1425,7 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
             excluded: dict[str, str] = {}
             and_where: str = ""
             nones: dict[int, None] = {}
-            for column in columns:
+            for col_index, column in enumerate(columns):
                 col_name = column.name
                 if column.nullable:
                     if com.pop():
@@ -1431,7 +1443,7 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
                     else:
                         excluded[col_name] = f"{col_name} IS NULL"
                         and_where += f" AND {col_name} IS NULL"
-                        nones[index] = None
+                        nones[col_index] = None
             query = self.query(
                 table=table,
                 columns=included_numeric,
@@ -1453,11 +1465,11 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
                 try:
                     rp.covariates = connection.execute(text(
                         rp.query
-                    )).mappings().first()
+                    )).mappings().fetchall()
                 except Exception as e:
                     logger.debug("SQL query %s failed with error %s", rp.query, e)
                     return []
-                if not rp.covariates or rp.covariates["count"] is None:
+                if not rp.covariates or rp.covariates[0]["count"] is None:
                     return []
         return [NullPartitionedNormalGenerator(
             table,

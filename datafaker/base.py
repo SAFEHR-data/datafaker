@@ -143,7 +143,7 @@ class DistributionGenerator:
                 return alt
         raise Exception("Internal error: ran out of choices in _select_group")
 
-    def _find_constants(result: dict[str, any]):
+    def _find_constants(self, result: dict[str, any]):
         """
         Find all keys ``kN``, returning a dictionary of ``N: kNN``.
 
@@ -197,13 +197,13 @@ class DistributionGenerator:
     def grouped_multivariate_normal(self, covs):
         cov = self._select_group(covs)
         constants = self._find_constants(cov)
-        nums = self.multivariate_normal(cov).tolist()
+        nums = self.multivariate_normal(cov)
         return list(merge_with_constants(nums, constants))
 
     def grouped_multivariate_lognormal(self, covs):
         cov = self._select_group(covs)
         constants = self._find_constants(cov)
-        nums = np.exp(self.multivariate_normal(cov)).tolist()
+        nums = np.exp(self.multivariate_normal_np(cov)).tolist()
         return list(merge_with_constants(nums, constants))
 
     def composite(self, subgen_configs: list[dict[str, any]]):
@@ -277,6 +277,7 @@ class DistributionGenerator:
         :return: list of values
         """
         alt = self._select_group(alternative_configs)
+        logger.debug("Alternative selected: %s", alt)
         if alt["name"] not in self.PERMITTED_SUBGENS:
             logger.error("Alternative %s is not a permitted generator", alt["name"])
             return

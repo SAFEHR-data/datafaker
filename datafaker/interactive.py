@@ -865,7 +865,7 @@ information about the columns in the current table. Use 'peek',
     ERROR_CANNOT_UNMERGE_ALL = "You cannot unmerge all the generator's columns"
     PROPOSE_NOTHING = "No proposed generators, sorry."
 
-    SRC_STAT_RE = re.compile(r'SRC_STATS\["([^"]+)"\](\["results"\]\[0\]\["([^"]+)"\])?')
+    SRC_STAT_RE = re.compile(r'\bSRC_STATS\["([^"]+)"\](\["results"\]\[0\]\["([^"]+)"\])?')
 
     def make_table_entry(self, table_name: str, table: Mapping) -> TableEntry | None:
         if table.get("ignore", False):
@@ -1328,17 +1328,19 @@ information about the columns in the current table. Use 'peek',
         if not cqs:
             return
         cq_key2args = {}
+        nominal = gen.nominal_kwargs()
+        actual = gen.actual_kwargs()
         self._get_custom_queries_from(
             cq_key2args,
-            gen.nominal_kwargs(),
-            gen.actual_kwargs(),
+            nominal,
+            actual,
         )
         for cq_key, cq in cqs.items():
             self.print("{0}; providing the following values: {1}", cq["query"], cq_key2args[cq_key])
 
     def _get_custom_queries_from(self, out, nominal, actual):
         if type(nominal) is str:
-            src_stat_groups = self.SRC_STAT_RE.match(nominal)
+            src_stat_groups = self.SRC_STAT_RE.search(nominal)
             if src_stat_groups:
                 cq_key = src_stat_groups.group(1)
                 if cq_key not in out:
@@ -1347,11 +1349,10 @@ information about the columns in the current table. Use 'peek',
                 if sub:
                     actual = {sub: actual}
                 out[cq_key].append(actual)
-                return
-        if type(nominal) is list and type(actual) is list:
+        elif type(nominal) is list and type(actual) is list:
             for i in range(min(len(nominal), len(actual))):
                 self._get_custom_queries_from(out, nominal[i], actual[i])
-        if type(nominal) is dict and type(actual) is dict:
+        elif type(nominal) is dict and type(actual) is dict:
             for k, v in nominal.items():
                 if k in actual:
                     self._get_custom_queries_from(out, v, actual[k])
@@ -1464,7 +1465,10 @@ information about the columns in the current table. Use 'peek',
                 self.print("set's integer argument must be at least 1")
                 return
             if len(gens) < index:
-                self.print("There are currently only {0} generators proposed, please select one of them.", index)
+                self.print(
+                    "There are currently only {0} generators proposed, please select one of them.",
+                    len(gens),
+                )
                 return
             new_gen = gens[index - 1]
         else:
