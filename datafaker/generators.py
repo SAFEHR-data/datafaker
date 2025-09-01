@@ -12,7 +12,7 @@ import mimesis
 import mimesis.locales
 import re
 import sqlalchemy
-from sqlalchemy import Column, Engine, text
+from sqlalchemy import Column, Engine, text, Connection
 from sqlalchemy.types import Date, DateTime, Integer, Numeric, String, Time
 from typing import Callable
 
@@ -1104,7 +1104,7 @@ class MultivariateNormalGeneratorFactory(GeneratorFactory):
         group_by_clause: str="",
         constant_clauses: str="",
         constants: str="",
-        suppress_count: int | None=None,
+        suppress_count: int=1,
     ) -> str:
         """
         Gets a query for the basics for multivariate normal/lognormal parameters.
@@ -1123,11 +1123,7 @@ class MultivariateNormalGeneratorFactory(GeneratorFactory):
             where = " WHERE" + and_where[4:]
         else:
             where = " WHERE TRUE " + and_where
-        if suppress_count is None and group_by_clause:
-            # We need more than one for each row, otherwise the cI_J entries
-            # will be NULL and the multivariate generator will fail.
-            suppress_count = 1
-        suppress_condition = f" WHERE {suppress_count} < q.count" if suppress_count else ""
+        suppress_condition = f" WHERE {suppress_count} < q.count" if 0 < suppress_count else ""
         if not columns:
             return (
                 f"SELECT q.count AS count, 0 AS rank{constant_clauses}"
@@ -1283,13 +1279,18 @@ class NullPartitionedNormalGenerator(Generator):
         table_name: list[str],
         partitions: list[RowPartition],
         function_name: str="grouped_multivariate_lognormal",
+        name_suffix: str | None=None,
     ):
         self._table = table_name
         self._partitions = partitions
         self._function_name = function_name
+        if name_suffix:
+            self._name = f"null-partitioned {function_name} [{name_suffix}]"
+        else:
+            self._name = f"null-partitioned {function_name}"
 
     def name(self):
-        return "null-partitioned " + self._function_name
+        return self._name
 
     def function_name(self):
         return "dist_gen.alternatives"
@@ -1415,7 +1416,10 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
         if nullable_count == 0:
             return []
         table = columns[0].table.name
-        row_partitions: list[RowPartition] = []
+        # Partitions for minimal suppression and no sampling
+        row_partitions_maximal: list[RowPartition] = []
+        # Partitions for normal suppression and severe sampling
+        row_partitions_ss: list[RowPartition] = []
         for index, com in enumerate(combination(nullable_count)):
             included_numeric: list[str] = []
             included_choice: dict[int, str] = {}
@@ -1452,7 +1456,7 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
                 constants = constants,
                 constant_clauses=constant_clauses,
             )
-            row_partitions.append(RowPartition(
+            row_partitions_maximal.append(RowPartition(
                 query,
                 included_numeric,
                 included_choice,
@@ -1460,22 +1464,71 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
                 nones,
                 {},
             ))
+            query = self.query(
+                table=f"(SELECT * FROM {table} ORDER BY RANDOM() LIMIT 500)",
+                columns=included_numeric,
+                and_where=and_where,
+                group_by_clause=group_by_clause,
+                constants = constants,
+                constant_clauses=constant_clauses,
+                suppress_count=5,
+            )
+            row_partitions_ss.append(RowPartition(
+                query,
+                included_numeric,
+                included_choice,
+                excluded,
+                nones,
+                {},
+            ))
+        gens = []
         with engine.connect() as connection:
-            for rp in row_partitions:
-                try:
-                    rp.covariates = connection.execute(text(
-                        rp.query
-                    )).mappings().fetchall()
-                except Exception as e:
-                    logger.debug("SQL query %s failed with error %s", rp.query, e)
-                    return []
-                if not rp.covariates or rp.covariates[0]["count"] is None:
-                    return []
-        return [NullPartitionedNormalGenerator(
-            table,
-            row_partitions,
-            self.function_name(),
-        )]
+            if self._execute_partition_queries(connection, row_partitions_maximal):
+                gens.append(NullPartitionedNormalGenerator(
+                    table,
+                    row_partitions_maximal,
+                    self.function_name(),
+                ))
+            if self._execute_partition_queries(connection, row_partitions_ss):
+                gens.append(NullPartitionedNormalGenerator(
+                    table,
+                    row_partitions_ss,
+                    self.function_name(),
+                    name_suffix="sampled and suppressed",
+                ))
+        return gens
+    
+    def _execute_partition_queries(
+        self,
+        connection: Connection,
+        partitions: list[RowPartition],
+    ):
+        """
+        Execute the query in each partition, filling in the covariates.
+        :return: True if all the partitions work, False if any of them fail.
+        """
+        for rp in partitions:
+            try:
+                rp.covariates = connection.execute(text(
+                    rp.query
+                )).mappings().fetchall()
+            except Exception as e:
+                logger.debug("SQL query %s failed with error %s", rp.query, e)
+                return False
+            if not rp.covariates or rp.covariates[0]["count"] is None:
+                rp.covariates = [{"count": 0}]
+        return True
+
+
+class NullPartitionedLogNormalGeneratorFactory(NullPartitionedNormalGeneratorFactory):
+    def function_name(self) -> str:
+        return "grouped_multivariate_lognormal"
+
+    def query_predicate(self, column: str) -> str:
+        return f"{column} IS NOT NULL AND 0 < {column}"
+
+    def query_var(self, column: str) -> str:
+        return f"LN({column})"
 
 
 @lru_cache(1)
@@ -1494,4 +1547,5 @@ def everything_factory():
         MultivariateNormalGeneratorFactory(),
         MultivariateLogNormalGeneratorFactory(),
         NullPartitionedNormalGeneratorFactory(),
+        NullPartitionedLogNormalGeneratorFactory(),
     ])
