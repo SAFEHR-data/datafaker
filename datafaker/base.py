@@ -136,10 +136,13 @@ class DistributionGenerator:
                 logger.warning("Alternative count is %d, but should not be negative", alt["count"])
             else:
                 total += alt["count"]
+        if total == 0:
+            breakpoint()
+            raise Exception("No counts in any alternative")
         choice = random.randrange(total)
         for alt in alts:
             choice -= alt["count"]
-            if choice <= 0:
+            if choice < 0:
                 return alt
         raise Exception("Internal error: ran out of choices in _select_group")
 
@@ -196,12 +199,14 @@ class DistributionGenerator:
 
     def grouped_multivariate_normal(self, covs):
         cov = self._select_group(covs)
+        logger.debug("Multivariate normal group selected: %s", cov)
         constants = self._find_constants(cov)
         nums = self.multivariate_normal(cov)
         return list(merge_with_constants(nums, constants))
 
     def grouped_multivariate_lognormal(self, covs):
         cov = self._select_group(covs)
+        logger.debug("Multivariate lognormal group selected: %s", cov)
         constants = self._find_constants(cov)
         nums = np.exp(self.multivariate_normal_np(cov)).tolist()
         return list(merge_with_constants(nums, constants))
@@ -277,7 +282,6 @@ class DistributionGenerator:
         :return: list of values
         """
         alt = self._select_group(alternative_configs)
-        logger.debug("Alternative selected: %s", alt)
         if alt["name"] not in self.PERMITTED_SUBGENS:
             logger.error("Alternative %s is not a permitted generator", alt["name"])
             return
@@ -291,6 +295,7 @@ class DistributionGenerator:
                 self.PERMITTED_SUBGENS,
             )
         subout = getattr(self, subgen)(**params)
+        logger.debug("Merging constants %s", constants_at)
         return list(merge_with_constants(subout, constants_at))
 
 

@@ -813,6 +813,6 @@ async def make_src_stats_connection(config: Mapping, db_conn: DbConnection, meta
 
     for name, result in src_stats.items():
         if not result["results"]:
-            logger.warning("src-stats query %s returned no results", name)
+            logger.info("src-stats query %s returned no results", name)
 
     return src_stats

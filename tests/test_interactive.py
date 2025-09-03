@@ -1,8 +1,9 @@
 """ Tests for the base module. """
 import copy
+from dataclasses import dataclass
 import random
 import re
-from sqlalchemy import select
+from sqlalchemy import insert, select
 
 from datafaker.interactive import DbCmd, TableCmd, GeneratorCmd, MissingnessCmd
 
@@ -421,7 +422,11 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             gc.reset()
             bad_table_name = "notarealtable"
             gc.do_next(bad_table_name)
-            self.assertListEqual(gc.messages, [(GeneratorCmd.ERROR_NO_SUCH_TABLE, (bad_table_name,), {})])
+            self.assertListEqual(gc.messages, [(
+                GeneratorCmd.ERROR_NO_SUCH_TABLE_OR_COLUMN,
+                (bad_table_name,),
+                {}
+            )])
             gc.reset()
 
     def test_set_generator_mimesis(self):
@@ -1123,3 +1128,170 @@ class GeneratorTests(GeneratesDBTestCase):
             for s in src_stats["auto__signature_model__based_on"]["results"]
         ]
         self.assertListEqual(based_ons, [1, 3, 2])
+
+
+@dataclass
+class Stat:
+    n: int=0
+    x: float=0
+    x2: float=0
+
+    def add(self, x: float) -> None:
+        self.n += 1
+        self.x += x
+        self.x2 += x * x
+
+    def count(self) -> int:
+        return self.n
+
+    def x_mean(self) -> float:
+        return self.x / self.n
+
+    def x_var(self) -> float:
+        x = self.x
+        return (self.x2 - x*x/self.n)/(self.n - 1)
+
+
+@dataclass
+class Correlation(Stat):
+    y: float=0
+    y2: float=0
+    xy: float=0
+
+    def add(self, x: float, y: float) -> None:
+        self.n += 1
+        self.x += x
+        self.x2 += x * x
+        self.y += y
+        self.y2 += y * y
+        self.xy += x * y
+
+    def y_mean(self) -> float:
+        return self.y / self.n
+
+    def y_var(self) -> float:
+        y = self.y
+        return (self.y2 - y*y/self.n)/(self.n - 1)
+
+    def covar(self) -> float:
+        return (self.xy - self.x*self.y/self.n)/(self.n - 1)
+
+
+class GeneratorTests(GeneratesDBTestCase):
+    """ Testing null-partitioned grouped multivariate generation. """
+    dump_file_path = "eav.sql"
+    database_name = "eav"
+    schema_name = "public"
+
+    def _get_cmd(self, config) -> TestGeneratorCmd:
+        return TestGeneratorCmd(self.dsn, self.schema_name, self.metadata, config)
+
+    def test_create_with_null_partitioned_grouped_multivariate(self):
+        """ Test EAV for all columns. """
+        table_name = "measurement"
+        generate_count = 800
+        with self._get_cmd({}) as gc:
+            gc.do_next("measurement.type")
+            gc.do_merge("first_value")
+            gc.do_merge("second_value")
+            gc.do_merge("third_value")
+            gc.reset()
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            self.assertIn("null-partitioned grouped_multivariate_lognormal", proposals)
+            dist_to_choose = "null-partitioned grouped_multivariate_normal"
+            self.assertIn(dist_to_choose, proposals)
+            prop = proposals[dist_to_choose]
+            gc.reset()
+            gc.do_compare(str(prop[0]))
+            col_heading = f"{prop[0]}. {dist_to_choose}"
+            self.assertIn(col_heading, set(gc.columns.keys()))
+            gc.do_set(str(prop[0]))
+            gc.reset()
+            gc.do_quit("")
+            self.set_configuration(gc.config)
+            self.get_src_stats(gc.config)
+            self.create_generators(gc.config)
+            self.remove_data(gc.config)
+            # let's add a vocab table without messing around with files
+            table = self.metadata.tables["measurement_type"]
+            with self.engine.connect() as conn:
+                conn.execute(insert(table).values({"id": 1, "name": "agreement"}))
+                conn.execute(insert(table).values({"id": 2, "name": "acceleration"}))
+                conn.execute(insert(table).values({"id": 3, "name": "velocity"}))
+                conn.execute(insert(table).values({"id": 4, "name": "position"}))
+                conn.execute(insert(table).values({"id": 5, "name": "matter"}))
+                conn.commit()
+            self.create_data(gc.config, num_passes=generate_count)
+        with self.engine.connect() as conn:
+            stmt = select(self.metadata.tables[table_name])
+            rows = conn.execute(stmt).fetchall()
+            one_count = 0
+            one_yes_count = 0
+            two = Correlation()
+            three = Correlation()
+            four = Correlation()
+            fish = Stat()
+            fowl = Stat()
+            for row in rows:
+                if row.type == 1:
+                    # yes or no
+                    self.assertIsNone(row.first_value)
+                    self.assertIsNone(row.second_value)
+                    self.assertIn(row.third_value, {'yes', 'no'})
+                    one_count += 1
+                    if row.third_value == 'yes':
+                        one_yes_count += 1
+                elif row.type == 2:
+                    # positive correlation around 1.4, 1.8
+                    self.assertIsNotNone(row.first_value)
+                    self.assertIsNotNone(row.second_value)
+                    self.assertIsNone(row.third_value)
+                    two.add(row.first_value, row.second_value)
+                elif row.type == 3:
+                    # negative correlation around 11.8, 12.1
+                    self.assertIsNotNone(row.first_value)
+                    self.assertIsNotNone(row.second_value)
+                    self.assertIsNone(row.third_value)
+                    three.add(row.first_value, row.second_value)
+                elif row.type == 4:
+                    # positive correlation around 21.4, 23.4
+                    self.assertIsNotNone(row.first_value)
+                    self.assertIsNotNone(row.second_value)
+                    self.assertIsNone(row.third_value)
+                    four.add(row.first_value, row.second_value)
+                elif row.type == 5:
+                    self.assertIn(row.third_value, {'fish', 'fowl'})
+                    self.assertIsNotNone(row.first_value)
+                    self.assertIsNone(row.second_value)
+                    if row.third_value == 'fish':
+                        # mean 8.1 and sd 0.755
+                        fish.add(row.first_value)
+                    else:
+                        # mean 11.2 and sd 1.114
+                        fowl.add(row.first_value)
+            # type 1
+            self.assertAlmostEqual(one_count, generate_count * 5 / 20, delta=generate_count * 0.4)
+            # about 40% are yes
+            self.assertAlmostEqual(one_yes_count / one_count, 0.4, delta=generate_count * 0.4)
+            # type 2
+            self.assertAlmostEqual(two.count(), generate_count * 3 / 20, delta=generate_count * 0.5)
+            self.assertAlmostEqual(two.x_mean(), 1.4, delta=0.6)
+            self.assertAlmostEqual(two.x_var(), 0.21, delta=0.4)
+            self.assertAlmostEqual(two.y_mean(), 1.8, delta=0.8)
+            self.assertAlmostEqual(two.y_var(), 0.07, delta=0.1)
+            self.assertAlmostEqual(two.covar(), 0.5, delta=0.5)
+            # type 3
+            self.assertAlmostEqual(three.count(), generate_count * 3 / 20, delta=generate_count * 0.2)
+            self.assertAlmostEqual(two.covar(), -0.5, delta=0.5)
+            # type 4
+            self.assertAlmostEqual(four.count(), generate_count * 3 / 20, delta=generate_count * 0.2)
+            self.assertAlmostEqual(two.covar(), 0.5, delta=0.5)
+            # type 5/fish
+            self.assertAlmostEqual(fish.count(), generate_count * 3 / 20, delta=generate_count * 0.2)
+            self.assertAlmostEqual(fish.x_mean(), 8.1, delta=3.0)
+            self.assertAlmostEqual(fish.x_var(), 0.57, delta=0.8)
+            # type 5/fowl
+            self.assertAlmostEqual(fowl.count(), generate_count * 3 / 20, delta=generate_count * 0.2)
+            self.assertAlmostEqual(fish.x_mean(), 11.2, delta=8.0)
+            self.assertAlmostEqual(fish.x_var(), 1.24, delta=1.5)

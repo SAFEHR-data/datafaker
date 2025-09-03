@@ -1431,23 +1431,22 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
             nones: dict[int, None] = {}
             for col_index, column in enumerate(columns):
                 col_name = column.name
-                if column.nullable:
-                    if com.pop():
-                        if is_numeric(column):
-                            included_numeric.append(col_name)
-                        else:
-                            index = len(included_numeric) + len(included_choice)
-                            included_choice[index] = col_name
-                            if group_by_clause:
-                                group_by_clause += ", " + col_name
-                            else:
-                                group_by_clause = " GROUP BY " + col_name
-                            constant_clauses += f", q.{col_name} AS k{index}"
-                            constants += ", " + col_name
+                if not column.nullable or com.pop():
+                    if is_numeric(column):
+                        included_numeric.append(col_name)
                     else:
-                        excluded[col_name] = f"{col_name} IS NULL"
-                        and_where += f" AND {col_name} IS NULL"
-                        nones[col_index] = None
+                        index = len(included_numeric) + len(included_choice)
+                        included_choice[index] = col_name
+                        if group_by_clause:
+                            group_by_clause += ", " + col_name
+                        else:
+                            group_by_clause = " GROUP BY " + col_name
+                        constant_clauses += f", q.{col_name} AS k{index}"
+                        constants += ", " + col_name
+                else:
+                    excluded[col_name] = f"{col_name} IS NULL"
+                    and_where += f" AND {col_name} IS NULL"
+                    nones[col_index] = None
             query = self.query(
                 table=table,
                 columns=included_numeric,
@@ -1507,6 +1506,7 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
         Execute the query in each partition, filling in the covariates.
         :return: True if all the partitions work, False if any of them fail.
         """
+        found_nonzero = False
         for rp in partitions:
             try:
                 rp.covariates = connection.execute(text(
@@ -1517,7 +1517,9 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
                 return False
             if not rp.covariates or rp.covariates[0]["count"] is None:
                 rp.covariates = [{"count": 0}]
-        return True
+            else:
+                found_nonzero = True
+        return found_nonzero
 
 
 class NullPartitionedLogNormalGeneratorFactory(NullPartitionedNormalGeneratorFactory):
