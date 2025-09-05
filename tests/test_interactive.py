@@ -1129,6 +1129,42 @@ class GeneratorTests(GeneratesDBTestCase):
         ]
         self.assertListEqual(based_ons, [1, 3, 2])
 
+    def assertAreTruncatedTo(self, xs, length):
+            maxlen = 0
+            for x in xs:
+                newlen = len(x.strip("'\""))
+                self.assertLessEqual(newlen, length)
+                maxlen = max(maxlen, newlen)
+            self.assertEqual(maxlen, length)
+
+    def test_varchar_ns_are_truncated(self):
+        """ Tests that mimesis generators for VARCHAR(N) truncate to N characters """
+        GENERATOR = "generic.text.quote"
+        TABLE = "signature_model"
+        COLUMN = "name"
+        with self._get_cmd({}) as gc:
+            gc.do_next(f"{TABLE}.{COLUMN}")
+            gc.reset()
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            quotes = [k for k in proposals.keys() if k.startswith(GENERATOR)]
+            self.assertEqual(len(quotes), 1)
+            prop = proposals[quotes[0]]
+            self.assertAreTruncatedTo(prop[2], 20)
+            gc.reset()
+            gc.do_compare(str(prop[0]))
+            col_heading = f"{prop[0]}. {quotes[0]}"
+            gc.do_set(str(prop[0]))
+            self.assertIn(col_heading, gc.columns)
+            self.assertAreTruncatedTo(gc.columns[col_heading], 20)
+            gc.do_quit("")
+            config = gc.config
+            self.generate_data(config, num_passes=15)
+        with self.engine.connect() as conn:
+            stmt = select(self.metadata.tables[TABLE].c[COLUMN])
+            rows = conn.execute(stmt).scalars().fetchall()
+            self.assertAreTruncatedTo(rows, 20)
+
 
 @dataclass
 class Stat:
@@ -1177,7 +1213,7 @@ class Correlation(Stat):
         return (self.xy - self.x*self.y/self.n)/(self.n - 1)
 
 
-class GeneratorTests(GeneratesDBTestCase):
+class NullPartitionedTests(GeneratesDBTestCase):
     """ Testing null-partitioned grouped multivariate generation. """
     dump_file_path = "eav.sql"
     database_name = "eav"

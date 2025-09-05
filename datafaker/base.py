@@ -298,6 +298,13 @@ class DistributionGenerator:
         logger.debug("Merging constants %s", constants_at)
         return list(merge_with_constants(subout, constants_at))
 
+    def truncated_string(self, subgen_fn, params, length):
+        """ Calls ``subgen_fn(**params)`` and truncates the results to ``length``. """
+        result = subgen_fn(**params)
+        if result is None:
+            return None
+        return result[:length]
+
 
 class TableGenerator(ABC):
     """Abstract base class for table generator classes."""

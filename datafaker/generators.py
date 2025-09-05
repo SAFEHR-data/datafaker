@@ -387,6 +387,39 @@ class MimesisGenerator(MimesisGeneratorBase):
         return default if self._fit is None else self._fit
 
 
+class MimesisGeneratorTruncated(MimesisGenerator):
+    def __init__(
+        self,
+        function_name: str,
+        length: int,
+        value_fn: Callable[[any], float] | None=None,
+        buckets: Buckets | None=None,
+    ):
+        self._length = length
+        super().__init__(function_name, value_fn, buckets)
+    def function_name(self):
+        return "dist_gen.truncated_string"
+    def name(self):
+        return f"{self._name} [truncated to {self._length}]"
+    def nominal_kwargs(self):
+        return {
+            "subgen_fn": self._name,
+            "params": {},
+            "length": self._length,
+        }
+    def actual_kwargs(self):
+        return {
+            "subgen_fn": self._name,
+            "params": {},
+            "length": self._length,
+        }
+    def generate_data(self, count):
+        return [
+            self._generator_function()[:self._length]
+            for _ in range(count)
+        ]
+
+
 class MimesisDateTimeGenerator(MimesisGeneratorBase):
     def __init__(self, column: Column, function_name: str, min_year: str, max_year: str, start: int, end: int):
         """
@@ -462,11 +495,45 @@ class MimesisStringGeneratorFactory(GeneratorFactory):
     """
     All Mimesis generators that return strings.
     """
+    GENERATOR_NAMES = [
+        "address.calling_code",
+        "address.city",
+        "address.continent",
+        "address.country",
+        "address.country_code",
+        "address.postal_code",
+        "address.province",
+        "address.street_number",
+        "address.street_name",
+        "address.street_suffix",
+        "person.blood_type",
+        "person.email",
+        "person.first_name",
+        "person.last_name",
+        "person.full_name",
+        "person.gender",
+        "person.language",
+        "person.nationality",
+        "person.occupation",
+        "person.password",
+        "person.title",
+        "person.university",
+        "person.username",
+        "person.worldview",
+        "text.answer",
+        "text.color",
+        "text.level",
+        "text.quote",
+        "text.sentence",
+        "text.text",
+        "text.word",
+    ]
     def get_generators(self, columns: list[Column], engine: Engine):
         if len(columns) != 1:
             return []
         column = columns[0]
-        if not isinstance(get_column_type(column), String):
+        column_type = get_column_type(column)
+        if not isinstance(column_type, String):
             return []
         try:
             buckets = Buckets.make_buckets(
@@ -481,39 +548,16 @@ class MimesisStringGeneratorFactory(GeneratorFactory):
             # detect fitness using lengths.
             buckets = None
             fitness_fn = None
-        return list(map(lambda gen: MimesisGenerator(gen, fitness_fn, buckets), [
-            "address.calling_code",
-            "address.city",
-            "address.continent",
-            "address.country",
-            "address.country_code",
-            "address.postal_code",
-            "address.province",
-            "address.street_number",
-            "address.street_name",
-            "address.street_suffix",
-            "person.blood_type",
-            "person.email",
-            "person.first_name",
-            "person.last_name",
-            "person.full_name",
-            "person.gender",
-            "person.language",
-            "person.nationality",
-            "person.occupation",
-            "person.password",
-            "person.title",
-            "person.university",
-            "person.username",
-            "person.worldview",
-            "text.answer",
-            "text.color",
-            "text.level",
-            "text.quote",
-            "text.sentence",
-            "text.text",
-            "text.word",
-        ]))
+        length = column_type.length
+        if length:
+            return list(map(
+                lambda gen: MimesisGeneratorTruncated(gen, length, fitness_fn, buckets),
+                self.GENERATOR_NAMES,
+            ))
+        return list(map(
+            lambda gen: MimesisGenerator(gen, fitness_fn, buckets),
+            self.GENERATOR_NAMES,
+        ))
 
 
 class MimesisFloatGeneratorFactory(GeneratorFactory):
@@ -1404,7 +1448,8 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
         return "grouped_multivariate_normal"
 
     def query_predicate(self, column: str) -> str:
-        return column + " IS NOT NULL"
+        # x <> x + 1 ensures that x is not infinity or NaN
+        return f"{column} IS NOT NULL AND {column} <> {column} + 1"
 
     def query_var(self, column: str) -> str:
         return column
@@ -1527,7 +1572,8 @@ class NullPartitionedLogNormalGeneratorFactory(NullPartitionedNormalGeneratorFac
         return "grouped_multivariate_lognormal"
 
     def query_predicate(self, column: str) -> str:
-        return f"{column} IS NOT NULL AND 0 < {column}"
+        # x <> x + 1 ensures that x is not infinity or NaN
+        return f"{column} IS NOT NULL AND {column} <> {column} + 1 AND 0 < {column}"
 
     def query_var(self, column: str) -> str:
         return f"LN({column})"
