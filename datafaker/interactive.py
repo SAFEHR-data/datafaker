@@ -152,6 +152,11 @@ class DbCmd(ABC, cmd.Cmd):
         return self.table_entries[self.table_index].name
     def table_metadata(self) -> Table:
         return self.metadata.tables[self.table_name()]
+    def get_column_names(self) -> list[str]:
+        return [
+            col.name
+            for col in self.table_metadata().columns
+        ]
     def report_columns(self):
         self.print_table(["name", "type", "primary", "nullable", "foreign key"], [
             [name, str(col.type), col.primary_key, col.nullable, ", ".join(
@@ -247,19 +252,25 @@ class DbCmd(ABC, cmd.Cmd):
             self.print_table(fields, rows)
 
     def do_peek(self, arg: str):
-        """Use 'peek col1 col2 col3' to see a sample of values from columns col1, col2 and col3 in the current table."""
+        """
+        Use 'peek col1 col2 col3' to see a sample of values from columns col1, col2 and col3 in the current table.
+        Use 'peek' to see a sample of the current column(s).
+        Rows that are enitrely null are suppressed.
+        """
         MAX_PEEK_ROWS = 25
         if len(self.table_entries) <= self.table_index:
             return
         table_name = self.table_name()
         col_names = arg.split()
+        if not col_names:
+            col_names = self.get_column_names()
         nonnulls = [cn + " IS NOT NULL" for cn in col_names]
         with self.engine.connect() as connection:
-            query = "SELECT {cols} FROM {table} {where} {nonnull} LIMIT {max}".format(
+            query = "SELECT {cols} FROM {table} {where} {nonnull} ORDER BY RANDOM() LIMIT {max}".format(
                     cols=",".join(col_names),
                     table=table_name,
                     where="WHERE" if nonnulls else "",
-                    nonnull=" AND ".join(nonnulls),
+                    nonnull=" OR ".join(nonnulls),
                     max=MAX_PEEK_ROWS,
                 )
             try:
