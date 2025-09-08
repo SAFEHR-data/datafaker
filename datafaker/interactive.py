@@ -1618,16 +1618,6 @@ information about the columns in the current table. Use 'peek',
             if column.startswith(last_arg)
         ]
 
-    def do_condition(self, arg: str):
-        """
-        Add a condition, so we can set a complex generator that uses different parameters
-        depending on the results of the condition.
-        "condition columnname is null" splits on whether the column is null or not.
-        "condition columnname" splits on the value of the column.
-        "condition column1name < column2name" splits on which of these columns has the greater value.
-        "condition age < 18" splits on whether the patient is an adult or child.
-        """
-
 
 def update_config_generators(
     src_dsn: str,
