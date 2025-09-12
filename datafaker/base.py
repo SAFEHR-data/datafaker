@@ -59,6 +59,11 @@ def merge_with_constants(xs: list, constants_at: dict[int, any]):
         yield x
 
 
+class NothingToGenerateException(Exception):
+    def __init__(self, message):
+        super().__init__(message)
+
+
 class DistributionGenerator:
     root3 = math.sqrt(3)
 
@@ -128,7 +133,7 @@ class DistributionGenerator:
 
     def _select_group(self, alts: list[dict[str, any]]):
         """
-        Choose one of the ``alts`` weighted by their "count" elements.
+        Choose one of the ``alts`` weighted by their ``"count"`` elements.
         """
         total = 0
         for alt in alts:
@@ -137,8 +142,7 @@ class DistributionGenerator:
             else:
                 total += alt["count"]
         if total == 0:
-            breakpoint()
-            raise Exception("No counts in any alternative")
+            raise NothingToGenerateException("No counts in any alternative")
         choice = random.randrange(total)
         for alt in alts:
             choice -= alt["count"]
@@ -164,7 +168,6 @@ class DistributionGenerator:
         "multivariate_normal",
         "grouped_multivariate_lognormal",
         "grouped_multivariate_normal",
-        "composite",
         "constant",
         "weighted_choice",
         "with_constants_at",
@@ -211,66 +214,11 @@ class DistributionGenerator:
         nums = np.exp(self.multivariate_normal_np(cov)).tolist()
         return list(merge_with_constants(nums, constants))
 
-    def composite(self, subgen_configs: list[dict[str, any]]):
-        """
-        Many distributions.
+    def _check_generator_name(self, name: str) -> None:
+        if name not in self.PERMITTED_SUBGENS:
+            raise Exception("%s is not a permitted generator", name)
 
-        :param config: A list of sub-generations. Each one is a dict with
-        the following keys: ``output`` -- list of indices of the return values
-        into which this sub-generation's outputs should be placed;
-        ``name`` -- sub-generation name, such as "constant",
-        "multivariate_normal", "multivariate_lognormal" or
-        "weighted_choice"; ``params`` -- the parameters for the
-        sub-generation.
-        :return: list of values
-        """
-        outputs = set()
-        multiples = set()
-        for subgen in subgen_configs:
-            so = set(["output"])
-            multiples |= outputs & so
-            outputs |= so
-        if not outputs:
-            return
-        omin = min(*outputs)
-        omax = max(*outputs)
-        if omin != 0 or omax + 1 != len(outputs):
-            logger.error(
-                "the outputs in the subgenerator should be integers"
-                " from 0 to one less than the number of columns assigned"
-                " to (with no gaps), instead we have %s",
-                sorted(list(outputs)),
-            )
-            return
-        if multiples:
-            logger.error(
-                "%s outputs assigned more than once",
-                multiples,
-            )
-            return
-        output = [None] * len(outputs)
-        for subgen in subgen_configs:
-            if subgen["name"] not in self.PERMITTED_SUBGENS:
-                logger.error(
-                    "subgenerator %s is not a valid name. Valid names are %s.",
-                    subgen["name"],
-                    self.PERMITTED_SUBGENS,
-                )
-            else:
-                # Actually run the subgenerator
-                subout = getattr(self, subgen["name"])(**subgen["params"])
-                if len(subout) != len(subgen["output"]):
-                    logger.error(
-                        "subgenerator %s produced %d results when %d were required",
-                        len(subout),
-                        len(subgen["output"]),
-                    )
-                else:
-                    for (in_index, out_index) in enumerate(subgen["output"]):
-                        output[out_index] = subout[in_index]
-        return output
-
-    def alternatives(self, alternative_configs: list[dict[str, any]]):
+    def alternatives(self, alternative_configs: list[dict[str, any]], counts: list[int] | None):
         """
         A generator that picks between other generators.
 
@@ -281,11 +229,21 @@ class DistributionGenerator:
         parameters for this alternative.
         :return: list of values
         """
+        if counts is not None:
+            while True:
+                count = self._select_group(counts)
+                alt = alternative_configs[count["index"]]
+                name = alt["name"]
+                self._check_generator_name(name)
+                try:
+                    return getattr(self, name)(**alt["params"])
+                except NothingToGenerateException:
+                    # Prevent this alternative from being chosen again
+                    count["count"] = 0
         alt = self._select_group(alternative_configs)
-        if alt["name"] not in self.PERMITTED_SUBGENS:
-            logger.error("Alternative %s is not a permitted generator", alt["name"])
-            return
-        return getattr(self, alt["name"])(**alt["params"])
+        name = alt["name"]
+        self._check_generator_name(name)
+        return getattr(self, name)(**alt["params"])
 
     def with_constants_at(self, constants_at: list[int], subgen: str, params: dict[str, any]):
         if subgen not in self.PERMITTED_SUBGENS:

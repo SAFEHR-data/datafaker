@@ -6,6 +6,7 @@ import re
 from sqlalchemy import insert, select
 
 from datafaker.interactive import DbCmd, TableCmd, GeneratorCmd, MissingnessCmd
+from datafaker.generators import NullPartitionedNormalGeneratorFactory
 
 from tests.utils import RequiresDBTestCase, GeneratesDBTestCase
 
@@ -1219,6 +1220,11 @@ class NullPartitionedTests(GeneratesDBTestCase):
     database_name = "eav"
     schema_name = "public"
 
+    def setUp(self) -> None:
+        super().setUp()
+        NullPartitionedNormalGeneratorFactory.SAMPLE_COUNT = 4
+        NullPartitionedNormalGeneratorFactory.SUPPRESS_COUNT = 2
+
     def _get_cmd(self, config) -> TestGeneratorCmd:
         return TestGeneratorCmd(self.dsn, self.schema_name, self.metadata, config)
 
@@ -1329,5 +1335,80 @@ class NullPartitionedTests(GeneratesDBTestCase):
             self.assertAlmostEqual(fish.x_var(), 0.57, delta=0.8)
             # type 5/fowl
             self.assertAlmostEqual(fowl.count(), generate_count * 3 / 20, delta=generate_count * 0.2)
+            self.assertAlmostEqual(fish.x_mean(), 11.2, delta=8.0)
+            self.assertAlmostEqual(fish.x_var(), 1.24, delta=1.5)
+
+    def test_create_with_null_partitioned_grouped_sampled_and_suppressed(self):
+        """ Test EAV for all columns with sampled and suppressed generation. """
+        table_name = "measurement"
+        generate_count = 800
+        with self._get_cmd({}) as gc:
+            gc.do_next("measurement.type")
+            gc.do_merge("first_value")
+            gc.do_merge("second_value")
+            gc.do_merge("third_value")
+            gc.reset()
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            self.assertIn("null-partitioned grouped_multivariate_lognormal", proposals)
+            self.assertIn("null-partitioned grouped_multivariate_normal", proposals)
+            self.assertIn("null-partitioned grouped_multivariate_lognormal [sampled and suppressed]", proposals)
+            dist_to_choose = "null-partitioned grouped_multivariate_normal [sampled and suppressed]"
+            self.assertIn(dist_to_choose, proposals)
+            prop = proposals[dist_to_choose]
+            gc.reset()
+            gc.do_compare(str(prop[0]))
+            col_heading = f"{prop[0]}. {dist_to_choose}"
+            self.assertIn(col_heading, set(gc.columns.keys()))
+            gc.do_set(str(prop[0]))
+            gc.reset()
+            gc.do_quit("")
+            self.set_configuration(gc.config)
+            src_stats = self.get_src_stats(gc.config)
+            breakpoint()
+            self.create_generators(gc.config)
+            self.remove_data(gc.config)
+            # let's add a vocab table without messing around with files
+            table = self.metadata.tables["measurement_type"]
+            with self.engine.connect() as conn:
+                conn.execute(insert(table).values({"id": 1, "name": "agreement"}))
+                conn.execute(insert(table).values({"id": 2, "name": "acceleration"}))
+                conn.execute(insert(table).values({"id": 3, "name": "velocity"}))
+                conn.execute(insert(table).values({"id": 4, "name": "position"}))
+                conn.execute(insert(table).values({"id": 5, "name": "matter"}))
+                conn.commit()
+            self.create_data(gc.config, num_passes=generate_count)
+        with self.engine.connect() as conn:
+            stmt = select(self.metadata.tables[table_name])
+            rows = conn.execute(stmt).fetchall()
+            one_count = 0
+            fish = Stat()
+            fowl = Stat()
+            for row in rows:
+                self.assertIn(row.type, {1, 5})
+                if row.type == 1:
+                    # yes or no
+                    self.assertIsNone(row.first_value)
+                    self.assertIsNone(row.second_value)
+                    self.assertEqual(row.third_value, 'no')
+                    one_count += 1
+                elif row.type == 5:
+                    self.assertIn(row.third_value, {'fish', 'fowl'})
+                    self.assertIsNotNone(row.first_value)
+                    self.assertIsNone(row.second_value)
+                    if row.third_value == 'fish':
+                        # mean 8.1 and sd 0.755
+                        fish.add(row.first_value)
+                    else:
+                        # mean 11.2 and sd 1.114
+                        fowl.add(row.first_value)
+            # type 1
+            self.assertAlmostEqual(one_count, generate_count * 5 / 11, delta=generate_count * 0.4)
+            # type 5/fish
+            self.assertAlmostEqual(fish.count(), generate_count * 3 / 11, delta=generate_count * 0.2)
+            self.assertAlmostEqual(fish.x_mean(), 8.1, delta=3.0)
+            self.assertAlmostEqual(fish.x_var(), 0.57, delta=0.8)
+            # type 5/fowl
+            self.assertAlmostEqual(fowl.count(), generate_count * 3 / 11, delta=generate_count * 0.2)
             self.assertAlmostEqual(fish.x_mean(), 11.2, delta=8.0)
             self.assertAlmostEqual(fish.x_var(), 1.24, delta=1.5)
