@@ -1222,7 +1222,7 @@ class NullPartitionedTests(GeneratesDBTestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        NullPartitionedNormalGeneratorFactory.SAMPLE_COUNT = 4
+        NullPartitionedNormalGeneratorFactory.SAMPLE_COUNT = 8
         NullPartitionedNormalGeneratorFactory.SUPPRESS_COUNT = 2
 
     def _get_cmd(self, config) -> TestGeneratorCmd:
@@ -1341,6 +1341,7 @@ class NullPartitionedTests(GeneratesDBTestCase):
     def test_create_with_null_partitioned_grouped_sampled_and_suppressed(self):
         """ Test EAV for all columns with sampled and suppressed generation. """
         table_name = "measurement"
+        table2_name = "observation"
         generate_count = 800
         with self._get_cmd({}) as gc:
             gc.do_next("measurement.type")
@@ -1362,10 +1363,19 @@ class NullPartitionedTests(GeneratesDBTestCase):
             self.assertIn(col_heading, set(gc.columns.keys()))
             gc.do_set(str(prop[0]))
             gc.reset()
+            gc.do_next("observation.type")
+            gc.do_merge("first_value")
+            gc.do_merge("second_value")
+            gc.do_merge("third_value")
+            gc.reset()
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            dist_to_choose = "null-partitioned grouped_multivariate_normal [sampled and suppressed]"
+            prop = proposals[dist_to_choose]
+            gc.do_set(str(prop[0]))
             gc.do_quit("")
             self.set_configuration(gc.config)
-            src_stats = self.get_src_stats(gc.config)
-            breakpoint()
+            self.get_src_stats(gc.config)
             self.create_generators(gc.config)
             self.remove_data(gc.config)
             # let's add a vocab table without messing around with files
@@ -1382,15 +1392,19 @@ class NullPartitionedTests(GeneratesDBTestCase):
             stmt = select(self.metadata.tables[table_name])
             rows = conn.execute(stmt).fetchall()
             one_count = 0
+            one_yes_count = 0
             fish = Stat()
             fowl = Stat()
+            types: set[int] = set()
             for row in rows:
-                self.assertIn(row.type, {1, 5})
+                types.add(row.type)
                 if row.type == 1:
                     # yes or no
                     self.assertIsNone(row.first_value)
                     self.assertIsNone(row.second_value)
-                    self.assertEqual(row.third_value, 'no')
+                    self.assertIn(row.third_value, {'yes', 'no'})
+                    if row.third_value == 'yes':
+                        one_yes_count += 1
                     one_count += 1
                 elif row.type == 5:
                     self.assertIn(row.third_value, {'fish', 'fowl'})
@@ -1402,8 +1416,13 @@ class NullPartitionedTests(GeneratesDBTestCase):
                     else:
                         # mean 11.2 and sd 1.114
                         fowl.add(row.first_value)
+            self.assertSubset(types, {1, 2, 3, 4, 5})
+            self.assertEqual(len(types), 4)
+            self.assertSubset({1, 5}, types)
             # type 1
             self.assertAlmostEqual(one_count, generate_count * 5 / 11, delta=generate_count * 0.4)
+            # about 40% are yes
+            self.assertAlmostEqual(one_yes_count / one_count, 0.4, delta=generate_count * 0.4)
             # type 5/fish
             self.assertAlmostEqual(fish.count(), generate_count * 3 / 11, delta=generate_count * 0.2)
             self.assertAlmostEqual(fish.x_mean(), 8.1, delta=3.0)
@@ -1412,3 +1431,15 @@ class NullPartitionedTests(GeneratesDBTestCase):
             self.assertAlmostEqual(fowl.count(), generate_count * 3 / 11, delta=generate_count * 0.2)
             self.assertAlmostEqual(fish.x_mean(), 11.2, delta=8.0)
             self.assertAlmostEqual(fish.x_var(), 1.24, delta=1.5)
+            stmt = select(self.metadata.tables[table2_name])
+            rows = conn.execute(stmt).fetchall()
+            firsts = Stat()
+            for row in rows:
+                types.add(row.type)
+                self.assertEqual(row.type, 1)
+                self.assertIsNotNone(row.first_value)
+                self.assertIsNone(row.second_value)
+                self.assertIn(row.third_value, {'ham', 'eggs'})
+                firsts.add(row.first_value)
+            self.assertEqual(firsts.count(), 800)
+            self.assertAlmostEqual(firsts.x_mean(), 1.3, delta = generate_count * 0.3)

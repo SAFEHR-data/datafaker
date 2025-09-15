@@ -1612,7 +1612,7 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
                 partition_count_max_results = connection.execute(
                     text(partition_query_max)
                 ).mappings().fetchall()
-                count_comment = f"Number of rows for each combination of the columns { {nc.column.name for nc in nullable_columns} } or the table {table} being null"
+                count_comment = f"Number of rows for each combination of the columns { {nc.column.name for nc in nullable_columns} } of the table {table} being null"
                 if self._execute_partition_queries(connection, row_partitions_maximal):
                     gens.append(NullPartitionedNormalGenerator(
                         query_name,

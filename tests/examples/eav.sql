@@ -53,3 +53,26 @@ INSERT INTO public.measurement VALUES (17, 5, 8.9, NULL, 'fish');
 INSERT INTO public.measurement VALUES (18, 5, 10.2, NULL, 'fowl');
 INSERT INTO public.measurement VALUES (19, 5, 11.0, NULL, 'fowl');
 INSERT INTO public.measurement VALUES (20, 5, 12.4, NULL, 'fowl');
+
+CREATE TABLE public.observation (
+    id INTEGER NOT NULL,
+    type INTEGER NOT NULL,
+    first_value INTEGER,
+    second_value INTEGER,
+    third_value TEXT
+);
+
+ALTER TABLE ONLY public.observation ADD CONSTRAINT observation_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.observation
+    ADD CONSTRAINT observation_type_fkey FOREIGN KEY (type) REFERENCES public.measurement_type(id);
+
+ALTER TABLE public.observation OWNER TO postgres;
+
+INSERT INTO public.observation VALUES (1, 1, 1.2, NULL, 'ham');
+INSERT INTO public.observation VALUES (2, 1, 1.3, NULL, 'eggs');
+INSERT INTO public.observation VALUES (3, 1, 1.4, NULL, 'ham');
+INSERT INTO public.observation VALUES (4, 1, 1.3, NULL, 'eggs');
+INSERT INTO public.observation VALUES (5, 1, 1.5, NULL, 'eggs');
+INSERT INTO public.observation VALUES (6, 1, 9.2, NULL, 'cheese');
+INSERT INTO public.observation VALUES (7, 1, 9.3, NULL, 'cheese');
+INSERT INTO public.observation VALUES (8, 1, 1.1, NULL, 'ham');
