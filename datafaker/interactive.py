@@ -10,11 +10,12 @@ from pathlib import Path
 
 import sqlalchemy
 from prettytable import PrettyTable
-from sqlalchemy import Column, MetaData, Table, text
+from sqlalchemy import Column, MetaData, Table, text, ForeignKey
 
 from datafaker.generators import Generator, PredefinedGenerator, everything_factory
 from datafaker.utils import (
     create_db_engine,
+    fk_refers_to_ignored_table,
     logger,
     primary_private_fks,
     table_is_private,
@@ -78,6 +79,12 @@ class AskSaveCmd(cmd.Cmd):
     def do_cancel(self, _arg):
         self.result = "cancel"
         return True
+
+
+def fk_column_name(fk: ForeignKey):
+    if fk_refers_to_ignored_table(fk):
+        return f"{fk.target_fullname} (ignored)"
+    return fk.target_fullname
 
 
 class DbCmd(ABC, cmd.Cmd):
@@ -160,7 +167,7 @@ class DbCmd(ABC, cmd.Cmd):
     def report_columns(self):
         self.print_table(["name", "type", "primary", "nullable", "foreign key"], [
             [name, str(col.type), col.primary_key, col.nullable, ", ".join(
-                [f"{fk.column.table.name}.{fk.column.name}" for fk in col.foreign_keys]
+                [fk_column_name(fk) for fk in col.foreign_keys]
             )]
             for name, col in self.table_metadata().columns.items()
         ])
@@ -1132,11 +1139,11 @@ information about the columns in the current table. Use 'peek',
                 "nullable" if cm.nullable else "not nullable",
             )
             if cm.primary_key:
-                self.print("It is a primary key, which usually does not need a generator")
-            elif cm.foreign_keys:
-                fk_names = [fk.column.name for fk in cm.foreign_keys]
-                self.print("It is a foreign key referencing table {0}", ", ".join(fk_names))
-                if len(fk_names) == 1:
+                self.print("It is a primary key, which usually does not need a generator (it will auto-increment)")
+            if cm.foreign_keys:
+                fk_names = [fk_column_name(fk) for fk in cm.foreign_keys]
+                self.print("It is a foreign key referencing column {0}", ", ".join(fk_names))
+                if len(fk_names) == 1 and not cm.primary_key:
                     self.print("You do not need a generator if you just want a uniform choice over the referenced table's rows")
 
     def _get_table_index(self, table_name: str) -> int | None:

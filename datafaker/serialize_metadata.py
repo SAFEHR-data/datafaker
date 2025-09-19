@@ -1,7 +1,10 @@
+from enum import Enum
 import parsy
 from sqlalchemy import Column, Dialect, Engine, ForeignKey, MetaData, Table
 from sqlalchemy.dialects import oracle, postgresql
 from sqlalchemy.sql import sqltypes, schema
+from typing import Callable
+
 from datafaker.utils import make_foreign_key_name
 
 type table_component_t = dict[str, any]
@@ -137,7 +140,12 @@ def column_to_dict(column: Column, dialect: Dialect) -> str:
         result["foreign_keys"] = foreign_keys
     return result
 
-def dict_to_column(table_name, col_name, rep: dict) -> Column:
+def dict_to_column(
+    table_name,
+    col_name,
+    rep: dict,
+    ignore_fk: Callable[[str], bool],
+) -> Column:
     type_sql = rep["type"]
     try:
         type_ = type_parser.parse(type_sql)
@@ -152,6 +160,7 @@ def dict_to_column(table_name, col_name, rep: dict) -> Column:
                 ondelete='CASCADE',
             )
             for fk in rep["foreign_keys"]
+            if not ignore_fk(fk)
         ]
     else:
         args = []
@@ -186,7 +195,7 @@ def table_to_dict(table: Table, dialect: Dialect) -> table_t:
     return {
         "columns": {
             str(column.key): column_to_dict(column, dialect)
-            for (k, column) in table.columns.items()
+            for column in table.columns.values()
         },
         "unique": [
             unique_to_dict(constraint)
@@ -195,11 +204,16 @@ def table_to_dict(table: Table, dialect: Dialect) -> table_t:
         ],
     }
 
-def dict_to_table(name: str, meta: MetaData, table_dict: table_t) -> Table:
+def dict_to_table(
+    name: str,
+    meta: MetaData,
+    table_dict: table_t,
+    ignore_fk: Callable[[str], bool],
+) -> Table:
     return Table(
         name,
         meta,
-        *[ dict_to_column(name, colname, col)
+        *[ dict_to_column(name, colname, col, ignore_fk)
             for (colname, col) in table_dict.get("columns", {}).items()
         ],
         *[ dict_to_unique(constraint)
@@ -215,18 +229,46 @@ def metadata_to_dict(meta: MetaData, schema_name: str | None, engine: Engine) ->
     return {
         "tables": {
             str(table.name): table_to_dict(table, engine.dialect)
-            for (k, table) in meta.tables.items()
+            for table in meta.tables.values()
         },
         "dsn": str(engine.url),
         "schema": schema_name,
     }
 
-def dict_to_metadata(obj: dict[str, table_t]) -> MetaData:
+
+def should_ignore_fk(fk: str, tables_dict: dict[str, table_t]):
+    """
+    Tell if this foreign key should be ignored because it points to an
+    ignored table.
+    """
+    fk_bits = fk.split(".", 2)
+    if len(fk_bits) != 2:
+        return True
+    if fk_bits[0] not in tables_dict:
+        return False
+    return tables_dict[fk_bits[0]].get("ignore", False)
+
+
+def dict_to_metadata(
+    obj: dict,
+    config_for_output: dict=None
+) -> MetaData:
     """
     Converts a dict to a SQL Alchemy MetaData object.
+
+    :param config_for_output: The configuration object. Should be None if
+    the metadata object is being used for connecting to the source database.
+    If it is being used for connecting to the destination database this
+    configuration will be used to make sure that there is no foreign key
+    constraint to an ignored table.
     """
-    table_dict = obj.get("tables", {})
+    tables_dict = obj.get("tables", {})
+    if config_for_output and "tables" in config_for_output:
+        tables_config = config_for_output["tables"]
+        ignore_fk = lambda fk: should_ignore_fk(fk, tables_config)
+    else:
+        ignore_fk = lambda _: False
     meta = MetaData()
-    for (k, td) in table_dict.items():
-        dict_to_table(k, meta, td)
+    for (k, td) in tables_dict.items():
+        dict_to_table(k, meta, td, ignore_fk)
     return meta

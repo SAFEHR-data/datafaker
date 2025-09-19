@@ -17,6 +17,7 @@ import sqlalchemy
 from sqlalchemy import (
     Connection,
     Engine,
+    ForeignKey,
     create_engine,
     event,
     select,
@@ -289,6 +290,28 @@ def get_property(maybe_dict, key, default):
     return maybe_dict.get(key, default) if type(maybe_dict) is dict else default
 
 
+def fk_refers_to_ignored_table(fk: ForeignKey):
+    """
+    Does this foreign key refer to a table that is configured as ignore in config.yaml
+    """
+    try:
+        fk.column
+    except sqlalchemy.exc.NoReferencedTableError:
+        return True
+    return False
+
+
+def fk_constraint_refers_to_ignored_table(fk: ForeignKeyConstraint):
+    """
+    Does this foreign key constraint refer to a table that is configured as ignore in config.yaml
+    """
+    try:
+        fk.referred_table
+    except sqlalchemy.exc.NoReferencedTableError:
+        return True
+    return False
+
+
 def get_related_table_names(table: Table) -> set[str]:
     """
     Get the names of all tables for which there exist foreign keys from this table.
@@ -296,6 +319,7 @@ def get_related_table_names(table: Table) -> set[str]:
     return {
         str(fk.referred_table.name)
         for fk in table.foreign_key_constraints
+        if not fk_constraint_refers_to_ignored_table(fk)
     }
 
 
@@ -321,6 +345,7 @@ def primary_private_fks(config: Mapping, table: Table) -> list[str]:
     return [
         str(fk.referred_table.name)
         for fk in table.foreign_key_constraints
+        if not fk_constraint_refers_to_ignored_table(fk)
         if table_is_private(config, str(fk.referred_table.name))
     ]
 
