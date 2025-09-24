@@ -4,8 +4,7 @@ Advanced Example: OMOP Health Data
 ==================================
 
 The OMOP common data model (CDM) is a widely used format for storing health data.
-Here we will show how `SqlSynthGen` (SSG) can be configured to generate data for OMOP.
-We also use this as an opportunity to demonstrate some typical patterns in advanced usage of SSG, beyond what is covered in the :ref:`introduction <page-introduction>`, which we encourage the reader to go through first.
+Here we will show how datafaker can be configured to generate data for OMOP.
 
 There are multiple versions of the OMOP CDM and variations between implementations as well (at schema and data levels).
 SSG allows you to generate data irrespective of your schema peculiarities, but the example configuration we demonstrate here was originally built for the `CCHIC dataset <https://pubmed.ncbi.nlm.nih.gov/29500026/>`_ for critical care data.
@@ -44,7 +43,11 @@ More stability might be achieved by limiting ``make-vocab`` to one table at a ti
 Even still, a ``make-vocab`` call can take many hours to complete.
 
 If all of these mechanisms fail, the offending tables will need to be marked (using ``configure-tables``) as ``ignore``.
-Such tables will need to be downloaded manually via the database's own software (for example ``psql`` for Postgres).
+Such tables can be downloaded manually via the database's own software (for example ``psql`` for Postgres),
+or you can just leave them ignored.
+For example, if you do not have permission to publish the OMOP concepts table, you might have to leave it as ignored.
+If you do leave a concept table ignored, the default generator for all foreign keys to it will be a plain integer genenerator, which is probably not what you want.
+Instead, use one of the choice generators for such foreign keys. The null-partitioned grouped generators will also work.
 
 The standard OMOP vocabulary tables are as follows:
 
@@ -108,6 +111,10 @@ what would that look like?
 
 The essential columns for the ``observation`` table would seem to be: ``observation_concept_id``,
 ``value_as_number``, ``value_as_string``, ``value_as_concept_id``, and ``unit_concept_id``.
+But note that these columns are essential to be in the generator output only if they need to be present in the destination database.
+For example, if the destination database is producing the minimal data required to be processed by the
+`UK HRA's Cohort Discovery Tool <https://ukhealthdata.org/wp-content/uploads/2024/11/2024-OHDSI-UK-Cohort-Discovery-Poster-v0.2-B-Kirby.pdf>`_,
+then the ``unit_concept_id`` column will not be produced and so does not need to be in any generator.
 
 Another group of columns (depending on what the source data looks like) that could be nice:
 ``observation_type_concept_id``, ``qualifier_concept_id``, ``observation_source_value``,
@@ -128,7 +135,8 @@ all correlation except that of any single individual with multiple observations 
 Do not add these.
 
 The ``measurement`` table is very similar. Essential columns are ``measurement_concept_id``,
-``value_as_number``, ``value_as_concept_id`` and ``unit_concept_id``. Useful columns are
+``value_as_number``, ``value_as_concept_id`` and ``unit_concept_id``
+(with the same caveat as for the ``observation`` table). Useful columns are
 ``measurement_type_concept_id``, ``operator_concept_id``, ``range_low``, ``range_high``,
 ``measurement_source_value``, ``measurement_source_concept_id``, ``unit_source_value`` and ``value_source_value``.
 ``provider_id`` possibly useful, but only if the ``provider`` table is a vocabulary table.
