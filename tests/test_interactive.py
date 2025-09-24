@@ -5,10 +5,17 @@ import random
 import re
 from sqlalchemy import insert, select
 
-from datafaker.interactive import DbCmd, TableCmd, GeneratorCmd, MissingnessCmd
+from datafaker.interactive import (
+    DbCmd,
+    TableCmd,
+    GeneratorCmd,
+    MissingnessCmd,
+    update_config_generators,
+)
 from datafaker.generators import NullPartitionedNormalGeneratorFactory
 
 from tests.utils import RequiresDBTestCase, GeneratesDBTestCase
+from unittest.mock import MagicMock, Mock, patch
 
 
 class TestDbCmdMixin(DbCmd):
@@ -1443,3 +1450,34 @@ class NullPartitionedTests(GeneratesDBTestCase):
                 firsts.add(row.first_value)
             self.assertEqual(firsts.count(), 800)
             self.assertAlmostEqual(firsts.x_mean(), 1.3, delta = generate_count * 0.3)
+
+
+class NonInteractiveTests(RequiresDBTestCase):
+    """
+    Test the --spec SPEC_FILE option of configure-generators
+    """
+    dump_file_path = "eav.sql"
+    database_name = "eav"
+    schema_name = "public"
+
+    @patch("datafaker.interactive.Path")
+    @patch("datafaker.interactive.csv.reader", return_value=iter([
+        ["observation", "type", "dist_gen.weighted_choice"],
+        ["observation", "first_value", "dist_gen.weighted_choice"],
+        ["observation", "third_value", "dist_gen.weighted_choice"],
+    ]))
+    def test_non_interactive_configure_generators(self, mock_csv_reader: MagicMock, mock_path: MagicMock):
+        """
+        test that we can set generators from a CSV file
+        """
+        config = {}
+        spec_csv = Mock(return_value="mock spec.csv file")
+        update_config_generators(self.dsn, self.schema_name, self.metadata, config, spec_csv)
+        row_gens = {
+            f"{table}{sorted(rg['columns_assigned'])}": rg["name"]
+            for table, tables in config.get("tables", {}).items()
+            for rg in tables.get("row_generators", [])
+        }
+        self.assertEqual(row_gens["observation['type']"], "dist_gen.weighted_choice")
+        self.assertEqual(row_gens["observation['first_value']"], "dist_gen.weighted_choice")
+        self.assertEqual(row_gens["observation['third_value']"], "dist_gen.weighted_choice")
