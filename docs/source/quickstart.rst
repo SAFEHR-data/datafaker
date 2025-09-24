@@ -477,8 +477,9 @@ As we have five columns, this implies up to 32 missingness patterns.
 Currently, none of our generators suppress the generation of data from patterns that are not represented in the source database at time of configuration;
 therefore data for all 32 possible are pulled into the source stats file.
 This works well if we want future missingness patters to be accounted for,
-but it does mean that our Information Governance people have to look at a huge amount of summary statistics
-(even if most of those are just ``count: 0``, this is still a burden and certainly a scary-looking wall of text!).
+but it does mean that manually checking the actual ``src-stats.yaml`` output
+(if that is what your Information Governance requires) means looking at a huge amount of summary statistics;
+even if most of those are just ``count: 0``, this is still a burden and certainly a scary-looking wall of text!.
 
 Still, we can see some nice, faithful data being reproduced.
 
