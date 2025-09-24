@@ -1462,7 +1462,7 @@ information about the columns in the current table. Use 'peek',
         """ Synonym for propose """
         self.do_propose(arg)
 
-    def _get_proposed_generator_by_name(self, gen_name: str) -> Generator | None:
+    def get_proposed_generator_by_name(self, gen_name: str) -> Generator | None:
         for gen in self._get_generator_proposals():
             if gen.name() == gen_name:
                 return gen
@@ -1490,10 +1490,14 @@ information about the columns in the current table. Use 'peek',
                 return
             new_gen = gens[index - 1]
         else:
-            new_gen = self._get_proposed_generator_by_name(arg)
+            new_gen = self.get_proposed_generator_by_name(arg)
             if new_gen is None:
                 self.print("'{0}' is not an appropriate generator for this column", arg)
                 return
+        self.set_generator(new_gen)
+        self._go_next()
+
+    def set_generator(self, gen: Generator):
         (table, gen_info) = self.get_table_and_generator()
         if table is None:
             self.print("Error: no table")
@@ -1501,8 +1505,7 @@ information about the columns in the current table. Use 'peek',
         if gen_info is None:
             self.print("Error: no column")
             return
-        gen_info.gen = new_gen
-        self._go_next()
+        gen_info.gen = gen
 
     def do_s(self, arg):
         """ Synonym for set """
@@ -1512,14 +1515,7 @@ information about the columns in the current table. Use 'peek',
         """
         Remove any generator set for this column.
         """
-        (table, gen_info) = self.get_table_and_generator()
-        if table is None:
-            self.print("Error: no table")
-            return
-        if gen_info is None:
-            self.print("Error: no column")
-            return
-        gen_info.gen = None
+        self.set_generator(None)
         self._go_next()
 
     def do_merge(self, arg: str):

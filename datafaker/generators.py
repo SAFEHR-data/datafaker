@@ -17,7 +17,7 @@ from sqlalchemy import Column, Engine, text, Connection, RowMapping, Sequence
 from sqlalchemy.types import Date, DateTime, Integer, Numeric, String, Time
 from typing import Callable, Iterable, TypeVar
 
-from datafaker.base import DistributionGenerator, merge_with_constants
+from datafaker.base import DistributionGenerator
 from datafaker.utils import logger
 
 # How many distinct values can we have before we consider a
