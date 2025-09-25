@@ -1462,8 +1462,9 @@ class NonInteractiveTests(RequiresDBTestCase):
 
     @patch("datafaker.interactive.Path")
     @patch("datafaker.interactive.csv.reader", return_value=iter([
-        ["observation", "type", "dist_gen.weighted_choice"],
-        ["observation", "first_value", "dist_gen.weighted_choice"],
+        ["observation", "type", "dist_gen.weighted_choice [sampled]"],
+        ["observation", "first_value", "dist_gen.weighted_choice", "dist_gen.constant"],
+        ["observation", "second_value", "dist_gen.weighted_choice", "dist_gen.weighted_choice [sampled]", "dist_gen.constant"],
         ["observation", "third_value", "dist_gen.weighted_choice"],
     ]))
     def test_non_interactive_configure_generators(self, mock_csv_reader: MagicMock, mock_path: MagicMock):
@@ -1480,4 +1481,5 @@ class NonInteractiveTests(RequiresDBTestCase):
         }
         self.assertEqual(row_gens["observation['type']"], "dist_gen.weighted_choice")
         self.assertEqual(row_gens["observation['first_value']"], "dist_gen.weighted_choice")
+        self.assertEqual(row_gens["observation['second_value']"], "dist_gen.constant")
         self.assertEqual(row_gens["observation['third_value']"], "dist_gen.weighted_choice")
