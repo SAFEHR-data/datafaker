@@ -1483,3 +1483,40 @@ class NonInteractiveTests(RequiresDBTestCase):
         self.assertEqual(row_gens["observation['first_value']"], "dist_gen.weighted_choice")
         self.assertEqual(row_gens["observation['second_value']"], "dist_gen.constant")
         self.assertEqual(row_gens["observation['third_value']"], "dist_gen.weighted_choice")
+
+    @patch("datafaker.interactive.Path")
+    @patch("datafaker.interactive.csv.reader", return_value=iter([
+        [
+            "observation",
+            "type first_value second_value third_value",
+            "null-partitioned grouped_multivariate_lognormal",
+        ],
+    ]))
+    def test_non_interactive_configure_null_partitioned(self, mock_csv_reader: MagicMock, mock_path: MagicMock):
+        """
+        test that we can set multi-column generators from a CSV file
+        """
+        config = {}
+        spec_csv = Mock(return_value="mock spec.csv file")
+        update_config_generators(self.dsn, self.schema_name, self.metadata, config, spec_csv)
+        row_gens = {
+            f"{table}{sorted(rg['columns_assigned'])}": rg
+            for table, tables in config.get("tables", {}).items()
+            for rg in tables.get("row_generators", [])
+        }
+        self.assertEqual(
+            row_gens["observation['first_value', 'second_value', 'third_value', 'type']"]["name"],
+            "dist_gen.alternatives",
+        )
+        self.assertEqual(
+            row_gens[
+                "observation['first_value', 'second_value', 'third_value', 'type']"
+            ]["kwargs"]["alternative_configs"][0]["name"],
+            '"with_constants_at"',
+        )
+        self.assertEqual(
+            row_gens[
+                "observation['first_value', 'second_value', 'third_value', 'type']"
+            ]["kwargs"]["alternative_configs"][0]["params"]["subgen"],
+            '"grouped_multivariate_lognormal"',
+        )
