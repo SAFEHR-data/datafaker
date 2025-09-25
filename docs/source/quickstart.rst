@@ -288,46 +288,206 @@ So far we have been talking about generators that generate one column in isolati
 If we want columns that are not independent we will need to merge generators.
 Let us merge the width and height of the artwork so that we can generate larger widths when we have larger heights.
 
-For this example we will use the `database of artworks from the Museam of Modern Art in New York<https://github.com/MuseumofModernArt/collection>`_.
+For this example we will use the `database of artworks from the Museam of Modern Art in New York <https://github.com/MuseumofModernArt/collection>`_.
 
 .. code-block:: console
 
    (artist.artist_bio) next artwork.width_cm
    (artwork.width_cm) merge height_cm
    (artwork.width_cm,height_cm) propose
-   Sample of actual source data: Decimal('16.2'),Decimal('22.4'); Decimal('116.8402336805'),Decimal('86.3601727203'); Decimal('22.5'),Decimal('16.7'); Decimal('14.8'),Decimal('12.0'); Decimal('33.0'),Decimal('41.0')...
-   1. dist_gen.multivariate_normal: (no fit) [24.218647620979098, 7.360975395642008]; [-25.66672699079883, 6.305174473450588]; [51.9325078591789, 50.400909869916106]; [-36.8172785399614, -8.764753035274687]; [-6.686185021449695, -4.329031921751557] ...
-   (artwork.width_cm,height_cm) compare 1
+   Sample of actual source data: Decimal('19.5'),Decimal('24.2'); Decimal('17.8'),Decimal('22.3'); Decimal('60.3251206502'),Decimal('73.3426466853'); Decimal('29.5'),Decimal('18.8'); Decimal('33.5'),Decimal('24.4')...
+   1. dist_gen.multivariate_normal: (no fit) [156.09031589469922, 26.69778970196757]; [-4.090845423753819, -8.18194806335324]; [57.91680668094389, -3.1887356250744077]; [-26.06615585218517, 9.165796782425087]; [123.06615368995867, 73.76191916586535] ...
+   2. dist_gen.multivariate_lognormal: (no fit) [13.111796803254672, 36.29819014891643]; [8.243881226804909, 12.183080281415767]; [34.74746356276248, 40.259883403242]; [16.71081622360879, 13.136174935970404]; [28.625189220743074, 25.134767045686736] ...
+   3. null-partitioned grouped_multivariate_normal: (no fit) [18.832731713525874, -20.218237295889274]; [9.22970763980161, 69.63305466303493]; [159.45614650560498, 52.46062596299266]; [91.30038782576139, 64.3899269396307]; [230.3406736168121, 20.91434294652789] ...
+   4. null-partitioned grouped_multivariate_normal [sampled and suppressed]: (no fit) [-168.25567806040397, -12.805359915935114]; [104.58903478494895, 41.38105009883969]; [-108.643833670611, -25.594600883707706]; [None, None]; [-0.20287791770687846, 69.88744644001237] ...
+   5. null-partitioned grouped_multivariate_lognormal: (no fit) [17.96925731188804, 8.41346587248666]; [None, None]; [18.05960425078999, 18.472900483777277]; [25.244847272832885, 21.32227474728793]; [22.271880531808534, 27.509500509472115] ...
+   6. null-partitioned grouped_multivariate_lognormal [sampled and suppressed]: (no fit) [None, None]; [None, None]; [6.189055115396227, 6.661888913381631]; [29.99920965125257, 17.858917208234534]; [None, None] ...
+   (artwork.width_cm,height_cm) compare 1 2
    Not private
-   2. dist_gen.multivariate_normal requires the following data from the source database:
-   {'comment': 'Means and covariate matrix for the columns width_cm, height_cm, so that we can produce the relatedness between these in the fake data.', 'query': 'SELECT q.m0, q.m1, (q.s0_0 - q.count * q.m0 * q.m0)/(q.count - 1) AS c0_0, (q.s0_1 - q.count * q.m0 * q.m1)/(q.count - 1) AS c0_1, (q.s1_1 - q.count * q.m1 * q.m1)/(q.count - 1) AS c1_1, 2 AS rank FROM (SELECT COUNT(*) AS count, SUM(width_cm * width_cm) AS s0_0, SUM(width_cm * height_cm) AS s0_1, SUM(height_cm * height_cm) AS s1_1, AVG(width_cm) AS m0, AVG(height_cm) AS m1 FROM artwork WHERE width_cm IS NOT NULL AND height_cm IS NOT NULL) AS q'}; providing the following values: [{'m0': Decimal('39.8408881695503020'), 'm1': Decimal('37.8942602940080112'), 'c0_0': Decimal('8566.13996292591607014145908725748824'), 'c0_1': Decimal('1771.51432112064062574103021748260967'), 'c1_1': Decimal('2434.30506961622772921636781436857116'), 'rank': 2}]
-   +------------------------------------+--------------------------------------------+
-   |               source               |      1. dist_gen.multivariate_normal       |
-   +------------------------------------+--------------------------------------------+
-   |          ['51.0', '25.3']          |  [107.62299759565568, 37.35577315694575]   |
-   |          ['44.5', '30.5']          |  [152.92767947123627, 58.16764808196753]   |
-   |           ['2.7', '1.4']           |  [56.330025279386106, -33.96974465059194]  |
-   |          ['22.9', '30.0']          |  [107.26687687006478, -3.97940090777724]   |
-   |          ['63.0', '47.0']          |  [2.3866753797989446, 12.881616830761228]  |
-   |          ['76.7', '56.1']          |  [64.25340675261016, -29.273930592763726]  |
-   |          ['20.8', '23.4']          |  [-8.995270515356808, -7.705664324666984]  |
-   |          ['12.6', '17.6']          |  [34.178077659717836, 94.70620393166871]   |
-   |          ['25.2', '16.1']          | [-123.37431991776657, -28.507489258163467] |
-   |          ['56.4', '76.0']          |  [6.060190508953035, 107.64705861417013]   |
-   |          ['47.0', '60.3']          |   [42.1814314824603, 25.618930675417985]   |
-   |     ['28.8925577851', '38.4']      |    [-2.5661114817431, 42.6582049225207]    |
-   |          ['13.8', '17.8']          |  [-68.31635612312357, 71.04694634347027]   |
-   |          ['25.0', '35.1']          |  [-22.950164218800843, 71.28958248545288]  |
-   | ['76.2001524003', '50.8001016002'] |  [47.8174777970675, -25.945373592062154]   |
-   |          ['58.0', '39.0']          |  [45.99046685957763, 23.657508524854045]   |
-   |          ['22.3', '30.2']          |  [-34.78167099385892, -83.23940863318586]  |
-   |          ['20.3', '19.7']          |  [63.65436136383347, 23.447379421706685]   |
-   | ['28.4163068326', '21.7487934976'] |  [158.41474989518605, 74.15055440725314]   |
-   |          ['17.9', '23.8']          |   [100.0788055327166, 46.13183648219197]   |
-   +------------------------------------+--------------------------------------------+
+   1. dist_gen.multivariate_normal requires the following data from the source database:
+   SELECT q.m0, q.m1, (q.s0_0 - q.count * q.m0 * q.m0)/NULLIF(q.count - 1, 0) AS c0_0, (q.s0_1 - q.count * q.m0 * q.m1)/NULLIF(q.count - 1, 0) AS c0_1, (q.s1_1 - q.count * q.m1 * q.m1)/NULLIF(q.count - 1, 0) AS c1_1, q.count AS count, 2 AS rank FROM (SELECT COUNT(*) AS count, SUM(width_cm * width_cm) AS s0_0, SUM(width_cm * height_cm) AS s0_1, SUM(height_cm * height_cm) AS s1_1, AVG(width_cm) AS m0, AVG(height_cm) AS m1 FROM artwork WHERE width_cm IS NOT NULL AND height_cm IS NOT NULL) AS q WHERE 1 < q.count; providing the following values: [{'m0': Decimal('39.8408881695503020'), 'm1': Decimal('37.8942602940080112'), 'c0_0': Decimal('8566.13996292591607014145908725748824'), 'c0_1': Decimal('1771.51432112064062574103021748260967'), 'c1_1': Decimal('2434.30506961622772921636781436857116'), 'count': 127808, 'rank': 2}]
+   2. dist_gen.multivariate_lognormal requires the following data from the source database:
+   SELECT q.m0, q.m1, (q.s0_0 - q.count * q.m0 * q.m0)/NULLIF(q.count - 1, 0) AS c0_0, (q.s0_1 - q.count * q.m0 * q.m1)/NULLIF(q.count - 1, 0) AS c0_1, (q.s1_1 - q.count * q.m1 * q.m1)/NULLIF(q.count - 1, 0) AS c1_1, q.count AS count, 2 AS rank FROM (SELECT COUNT(*) AS count, SUM(LN(width_cm) * LN(width_cm)) AS s0_0, SUM(LN(width_cm) * LN(height_cm)) AS s0_1, SUM(LN(height_cm) * LN(height_cm)) AS s1_1, AVG(LN(width_cm)) AS m0, AVG(LN(height_cm)) AS m1 FROM artwork WHERE width_cm IS NOT NULL AND 0 < width_cm AND height_cm IS NOT NULL AND 0 < height_cm) AS q WHERE 1 < q.count; providing the following values: [{'m0': Decimal('3.328012379626851426'), 'm1': Decimal('3.353020870725566034'), 'c0_0': Decimal('0.588886424217914574880579068386344791'), 'c0_1': Decimal('0.482342791051859102539757116685206243'), 'c1_1': Decimal('0.576396368516107766179437511660540672'), 'count': 125300, 'rank': 2}]
+   +------------------------------+-------------------------------------------+------------------------------------------+
+   |            source            |      1. dist_gen.multivariate_normal      |    2. dist_gen.multivariate_lognormal    |
+   +------------------------------+-------------------------------------------+------------------------------------------+
+   |          22.4, 29.9          |  [-30.30197300226458, 125.32226985736872] | [59.152930502697714, 56.40653542376871]  |
+   |          51.9, 41.6          |  [-12.853806535442509, 49.52394347123934] | [62.80967227803588, 27.610574449276893]  |
+   |          23.6, 27.7          |  [-76.54701202747279, 95.28076769991027]  | [120.22207976396665, 67.99534689550484]  |
+   |          19.1, 25.3          |  [-94.73357751277317, -40.53065124214407] |  [10.256731266417718, 9.92401948516523]  |
+   |          56.4, 76.2          |   [5.783164682381688, 75.31682595299304]  |  [33.56480847165019, 32.31307126699535]  |
+   |          45.1, 52.8          |  [13.239585293742458, 14.95156014276887]  | [42.772989425028385, 43.146644322968754] |
+   | 14.2875285751, 20.9550419101 |   [67.13380379777615, 68.38226051217048]  | [19.072875407542448, 8.705480286190836]  |
+   |          22.5, 16.7          | [-11.246221416602566, -52.48693945380513] | [39.977277575041306, 24.472887821531405] |
+   | 79.3751587503, 59.6901193802 |  [-43.54109084064334, 23.635761625126122] | [17.591732388768918, 12.468330774072989] |
+   |          27.6, 28.1          |   [39.1207176171055, 50.930461148452565]  |  [24.24087885150377, 29.01327658224259]  |
+   |          50.2, 39.8          | [-147.21637042993717, 29.937545279847257] | [20.598207180125364, 18.586852513581082] |
+   |          23.2, 30.8          |   [54.8823235542188, 35.32302587446014]   | [15.312141023476611, 18.439038524603294] |
+   |       70.4851, 58.7376       |  [12.201614091657802, 23.37266118274506]  | [14.842880257906147, 28.060559922386517] |
+   |     32.5438150876, 42.7      |  [36.36776373020976, 3.9374033292046207]  |  [46.87929388618674, 27.50376839671559]  |
+   |          49.5, 35.0          |   [38.4553214014625, 44.05597131161997]   | [19.934782162790142, 29.393521224229563] |
+   |          16.4, 33.5          |  [-53.22130937119619, 13.891352066160252] |  [88.36839133560514, 69.24444774268322]  |
+   |          62.5, 76.2          |  [120.61263891147385, 81.78495411418078]  | [39.880687407969226, 30.60721063876066]  |
+   |          36.7, 24.4          |   [125.801983433586, 59.14111658833157]   |  [53.733946922347656, 33.0511244388031]  |
+   |  12.382524765, 7.937515875   |   [50.56656447948824, 80.36754342712976]  | [17.354428334282115, 27.234368131874156] |
+   |           0.0, 0.0           |  [120.63922185844007, 30.084733739945715] | [20.476178451775507, 18.79872306014655]  |
+   +------------------------------+-------------------------------------------+------------------------------------------+
+   (artwork.width_cm,height_cm)
 
-And now we can ``set 1`` as usual.
-We can see that large widths and heights generally go together, but unfortunately we get many negative lengths and widths.
+We can see six generators; normal and lognormal distributions, and some are "null-partitioned grouped" and some are "sampled and suppressed".
+We can see in the ``compare`` table that the normal distribution produces negative heights and widths, whereas the lognormal distribution produces much saner results.
+
+To describe "null-partitioned grouped", let us make the generator much more complicated by adding ``depth_cm`` and ``medium`` columns and peeking at the data there:
+
+.. code-block:: console
+
+   (artwork.width_cm,height_cm) merge depth_cm medium
+   (artwork.depth_cm,width_cm,height_cm,medium) peek
+   +----------+---------------+---------------+------------------------------------------------------------------------------------------------+
+   | depth_cm |    width_cm   |   height_cm   |                                             medium                                             |
+   +----------+---------------+---------------+------------------------------------------------------------------------------------------------+
+   |   None   |      26.7     |      38.1     |                               One from a set of four lithographs                               |
+   |   None   |     24.13     |    30.4801    |                              Page with chromogenic print and text                              |
+   |   2.9    |     150.0     |      42.0     |     Pencil on paper, gelatin silver print, metallic paper, colored paper, and graph paper      |
+   |   0.0    |      40.0     |      40.3     |                                         Alkyd on board                                         |
+   |   None   |    22.3838    |    28.5751    |                                        Pencil on paper                                         |
+   |   None   | 70.8026416053 | 82.5501651003 |                                             Poster                                             |
+   |   None   |      19.8     |      26.0     |                             Lift ground aquatint, printed in color                             |
+   |   None   |      45.8     |      32.5     |                                           Lithograph                                           |
+   |   None   |      86.4     |      None     |                                           Polyester                                            |
+   |   None   |      None     |      None     |                                      Video (color, sound)                                      |
+   |   None   |      18.4     |      13.6     |                                      Gelatin silver print                                      |
+   |   None   |      None     |      None     |                                      Albumen silver print                                      |
+   |   None   |      13.0     |      18.0     |                                            Drypoint                                            |
+   |   None   | 17.7800355601 | 24.4475488951 |                                      Watercolor on paper                                       |
+   |   None   |      33.4     |      25.8     |                                      Gelatin silver print                                      |
+   |   None   |      24.0     |      18.0     |                                      Gelatin silver print                                      |
+   |   None   |      7.2      |      4.0      | Wood engraving from an illustrated book with 323 wood engravings and one etching and engraving |
+   |   None   |      91.1     |      71.8     |     Cut-and-pasted printed and painted papers, wood veneer, gouache, oil, and ink on board     |
+   |   None   |      33.3     |      24.3     |                              Illustrated book with one lithograph                              |
+   |   None   |      15.1     |      16.9     |                       One from an artist's book of twenty-four die-cuts                        |
+   |   None   |      23.2     |      30.8     |                                           Periodical                                           |
+   |   None   |      None     |      None     |                                   Matte albumen silver print                                   |
+   |   None   |      14.8     |      12.2     |                                     Drypoint and engraving                                     |
+   |   None   |      None     |      None     |                                    Pencil on tracing paper                                     |
+   |   None   |      18.5     |      24.3     |               Lithograph from an illustrated book of poems and four lithographs                |
+   +----------+---------------+---------------+------------------------------------------------------------------------------------------------+
+   (artwork.depth_cm,width_cm,height_cm,medium) 
+
+Here we can see that Moma understandably does not record depths for 2D artworks so we have many NULLs in that column.
+If we try to apply the standard normal or lognormal to data with many NULLs, it will ignore those rows with any NULLs.
+So while we could use missingness generators (see later) to give us the sense of 2D as well as 3D artworks,
+if we did this the dimensions of the 2D artworks would be based entirely on the dimensions of the 3D artworks!
+The other obvious problem is that normal and lognormal distributions can't help you with the ``medium``  column!
+
+Both of these problems can be addressed with the null-partitioned grouped generators.
+
+Null-partitioned generators deal in three different types of value: NULL, numeric (while not a foreign key) and category.
+As long as the columns contain these three types of data the Null-partitioned grouped generators are appropriate.
+"Null-partitioned" essentially means that you will get a different generator for each pattern of NULLs in a row (not very different!).
+"Grouped" means that you will get a different set of covariates for the numeric columns for the different patterns of choice values within each partition.
+
+This is a little confusing, so let's talk about how this works with the Moma example above:
+
+.. code-block:: console
+
+   (artwork.depth_cm,width_cm,height_cm,medium) propose
+   Sample of actual source data: Decimal('0.0'),Decimal('50.8001016002'),Decimal('40.9575819152'),'Colored pencil and pencil on cut-and-pasted paper on oil on paper'; Decimal('0.0'),Decimal('21.9'),Decimal('31.7500635001'),'Gelatin silver print'; Decimal('0.0'),Decimal('66.0401320803'),Decimal('101.6002032004'),'Solvent transfer drawing with gouache, pencil, colored pencil, and lithograph on paper'; Decimal('0.0'),Decimal('0.0'),Decimal('0.0'),'Offset'; Decimal('9.5'),Decimal('43.0'),Decimal('32.0'),'Vinyl-covered attaché case with screenprint'...
+   1. null-partitioned grouped_multivariate_normal: (no fit) [None, 39.973634541811435, 31.93624913182064, 'Gelatin silver print']; [None, 14.147337233160641, 34.97976525453238, 'Woodcut and wood engraving, printed in color']; [None, 10.092882610994772, 14.249800582490234, 'Gelatin silver print']; [None, -6.391051500993143, -2.403385248222161, 'Gelatin silver print']; [None, 29.390544388814472, 30.162571070278858, 'Gelatin silver print'] ...
+   2. null-partitioned grouped_multivariate_normal [sampled and suppressed]: (no fit) [None, 36.06686932038727, 29.41013826875849, 'Gelatin silver print']; [None, 17.514537089293558, 17.891332542467747, None]; [None, 47.774761208268984, 45.61942518797726, 'Lithograph']; [None, 33.65613203530817, 61.84008585634961, 'Lithograph']; [None, -31.874726507172454, -22.155743053736508, 'Lithograph'] ...
+   3. null-partitioned grouped_multivariate_lognormal: (no fit) [None, None, None, 'Pencil on tracing']; [None, None, None, 'Albumen silver print']; [None, None, None, 'Ink on note paper']; [None, 29.770314274108912, 36.92932081226337, 'Gelatin silver print']; [None, 28.09314226304076, 19.23404715223526, 'Lithograph'] ...
+   4. null-partitioned grouped_multivariate_lognormal [sampled and suppressed]: (no fit) [None, None, None, 'Albumen silver print']; [None, None, None, 'Pencil on paper']; [None, None, None, 'Pencil on tracing paper']; [None, 19.117201243763237, 15.87224244805247, 'Chromogenic print']; [None, 73.59589035622726, 36.004739858192416, 'Lithograph'] ...
+   (artwork.depth_cm,width_cm,height_cm,medium)
+
+The ``medium`` column is preventing the ``dist_gen.multivariate_normal``  and ``dist_gen.multivariate_lognormal`` from appearing,
+so we just have the null-partitioned generators.
+In the data above we can see three patterns of missingness: All four columns are non-null, only ``depth_cm`` is null, and only ``medium`` is non-null.
+The first thing these generators will do is partition the data into these three missingness patterns (and more if there are others present).
+The second thing it will do is get data for each medium listed in each partition;
+a query will be run for each partition finding the covariates between the width, height and depth (if present) for each medium
+("grouped by medium" in the language of SQL, hence the name null-partitioned "grouped" generators).
+When it comes to generating the data, it will choose a partition (weighted by how popular these partitions are in the source data),
+then it will choose a medium (again weighted by the source data), then it will generate values for the numeric columns based on the covariates associated with that medium.
+In this way, the dimensions of the artwork will be dependent on the materials it is made out of!
+So these generators can cope with the missingness, category choices and numeric values, all related to one another:
+
+.. code-block:: console
+
+   (artwork.depth_cm,width_cm,height_cm,medium) compare 3
+   ...
+   16.8000000000000000'), 'm2': Decimal('7.2500000000000000'), 'c0_0': Decimal('0.00500000000000000000000000000000'), 'c0_1': Decimal('0E-32'), 'c1_1': Decimal('0E-32'), 'c0_2': Decimal('-0.00500000000000000000000000000000'),
+   'c1_2': Decimal('0E-32'), 'c2_2': Decimal('0.00500000000000000000000000000000'), 'count': 2, 'rank': 3, 'k3': 'Wood chessboard with offset label, containing thirty-two grinder-attachment pieces'},
+   {'m0': Decimal('0.18142893428571428571'), 'm1': Decimal('148.6275989694857143'), 'm2': Decimal('86.7962190210142857'), 'c0_0': Decimal('0.2304152073723502285732428607714285714286'),
+   'c0_1': Decimal('-26.486443141750314132709249005152571429'), 'c1_1': Decimal('50474.07439826790816042306146292190476'), 'c0_2': Decimal('-16.221361167705473902113631904894928572'),
+   'c1_2': Decimal('17016.51237059149724684191157056976191'), 'c2_2': Decimal('6161.43161737166644044758872927190476'), 'count': 7, 'rank': 3, 'k3': 'Woodcut'},
+   {'m0': Decimal('14.2875285750500000'), 'm1': Decimal('45.4025908051500000'), 'm2': Decimal('78.7401574803000000'), 'c0_0': Decimal('193.75038750119350238700500000000000'),
+   'c0_1': Decimal('256.25051250126100252200500000000000'), 'c1_1': Decimal('338.91196814640914765700500000000000'), 'c0_2': Decimal('-350.00070000234650469301000000000000'),
+   'c1_2': Decimal('-462.90415161543311796301000000000000'), 'c2_2': Decimal('632.25932903684104142402000000000000'), 'count': 2, 'rank': 3, 'k3': 'Wood, metal, and plastic'},
+   {'m0': Decimal('34.9250698501000000'), 'm1': Decimal('34.9250698501000000'), 'm2': Decimal('132.8210989755166667'), 'c0_0': Decimal('0E-32'), 'c0_1': Decimal('0E-32'), 'c1_1': Decimal('0E-32'),
+   'c0_2': Decimal('-1.39700279400400000E-15'), 'c1_2': Decimal('-1.39700279400400000E-15'), 'c2_2': Decimal('2346.52351025098558274334974862533333'), 'count': 6, 'rank': 3, 'k3': 'Wood, plastic and acrylic paint'},
+   {'m0': Decimal('3.8000000000000000'), 'm1': Decimal('21.3000000000000000'), 'm2': Decimal('21.3000000000000000'), 'c0_0': Decimal('0E-32'), 'c0_1': Decimal('0E-32'), 'c1_1': Decimal('0E-32'),
+   'c0_2': Decimal('0E-32'), 'c1_2': Decimal('0E-32'), 'c2_2': Decimal('0E-32'), 'count': 5, 'rank': 3, 'k3': 'Wood, plastic, and graphite on paper on plywood'}, {'m0': Decimal('65.8588500000000000'),
+   'm1': Decimal('36.7606500000000000'), 'm2': Decimal('63.4000000000000000'), 'c0_0': Decimal('1091.27174664500000000000000000000000'), 'c0_1': Decimal('292.48316850500000000000000000000000'),
+   'c1_1': Decimal('78.39147684500000000000000000000000'), 'c0_2': Decimal('-953.04108000000000000000000000000000'), 'c1_2': Decimal('-255.43452000000000000000000000000000'),
+   'c2_2': Decimal('832.32000000000000000000000000000000'), 'count': 2, 'rank': 3, 'k3': 'Wood, plastic and metal'}, {'m0': Decimal('29.2100584201000000'), 'm1': Decimal('127.0002540005000000'),
+   'm2': Decimal('167.6403352807000000'), 'c0_0': Decimal('1706.45502581130981616802000000000000'), 'c0_1': Decimal('-890.32436129565130098002000000000000'),
+   'c1_1': Decimal('464.51705806875407299202000000000000'), 'c0_2': Decimal('4451.62180646657248153206000000000000'), 'c1_2': Decimal('-2322.58529033767435276806000000000000')
+    'c2_2': Decimal('11612.92645165789170288018000000000000'), 'count': 2, 'rank': 3, 'k3': 'Wood, plexiglass and painted metal'},
+    {'m0': Decimal('45.7201000000000000'), 'm1': Decimal('78.9765181818181818'), 'm2': Decimal('49.6455545454545455'), 'c0_0': Decimal('0E-32'), 'c0_1': Decimal('9.1440200000000000E-16'),
+    'c1_1': Decimal('2128.48295510363636679542436363636364'), 'c0_2': Decimal('-2.28600500000000000E-15'), 'c1_2': Decimal('-399.02437570909091204682390909090909'),
+    'c2_2': Decimal('114.01736727272726776271727272727273'), 'count': 11, 'rank': 3, 'k3': 'Wood with Honduras mahogany veneer'}, {'m0': Decimal('5.0006350012500000'), 'm1': Decimal('48.4982219964000000'),
+    'm2': Decimal('105.0133350266500000'), 'c0_0': Decimal('50.01270083145317500312500000000000'), 'c0_1': Decimal('115.10859715225737104700000000000000'), 'c1_1': Decimal('264.93248551031473030688000000000000'),
+    'c0_2': Decimal('450.11430748507882902862500000000000'), 'c1_2': Decimal('1035.97737437492009863052000000000000'), 'c2_2': Decimal('4051.02876738371174726220500000000000'), 'count': 2, 'rank': 3, 'k3': 'Wool'},
+    {'m0': Decimal('71.1201000000000000'), 'm1': Decimal('140.0178000000000000'), 'm2': Decimal('127.3178000000000000'), 'c0_0': Decimal('0E-32'), 'c0_1': Decimal('0E-32'), 'c1_1': Decimal('0E-32'), 'c0_2': Decimal('0E-32'),
+    'c1_2': Decimal('0E-32'), 'c2_2': Decimal('0E-32'), 'count': 3, 'rank': 3, 'k3': 'Wool felt and polyester resin\r\n'},
+    {'m0': Decimal('32.7900040640000000'), 'm1': Decimal('95.6151614681200000'), 'm2': Decimal('99.3051305461000000'), 'c0_0': Decimal('491.80807007928258048000000000000000'),
+    'c0_1': Decimal('138.88226464069653219840000000000000'), 'c1_1': Decimal('4898.08109161279111888167200000000000'), 'c0_2': Decimal('764.37647839261694675200000000000000'),
+    'c1_2': Decimal('3490.06731087702316920166000000000000'), 'c2_2': Decimal('3690.17446446333032112605000000000000'), 'count': 5, 'rank': 3, 'k3': 'Wrought iron'},
+    {'m0': Decimal('2.7883953175371784'), 'm1': Decimal('14.7226723153384232'), 'm2': Decimal('18.6838369725005809'), 'c0_0': Decimal('227.28021114171587616480741876139618'),
+    'c0_1': Decimal('121.47245807562292099861695800674074'), 'c1_1': Decimal('528.93747093614426159615049398166995'), 'c0_2': Decimal('44.67974187605438985600073640111816'),
+    'c1_2': Decimal('472.61993813801730220734491759261259'), 'c2_2': Decimal('1975.74652217638248323643763765853738'), 'count': 1205, 'rank': 3, 'k3': None}]]
+   +--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   |                                           source                                           |                                                                             1. null-partitioned grouped_multivariate_normal                                                                             |
+   +--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   |               0.0, 35.6, 43.8, Spiral-bound sketchbook with pencil on paper                |                                                                                  [None, None, None, 'Pencil on paper']                                                                                  |
+   |               20.3200406401, 20.3200406401, 231.1404622809, Acrylic on wood                |                                     [None, 12.47756100823895, 8.392584765777505, 'Linoleum cut from an illustrated book with 51 linoleum cuts (including wrapper)']                                     |
+   |    24.13, 19.0, 21.59, Enameled aluminum, plastic, enameled steel, aluminum, and glass     |                                                                   [None, -25.017489688446325, -17.11990764028542, 'Chromogenic print']                                                                  |
+   |          0.0, 270.0, 147.6377952756, Textile, plastic, glass, ceramic, and metal           |                                                   [None, 25.123206640930412, 31.3603335841623, 'Drypoint, with selective wiping, and hand additions']                                                   |
+   |             0.0, 9.8, 14.9, Colored pencil, pencil, and ballpoint pen on board             |                                                                                [None, None, None, 'Gelatin silver print']                                                                               |
+   |                     0.0, 289.5605791212, 139.1922783846, Inkjet print                      |                                                                           [None, 5.396357927615062, 21.705187032410645, None]                                                                           |
+   |                                  0.0, 0.0, 0.0, (confirm)                                  |                                                                [None, 85.92337359469983, 56.44070634304563, 'Gouache on paper on board']                                                                |
+   |         0.0, 27.6, 34.0, Page from a spiral-bound sketchbook with pencil on paper          | [None, 26.733426637007618, 31.200065658361655, 'Engraving from an illustrated book with twenty engravings, ten aquatints (one with drypoint), one drypoint, and one etching (including wrapper front)'] |
+   |        0.0, 33.3375666751, 38.4175768352, black, blue, red marker (faded) on paper         |                                   [None, 22.136869416798323, 25.274412343341794, 'Lithograph with watercolor and gouache additions and lithographed manuscript text']                                   |
+   | 4.127508255, 119.3802387605, 83.8201676403, Inkjet print with hand engraving on lava stone |                                                                   [None, 33.206742942716964, 47.71103655986387, 'Watercolor on paper']                                                                  |
+   |                    2.0, 12.0, 19.0, Artist's book with offset bookplate                    |                                   [None, 17.0, 27.0, 'Page from an illustrated book with forty-three in-text prints and one supplementary ink drawing (frontispiece)']                                  |
+   |          34.2900685801, 31.3, 31.5, 12-inch vinyl record with screenprinted cover          |                                                               [None, 82.0805969523993, 136.27700248250204, 'Etching, with hand additions']                                                              |
+   |                                 58.7, 109.5, 74.9, Bronze                                  |                                                                                         [None, None, None, None]                                                                                        |
+   |     0.0, 18.4, 27.6, Spiral-bound sketchbook with pencil, ink, and watercolor on paper     |                                                                  [None, 8.131937888918507, -5.780436152200849, 'Gelatin silver print']                                                                  |
+   |                       0.0, 70.8026416053, 106.6802133604, Lithograph                       |                                                                           [None, -18.456152268697725, 2.330663099603008, None]                                                                          |
+   |           81.2802, 543.5611, 424.1808, Painted cast iron, glazed lava, and glass           |                                                                                  [None, None, None, 'Pencil on vellum']                                                                                 |
+   |                          12.3825, 41.2751, 41.2751, Crumpled map                           |                                                                   [None, 24.543223703363182, 20.0212206104858, 'Gelatin silver print']                                                                  |
+   |                 1.1, 14.0, 18.0, Plastic box containing nine offset cards                  |                                                                      [None, None, None, 'Gelatin silver printing-out-paper print']                                                                      |
+   |                  0.0, 38.1000762002, 45.7200914402, Etching with aquatint                  |                                                                                [None, None, None, 'Gelatin silver print']                                                                               |
+   |          0.0, 25.6, 25.9, One from a set of six records with lithographic sleeves          |                                                                         [None, 95.70986740244891, 72.83297376657666, 'Etching']                                                                         |
+   +--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   (artwork.depth_cm,width_cm,height_cm,medium)
+
+In the listing above I have had to cut the amount of source statistics reported from the database because datafaker actually produces far more than this!
+As we have five columns, this implies up to 32 missingness patterns.
+Currently, none of our generators suppress the generation of data from patterns that are not represented in the source database at time of configuration;
+therefore data for all 32 possible are pulled into the source stats file.
+This works well if we want future missingness patters to be accounted for,
+but it does mean that manually checking the actual ``src-stats.yaml`` output
+(if that is what your Information Governance requires) means looking at a huge amount of summary statistics;
+even if most of those are just ``count: 0``, this is still a burden and certainly a scary-looking wall of text!.
+
+Still, we can see some nice, faithful data being reproduced.
+
+If we have too many rows in any one partition, this could result in too much data in the source stats file, so the generator will not be proposed.
+However, we have the "sampled and suppressed" generators that get around that problem.
+These generators pull a sample of rows for each partition and operate on those.
+They also suppress any groups with fewer than five members to improve anonymity.
+Currently there are no "sampled but not suppressed" or "suppressed but not sampled" generators, though both would be useful.
 
 Configuring missingness
 -----------------------

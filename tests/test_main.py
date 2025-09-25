@@ -35,7 +35,7 @@ class TestCLI(DatafakerTestCase):
         self.assertSuccess(result)
 
     @patch("datafaker.main.read_config_file")
-    @patch("datafaker.main.load_metadata")
+    @patch("datafaker.main.load_metadata_for_output")
     @patch("datafaker.main.get_settings")
     @patch("datafaker.main.Path")
     @patch("datafaker.main.make_table_generators")
@@ -76,7 +76,7 @@ class TestCLI(DatafakerTestCase):
         self.assertSuccess(result)
 
     @patch("datafaker.main.read_config_file")
-    @patch("datafaker.main.load_metadata")
+    @patch("datafaker.main.load_metadata_for_output")
     @patch("datafaker.main.get_settings")
     @patch("datafaker.main.Path")
     @patch("datafaker.main.make_table_generators")
@@ -139,7 +139,7 @@ class TestCLI(DatafakerTestCase):
         self.assertEqual(1, result.exit_code)
 
     @patch("datafaker.main.read_config_file")
-    @patch("datafaker.main.load_metadata")
+    @patch("datafaker.main.load_metadata_for_output")
     @patch("datafaker.main.get_settings")
     @patch("datafaker.main.Path")
     @patch("datafaker.main.make_table_generators")
@@ -181,7 +181,7 @@ class TestCLI(DatafakerTestCase):
 
     @patch("datafaker.main.create_db_tables")
     @patch("datafaker.main.read_config_file")
-    @patch("datafaker.main.load_metadata")
+    @patch("datafaker.main.load_metadata_for_output")
     def test_create_tables(
         self, mock_load_meta: MagicMock, mock_config: MagicMock, mock_create: MagicMock
     ) -> None:
@@ -493,7 +493,7 @@ class TestCLI(DatafakerTestCase):
 
     @patch("datafaker.main.remove_db_data")
     @patch("datafaker.main.read_config_file")
-    @patch("datafaker.main.load_metadata")
+    @patch("datafaker.main.load_metadata_for_output")
     def test_remove_data(
         self,
         mock_meta: MagicMock,
@@ -531,7 +531,7 @@ class TestCLI(DatafakerTestCase):
         mock_remove.assert_called_once_with(mock_d2m.return_value, mock_load_metadata.return_value, mock_read_config.return_value)
 
     @patch("datafaker.main.remove_db_tables")
-    @patch("datafaker.main.load_metadata")
+    @patch("datafaker.main.load_metadata_for_output")
     @patch("datafaker.main.read_config_file")
     def test_remove_tables(self, _: MagicMock, mock_meta: MagicMock, mock_remove: MagicMock) -> None:
         """Test the remove-tables command."""

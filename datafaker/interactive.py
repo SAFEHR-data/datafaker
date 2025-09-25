@@ -10,11 +10,12 @@ from pathlib import Path
 
 import sqlalchemy
 from prettytable import PrettyTable
-from sqlalchemy import Column, MetaData, Table, text
+from sqlalchemy import Column, MetaData, Table, text, ForeignKey
 
 from datafaker.generators import Generator, PredefinedGenerator, everything_factory
 from datafaker.utils import (
     create_db_engine,
+    fk_refers_to_ignored_table,
     logger,
     primary_private_fks,
     table_is_private,
@@ -80,10 +81,17 @@ class AskSaveCmd(cmd.Cmd):
         return True
 
 
+def fk_column_name(fk: ForeignKey):
+    if fk_refers_to_ignored_table(fk):
+        return f"{fk.target_fullname} (ignored)"
+    return fk.target_fullname
+
+
 class DbCmd(ABC, cmd.Cmd):
     INFO_NO_MORE_TABLES = "There are no more tables"
     ERROR_ALREADY_AT_START = "Error: Already at the start"
     ERROR_NO_SUCH_TABLE = "Error: '{0}' is not the name of a table in this database"
+    ERROR_NO_SUCH_TABLE_OR_COLUMN = "Error: '{0}' is not the name of a table in this database or a column in this table"
     ROW_COUNT_MSG = "Total row count: {}"
 
     @abstractmethod
@@ -151,10 +159,15 @@ class DbCmd(ABC, cmd.Cmd):
         return self.table_entries[self.table_index].name
     def table_metadata(self) -> Table:
         return self.metadata.tables[self.table_name()]
+    def get_column_names(self) -> list[str]:
+        return [
+            col.name
+            for col in self.table_metadata().columns
+        ]
     def report_columns(self):
         self.print_table(["name", "type", "primary", "nullable", "foreign key"], [
             [name, str(col.type), col.primary_key, col.nullable, ", ".join(
-                [f"{fk.column.table.name}.{fk.column.name}" for fk in col.foreign_keys]
+                [fk_column_name(fk) for fk in col.foreign_keys]
             )]
             for name, col in self.table_metadata().columns.items()
         ])
@@ -246,23 +259,32 @@ class DbCmd(ABC, cmd.Cmd):
             self.print_table(fields, rows)
 
     def do_peek(self, arg: str):
-        """Use 'peek col1 col2 col3' to see a sample of values from columns col1, col2 and col3 in the current table."""
+        """
+        Use 'peek col1 col2 col3' to see a sample of values from columns col1, col2 and col3 in the current table.
+        Use 'peek' to see a sample of the current column(s).
+        Rows that are enitrely null are suppressed.
+        """
         MAX_PEEK_ROWS = 25
         if len(self.table_entries) <= self.table_index:
             return
         table_name = self.table_name()
         col_names = arg.split()
+        if not col_names:
+            col_names = self.get_column_names()
         nonnulls = [cn + " IS NOT NULL" for cn in col_names]
         with self.engine.connect() as connection:
-            result = connection.execute(
-                text("SELECT {cols} FROM {table} {where} {nonnull} LIMIT {max}".format(
+            query = "SELECT {cols} FROM {table} {where} {nonnull} ORDER BY RANDOM() LIMIT {max}".format(
                     cols=",".join(col_names),
                     table=table_name,
                     where="WHERE" if nonnulls else "",
-                    nonnull=" AND ".join(nonnulls),
+                    nonnull=" OR ".join(nonnulls),
                     max=MAX_PEEK_ROWS,
-                ))
-            )
+                )
+            try:
+                result = connection.execute(text(query))
+            except Exception as exc:
+                self.print(f'SQL query "{query}" caused exception {exc}')
+                return
             rows = [
                 row._tuple()
                 for row in result.fetchmany(MAX_PEEK_ROWS)
@@ -861,6 +883,8 @@ information about the columns in the current table. Use 'peek',
     ERROR_CANNOT_UNMERGE_ALL = "You cannot unmerge all the generator's columns"
     PROPOSE_NOTHING = "No proposed generators, sorry."
 
+    SRC_STAT_RE = re.compile(r'\bSRC_STATS\["([^"]+)"\](\["results"\]\[0\]\["([^"]+)"\])?')
+
     def make_table_entry(self, table_name: str, table: Mapping) -> TableEntry | None:
         if table.get("ignore", False):
             return None
@@ -1115,11 +1139,11 @@ information about the columns in the current table. Use 'peek',
                 "nullable" if cm.nullable else "not nullable",
             )
             if cm.primary_key:
-                self.print("It is a primary key, which usually does not need a generator")
-            elif cm.foreign_keys:
-                fk_names = [fk.column.name for fk in cm.foreign_keys]
-                self.print("It is a foreign key referencing table {0}", ", ".join(fk_names))
-                if len(fk_names) == 1:
+                self.print("It is a primary key, which usually does not need a generator (it will auto-increment)")
+            if cm.foreign_keys:
+                fk_names = [fk_column_name(fk) for fk in cm.foreign_keys]
+                self.print("It is a foreign key referencing column {0}", ", ".join(fk_names))
+                if len(fk_names) == 1 and not cm.primary_key:
                     self.print("You do not need a generator if you just want a uniform choice over the referenced table's rows")
 
     def _get_table_index(self, table_name: str) -> int | None:
@@ -1139,7 +1163,13 @@ information about the columns in the current table. Use 'peek',
         parts = target.split(".", 1)
         table_index = self._get_table_index(parts[0])
         if table_index is None:
-            self.print(self.ERROR_NO_SUCH_TABLE, parts[0])
+            if len(parts) == 1:
+                gen_index = self._get_generator_index(self.table_index, parts[0])
+                if gen_index is not None:
+                    self.generator_index = gen_index
+                    self.set_prompt()
+                    return True
+            self.print(self.ERROR_NO_SUCH_TABLE_OR_COLUMN, parts[0])
             return False
         gen_index = None
         if 1 < len(parts) and parts[1]:
@@ -1158,7 +1188,7 @@ information about the columns in the current table. Use 'peek',
         Go to the next generator.
         Or go to a named table: 'next tablename'.
         Or go to a column: 'next tablename.columnname'.
-        Or go to a column within this table 'next columnname'.
+        Or go to a column within this table: 'next columnname'.
         """
         if arg:
             self.go_to(arg)
@@ -1315,19 +1345,35 @@ information about the columns in the current table. Use 'peek',
         cqs = gen.custom_queries()
         if not cqs:
             return
-        kwa = gen.actual_kwargs()
         cq_key2args = {}
-        src_stat_re = re.compile(f'SRC_STATS\\["([^"]+)"\\]')
-        for argname, src_stat in gen.nominal_kwargs().items():
-            if argname in kwa:
-                src_stat_groups = src_stat_re.match(src_stat)
-                if src_stat_groups:
-                    cq_key = src_stat_groups.group(1)
-                    if cq_key not in cq_key2args:
-                        cq_key2args[cq_key] = []
-                    cq_key2args[cq_key].append(kwa[argname])
+        nominal = gen.nominal_kwargs()
+        actual = gen.actual_kwargs()
+        self._get_custom_queries_from(
+            cq_key2args,
+            nominal,
+            actual,
+        )
         for cq_key, cq in cqs.items():
-            self.print("{0}; providing the following values: {1}", cq, cq_key2args[cq_key])
+            self.print("{0}; providing the following values: {1}", cq["query"], cq_key2args[cq_key])
+
+    def _get_custom_queries_from(self, out, nominal, actual):
+        if type(nominal) is str:
+            src_stat_groups = self.SRC_STAT_RE.search(nominal)
+            if src_stat_groups:
+                cq_key = src_stat_groups.group(1)
+                if cq_key not in out:
+                    out[cq_key] = []
+                sub = src_stat_groups.group(3)
+                if sub:
+                    actual = {sub: actual}
+                out[cq_key].append(actual)
+        elif type(nominal) is list and type(actual) is list:
+            for i in range(min(len(nominal), len(actual))):
+                self._get_custom_queries_from(out, nominal[i], actual[i])
+        elif type(nominal) is dict and type(actual) is dict:
+            for k, v in nominal.items():
+                if k in actual:
+                    self._get_custom_queries_from(out, v, actual[k])
 
     def _get_aggregate_query(self, gens: list[Generator], table_name: str) -> str | None:
         clauses = [
@@ -1416,7 +1462,7 @@ information about the columns in the current table. Use 'peek',
         """ Synonym for propose """
         self.do_propose(arg)
 
-    def _get_proposed_generator_by_name(self, gen_name: str) -> Generator | None:
+    def get_proposed_generator_by_name(self, gen_name: str) -> Generator | None:
         for gen in self._get_generator_proposals():
             if gen.name() == gen_name:
                 return gen
@@ -1437,14 +1483,21 @@ information about the columns in the current table. Use 'peek',
                 self.print("set's integer argument must be at least 1")
                 return
             if len(gens) < index:
-                self.print("There are currently only {0} generators proposed, please select one of them.", index)
+                self.print(
+                    "There are currently only {0} generators proposed, please select one of them.",
+                    len(gens),
+                )
                 return
             new_gen = gens[index - 1]
         else:
-            new_gen = self._get_proposed_generator_by_name(arg)
+            new_gen = self.get_proposed_generator_by_name(arg)
             if new_gen is None:
                 self.print("'{0}' is not an appropriate generator for this column", arg)
                 return
+        self.set_generator(new_gen)
+        self._go_next()
+
+    def set_generator(self, gen: Generator):
         (table, gen_info) = self.get_table_and_generator()
         if table is None:
             self.print("Error: no table")
@@ -1452,8 +1505,7 @@ information about the columns in the current table. Use 'peek',
         if gen_info is None:
             self.print("Error: no column")
             return
-        gen_info.gen = new_gen
-        self._go_next()
+        gen_info.gen = gen
 
     def do_s(self, arg):
         """ Synonym for set """
@@ -1463,14 +1515,7 @@ information about the columns in the current table. Use 'peek',
         """
         Remove any generator set for this column.
         """
-        (table, gen_info) = self.get_table_and_generator()
-        if table is None:
-            self.print("Error: no table")
-            return
-        if gen_info is None:
-            self.print("Error: no column")
-            return
-        gen_info.gen = None
+        self.set_generator(None)
         self._go_next()
 
     def do_merge(self, arg: str):

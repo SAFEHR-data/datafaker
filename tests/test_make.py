@@ -220,7 +220,6 @@ class TestMakeStats(RequiresDBTestCase):
         )
         self.assertEqual(src_stats[query_name1]["results"], [])
         self.assertEqual(src_stats[query_name2]["results"], [])
-        warning_template = "src-stats query %s returned no results"
-        mock_logger.warning.assert_any_call(warning_template, query_name1)
-        mock_logger.warning.assert_any_call(warning_template, query_name2)
-        self.assertEqual(len(mock_logger.warning.call_args_list), 2)
+        debug_template = "src-stats query %s returned no results"
+        mock_logger.debug.assert_any_call(debug_template, query_name1)
+        mock_logger.debug.assert_any_call(debug_template, query_name2)

@@ -82,7 +82,15 @@ def load_metadata_config(orm_file_name, config: dict | None=None):
 
 def load_metadata(orm_file_name, config: dict | None=None):
     meta_dict = load_metadata_config(orm_file_name, config)
-    return dict_to_metadata(meta_dict)
+    return dict_to_metadata(meta_dict, None)
+
+
+def load_metadata_for_output(orm_file_name, config: dict | None=None):
+    """
+    Load metadata excluding any foreign keys pointing to ignored tables.
+    """
+    meta_dict = load_metadata_config(orm_file_name, config)
+    return dict_to_metadata(meta_dict, config)
 
 
 @app.callback()
@@ -125,7 +133,7 @@ def create_data(
     """
     logger.debug("Creating data.")
     config = read_config_file(config_file) if config_file is not None else {}
-    orm_metadata = load_metadata(orm_file, config)
+    orm_metadata = load_metadata_for_output(orm_file, config)
     df_module = import_file(df_file)
     table_generator_dict = df_module.table_generator_dict
     story_generator_list = df_module.story_generator_list
@@ -165,7 +173,7 @@ def create_vocab(
     logger.debug("Loading vocab.")
     config = read_config_file(config_file) if config_file is not None else {}
     meta_dict = load_metadata_config(orm_file, config)
-    orm_metadata = dict_to_metadata(meta_dict)
+    orm_metadata = dict_to_metadata(meta_dict, config)
     vocabs_loaded = create_db_vocab(orm_metadata, meta_dict, config)
     num_vocabs = len(vocabs_loaded)
     logger.debug("%s %s loaded.", num_vocabs, "table" if num_vocabs == 1 else "tables")
@@ -186,7 +194,7 @@ def create_tables(
     """
     logger.debug("Creating tables.")
     config = read_config_file(config_file) if config_file is not None else {}
-    orm_metadata = load_metadata(orm_file, config)
+    orm_metadata = load_metadata_for_output(orm_file, config)
     create_db_tables(orm_metadata)
     logger.debug("Tables created.")
 
@@ -223,7 +231,7 @@ def create_generators(
     generator_config = read_config_file(config_file) if config_file is not None else {}
     if stats_file is None and generators_require_stats(generator_config):
         stats_file = STATS_FILENAME
-    orm_metadata = load_metadata(orm_file, generator_config)
+    orm_metadata = load_metadata_for_output(orm_file, generator_config)
     result: str = make_table_generators(
         orm_metadata,
         generator_config,
@@ -415,7 +423,7 @@ def dump_data(
     assert dst_dsn != "", "Missing DST_DSN setting."
     schema_name = settings.dst_schema
     config = read_config_file(config_file) if config_file is not None else {}
-    metadata = load_metadata(orm_file, config)
+    metadata = load_metadata_for_output(orm_file, config)
     if output == None:
         dump_db_tables(metadata, dst_dsn, schema_name, table, sys.stdout)
         return
@@ -450,7 +458,7 @@ def remove_data(
     if yes:
         logger.debug("Truncating non-vocabulary tables.")
         config = read_config_file(config_file) if config_file is not None else {}
-        metadata = load_metadata(orm_file, config)
+        metadata = load_metadata_for_output(orm_file, config)
         remove_db_data(metadata, config)
         logger.debug("Non-vocabulary tables truncated.")
     else:
@@ -468,7 +476,7 @@ def remove_vocab(
         logger.debug("Truncating vocabulary tables.")
         config = read_config_file(config_file) if config_file is not None else {}
         meta_dict = load_metadata_config(orm_file, config)
-        orm_metadata = dict_to_metadata(meta_dict)
+        orm_metadata = dict_to_metadata(meta_dict, config)
         remove_db_vocab(orm_metadata, meta_dict, config)
         logger.debug("Vocabulary tables truncated.")
     else:
@@ -488,7 +496,7 @@ def remove_tables(
     if yes:
         logger.debug("Dropping tables.")
         config = read_config_file(config_file) if config_file is not None else {}
-        metadata = load_metadata(orm_file, config)
+        metadata = load_metadata_for_output(orm_file, config)
         remove_db_tables(metadata)
         logger.debug("Tables dropped.")
     else:

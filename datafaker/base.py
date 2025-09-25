@@ -31,6 +31,38 @@ def zipf_weights(size):
         for n in range(1, size + 1)
     ]
 
+def merge_with_constants(xs: list, constants_at: dict[int, any]):
+    """
+    Merge a list of items with other items that must be placed at certain indices.
+    :param constants_at: A map of indices to objects that must be placed at
+    those indices.
+    :param xs: Items that fill in the gaps left by ``constants_at``.
+    :return: ``xs`` with ``constants_at`` inserted at the appropriate
+    points. If there are not enough elements in ``xs`` to fill in the gaps
+    in ``constants_at``, the elements of ``constants_at`` after the gap
+    are dropped.
+    """
+    outi = 0
+    xi = 0
+    constant_count = len(constants_at)
+    while constant_count != 0:
+        if outi in constants_at:
+            yield constants_at[outi]
+            constant_count -= 1
+        else:
+            if xi == len(xs):
+                return
+            yield xs[xi]
+            xi += 1
+        outi += 1
+    for x in xs[xi:]:
+        yield x
+
+
+class NothingToGenerateException(Exception):
+    def __init__(self, message):
+        super().__init__(message)
+
 
 class DistributionGenerator:
     root3 = math.sqrt(3)
@@ -84,6 +116,8 @@ class DistributionGenerator:
 
     def multivariate_normal_np(self, cov):
         rank = int(cov["rank"])
+        if rank == 0:
+            return np.empty(shape=(0,))
         mean = [
             float(cov[f"m{i}"])
             for i in range(rank)
@@ -96,6 +130,48 @@ class DistributionGenerator:
             for j in range(rank)
         ]
         return self.np_gen.multivariate_normal(mean, covs)
+
+    def _select_group(self, alts: list[dict[str, any]]):
+        """
+        Choose one of the ``alts`` weighted by their ``"count"`` elements.
+        """
+        total = 0
+        for alt in alts:
+            if alt["count"] < 0:
+                logger.warning("Alternative count is %d, but should not be negative", alt["count"])
+            else:
+                total += alt["count"]
+        if total == 0:
+            raise NothingToGenerateException("No counts in any alternative")
+        choice = random.randrange(total)
+        for alt in alts:
+            choice -= alt["count"]
+            if choice < 0:
+                return alt
+        raise Exception("Internal error: ran out of choices in _select_group")
+
+    def _find_constants(self, result: dict[str, any]):
+        """
+        Find all keys ``kN``, returning a dictionary of ``N: kNN``.
+
+        This can be passed into ``merge_with_constants`` as the
+        ``constants_at`` argument.
+        """
+        out: dict[int, any] = {}
+        for k, v in result.items():
+            if k.startswith("k") and k[1:].isnumeric():
+                out[int(k[1:])] = v
+        return out
+
+    PERMITTED_SUBGENS = {
+        "multivariate_lognormal",
+        "multivariate_normal",
+        "grouped_multivariate_lognormal",
+        "grouped_multivariate_normal",
+        "constant",
+        "weighted_choice",
+        "with_constants_at",
+    }
 
     def multivariate_normal(self, cov):
         """
@@ -123,6 +199,69 @@ class DistributionGenerator:
         :return: list of ``rank`` floating point values
         """
         return np.exp(self.multivariate_normal_np(cov)).tolist()
+
+    def grouped_multivariate_normal(self, covs):
+        cov = self._select_group(covs)
+        logger.debug("Multivariate normal group selected: %s", cov)
+        constants = self._find_constants(cov)
+        nums = self.multivariate_normal(cov)
+        return list(merge_with_constants(nums, constants))
+
+    def grouped_multivariate_lognormal(self, covs):
+        cov = self._select_group(covs)
+        logger.debug("Multivariate lognormal group selected: %s", cov)
+        constants = self._find_constants(cov)
+        nums = np.exp(self.multivariate_normal_np(cov)).tolist()
+        return list(merge_with_constants(nums, constants))
+
+    def _check_generator_name(self, name: str) -> None:
+        if name not in self.PERMITTED_SUBGENS:
+            raise Exception("%s is not a permitted generator", name)
+
+    def alternatives(self, alternative_configs: list[dict[str, any]], counts: list[int] | None):
+        """
+        A generator that picks between other generators.
+
+        :param alternative_configs: List of alternative generators.
+        Each alternative has the following keys: "count" -- a weight for
+        how often to use this alternative; "name" -- which generator
+        for this partition, for example "composite"; "params" -- the
+        parameters for this alternative.
+        :return: list of values
+        """
+        if counts is not None:
+            while True:
+                count = self._select_group(counts)
+                alt = alternative_configs[count["index"]]
+                name = alt["name"]
+                self._check_generator_name(name)
+                try:
+                    return getattr(self, name)(**alt["params"])
+                except NothingToGenerateException:
+                    # Prevent this alternative from being chosen again
+                    count["count"] = 0
+        alt = self._select_group(alternative_configs)
+        name = alt["name"]
+        self._check_generator_name(name)
+        return getattr(self, name)(**alt["params"])
+
+    def with_constants_at(self, constants_at: list[int], subgen: str, params: dict[str, any]):
+        if subgen not in self.PERMITTED_SUBGENS:
+            logger.error(
+                "subgenerator %s is not a valid name. Valid names are %s.",
+                subgen,
+                self.PERMITTED_SUBGENS,
+            )
+        subout = getattr(self, subgen)(**params)
+        logger.debug("Merging constants %s", constants_at)
+        return list(merge_with_constants(subout, constants_at))
+
+    def truncated_string(self, subgen_fn, params, length):
+        """ Calls ``subgen_fn(**params)`` and truncates the results to ``length``. """
+        result = subgen_fn(**params)
+        if result is None:
+            return None
+        return result[:length]
 
 
 class TableGenerator(ABC):

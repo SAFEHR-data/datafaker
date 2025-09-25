@@ -80,7 +80,7 @@ INSERT INTO public.player VALUES (3, 'Pierre', 'Marchmont');
 
 CREATE TABLE public.signature_model (
     id INTEGER NOT NULL,
-    name TEXT NOT NULL,
+    name VARCHAR(20) NOT NULL,
     player_id INTEGER,
     based_on INTEGER
 );

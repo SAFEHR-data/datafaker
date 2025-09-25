@@ -1,4 +1,4 @@
-FROM python:3.13.3-alpine3.21
+FROM python:3.13.3-alpine3.22
 RUN apk add bash poetry
 WORKDIR /app
 ADD . /app
@@ -11,4 +11,4 @@ SHELL ["/bin/bash", "-c"]
 # The redirect to /dev/null seems to help shellingham detect bash!
 RUN poetry run datafaker --install-completion > /dev/null
 WORKDIR /data
-CMD ["poetry", "--directory=/app", "shell"]
+CMD ["bash", "-c", "source $(poetry -C /app env info --path)/bin/activate;bash"]
