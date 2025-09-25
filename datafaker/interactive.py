@@ -1,12 +1,14 @@
-import cmd
-import csv
-import functools
-import re
 from abc import ABC, abstractmethod
+import cmd
 from collections.abc import Mapping
+import csv
 from dataclasses import dataclass
 from enum import Enum
+import functools
+import itertools
 from pathlib import Path
+import re
+from typing import Iterable
 
 import sqlalchemy
 from prettytable import PrettyTable
@@ -1633,6 +1635,15 @@ information about the columns in the current table. Use 'peek',
         ]
 
 
+def try_setting_generator(gc: GeneratorCmd, gens: Iterable[str]) -> bool:
+    for gen in gens:
+        new_gen = gc.get_proposed_generator_by_name(gen)
+        if new_gen is not None:
+            gc.set_generator(new_gen)
+            return True
+    return False
+
+
 def update_config_generators(
     src_dsn: str,
     src_schema: str,
@@ -1649,9 +1660,11 @@ def update_config_generators(
         for line in csv.reader(spec):
             line_no += 1
             if line:
-                if len(line) != 3:
-                    logger.error("line {0} of file {1} does not have three values", line_no, spec_path)
+                if len(line) < 3:
+                    logger.error("line {0} of file {1} has fewer than three values", line_no, spec_path)
                 if gc.go_to(f"{line[0]}.{line[1]}"):
-                    gc.do_set(line[2])
+                    try_setting_generator(gc, itertools.islice(line, 2, None))
+                else:
+                    logger.warning("no such column {0}.{1}", line[0], line[1])
         gc.do_quit("yes")
         return gc.config
