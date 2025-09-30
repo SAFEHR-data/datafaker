@@ -1,25 +1,26 @@
 """Utilities for testing."""
 import asyncio
-from functools import lru_cache
 import os
-from pathlib import Path
 import shutil
-from sqlalchemy.schema import MetaData
-from subprocess import run
-import testing.postgresql
 import traceback
+from functools import lru_cache
+from pathlib import Path
+from subprocess import run
+from tempfile import mkstemp
 from typing import Any
 from unittest import TestCase, skipUnless
-import yaml
 
+import testing.postgresql
+import yaml
 from sqlalchemy import MetaData
-from tempfile import mkstemp
+from sqlalchemy.schema import MetaData
 
 from datafaker import settings
 from datafaker.create import create_db_data_into
-from datafaker.make import make_tables_file, make_src_stats, make_table_generators
+from datafaker.make import make_src_stats, make_table_generators, make_tables_file
 from datafaker.remove import remove_db_data_from
-from datafaker.utils import import_file, sorted_non_vocabulary_tables, create_db_engine
+from datafaker.utils import create_db_engine, import_file, sorted_non_vocabulary_tables
+
 
 class SysExit(Exception):
     """To force the function to exit as sys.exit() would."""
@@ -68,10 +69,10 @@ class DatafakerTestCase(TestCase):
         self.assertReturnCode(result, 1)
 
     def assertNoException(self, result: Any) -> None:  # pylint: disable=invalid-name
-        """ Assert that the result has no exception. """
+        """Assert that the result has no exception."""
         if result.exception is None:
             return
-        self.fail(''.join(traceback.format_exception(result.exception)))
+        self.fail("".join(traceback.format_exception(result.exception)))
 
     def assertSubset(self, set1, set2, msg=None):
         """Assert a set is a (non-strict) subset.
@@ -85,21 +86,22 @@ class DatafakerTestCase(TestCase):
         try:
             difference = set1.difference(set2)
         except TypeError as e:
-            self.fail('invalid type when attempting set difference: %s' % e)
+            self.fail("invalid type when attempting set difference: %s" % e)
         except AttributeError as e:
-            self.fail('first argument does not support set difference: %s' % e)
+            self.fail("first argument does not support set difference: %s" % e)
 
         if not difference:
             return
 
         lines = []
         if difference:
-            lines.append('Items in the first set but not the second:')
+            lines.append("Items in the first set but not the second:")
             for item in difference:
                 lines.append(repr(item))
 
-        standardMsg = '\n'.join(lines)
+        standardMsg = "\n".join(lines)
         self.fail(self._formatMessage(msg, standardMsg))
+
 
 @skipUnless(shutil.which("psql"), "need to find 'psql': install PostgreSQL to enable")
 class RequiresDBTestCase(DatafakerTestCase):
@@ -112,11 +114,12 @@ class RequiresDBTestCase(DatafakerTestCase):
     to get an engine to access the database and self.metadata to get metadata
     reflected from that engine.
     """
-    schema_name = None
+
+    schema_name: str | None = None
     use_asyncio = False
-    examples_dir = "tests/examples"
-    dump_file_path = None
-    database_name = None
+    examples_dir = Path("tests/examples")
+    dump_file_path: Path | None = None
+    database_name: str | None = None
     Postgresql = None
 
     @classmethod
@@ -201,13 +204,15 @@ class GeneratesDBTestCase(RequiresDBTestCase):
             make_src_stats(self.dsn, config, self.metadata, self.schema_name)
         )
         loop.close()
-        (self.stats_fd, self.stats_file_path) = mkstemp(".yaml", "src_stats_", text=True)
+        (self.stats_fd, self.stats_file_path) = mkstemp(
+            ".yaml", "src_stats_", text=True
+        )
         with os.fdopen(self.stats_fd, "w", encoding="utf-8") as stats_fh:
             stats_fh.write(yaml.dump(src_stats))
         return src_stats
 
     def create_generators(self, config) -> None:
-        """ ``create-generators`` with ``src-stats.yaml`` and the rest, producing ``df.py`` """
+        """``create-generators`` with ``src-stats.yaml`` and the rest, producing ``df.py``"""
         datafaker_content = make_table_generators(
             self.metadata,
             config,
@@ -220,12 +225,12 @@ class GeneratesDBTestCase(RequiresDBTestCase):
             datafaker_fh.write(datafaker_content)
 
     def remove_data(self, config):
-        """ Remove source data from the DB. """
+        """Remove source data from the DB."""
         # `remove-data` so we don't have to use a separate database for the destination
         remove_db_data_from(self.metadata, config, self.dsn, self.schema_name)
 
     def create_data(self, config, num_passes=1):
-        """ Create fake data in the DB. """
+        """Create fake data in the DB."""
         # `create-data` with all this stuff
         datafaker_module = import_file(self.generators_file_path)
         table_generator_dict = datafaker_module.table_generator_dict

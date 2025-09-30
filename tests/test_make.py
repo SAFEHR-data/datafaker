@@ -9,37 +9,38 @@ from sqlalchemy import BigInteger, Column, String, select
 from sqlalchemy.dialects.mysql.types import INTEGER
 from sqlalchemy.dialects.postgresql import UUID
 
-from datafaker.make import (
-    _get_provider_for_column,
-    make_src_stats,
-)
-from tests.utils import RequiresDBTestCase, GeneratesDBTestCase
+from datafaker.make import _get_provider_for_column, make_src_stats
+from tests.utils import GeneratesDBTestCase, RequiresDBTestCase
 
 
 class TestMakeGenerators(GeneratesDBTestCase):
     """Test the make_table_generators function."""
-    dump_file_path = "instrument.sql"
+
+    dump_file_path = Path("instrument.sql")
     database_name = "instrument"
     schema_name = "public"
 
     def test_make_table_generators(self) -> None:
-        """ Check that we can make a generators file. """
+        """Check that we can make a generators file."""
         config = {
             "tables": {
                 "player": {
-                    "row_generators": [{
-                        "name": "dist_gen.constant",
-                        "kwargs": {
-                            "value": '"Cave"',
+                    "row_generators": [
+                        {
+                            "name": "dist_gen.constant",
+                            "kwargs": {
+                                "value": '"Cave"',
+                            },
+                            "columns_assigned": "given_name",
                         },
-                        "columns_assigned": "given_name",
-                    }, {
-                        "name": "dist_gen.constant",
-                        "kwargs": {
-                            "value": '"Johnson"',
+                        {
+                            "name": "dist_gen.constant",
+                            "kwargs": {
+                                "value": '"Johnson"',
+                            },
+                            "columns_assigned": "family_name",
                         },
-                        "columns_assigned": "family_name",
-                    }],
+                    ],
                 },
             },
         }
@@ -96,7 +97,7 @@ class TestMakeGenerators(GeneratesDBTestCase):
         )
         self.assertEqual(
             generator_arguments,
-            { "length": "100" },
+            {"length": "100"},
         )
 
         # UUID
@@ -114,7 +115,7 @@ class TestMakeGenerators(GeneratesDBTestCase):
 class TestMakeStats(RequiresDBTestCase):
     """Test the make_src_stats function."""
 
-    dump_file_path = "src.dump"
+    dump_file_path = Path("src.dump")
     database_name = "src"
     schema_name = "public"
 
@@ -149,12 +150,15 @@ class TestMakeStats(RequiresDBTestCase):
 
         count_names = src_stats["count_names"]["results"]
         count_names.sort(key=lambda c: c["name"])
-        self.assertListEqual(count_names, [
-            {"num": 1, "name": "Miranda Rando-Generata"},
-            {"num": 997, "name": "Randy Random"},
-            {"num": 1, "name": "Testfried Testermann"},
-            {"num": 1, "name": "Veronica Fyre"},
-        ])
+        self.assertListEqual(
+            count_names,
+            [
+                {"num": 1, "name": "Miranda Rando-Generata"},
+                {"num": 997, "name": "Randy Random"},
+                {"num": 1, "name": "Testfried Testermann"},
+                {"num": 1, "name": "Veronica Fyre"},
+            ],
+        )
 
         avg_person_id = src_stats["avg_person_id"]["results"]
         self.assertEqual(len(avg_person_id), 1)

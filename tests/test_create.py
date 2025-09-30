@@ -1,9 +1,9 @@
 """Tests for the create module."""
 import itertools as itt
-from collections import Counter
 import os
-from pathlib import Path
 import random
+from collections import Counter
+from pathlib import Path
 from typing import Any, Generator, Tuple
 from unittest.mock import MagicMock, call, patch
 
@@ -11,23 +11,26 @@ from sqlalchemy import Connection, select
 from sqlalchemy.schema import Table
 
 from datafaker.base import TableGenerator
-from datafaker.create import (
-    create_db_vocab,
-    populate,
-)
+from datafaker.create import create_db_vocab, populate
 from datafaker.remove import remove_db_vocab
 from datafaker.serialize_metadata import metadata_to_dict
 from tests.utils import DatafakerTestCase, GeneratesDBTestCase
 
+
 class TestCreate(GeneratesDBTestCase):
     """Test the make_table_generators function."""
+
     dump_file_path = "instrument.sql"
     database_name = "instrument"
     schema_name = "public"
 
     def test_create_vocab(self) -> None:
         """Test the create_db_vocab function."""
-        with patch.dict(os.environ, {"DST_DSN": self.dsn, "DST_SCHEMA": self.schema_name}, clear=True):
+        with patch.dict(
+            os.environ,
+            {"DST_DSN": self.dsn, "DST_SCHEMA": self.schema_name},
+            clear=True,
+        ):
             config = {
                 "tables": {
                     "player": {
@@ -83,7 +86,7 @@ class TestCreate(GeneratesDBTestCase):
 
 
 class TestPopulate(DatafakerTestCase):
-    """ Test create.populate. """
+    """Test create.populate."""
 
     def test_populate(self) -> None:
         """Test the populate function."""

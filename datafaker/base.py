@@ -1,37 +1,46 @@
 """Base table generator classes."""
+import functools
+import gzip
+import math
+import os
+import random
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
-import functools
-import math
-import numpy as np
-import os
+from decimal import Decimal
 from pathlib import Path
-import random
-from typing import Any
+from typing import Any, Collection, Iterable, Generator, TypeVar
 
+import numpy as np
 import yaml
-import gzip
 from sqlalchemy import Connection, insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.schema import Table
 
 from datafaker.utils import (
+    MAKE_VOCAB_PROGRESS_REPORT_EVERY,
     logger,
     stream_yaml,
-    MAKE_VOCAB_PROGRESS_REPORT_EVERY,
     table_row_count,
 )
 
-@functools.cache
-def zipf_weights(size):
-    total = sum(map(lambda n: 1/n, range(1, size + 1)))
-    return [
-        1 / (n * total)
-        for n in range(1, size + 1)
-    ]
 
-def merge_with_constants(xs: list, constants_at: dict[int, any]):
+_T = TypeVar("_T")
+
+
+@functools.cache
+def zipf_weights(size: int) -> list[float]:
+    """
+    Set of weights for the zipf distribution.
+
+    :param size: The number of weights.
+    :return: List of weights.
+    """
+    total = sum(map(lambda n: 1 / n, range(1, size + 1)))
+    return [1 / (n * total) for n in range(1, size + 1)]
+
+
+def merge_with_constants(xs: list, constants_at: dict[int, Any]) -> Generator[Any]:
     """
     Merge a list of items with other items that must be placed at certain indices.
     :param constants_at: A map of indices to objects that must be placed at
@@ -60,41 +69,69 @@ def merge_with_constants(xs: list, constants_at: dict[int, any]):
 
 
 class NothingToGenerateException(Exception):
-    def __init__(self, message):
+    def __init__(self, message: str):
         super().__init__(message)
 
 
 class DistributionGenerator:
     root3 = math.sqrt(3)
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.np_gen = np.random.default_rng()
 
-    def uniform(self, low, high) -> float:
+    def uniform(self, low: float | Decimal, high: float | Decimal) -> float:
+        """ Returns a value between ``low`` and ``high``."""
         return random.uniform(float(low), float(high))
 
-    def uniform_ms(self, mean, sd) -> float:
+    def uniform_ms(self, mean: float | Decimal, sd: float | Decimal) -> float:
+        """
+        Returns a float from a uniform distribution.
+        :param mean: The centre of the distribution.
+        :param sd: The standard deviation of the distribution.
+        """
         m = float(mean)
         h = self.root3 * float(sd)
         return random.uniform(m - h, m + h)
 
-    def normal(self, mean, sd) -> float:
+    def normal(self, mean: float | Decimal, sd: float | Decimal) -> float:
+        """
+        Returns a float from a normal (Gaussian) distribution.
+        :param mean: The centre of the distribution.
+        :param sd: The standard deviation of the distribution.
+        """
         return random.normalvariate(float(mean), float(sd))
 
-    def lognormal(self, logmean, logsd) -> float:
+    def lognormal(self, logmean: float | Decimal, logsd: float | Decimal) -> float:
+        """
+        Returns a float from a lognormal distribution.
+        :param mean: The mean of the log of the values from the distribution.
+        :param sd: The standard deviation of the log of the values from the distribution.
+        """
         return random.lognormvariate(float(logmean), float(logsd))
 
     def choice(self, a):
+        """
+        Returns a (uniformly) random value from a.
+        :param a: Either an collection of values to return or an collection of dicts
+        with ``value`` keys.
+        :return: One of the input values, or their ``value`` values if dicts.
+        """
         c = random.choice(a)
         return c["value"] if type(c) is dict and "value" in c else c
 
-    def zipf_choice(self, a, n=None):
-        if n is None:
-            n = len(a)
-        c = random.choices(a, weights=zipf_weights(n))[0]
-        return c["value"] if type(c) is dict and "value" in c else c
+    def zipf_choice(self, a):
+        """
+        Returns a random value from a.
 
-    def weighted_choice(self, a: list[dict[str, any]]) -> list[any]:
+        Earlier values are returned the most often. ``a[n-1]`` is returned 1/n times as
+        often as ``a[0]``.
+        :param a: Either a collection of values to return or a collection of dicts
+        with ``value`` keys.
+        :return: One of the input values, or their ``value`` values if dicts.
+        """
+        return random.choices(a, weights=zipf_weights(len(a)))[0]
+
+    def weighted_choice(self, a: list[dict[str, Any]]) -> list[Any]:
         """
         Choice weighted by the count in the original dataset.
         :param a: a list of dicts, each with a ``value`` key
@@ -108,20 +145,18 @@ class DistributionGenerator:
             if count:
                 counts.append(count)
                 vs.append(vc.get("value", None))
-        c = random.choices(vs, weights=counts)[0]
+        c: list[Any] = random.choices(vs, weights=counts)[0]
         return c
 
-    def constant(self, value):
+    def constant(self, value: _T) -> _T:
+        """ Always returns the same value """
         return value
 
-    def multivariate_normal_np(self, cov):
+    def multivariate_normal_np(self, cov: dict[str, Any]) -> np._typing.NDArray:
         rank = int(cov["rank"])
         if rank == 0:
             return np.empty(shape=(0,))
-        mean = [
-            float(cov[f"m{i}"])
-            for i in range(rank)
-        ]
+        mean = [float(cov[f"m{i}"]) for i in range(rank)]
         covs = [
             [
                 float(cov[f"c{i}_{j}"] if i <= j else cov[f"c{j}_{i}"])
@@ -131,14 +166,16 @@ class DistributionGenerator:
         ]
         return self.np_gen.multivariate_normal(mean, covs)
 
-    def _select_group(self, alts: list[dict[str, any]]):
+    def _select_group(self, alts: list[dict[str, Any]]) -> Any:
         """
         Choose one of the ``alts`` weighted by their ``"count"`` elements.
         """
         total = 0
         for alt in alts:
             if alt["count"] < 0:
-                logger.warning("Alternative count is %d, but should not be negative", alt["count"])
+                logger.warning(
+                    "Alternative count is %d, but should not be negative", alt["count"]
+                )
             else:
                 total += alt["count"]
         if total == 0:
@@ -150,14 +187,14 @@ class DistributionGenerator:
                 return alt
         raise Exception("Internal error: ran out of choices in _select_group")
 
-    def _find_constants(self, result: dict[str, any]):
+    def _find_constants(self, result: dict[str, Any]) -> dict[int, Any]:
         """
         Find all keys ``kN``, returning a dictionary of ``N: kNN``.
 
         This can be passed into ``merge_with_constants`` as the
         ``constants_at`` argument.
         """
-        out: dict[int, any] = {}
+        out: dict[int, Any] = {}
         for k, v in result.items():
             if k.startswith("k") and k[1:].isnumeric():
                 out[int(k[1:])] = v
@@ -173,7 +210,7 @@ class DistributionGenerator:
         "with_constants_at",
     }
 
-    def multivariate_normal(self, cov):
+    def multivariate_normal(self, cov: dict[str, Any]) -> list[float]:
         """
         Produce a list of values pulled from a multivariate distribution.
 
@@ -184,9 +221,10 @@ class DistributionGenerator:
         ``M``th varaibles, with 0 <= ``N`` <= ``M`` < ``rank``.
         :return: list of ``rank`` floating point values
         """
-        return self.multivariate_normal_np(cov).tolist()
+        out: list[float] = self.multivariate_normal_np(cov).tolist()
+        return out
 
-    def multivariate_lognormal(self, cov):
+    def multivariate_lognormal(self, cov: dict[str, Any]) -> list[float]:
         """
         Produce a list of values pulled from a multivariate distribution.
 
@@ -198,16 +236,17 @@ class DistributionGenerator:
         are all the means and covariants of the logs of the data.
         :return: list of ``rank`` floating point values
         """
-        return np.exp(self.multivariate_normal_np(cov)).tolist()
+        out: list[float] = np.exp(self.multivariate_normal_np(cov)).tolist()
+        return out
 
-    def grouped_multivariate_normal(self, covs):
+    def grouped_multivariate_normal(self, covs: list[dict[str, Any]]) -> list[float]:
         cov = self._select_group(covs)
         logger.debug("Multivariate normal group selected: %s", cov)
         constants = self._find_constants(cov)
         nums = self.multivariate_normal(cov)
         return list(merge_with_constants(nums, constants))
 
-    def grouped_multivariate_lognormal(self, covs):
+    def grouped_multivariate_lognormal(self, covs: list[dict[str, Any]]) -> list[float]:
         cov = self._select_group(covs)
         logger.debug("Multivariate lognormal group selected: %s", cov)
         constants = self._find_constants(cov)
@@ -218,7 +257,9 @@ class DistributionGenerator:
         if name not in self.PERMITTED_SUBGENS:
             raise Exception("%s is not a permitted generator", name)
 
-    def alternatives(self, alternative_configs: list[dict[str, any]], counts: list[int] | None):
+    def alternatives(
+        self, alternative_configs: list[dict[str, Any]], counts: list[dict[str, Any]] | None
+    ) -> Any:
         """
         A generator that picks between other generators.
 
@@ -245,7 +286,9 @@ class DistributionGenerator:
         self._check_generator_name(name)
         return getattr(self, name)(**alt["params"])
 
-    def with_constants_at(self, constants_at: list[int], subgen: str, params: dict[str, any]):
+    def with_constants_at(
+        self, constants_at: dict[int, Any], subgen: str, params: dict[str, Any]
+    ) -> Any:
         if subgen not in self.PERMITTED_SUBGENS:
             logger.error(
                 "subgenerator %s is not a valid name. Valid names are %s.",
@@ -256,8 +299,8 @@ class DistributionGenerator:
         logger.debug("Merging constants %s", constants_at)
         return list(merge_with_constants(subout, constants_at))
 
-    def truncated_string(self, subgen_fn, params, length):
-        """ Calls ``subgen_fn(**params)`` and truncates the results to ``length``. """
+    def truncated_string(self, subgen_fn: Callable[..., str], params: dict[str, Any], length: int) -> str:
+        """Calls ``subgen_fn(**params)`` and truncates the results to ``length``."""
         result = subgen_fn(**params)
         if result is None:
             return None
@@ -288,7 +331,9 @@ class FileUploader:
 
     table: Table
 
-    def _load_existing_file(self, connection: Connection, file_size: int, opener: Callable[[], Any]) -> None:
+    def _load_existing_file(
+        self, connection: Connection, file_size: int, opener: Callable[[], Any]
+    ) -> None:
         count = 0
         with opener() as fh:
             rows = stream_yaml(fh)
@@ -305,7 +350,7 @@ class FileUploader:
                         100 * fh.tell() / file_size,
                     )
 
-    def load(self, connection: Connection, base_path: Path=Path(".")) -> None:
+    def load(self, connection: Connection, base_path: Path = Path(".")) -> None:
         """Load the data from file."""
         yaml_file = base_path / Path(self.table.fullname + ".yaml")
         if yaml_file.exists():
@@ -318,7 +363,10 @@ class FileUploader:
                 logger.warning("File %s not found. Skipping...", yaml_file)
                 return
         if 0 < table_row_count(self.table, connection):
-            logger.warning("Table %s already contains data (consider running 'datafaker remove-vocab'), skipping...", self.table.name)
+            logger.warning(
+                "Table %s already contains data (consider running 'datafaker remove-vocab'), skipping...",
+                self.table.name,
+            )
             return
         try:
             file_size = os.path.getsize(yaml_file)
@@ -331,8 +379,9 @@ class FileUploader:
                 "Error inserting rows into table %s: %s", self.table.fullname, e
             )
 
+
 class ColumnPresence:
-    def sampled(self, patterns):
+    def sampled(self, patterns: Iterable[dict[str, Any]]) -> set:
         total = 0
         for pattern in patterns:
             total += pattern.get("row_count", 0)

@@ -2,19 +2,22 @@
 import os
 import shutil
 from pathlib import Path
+from typing import Mapping
 
+from click.testing import Result
 from sqlalchemy import create_engine, inspect
 from typer.testing import CliRunner
 
-from tests.utils import RequiresDBTestCase
-
 from datafaker.main import app
+from tests.utils import RequiresDBTestCase
 
 # pylint: disable=subprocess-run-check
 
+
 class DBFunctionalTestCase(RequiresDBTestCase):
     """End-to-end tests that require a database."""
-    dump_file_path = "src.dump"
+
+    dump_file_path = Path("src.dump")
     database_name = "src"
     schema_name = "public"
 
@@ -33,7 +36,7 @@ class DBFunctionalTestCase(RequiresDBTestCase):
     generator_file_paths = tuple(
         map(Path, ("story_generators.py", "row_generators.py")),
     )
-    #dump_file_path = Path("dst.dump")
+    # dump_file_path = Path("dst.dump")
     config_file_path = Path("example_config2.yaml")
     stats_file_path = Path("example_stats.yaml")
 
@@ -430,7 +433,7 @@ class DBFunctionalTestCase(RequiresDBTestCase):
             completed_process.stdout,
         )
 
-    def invoke(self, *args, expected_error: str=None, env={}):
+    def invoke(self, *args: str, expected_error: str | None = None, env: Mapping[str, str]={}) -> Result:
         res = self.runner.invoke(app, args, env=env)
         if expected_error is None:
             self.assertNoException(res)
@@ -513,12 +516,15 @@ class DBFunctionalTestCase(RequiresDBTestCase):
         )
         self.assertEqual("", completed_process.stderr)
         self.assertEqual(
-            ("Generating data for story 'story_generators.short_story'\n"
-            "Generating data for story 'story_generators.short_story'\n"
-            "Generating data for story 'story_generators.short_story'\n"
-            "Generating data for story 'story_generators.full_row_story'\n"
-            "Generating data for story 'story_generators.long_story'\n"
-            "Generating data for story 'story_generators.long_story'\n") * 3,
+            (
+                "Generating data for story 'story_generators.short_story'\n"
+                "Generating data for story 'story_generators.short_story'\n"
+                "Generating data for story 'story_generators.short_story'\n"
+                "Generating data for story 'story_generators.full_row_story'\n"
+                "Generating data for story 'story_generators.long_story'\n"
+                "Generating data for story 'story_generators.long_story'\n"
+            )
+            * 3,
             completed_process.stdout,
         )
 
@@ -529,7 +535,7 @@ class DBFunctionalTestCase(RequiresDBTestCase):
             f"--orm-file={self.alt_orm_file_path}",
             f"--df-file={self.alt_datafaker_file_path}",
             "--num-passes=1",
-            expected_error = (
+            expected_error=(
                 "Failed to satisfy unique constraints for table unique_constraint_test"
             ),
         )
@@ -538,7 +544,7 @@ class DBFunctionalTestCase(RequiresDBTestCase):
 
     def test_create_schema(self) -> None:
         """Check that we create a destination schema if it doesn't exist."""
-        env = { "dst_schema": "doesntexistyetschema" }
+        env = {"dst_schema": "doesntexistyetschema"}
 
         engine = create_engine(self.env["dst_dsn"])
         inspector = inspect(engine)

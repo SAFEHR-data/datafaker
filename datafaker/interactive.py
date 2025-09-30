@@ -1,18 +1,18 @@
-from abc import ABC, abstractmethod
 import cmd
-from collections.abc import Mapping
 import csv
-from dataclasses import dataclass
-from enum import Enum
 import functools
 import itertools
-from pathlib import Path
 import re
+from abc import ABC, abstractmethod
+from collections.abc import Mapping
+from dataclasses import dataclass
+from enum import Enum
+from pathlib import Path
 from typing import Iterable
 
 import sqlalchemy
 from prettytable import PrettyTable
-from sqlalchemy import Column, MetaData, Table, text, ForeignKey
+from sqlalchemy import Column, ForeignKey, MetaData, Table, text
 
 from datafaker.generators import Generator, PredefinedGenerator, everything_factory
 from datafaker.utils import (
@@ -28,14 +28,17 @@ from datafaker.utils import (
 # See https://github.com/pyreadline3/pyreadline3/issues/37
 try:
     import readline
+
     if not hasattr(readline, "backend"):
         readline.backend = "readline"
 except:
     pass
 
+
 def or_default(v, d):
-    """ Returns v if it isn't None, otherwise d. """
+    """Returns v if it isn't None, otherwise d."""
     return d if v is None else v
+
 
 class TableType(Enum):
     GENERATE = "generate"
@@ -43,6 +46,7 @@ class TableType(Enum):
     VOCABULARY = "vocabulary"
     PRIVATE = "private"
     EMPTY = "empty"
+
 
 TYPE_LETTER = {
     TableType.GENERATE: "G",
@@ -60,6 +64,7 @@ TYPE_PROMPT = {
     TableType.EMPTY: "(table: {} (empty))",
 }
 
+
 @dataclass
 class TableEntry:
     name: str  # name of the table
@@ -69,15 +74,19 @@ class AskSaveCmd(cmd.Cmd):
     intro = "Do you want to save this configuration?"
     prompt = "(yes/no/cancel) "
     file = None
+
     def __init__(self):
         super().__init__()
         self.result = ""
+
     def do_yes(self, _arg):
         self.result = "yes"
         return True
+
     def do_no(self, _arg):
         self.result = "no"
         return True
+
     def do_cancel(self, _arg):
         self.result = "cancel"
         return True
@@ -100,7 +109,9 @@ class DbCmd(ABC, cmd.Cmd):
     def make_table_entry(self, name: str, table_config: Mapping) -> TableEntry:
         ...
 
-    def __init__(self, src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping):
+    def __init__(
+        self, src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping
+    ):
         super().__init__()
         self.config = config
         self.metadata = metadata
@@ -117,30 +128,33 @@ class DbCmd(ABC, cmd.Cmd):
                 self.table_entries.append(entry)
         self.table_index = 0
         self.engine = create_db_engine(src_dsn, schema_name=src_schema)
+
     def __enter__(self):
         return self
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.engine.dispose()
 
     def print(self, text: str, *args, **kwargs):
         print(text.format(*args, **kwargs))
+
     def print_table(self, headings: list[str], rows: list[list[str]]):
         output = PrettyTable()
         output.field_names = headings
         for row in rows:
             output.add_row(row)
         print(output)
+
     def print_table_by_columns(self, columns: dict[str, list[str]]):
         output = PrettyTable()
         row_count = max([len(col) for col in columns.values()])
         for field_name, data in columns.items():
             output.add_column(field_name, data + [None] * (row_count - len(data)))
         print(output)
+
     def print_results(self, result):
-        self.print_table(
-            list(result.keys()),
-            [list(row) for row in result.all()]
-        )
+        self.print_table(list(result.keys()), [list(row) for row in result.all()])
+
     def ask_save(self):
         ask = AskSaveCmd()
         ask.cmdloop()
@@ -152,39 +166,51 @@ class DbCmd(ABC, cmd.Cmd):
             self.set_prompt()
             return True
         return False
+
     def next_table(self, report="No more tables"):
         if not self.set_table_index(self.table_index + 1):
             self.print(report)
             return False
         return True
+
     def table_name(self):
         return self.table_entries[self.table_index].name
+
     def table_metadata(self) -> Table:
         return self.metadata.tables[self.table_name()]
+
     def get_column_names(self) -> list[str]:
-        return [
-            col.name
-            for col in self.table_metadata().columns
-        ]
+        return [col.name for col in self.table_metadata().columns]
+
     def report_columns(self):
-        self.print_table(["name", "type", "primary", "nullable", "foreign key"], [
-            [name, str(col.type), col.primary_key, col.nullable, ", ".join(
-                [fk_column_name(fk) for fk in col.foreign_keys]
-            )]
-            for name, col in self.table_metadata().columns.items()
-        ])
+        self.print_table(
+            ["name", "type", "primary", "nullable", "foreign key"],
+            [
+                [
+                    name,
+                    str(col.type),
+                    col.primary_key,
+                    col.nullable,
+                    ", ".join([fk_column_name(fk) for fk in col.foreign_keys]),
+                ]
+                for name, col in self.table_metadata().columns.items()
+            ],
+        )
+
     def get_table_config(self, table_name: str) -> dict[str, any]:
         ts = self.config.get("tables", None)
         if type(ts) is not dict:
             return {}
         t = ts.get(table_name)
         return t if type(t) is dict else {}
+
     def set_table_config(self, table_name: str, config: dict[str, any]):
         ts = self.config.get("tables", None)
         if type(ts) is not dict:
             self.config["tables"] = {table_name: config}
             return
         ts[table_name] = config
+
     def _remove_prefix_src_stats(self, prefix: str) -> list[dict[str, any]]:
         src_stats = self.config.get("src-stats", [])
         new_src_stats = []
@@ -193,6 +219,7 @@ class DbCmd(ABC, cmd.Cmd):
                 new_src_stats.append(stat)
         self.config["src-stats"] = new_src_stats
         return new_src_stats
+
     def get_nonnull_columns(self, table_name: str):
         metadata_table = self.metadata.tables[table_name]
         return [
@@ -200,52 +227,59 @@ class DbCmd(ABC, cmd.Cmd):
             for name, column in metadata_table.columns.items()
             if column.nullable
         ]
+
     def find_entry_index_by_table_name(self, table_name) -> int | None:
         return next(
-            (i for i,entry in enumerate(self.table_entries) if entry.name == table_name),
+            (
+                i
+                for i, entry in enumerate(self.table_entries)
+                if entry.name == table_name
+            ),
             None,
         )
+
     def find_entry_by_table_name(self, table_name) -> TableEntry | None:
         for e in self.table_entries:
             if e.name == table_name:
                 return e
         return None
+
     def do_counts(self, _arg):
         "Report the column names with the counts of nulls in them"
         if len(self.table_entries) <= self.table_index:
             return
         table_name = self.table_name()
         nonnull_columns = self.get_nonnull_columns(table_name)
-        colcounts = [
-            ", COUNT({0}) AS {0}".format(nnc)
-            for nnc in nonnull_columns
-        ]
+        colcounts = [", COUNT({0}) AS {0}".format(nnc) for nnc in nonnull_columns]
         with self.engine.connect() as connection:
             result = connection.execute(
-                text("SELECT COUNT(*) AS row_count{colcounts} FROM {table}".format(
-                    table=table_name,
-                    colcounts="".join(colcounts),
-                ))
+                text(
+                    "SELECT COUNT(*) AS row_count{colcounts} FROM {table}".format(
+                        table=table_name,
+                        colcounts="".join(colcounts),
+                    )
+                )
             ).first()
             if result is None:
                 self.print("Could not count rows in table {0}", table_name)
                 return
             row_count = result.row_count
             self.print(self.ROW_COUNT_MSG, row_count)
-            self.print_table(["Column", "NULL count"], [
-                [name, row_count - count]
-                for name, count in result._mapping.items()
-                if name != "row_count"
-            ])
+            self.print_table(
+                ["Column", "NULL count"],
+                [
+                    [name, row_count - count]
+                    for name, count in result._mapping.items()
+                    if name != "row_count"
+                ],
+            )
 
     def do_select(self, arg):
         "Run a select query over the database and show the first 50 results"
         MAX_SELECT_ROWS = 50
         with self.engine.connect() as connection:
             try:
-                result = connection.execute(
-                    text("SELECT " + arg)
-                )
+                result = connection.execute(text("SELECT " + arg))
             except sqlalchemy.exc.DatabaseError as exc:
                 self.print("Failed to execute: {}", exc)
                 return
@@ -254,10 +288,7 @@ class DbCmd(ABC, cmd.Cmd):
             if 50 < row_count:
                 self.print("Showing the first {} rows", MAX_SELECT_ROWS)
             fields = list(result.keys())
-            rows = [
-                row._tuple()
-                for row in result.fetchmany(MAX_SELECT_ROWS)
-            ]
+            rows = [row._tuple() for row in result.fetchmany(MAX_SELECT_ROWS)]
             self.print_table(fields, rows)
 
     def do_peek(self, arg: str):
@@ -276,30 +307,25 @@ class DbCmd(ABC, cmd.Cmd):
         nonnulls = [cn + " IS NOT NULL" for cn in col_names]
         with self.engine.connect() as connection:
             query = "SELECT {cols} FROM {table} {where} {nonnull} ORDER BY RANDOM() LIMIT {max}".format(
-                    cols=",".join(col_names),
-                    table=table_name,
-                    where="WHERE" if nonnulls else "",
-                    nonnull=" OR ".join(nonnulls),
-                    max=MAX_PEEK_ROWS,
-                )
+                cols=",".join(col_names),
+                table=table_name,
+                where="WHERE" if nonnulls else "",
+                nonnull=" OR ".join(nonnulls),
+                max=MAX_PEEK_ROWS,
+            )
             try:
                 result = connection.execute(text(query))
             except Exception as exc:
                 self.print(f'SQL query "{query}" caused exception {exc}')
                 return
-            rows = [
-                row._tuple()
-                for row in result.fetchmany(MAX_PEEK_ROWS)
-            ]
+            rows = [row._tuple() for row in result.fetchmany(MAX_PEEK_ROWS)]
             self.print_table(list(result.keys()), rows)
 
     def complete_peek(self, text: str, _line: str, _begidx: int, _endidx: int):
         if len(self.table_entries) <= self.table_index:
             return []
         return [
-            col
-            for col in self.table_metadata().columns.keys()
-            if col.startswith(text)
+            col for col in self.table_metadata().columns.keys() if col.startswith(text)
         ]
 
 
@@ -307,6 +333,7 @@ class DbCmd(ABC, cmd.Cmd):
 class TableCmdTableEntry(TableEntry):
     old_type: TableType
     new_type: TableType
+
 
 class TableCmd(DbCmd):
     intro = "Interactive table configuration (ignore, vocabulary, private, generate or empty). Type ? for help.\n"
@@ -318,10 +345,16 @@ information about the database. Use 'data', 'peek', 'select' or
 to exit this program."""
     prompt = "(tableconf) "
     file = None
-    WARNING_TEXT_VOCAB_TO_NON_VOCAB = "Vocabulary table {0} references non-vocabulary table {1}"
-    WARNING_TEXT_NON_EMPTY_TO_EMPTY = "Empty table {1} referenced from non-empty table {0}. {1} will need stories."
+    WARNING_TEXT_VOCAB_TO_NON_VOCAB = (
+        "Vocabulary table {0} references non-vocabulary table {1}"
+    )
+    WARNING_TEXT_NON_EMPTY_TO_EMPTY = (
+        "Empty table {1} referenced from non-empty table {0}. {1} will need stories."
+    )
     WARNING_TEXT_PROBLEMS_EXIST = "WARNING: The following table types have problems:"
-    WARNING_TEXT_POTENTIAL_PROBLEMS = "NOTE: The following table types might cause problems later:"
+    WARNING_TEXT_POTENTIAL_PROBLEMS = (
+        "NOTE: The following table types might cause problems later:"
+    )
     NOTE_TEXT_NO_CHANGES = "You have made no changes."
     NOTE_TEXT_CHANGING = "Changing {0} from {1} to {2}"
 
@@ -336,7 +369,9 @@ to exit this program."""
             return TableCmdTableEntry(name, TableType.EMPTY, TableType.EMPTY)
         return TableCmdTableEntry(name, TableType.GENERATE, TableType.GENERATE)
 
-    def __init__(self, src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping):
+    def __init__(
+        self, src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping
+    ):
         super().__init__(src_dsn, src_schema, metadata, config)
         self.set_prompt()
 
@@ -346,16 +381,21 @@ to exit this program."""
             self.prompt = TYPE_PROMPT[entry.new_type].format(entry.name)
         else:
             self.prompt = "(table) "
+
     def set_type(self, t_type: TableType):
         if self.table_index < len(self.table_entries):
             entry = self.table_entries[self.table_index]
             entry.new_type = t_type
+
     def _copy_entries(self) -> None:
         for entry in self.table_entries:
             entry: TableCmdTableEntry
             if entry.old_type != entry.new_type:
                 table = self.get_table_config(entry.name)
-                if entry.old_type == TableType.EMPTY and table.get("num_rows_per_pass", 1) == 0:
+                if (
+                    entry.old_type == TableType.EMPTY
+                    and table.get("num_rows_per_pass", 1) == 0
+                ):
                     table["num_rows_per_pass"] = 1
                 if entry.new_type == TableType.IGNORE:
                     table["ignore"] = True
@@ -383,13 +423,11 @@ to exit this program."""
     def _get_referenced_tables(self, from_table_name: str) -> set[str]:
         from_meta = self.metadata.tables[from_table_name]
         return {
-            fk.column.table.name
-            for col in from_meta.columns
-            for fk in col.foreign_keys
+            fk.column.table.name for col in from_meta.columns for fk in col.foreign_keys
         }
 
     def _sanity_check_failures(self) -> list[tuple[str, str, str]]:
-        """ Find tables that reference each other that should not given their types. """
+        """Find tables that reference each other that should not given their types."""
         failures = []
         for from_entry in self.table_entries:
             from_entry: TableCmdTableEntry
@@ -398,16 +436,21 @@ to exit this program."""
                 referenced = self._get_referenced_tables(from_entry.name)
                 for ref in referenced:
                     to_entry = self.find_entry_by_table_name(ref)
-                    if to_entry is not None and to_entry.new_type != TableType.VOCABULARY:
-                        failures.append((
-                            self.WARNING_TEXT_VOCAB_TO_NON_VOCAB,
-                            from_entry.name,
-                            to_entry.name,
-                        ))
+                    if (
+                        to_entry is not None
+                        and to_entry.new_type != TableType.VOCABULARY
+                    ):
+                        failures.append(
+                            (
+                                self.WARNING_TEXT_VOCAB_TO_NON_VOCAB,
+                                from_entry.name,
+                                to_entry.name,
+                            )
+                        )
         return failures
 
     def _sanity_check_warnings(self) -> list[tuple[str, str, str]]:
-        """ Find tables that reference each other that might cause problems given their types. """
+        """Find tables that reference each other that might cause problems given their types."""
         warnings = []
         for from_entry in self.table_entries:
             from_entry: TableCmdTableEntry
@@ -416,14 +459,18 @@ to exit this program."""
                 referenced = self._get_referenced_tables(from_entry.name)
                 for ref in referenced:
                     to_entry = self.find_entry_by_table_name(ref)
-                    if to_entry is not None and to_entry.new_type in {TableType.EMPTY, TableType.IGNORE}:
-                        warnings.append((
-                            self.WARNING_TEXT_NON_EMPTY_TO_EMPTY,
-                            from_entry.name,
-                            to_entry.name,
-                        ))
+                    if to_entry is not None and to_entry.new_type in {
+                        TableType.EMPTY,
+                        TableType.IGNORE,
+                    }:
+                        warnings.append(
+                            (
+                                self.WARNING_TEXT_NON_EMPTY_TO_EMPTY,
+                                from_entry.name,
+                                to_entry.name,
+                            )
+                        )
         return warnings
-
 
     def do_quit(self, _arg):
         "Check the updates, save them if desired and quit the configurer."
@@ -442,12 +489,12 @@ to exit this program."""
         failures = self._sanity_check_failures()
         if failures:
             self.print(self.WARNING_TEXT_PROBLEMS_EXIST)
-            for (text, from_t, to_t) in failures:
+            for text, from_t, to_t in failures:
                 self.print(text, from_t, to_t)
         warnings = self._sanity_check_warnings()
         if warnings:
             self.print(self.WARNING_TEXT_POTENTIAL_PROBLEMS)
-            for (text, from_t, to_t) in warnings:
+            for text, from_t, to_t in warnings:
                 self.print(text, from_t, to_t)
         reply = self.ask_save()
         if reply == "yes":
@@ -456,6 +503,7 @@ to exit this program."""
         if reply == "no":
             return True
         return False
+
     def do_tables(self, _arg):
         "list the tables with their types"
         for entry in self.table_entries:
@@ -463,6 +511,7 @@ to exit this program."""
             new = entry.new_type
             becomes = "   " if old == new else "->" + TYPE_LETTER[new]
             self.print("{0}{1} {2}", TYPE_LETTER[old], becomes, entry.name)
+
     def do_next(self, arg):
         "'next' = go to the next table, 'next tablename' = go to table 'tablename'"
         if arg:
@@ -474,44 +523,51 @@ to exit this program."""
             self.set_table_index(index)
             return
         self.next_table(self.INFO_NO_MORE_TABLES)
+
     def complete_next(self, text, line, begidx, endidx):
         return [
-            entry.name
-            for entry in self.table_entries
-            if entry.name.startswith(text)
+            entry.name for entry in self.table_entries if entry.name.startswith(text)
         ]
+
     def do_previous(self, _arg):
         "Go to the previous table"
         if not self.set_table_index(self.table_index - 1):
             self.print(self.ERROR_ALREADY_AT_START)
+
     def do_ignore(self, _arg):
         "Set the current table as ignored, and go to the next table"
         self.set_type(TableType.IGNORE)
         self.print("Table {} set as ignored", self.table_name())
         self.next_table()
+
     def do_vocabulary(self, _arg):
         "Set the current table as a vocabulary table, and go to the next table"
         self.set_type(TableType.VOCABULARY)
         self.print("Table {} set to be a vocabulary table", self.table_name())
         self.next_table()
+
     def do_private(self, _arg):
         "Set the current table as a primary private table (such as the table of patients)"
         self.set_type(TableType.PRIVATE)
         self.print("Table {} set to be a primary private table", self.table_name())
         self.next_table()
+
     def do_generate(self, _arg):
         "Set the current table as neither a vocabulary table nor ignored nor primary private, and go to the next table"
         self.set_type(TableType.GENERATE)
         self.print("Table {} generate", self.table_name())
         self.next_table()
+
     def do_empty(self, _arg):
         "Set the current table as empty; no generators will be run for it"
         self.set_type(TableType.EMPTY)
         self.print("Table {} empty", self.table_name())
         self.next_table()
+
     def do_columns(self, _arg):
         "Report the column names and metadata"
         self.report_columns()
+
     def do_data(self, arg: str):
         """
         Report some data.
@@ -551,15 +607,13 @@ Type 'help data' for examples."""
             if number is None:
                 number = 48
             self.print_column_data(column, number, min_length)
+
     def complete_data(self, text, line, begidx, endidx):
-        previous_parts = line[:begidx - 1].split()
+        previous_parts = line[: begidx - 1].split()
         if len(previous_parts) != 2:
             return []
         table_metadata = self.table_metadata()
-        return [
-            k for k in table_metadata.columns.keys()
-            if k.startswith(text)
-        ]
+        return [k for k in table_metadata.columns.keys() if k.startswith(text)]
 
     def print_column_data(self, column: str, count: int, min_length: int):
         where = f"WHERE {column} IS NOT NULL"
@@ -570,22 +624,26 @@ Type 'help data' for examples."""
             )
         with self.engine.connect() as connection:
             result = connection.execute(
-                text("SELECT {column} FROM {table} {where} ORDER BY RANDOM() LIMIT {count}".format(
-                    table=self.table_name(),
-                    column=column,
-                    count=count,
-                    where=where,
-                ))
+                text(
+                    "SELECT {column} FROM {table} {where} ORDER BY RANDOM() LIMIT {count}".format(
+                        table=self.table_name(),
+                        column=column,
+                        count=count,
+                        where=where,
+                    )
+                )
             )
             self.columnize([str(x[0]) for x in result.all()])
 
     def print_row_data(self, count: int):
         with self.engine.connect() as connection:
             result = connection.execute(
-                text("SELECT * FROM {table} ORDER BY RANDOM() LIMIT {count}".format(
-                    table=self.table_name(),
-                    count=count,
-                ))
+                text(
+                    "SELECT * FROM {table} ORDER BY RANDOM() LIMIT {count}".format(
+                        table=self.table_name(),
+                        count=count,
+                    )
+                )
             )
             if result is None:
                 self.print("No rows in this table!")
@@ -593,7 +651,9 @@ Type 'help data' for examples."""
             self.print_results(result)
 
 
-def update_config_tables(src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping):
+def update_config_tables(
+    src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping
+):
     with TableCmd(src_dsn, src_schema, metadata, config) as tc:
         tc.cmdloop()
         return tc.config
@@ -601,8 +661,8 @@ def update_config_tables(src_dsn: str, src_schema: str, metadata: MetaData, conf
 
 @dataclass
 class MissingnessType:
-    SAMPLED="column_presence.sampled"
-    SAMPLED_QUERY=(
+    SAMPLED = "column_presence.sampled"
+    SAMPLED_QUERY = (
         "SELECT COUNT(*) AS row_count, {result_names} FROM "
         "(SELECT {column_is_nulls} FROM {table} ORDER BY RANDOM() LIMIT {count})"
         " AS __t GROUP BY {result_names}"
@@ -611,16 +671,13 @@ class MissingnessType:
     query: str
     comment: str
     columns: list[str]
+
     @classmethod
     def sampled_query(cls, table, count, column_names) -> str:
-        result_names = ", ".join([
-            "{0}__is_null".format(c)
-            for c in column_names
-        ])
-        column_is_nulls = ", ".join([
-            "{0} IS NULL AS {0}__is_null".format(c)
-            for c in column_names
-        ])
+        result_names = ", ".join(["{0}__is_null".format(c) for c in column_names])
+        column_is_nulls = ", ".join(
+            ["{0} IS NULL AS {0}__is_null".format(c) for c in column_names]
+        )
         return cls.SAMPLED_QUERY.format(
             result_names=result_names,
             column_is_nulls=column_is_nulls,
@@ -646,8 +703,10 @@ data from the database. Use 'quit' to exit this tool."""
     file = None
     PATTERN_RE = re.compile(r'SRC_STATS\["([^"]*)"\]')
 
-    def find_missingness_query(self, missingness_generator: Mapping) -> tuple[str | None, str | None] | None:
-        """ Find query and comment from src-stats for the passed missingness generator. """
+    def find_missingness_query(
+        self, missingness_generator: Mapping
+    ) -> tuple[str | None, str | None] | None:
+        """Find query and comment from src-stats for the passed missingness generator."""
         kwargs = missingness_generator.get("kwargs", {})
         patterns = kwargs.get("patterns", "")
         pattern_match = self.PATTERN_RE.match(patterns)
@@ -657,6 +716,7 @@ data from the database. Use 'quit' to exit this tool."""
                 if src_stat.get("name") == key:
                     return (src_stat.get("query", None), src_stat.get("comment", None))
             return None
+
     def make_table_entry(self, name: str, table: Mapping) -> TableEntry:
         if table.get("ignore", False):
             return None
@@ -697,7 +757,9 @@ data from the database. Use 'quit' to exit this tool."""
             new_type=old,
         )
 
-    def __init__(self, src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping):
+    def __init__(
+        self, src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping
+    ):
         super().__init__(src_dsn, src_schema, metadata, config)
         self.set_prompt()
 
@@ -711,10 +773,12 @@ data from the database. Use 'quit' to exit this tool."""
                 self.prompt = "(missingness for {0}: {1}) ".format(entry.name, nt.name)
         else:
             self.prompt = "(missingness) "
+
     def set_type(self, t_type: TableType):
         if self.table_index < len(self.table_entries):
             entry = self.table_entries[self.table_index]
             entry.new_type = t_type
+
     def _copy_entries(self) -> None:
         src_stats = self._remove_prefix_src_stats("missing_auto__")
         for entry in self.table_entries:
@@ -724,16 +788,26 @@ data from the database. Use 'quit' to exit this tool."""
                 table.pop("missingness_generators", None)
             else:
                 src_stat_key = "missing_auto__{0}__0".format(entry.name)
-                table["missingness_generators"] = [{
-                    "name": entry.new_type.name,
-                    "kwargs": {"patterns": 'SRC_STATS["{0}"]["results"]'.format(src_stat_key)},
-                    "columns": entry.new_type.columns,
-                }]
-                src_stats.append({
-                    "name": src_stat_key,
-                    "query": entry.new_type.query,
-                    "comments": [] if entry.new_type.comment is None else [entry.new_type.comment],
-                })
+                table["missingness_generators"] = [
+                    {
+                        "name": entry.new_type.name,
+                        "kwargs": {
+                            "patterns": 'SRC_STATS["{0}"]["results"]'.format(
+                                src_stat_key
+                            )
+                        },
+                        "columns": entry.new_type.columns,
+                    }
+                ]
+                src_stats.append(
+                    {
+                        "name": src_stat_key,
+                        "query": entry.new_type.query,
+                        "comments": []
+                        if entry.new_type.comment is None
+                        else [entry.new_type.comment],
+                    }
+                )
             self.set_table_config(entry.name, table)
 
     def do_quit(self, _arg):
@@ -743,9 +817,17 @@ data from the database. Use 'quit' to exit this tool."""
             if entry.old_type != entry.new_type:
                 count += 1
                 if entry.old_type is None:
-                    self.print("Putting generator {0} on table {1}", entry.name, entry.new_type.name)
+                    self.print(
+                        "Putting generator {0} on table {1}",
+                        entry.name,
+                        entry.new_type.name,
+                    )
                 elif entry.new_type is None:
-                    self.print("Deleting generator {1} from table {0}", entry.name, entry.old_type.name)
+                    self.print(
+                        "Deleting generator {1} from table {0}",
+                        entry.name,
+                        entry.old_type.name,
+                    )
                 else:
                     self.print(
                         "Changing {0} from {1} to {2}",
@@ -762,6 +844,7 @@ data from the database. Use 'quit' to exit this tool."""
         if reply == "no":
             return True
         return False
+
     def do_tables(self, arg):
         "list the tables with their types"
         for entry in self.table_entries:
@@ -769,27 +852,32 @@ data from the database. Use 'quit' to exit this tool."""
             new = "-" if entry.new_type is None else entry.new_type.name
             desc = new if old == new else "{0}->{1}".format(old, new)
             self.print("{0} {1}", entry.name, desc)
+
     def do_next(self, arg):
         "'next' = go to the next table, 'next tablename' = go to table 'tablename'"
         if arg:
             # Find the index of the table called _arg, if any
-            index = next((i for i,entry in enumerate(self.table_entries) if entry.name == arg), None)
+            index = next(
+                (i for i, entry in enumerate(self.table_entries) if entry.name == arg),
+                None,
+            )
             if index is None:
                 self.print(self.ERROR_NO_SUCH_TABLE, arg)
                 return
             self.set_table_index(index)
             return
         self.next_table(self.INFO_NO_MORE_TABLES)
+
     def complete_next(self, text, line, begidx, endidx):
         return [
-            entry.name
-            for entry in self.table_entries
-            if entry.name.startswith(text)
+            entry.name for entry in self.table_entries if entry.name.startswith(text)
         ]
+
     def do_previous(self, _arg):
         "Go to the previous table"
         if not self.set_table_index(self.table_index - 1):
             self.print(self.ERROR_ALREADY_AT_START)
+
     def _set_type(self, name, query, comment):
         if len(self.table_entries) <= self.table_index:
             return
@@ -800,11 +888,13 @@ data from the database. Use 'quit' to exit this tool."""
             comment=comment,
             columns=self.get_nonnull_columns(entry.name),
         )
+
     def _set_none(self):
         if len(self.table_entries) <= self.table_index:
             return
         entry: MissingnessCmdTableEntry = self.table_entries[self.table_index]
         entry.new_type = None
+
     def do_sampled(self, arg: str):
         """
         Set the current table missingness as 'sampled', and go to the next table.
@@ -821,7 +911,10 @@ data from the database. Use 'quit' to exit this tool."""
         elif arg.isdecimal():
             count = int(arg)
         else:
-            self.print("Error: sampled can be used alone or with an integer argument. {0} is not permitted", arg)
+            self.print(
+                "Error: sampled can be used alone or with an integer argument. {0} is not permitted",
+                arg,
+            )
             return
         self._set_type(
             MissingnessType.SAMPLED,
@@ -830,10 +923,11 @@ data from the database. Use 'quit' to exit this tool."""
                 count,
                 self.get_nonnull_columns(entry.name),
             ),
-            f"The missingness patterns and how often they appear in a sample of {count} from table {entry.name}"
+            f"The missingness patterns and how often they appear in a sample of {count} from table {entry.name}",
         )
         self.print("Table {} set to sampled missingness", self.table_name())
         self.next_table()
+
     def do_none(self, _arg):
         "Set the current table to have no missingness, and go to the next table"
         self._set_none()
@@ -841,7 +935,9 @@ data from the database. Use 'quit' to exit this tool."""
         self.next_table()
 
 
-def update_missingness(src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping):
+def update_missingness(
+    src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping
+):
     with MissingnessCmd(src_dsn, src_schema, metadata, config) as mc:
         mc.cmdloop()
         return mc.config
@@ -852,10 +948,12 @@ class GeneratorInfo:
     columns: list[str]
     gen: Generator | None
 
+
 @dataclass
 class GeneratorCmdTableEntry(TableEntry):
     old_generators: list[GeneratorInfo]
     new_generators: list[GeneratorInfo]
+
 
 class GeneratorCmd(DbCmd):
     intro = "Interactive generator configuration. Type ? for help.\n"
@@ -885,7 +983,9 @@ information about the columns in the current table. Use 'peek',
     ERROR_CANNOT_UNMERGE_ALL = "You cannot unmerge all the generator's columns"
     PROPOSE_NOTHING = "No proposed generators, sorry."
 
-    SRC_STAT_RE = re.compile(r'\bSRC_STATS\["([^"]+)"\](\["results"\]\[0\]\["([^"]+)"\])?')
+    SRC_STAT_RE = re.compile(
+        r'\bSRC_STATS\["([^"]+)"\](\["results"\]\[0\]\["([^"]+)"\])?'
+    )
 
     def make_table_entry(self, table_name: str, table: Mapping) -> TableEntry | None:
         if table.get("ignore", False):
@@ -904,35 +1004,47 @@ information about the columns in the current table. Use 'peek',
             gen_name = rg.get("name", None)
             if gen_name:
                 ca = rg.get("columns_assigned", [])
-                collist: list[str] = [ca] if isinstance(ca, str) else [str(c) for c in ca]
+                collist: list[str] = (
+                    [ca] if isinstance(ca, str) else [str(c) for c in ca]
+                )
                 colset: set[str] = set(collist)
                 for unknown in colset - column_set:
                     logger.warning(
                         "table '%s' has '%s' assigned to column '%s' which is not in this table",
-                        table_name, gen_name, unknown
+                        table_name,
+                        gen_name,
+                        unknown,
                     )
                 for mult in columns_assigned_so_far & colset:
                     logger.warning(
-                        "table '%s' has column '%s' assigned to multiple times", table_name, mult
+                        "table '%s' has column '%s' assigned to multiple times",
+                        table_name,
+                        mult,
                     )
                 actual_collist = [c for c in collist if c in columns]
                 if actual_collist:
                     gen = PredefinedGenerator(table, rg, self.config)
-                    new_generator_infos.append(GeneratorInfo(
-                        columns=actual_collist.copy(),
-                        gen=gen,
-                    ))
-                    old_generator_infos.append(GeneratorInfo(
-                        columns=actual_collist.copy(),
-                        gen=gen,
-                    ))
+                    new_generator_infos.append(
+                        GeneratorInfo(
+                            columns=actual_collist.copy(),
+                            gen=gen,
+                        )
+                    )
+                    old_generator_infos.append(
+                        GeneratorInfo(
+                            columns=actual_collist.copy(),
+                            gen=gen,
+                        )
+                    )
                     columns_assigned_so_far |= colset
         for colname in columns:
             if colname not in columns_assigned_so_far:
-                new_generator_infos.append(GeneratorInfo(
-                    columns=[colname],
-                    gen=None,
-                ))
+                new_generator_infos.append(
+                    GeneratorInfo(
+                        columns=[colname],
+                        gen=None,
+                    )
+                )
         if len(new_generator_infos) == 0:
             return None
         return GeneratorCmdTableEntry(
@@ -941,7 +1053,9 @@ information about the columns in the current table. Use 'peek',
             new_generators=new_generator_infos,
         )
 
-    def __init__(self, src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping):
+    def __init__(
+        self, src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping
+    ):
         super().__init__(src_dsn, src_schema, metadata, config)
         self.generator_index = 0
         self.generators_valid_columns = None
@@ -959,7 +1073,10 @@ information about the columns in the current table. Use 'peek',
         if ret:
             table = self.get_table()
             if table is None:
-                self.print("Internal error! table {0} does not have any generators!", self.table_index)
+                self.print(
+                    "Internal error! table {0} does not have any generators!",
+                    self.table_index,
+                )
                 return False
             self.generator_index = len(table.new_generators) - 1
         else:
@@ -987,10 +1104,7 @@ information about the columns in the current table. Use 'peek',
         table = self.table_metadata()
         if table is None:
             return []
-        return [
-            table.columns[name]
-            for name in self.get_column_names()
-        ]
+        return [table.columns[name] for name in self.get_column_names()]
 
     def set_prompt(self):
         (table_name, gen_info) = self.get_table_and_generator()
@@ -1002,8 +1116,7 @@ information about the columns in the current table. Use 'peek',
             return
         table = self.table_metadata()
         columns = [
-            c + "[pk]" if table.columns[c].primary_key else c
-            for c in gen_info.columns
+            c + "[pk]" if table.columns[c].primary_key else c for c in gen_info.columns
         ]
         gen = f" ({gen_info.gen.name()})" if gen_info.gen else ""
         self.prompt = f"({table_name}.{','.join(columns)}{gen}) "
@@ -1022,11 +1135,15 @@ information about the columns in the current table. Use 'peek',
                     new_gens.append(generator.gen)
                     cqs = generator.gen.custom_queries()
                     for cq_key, cq in cqs.items():
-                        src_stats.append({
-                            "name": cq_key,
-                            "query": cq["query"],
-                            "comments": [cq["comment"]] if "comment" in cq and cq["comment"] else [],
-                        })
+                        src_stats.append(
+                            {
+                                "name": cq_key,
+                                "query": cq["query"],
+                                "comments": [cq["comment"]]
+                                if "comment" in cq and cq["comment"]
+                                else [],
+                            }
+                        )
                     rg = {
                         "name": generator.gen.function_name(),
                         "columns_assigned": generator.columns,
@@ -1037,16 +1154,18 @@ information about the columns in the current table. Use 'peek',
                     rgs.append(rg)
             aq = self._get_aggregate_query(new_gens, entry.name)
             if aq:
-                src_stats.append({
-                    "name": f"auto__{entry.name}",
-                    "query": aq,
-                    "comments": [
-                        q["comment"]
-                        for gen in new_gens
-                        for q in gen.select_aggregate_clauses().values()
-                        if "comment" in q and q["comment"] is not None
-                    ],
-                })
+                src_stats.append(
+                    {
+                        "name": f"auto__{entry.name}",
+                        "query": aq,
+                        "comments": [
+                            q["comment"]
+                            for gen in new_gens
+                            for q in gen.select_aggregate_clauses().values()
+                            if "comment" in q and q["comment"] is not None
+                        ],
+                    }
+                )
             table_config = self.get_table_config(entry.name)
             if rgs:
                 table_config["row_generators"] = rgs
@@ -1055,8 +1174,10 @@ information about the columns in the current table. Use 'peek',
             self.set_table_config(entry.name, table_config)
         self.config["src-stats"] = src_stats
 
-    def _find_old_generator(self, entry: GeneratorCmdTableEntry, columns) -> Generator | None:
-        """ Find any generator that previously assigned to these exact same columns. """
+    def _find_old_generator(
+        self, entry: GeneratorCmdTableEntry, columns
+    ) -> Generator | None:
+        """Find any generator that previously assigned to these exact same columns."""
         fc = frozenset(columns)
         for gen in entry.old_generators:
             if frozenset(gen.columns) == fc:
@@ -1141,12 +1262,18 @@ information about the columns in the current table. Use 'peek',
                 "nullable" if cm.nullable else "not nullable",
             )
             if cm.primary_key:
-                self.print("It is a primary key, which usually does not need a generator (it will auto-increment)")
+                self.print(
+                    "It is a primary key, which usually does not need a generator (it will auto-increment)"
+                )
             if cm.foreign_keys:
                 fk_names = [fk_column_name(fk) for fk in cm.foreign_keys]
-                self.print("It is a foreign key referencing column {0}", ", ".join(fk_names))
+                self.print(
+                    "It is a foreign key referencing column {0}", ", ".join(fk_names)
+                )
                 if len(fk_names) == 1 and not cm.primary_key:
-                    self.print("You do not need a generator if you just want a uniform choice over the referenced table's rows")
+                    self.print(
+                        "You do not need a generator if you just want a uniform choice over the referenced table's rows"
+                    )
 
     def _get_table_index(self, table_name: str) -> int | None:
         for n, entry in enumerate(self.table_entries):
@@ -1198,7 +1325,7 @@ information about the columns in the current table. Use 'peek',
             self._go_next()
 
     def do_n(self, arg):
-        """ Synonym for next """
+        """Synonym for next"""
         self.do_next(arg)
 
     def complete_n(self, text: str, line: str, begidx: int, endidx: int):
@@ -1250,7 +1377,7 @@ information about the columns in the current table. Use 'peek',
         return table_names + column_names
 
     def do_previous(self, _arg):
-        """ Go to the previous generator """
+        """Go to the previous generator"""
         if self.generator_index == 0:
             self.previous_table()
         else:
@@ -1258,11 +1385,14 @@ information about the columns in the current table. Use 'peek',
         self.set_prompt()
 
     def do_b(self, arg):
-        """ Synonym for previous """
+        """Synonym for previous"""
         self.do_previous(arg)
 
     def _generators_valid(self) -> bool:
-        return self.generators_valid_columns == (self.table_index, self.get_column_names())
+        return self.generators_valid_columns == (
+            self.table_index,
+            self.get_column_names(),
+        )
 
     def _get_generator_proposals(self) -> list[Generator]:
         if not self._generators_valid():
@@ -1272,7 +1402,10 @@ information about the columns in the current table. Use 'peek',
             gens = everything_factory().get_generators(columns, self.engine)
             gens.sort(key=lambda g: g.fit(9999))
             self.generators = gens
-            self.generators_valid_columns = (self.table_index, self.get_column_names().copy())
+            self.generators_valid_columns = (
+                self.table_index,
+                self.get_column_names().copy(),
+            )
         return self.generators
 
     def _print_privacy(self):
@@ -1318,7 +1451,7 @@ information about the columns in the current table. Use 'peek',
         self.print_table_by_columns(comparison)
 
     def do_c(self, arg):
-        """ Synonym for compare. """
+        """Synonym for compare."""
         self.do_compare(arg)
 
     def _print_values_queried(self, table_name: str, n: int, gen: Generator):
@@ -1356,7 +1489,11 @@ information about the columns in the current table. Use 'peek',
             actual,
         )
         for cq_key, cq in cqs.items():
-            self.print("{0}; providing the following values: {1}", cq["query"], cq_key2args[cq_key])
+            self.print(
+                "{0}; providing the following values: {1}",
+                cq["query"],
+                cq_key2args[cq_key],
+            )
 
     def _get_custom_queries_from(self, out, nominal, actual):
         if type(nominal) is str:
@@ -1377,7 +1514,9 @@ information about the columns in the current table. Use 'peek',
                 if k in actual:
                     self._get_custom_queries_from(out, v, actual[k])
 
-    def _get_aggregate_query(self, gens: list[Generator], table_name: str) -> str | None:
+    def _get_aggregate_query(
+        self, gens: list[Generator], table_name: str
+    ) -> str | None:
         clauses = [
             f'{q["clause"]} AS {n}'
             for gen in gens
@@ -1396,7 +1535,7 @@ information about the columns in the current table. Use 'peek',
             return
         kwa = gen.actual_kwargs()
         vals = []
-        src_stat2kwarg = { v: k for k, v in gen.nominal_kwargs().items() }
+        src_stat2kwarg = {v: k for k, v in gen.nominal_kwargs().items()}
         for n in sacs.keys():
             src_stat = f'SRC_STATS["auto__{table_name}"]["results"][0]["{n}"]'
             if src_stat in src_stat2kwarg:
@@ -1404,9 +1543,16 @@ information about the columns in the current table. Use 'peek',
                 if ak in kwa:
                     vals.append(kwa[ak])
                 else:
-                    logger.warning("actual_kwargs for %s does not report %s", gen.name(), ak)
+                    logger.warning(
+                        "actual_kwargs for %s does not report %s", gen.name(), ak
+                    )
             else:
-                logger.warning('nominal_kwargs for %s does not have a value SRC_STATS["auto__%s"]["results"][0]["%s"]', gen.name(), table_name, n)
+                logger.warning(
+                    'nominal_kwargs for %s does not have a value SRC_STATS["auto__%s"]["results"][0]["%s"]',
+                    gen.name(),
+                    table_name,
+                    n,
+                )
         select_q = self._get_aggregate_query([gen], table_name)
         self.print("{0}; providing the following values: {1}", select_q, vals)
 
@@ -1416,12 +1562,11 @@ information about the columns in the current table. Use 'peek',
         pred = " AND ".join(f"{column} IS NOT NULL" for column in columns)
         with self.engine.connect() as connection:
             result = connection.execute(
-                text(f"SELECT {columns_string} FROM {self.table_name()} WHERE {pred} ORDER BY RANDOM() LIMIT {count}")
+                text(
+                    f"SELECT {columns_string} FROM {self.table_name()} WHERE {pred} ORDER BY RANDOM() LIMIT {count}"
+                )
             )
-            return [
-                [to_str(x) for x in xs]
-                for xs in result.all()
-            ]
+            return [[to_str(x) for x in xs] for xs in result.all()]
 
     def do_propose(self, _arg):
         """
@@ -1435,10 +1580,7 @@ information about the columns in the current table. Use 'peek',
         gens = self._get_generator_proposals()
         sample = self._get_column_data(limit)
         if sample:
-            rep = [
-                x[0] if len(x) == 1 else ",".join(x)
-                for x in sample
-            ]
+            rep = [x[0] if len(x) == 1 else ",".join(x) for x in sample]
             self.print(self.PROPOSE_SOURCE_SAMPLE_TEXT, "; ".join(rep))
         else:
             self.print(self.PROPOSE_SOURCE_EMPTY_TEXT)
@@ -1457,11 +1599,11 @@ information about the columns in the current table. Use 'peek',
                 index=index + 1,
                 name=gen.name(),
                 fit=fit_s,
-                sample="; ".join(map(repr, gen.generate_data(limit)))
+                sample="; ".join(map(repr, gen.generate_data(limit))),
             )
 
     def do_p(self, arg):
-        """ Synonym for propose """
+        """Synonym for propose"""
         self.do_propose(arg)
 
     def get_proposed_generator_by_name(self, gen_name: str) -> Generator | None:
@@ -1510,7 +1652,7 @@ information about the columns in the current table. Use 'peek',
         gen_info.gen = gen
 
     def do_s(self, arg):
-        """ Synonym for set """
+        """Synonym for set"""
         self.do_set(arg)
 
     def do_unset(self, _arg):
@@ -1532,10 +1674,10 @@ information about the columns in the current table. Use 'peek',
         if table_entry is None:
             self.print(self.ERROR_NO_SUCH_TABLE)
             return False
-        cols_available = functools.reduce(lambda x, y: x | y, [
-            frozenset(gen.columns)
-            for gen in table_entry.new_generators
-        ])
+        cols_available = functools.reduce(
+            lambda x, y: x | y,
+            [frozenset(gen.columns) for gen in table_entry.new_generators],
+        )
         cols_to_merge = frozenset(cols)
         unknown_cols = cols_to_merge - cols_available
         if unknown_cols:
@@ -1578,7 +1720,7 @@ information about the columns in the current table. Use 'peek',
         return True
 
     def do_merge(self, arg: str):
-        """ Add this column(s) to the specified column(s), so one generator covers them all. """
+        """Add this column(s) to the specified column(s), so one generator covers them all."""
         self.merge_columns(arg)
 
     def complete_merge(self, text: str, _line: str, _begidx: int, _endidx: int):
@@ -1595,7 +1737,7 @@ information about the columns in the current table. Use 'peek',
         ]
 
     def do_unmerge(self, arg: str):
-        """ Remove this column(s) from this generator, make them a separate generator. """
+        """Remove this column(s) from this generator, make them a separate generator."""
         cols = arg.split()
         if not cols:
             self.print("Error: merge requires a column argument")
@@ -1625,10 +1767,13 @@ information about the columns in the current table. Use 'peek',
         # The existing generator will not work
         gen_info.gen = None
         # And put them into a new (empty) generator
-        table_entry.new_generators.insert(self.generator_index + 1, GeneratorInfo(
-            columns=cols,
-            gen=None,
-        ))
+        table_entry.new_generators.insert(
+            self.generator_index + 1,
+            GeneratorInfo(
+                columns=cols,
+                gen=None,
+            ),
+        )
         self.set_prompt()
 
     def complete_unmerge(self, text: str, _line: str, _begidx: int, _endidx: int):
@@ -1669,7 +1814,11 @@ def update_config_generators(
             line_no += 1
             if line:
                 if len(line) < 3:
-                    logger.error("line {0} of file {1} has fewer than three values", line_no, spec_path)
+                    logger.error(
+                        "line {0} of file {1} has fewer than three values",
+                        line_no,
+                        spec_path,
+                    )
                 cols = line[1].split(maxsplit=1)
                 if gc.go_to(f"{line[0]}.{cols[0]}"):
                     if len(cols) == 1 or gc.merge_columns(cols[1]):
