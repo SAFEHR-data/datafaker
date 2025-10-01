@@ -944,7 +944,7 @@ class ChoiceGeneratorFactory(GeneratorFactory):
     All generators that want an average and standard deviation.
     """
     SAMPLE_COUNT = MAXIMUM_CHOICES
-    SUPPRESS_COUNT = 5
+    SUPPRESS_COUNT = 7
     def get_generators(self, columns: list[Column], engine: Engine):
         if len(columns) != 1:
             return []
@@ -1511,7 +1511,7 @@ class NullPatternPartition:
 
 class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
     SAMPLE_COUNT = MAXIMUM_CHOICES
-    SUPPRESS_COUNT = 5
+    SUPPRESS_COUNT = 7
 
     def function_name(self) -> str:
         return "grouped_multivariate_normal"
