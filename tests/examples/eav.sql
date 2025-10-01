@@ -22,8 +22,8 @@ INSERT INTO public.measurement_type VALUES (5, 'matter');
 CREATE TABLE public.measurement (
     id INTEGER NOT NULL,
     type INTEGER NOT NULL,
-    first_value INTEGER,
-    second_value INTEGER,
+    first_value FLOAT,
+    second_value FLOAT,
     third_value TEXT
 );
 
@@ -57,8 +57,8 @@ INSERT INTO public.measurement VALUES (20, 5, 12.4, NULL, 'fowl');
 CREATE TABLE public.observation (
     id INTEGER NOT NULL,
     type INTEGER NOT NULL,
-    first_value INTEGER,
-    second_value INTEGER,
+    first_value FLOAT,
+    second_value FLOAT,
     third_value TEXT
 );
 

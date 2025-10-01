@@ -1240,11 +1240,7 @@ class NullPartitionedTests(GeneratesDBTestCase):
         table_name = "measurement"
         generate_count = 800
         with self._get_cmd({}) as gc:
-            gc.do_next("measurement.type")
-            gc.do_merge("first_value")
-            gc.do_merge("second_value")
-            gc.do_merge("third_value")
-            gc.reset()
+            self.merge_columns(gc, table_name, ["type", "first_value", "second_value", "third_value"])
             gc.do_propose("")
             proposals = gc.get_proposals()
             self.assertIn("null-partitioned grouped_multivariate_lognormal", proposals)
@@ -1262,15 +1258,7 @@ class NullPartitionedTests(GeneratesDBTestCase):
             self.get_src_stats(gc.config)
             self.create_generators(gc.config)
             self.remove_data(gc.config)
-            # let's add a vocab table without messing around with files
-            table = self.metadata.tables["measurement_type"]
-            with self.engine.connect() as conn:
-                conn.execute(insert(table).values({"id": 1, "name": "agreement"}))
-                conn.execute(insert(table).values({"id": 2, "name": "acceleration"}))
-                conn.execute(insert(table).values({"id": 3, "name": "velocity"}))
-                conn.execute(insert(table).values({"id": 4, "name": "position"}))
-                conn.execute(insert(table).values({"id": 5, "name": "matter"}))
-                conn.commit()
+            self.populate_measurement_type_vocab()
             self.create_data(gc.config, num_passes=generate_count)
         with self.engine.connect() as conn:
             stmt = select(self.metadata.tables[table_name])
@@ -1342,8 +1330,26 @@ class NullPartitionedTests(GeneratesDBTestCase):
             self.assertAlmostEqual(fish.x_var(), 0.57, delta=0.8)
             # type 5/fowl
             self.assertAlmostEqual(fowl.count(), generate_count * 3 / 20, delta=generate_count * 0.2)
-            self.assertAlmostEqual(fish.x_mean(), 11.2, delta=8.0)
-            self.assertAlmostEqual(fish.x_var(), 1.24, delta=1.5)
+            self.assertAlmostEqual(fowl.x_mean(), 11.2, delta=8.0)
+            self.assertAlmostEqual(fowl.x_var(), 1.24, delta=1.5)
+
+    def populate_measurement_type_vocab(self):
+        """ Add a vocab table without messing around with files """
+        table = self.metadata.tables["measurement_type"]
+        with self.engine.connect() as conn:
+            conn.execute(insert(table).values({"id": 1, "name": "agreement"}))
+            conn.execute(insert(table).values({"id": 2, "name": "acceleration"}))
+            conn.execute(insert(table).values({"id": 3, "name": "velocity"}))
+            conn.execute(insert(table).values({"id": 4, "name": "position"}))
+            conn.execute(insert(table).values({"id": 5, "name": "matter"}))
+            conn.commit()
+
+    def merge_columns(self, gc: TestGeneratorCmd, table: str, columns: list[str]) -> None:
+        """ Merge columns in a table """
+        gc.do_next(f"{table}.{columns[0]}")
+        for col in columns[1:]:
+            gc.do_merge(col)
+        gc.reset()
 
     def test_create_with_null_partitioned_grouped_sampled_and_suppressed(self):
         """ Test EAV for all columns with sampled and suppressed generation. """
@@ -1351,11 +1357,7 @@ class NullPartitionedTests(GeneratesDBTestCase):
         table2_name = "observation"
         generate_count = 800
         with self._get_cmd({}) as gc:
-            gc.do_next("measurement.type")
-            gc.do_merge("first_value")
-            gc.do_merge("second_value")
-            gc.do_merge("third_value")
-            gc.reset()
+            self.merge_columns(gc, table_name, ["type", "first_value", "second_value", "third_value"])
             gc.do_propose("")
             proposals = gc.get_proposals()
             self.assertIn("null-partitioned grouped_multivariate_lognormal", proposals)
@@ -1369,15 +1371,9 @@ class NullPartitionedTests(GeneratesDBTestCase):
             col_heading = f"{prop[0]}. {dist_to_choose}"
             self.assertIn(col_heading, set(gc.columns.keys()))
             gc.do_set(str(prop[0]))
-            gc.reset()
-            gc.do_next("observation.type")
-            gc.do_merge("first_value")
-            gc.do_merge("second_value")
-            gc.do_merge("third_value")
-            gc.reset()
+            self.merge_columns(gc, table2_name, ["type", "first_value", "second_value", "third_value"])
             gc.do_propose("")
             proposals = gc.get_proposals()
-            dist_to_choose = "null-partitioned grouped_multivariate_normal [sampled and suppressed]"
             prop = proposals[dist_to_choose]
             gc.do_set(str(prop[0]))
             gc.do_quit("")
@@ -1385,15 +1381,7 @@ class NullPartitionedTests(GeneratesDBTestCase):
             self.get_src_stats(gc.config)
             self.create_generators(gc.config)
             self.remove_data(gc.config)
-            # let's add a vocab table without messing around with files
-            table = self.metadata.tables["measurement_type"]
-            with self.engine.connect() as conn:
-                conn.execute(insert(table).values({"id": 1, "name": "agreement"}))
-                conn.execute(insert(table).values({"id": 2, "name": "acceleration"}))
-                conn.execute(insert(table).values({"id": 3, "name": "velocity"}))
-                conn.execute(insert(table).values({"id": 4, "name": "position"}))
-                conn.execute(insert(table).values({"id": 5, "name": "matter"}))
-                conn.commit()
+            self.populate_measurement_type_vocab()
             self.create_data(gc.config, num_passes=generate_count)
         with self.engine.connect() as conn:
             stmt = select(self.metadata.tables[table_name])
@@ -1436,8 +1424,8 @@ class NullPartitionedTests(GeneratesDBTestCase):
             self.assertAlmostEqual(fish.x_var(), 0.57, delta=0.8)
             # type 5/fowl
             self.assertAlmostEqual(fowl.count(), generate_count * 3 / 11, delta=generate_count * 0.2)
-            self.assertAlmostEqual(fish.x_mean(), 11.2, delta=8.0)
-            self.assertAlmostEqual(fish.x_var(), 1.24, delta=1.5)
+            self.assertAlmostEqual(fowl.x_mean(), 11.2, delta=8.0)
+            self.assertAlmostEqual(fowl.x_var(), 1.24, delta=1.5)
             stmt = select(self.metadata.tables[table2_name])
             rows = conn.execute(stmt).fetchall()
             firsts = Stat()
@@ -1450,6 +1438,82 @@ class NullPartitionedTests(GeneratesDBTestCase):
                 firsts.add(row.first_value)
             self.assertEqual(firsts.count(), 800)
             self.assertAlmostEqual(firsts.x_mean(), 1.3, delta = generate_count * 0.3)
+
+
+    def test_create_with_null_partitioned_grouped_sampled_only(self):
+        """ Test EAV for all columns with sampled generation but no suppression. """
+        table_name = "measurement"
+        table2_name = "observation"
+        generate_count = 800
+        with self._get_cmd({}) as gc:
+            self.merge_columns(gc, table_name, ["type", "first_value", "second_value", "third_value"])
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            self.assertIn("null-partitioned grouped_multivariate_lognormal", proposals)
+            self.assertIn("null-partitioned grouped_multivariate_normal", proposals)
+            self.assertIn("null-partitioned grouped_multivariate_lognormal [sampled and suppressed]", proposals)
+            self.assertIn("null-partitioned grouped_multivariate_normal [sampled and suppressed]", proposals)
+            self.assertIn("null-partitioned grouped_multivariate_lognormal [sampled]", proposals)
+            dist_to_choose = "null-partitioned grouped_multivariate_normal [sampled]"
+            self.assertIn(dist_to_choose, proposals)
+            prop = proposals[dist_to_choose]
+            gc.reset()
+            gc.do_compare(str(prop[0]))
+            col_heading = f"{prop[0]}. {dist_to_choose}"
+            self.assertIn(col_heading, set(gc.columns.keys()))
+            gc.do_set(str(prop[0]))
+            self.merge_columns(gc, table2_name, ["type", "first_value", "second_value", "third_value"])
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            prop = proposals[dist_to_choose]
+            gc.do_set(str(prop[0]))
+            gc.do_quit("")
+            self.set_configuration(gc.config)
+            self.get_src_stats(gc.config)
+            self.create_generators(gc.config)
+            self.remove_data(gc.config)
+            self.populate_measurement_type_vocab()
+            self.create_data(gc.config, num_passes=generate_count)
+        with self.engine.connect() as conn:
+            stmt = select(self.metadata.tables[table_name])
+            rows = conn.execute(stmt).fetchall()
+            self.assertSubset({row.type for row in rows}, {1, 2, 3, 4, 5})
+            stmt = select(self.metadata.tables[table2_name])
+            rows = conn.execute(stmt).fetchall()
+            self.assertEqual({row.third_value for row in rows}, {"ham", "eggs", "cheese"})
+
+
+    def test_create_with_null_partitioned_grouped_sampled_tiny(self):
+        """
+        Test EAV for all columns with sampled generation that only gets a tiny sample.
+        """
+        # five will ensure that at least one group will have two elements in it,
+        # but all three cannot.
+        NullPartitionedNormalGeneratorFactory.SAMPLE_COUNT = 5
+        table_name = "observation"
+        generate_count = 100
+        with self._get_cmd({}) as gc:
+            dist_to_choose = "null-partitioned grouped_multivariate_normal [sampled]"
+            self.merge_columns(gc, table_name, ["type", "first_value", "second_value", "third_value"])
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            #breakpoint()
+            prop = proposals[dist_to_choose]
+            gc.do_set(str(prop[0]))
+            gc.do_quit("")
+            self.set_configuration(gc.config)
+            self.get_src_stats(gc.config)
+            self.create_generators(gc.config)
+            self.remove_data(gc.config)
+            self.populate_measurement_type_vocab()
+            self.create_data(gc.config, num_passes=generate_count)
+        with self.engine.connect() as conn:
+            stmt = select(self.metadata.tables[table_name])
+            rows = conn.execute(stmt).fetchall()
+            # we should only have one or two of "ham", "eggs" and "cheese" represented
+            foods = {row.third_value for row in rows}
+            self.assertSubset(foods, {"ham", "eggs", "cheese"})
+            self.assertLess(len(foods), 3)
 
 
 class NonInteractiveTests(RequiresDBTestCase):
