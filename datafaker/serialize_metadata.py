@@ -1,4 +1,3 @@
-from enum import Enum
 import parsy
 from sqlalchemy import Column, Dialect, Engine, ForeignKey, MetaData, Table
 from sqlalchemy.dialects import oracle, postgresql
@@ -7,8 +6,8 @@ from typing import Callable
 
 from datafaker.utils import make_foreign_key_name
 
-type table_component_t = dict[str, any]
-type table_t = dict[str, table_component_t]
+table_component_t = dict[str, any]
+table_t = dict[str, table_component_t]
 
 def simple(type_):
     """
