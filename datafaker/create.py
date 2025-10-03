@@ -53,15 +53,15 @@ def create_db_vocab(
     metadata: MetaData,
     meta_dict: dict[str, Any],
     config: Mapping,
-    base_path: pathlib.Path | None = pathlib.Path("."),
-) -> int:
+    base_path: pathlib.Path = pathlib.Path("."),
+) -> list[str]:
     """
     Load vocabulary tables from files.
 
-    arguments:
-    metadata: The schema of the database
-    meta_dict: The simple description of the schema from --orm-file
-    config: The configuration from --config-file
+    :param metadata: The schema of the database
+    :param meta_dict: The simple description of the schema from --orm-file
+    :param config: The configuration from --config-file
+    :return: List of table names loaded.
     """
     settings = get_settings()
     dst_dsn: str = settings.dst_dsn or ""
@@ -151,6 +151,8 @@ class StoryIterator:
         self._table_dict: Mapping[str, Table] = table_dict
         self._table_generator_dict: Mapping[str, TableGenerator] = table_generator_dict
         self._dst_conn: Connection = dst_conn
+        self._table_name: str | None
+        self._final_values: dict[str, Any] | None = None
         try:
             name, self._story = next(self._stories)
             logger.info("Generating data for story '%s'", name)
@@ -165,13 +167,13 @@ class StoryIterator:
         """
         return self._table_name is None
 
-    def has_table(self, table_name: str):
+    def has_table(self, table_name: str) -> bool:
         """
         Do we have a row for table table_name?
         """
         return table_name == self._table_name
 
-    def table_name(self) -> str:
+    def table_name(self) -> str | None:
         """
         The name of the current table (or None if no more stories to process)
         """
@@ -182,10 +184,12 @@ class StoryIterator:
         Perform the insert. Call this after __init__ or next, and after checking
         that is_ended returns False.
         """
+        if self._table_name is None:
+            raise StopIteration("StoryIterator.insert after is_ended")
         table = self._table_dict[self._table_name]
         if table.name in self._table_generator_dict:
             table_generator = self._table_generator_dict[table.name]
-            default_values = table_generator(self._dst_conn, random.random)
+            default_values = table_generator(self._dst_conn)
         else:
             default_values = {}
         insert_values = {**default_values, **self._provided_values}
@@ -273,7 +277,7 @@ def populate(
             with dst_conn.begin():
                 for _ in range(table_generator.num_rows_per_pass):
                     stmt = insert(table).values(
-                        table_generator(dst_conn, random.random)
+                        table_generator(dst_conn)
                     )
                     dst_conn.execute(stmt)
                     row_counts[table.name] = row_counts.get(table.name, 0) + 1
@@ -286,6 +290,8 @@ def populate(
     while not story_iterator.is_ended():
         story_iterator.insert()
         t = story_iterator.table_name()
+        if t is None:
+            raise Exception("Internal error")
         row_counts[t] = row_counts.get(t, 0) + 1
         story_iterator.next()
 

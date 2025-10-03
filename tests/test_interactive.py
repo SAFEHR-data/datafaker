@@ -1623,8 +1623,8 @@ class NullPartitionedTests(GeneratesDBTestCase):
             self.assertAlmostEqual(
                 fowl.count(), generate_count * 3 / 11, delta=generate_count * 0.2
             )
-            self.assertAlmostEqual(fish.x_mean(), 11.2, delta=8.0)
-            self.assertAlmostEqual(fish.x_var(), 1.24, delta=1.5)
+            self.assertAlmostEqual(fowl.x_mean(), 11.2, delta=8.0)
+            self.assertAlmostEqual(fowl.x_var(), 1.24, delta=1.5)
             stmt = select(self.metadata.tables[table2_name])
             rows = conn.execute(stmt).fetchall()
             firsts = Stat()

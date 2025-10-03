@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Generator, TypeVar
 
 import numpy as np
 import yaml
@@ -24,13 +24,16 @@ from datafaker.utils import (
 )
 
 
+_T = TypeVar("_T")
+
+
 @functools.cache
-def zipf_weights(size):
+def zipf_weights(size: int) -> list[float]:
     total = sum(map(lambda n: 1 / n, range(1, size + 1)))
     return [1 / (n * total) for n in range(1, size + 1)]
 
 
-def merge_with_constants(xs: list, constants_at: dict[int, any]):
+def merge_with_constants(xs: list[_T], constants_at: dict[int, _T]) -> Generator[_T, None, None]:
     """
     Merge a list of items with other items that must be placed at certain indices.
     :param constants_at: A map of indices to objects that must be placed at
@@ -59,41 +62,41 @@ def merge_with_constants(xs: list, constants_at: dict[int, any]):
 
 
 class NothingToGenerateException(Exception):
-    def __init__(self, message):
+    def __init__(self, message: str):
         super().__init__(message)
 
 
 class DistributionGenerator:
     root3 = math.sqrt(3)
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.np_gen = np.random.default_rng()
 
-    def uniform(self, low, high) -> float:
+    def uniform(self, low: float, high: float) -> float:
         return random.uniform(float(low), float(high))
 
-    def uniform_ms(self, mean, sd) -> float:
+    def uniform_ms(self, mean: float, sd: float) -> float:
         m = float(mean)
         h = self.root3 * float(sd)
         return random.uniform(m - h, m + h)
 
-    def normal(self, mean, sd) -> float:
+    def normal(self, mean: float, sd: float) -> float:
         return random.normalvariate(float(mean), float(sd))
 
-    def lognormal(self, logmean, logsd) -> float:
+    def lognormal(self, logmean: float, logsd: float) -> float:
         return random.lognormvariate(float(logmean), float(logsd))
 
-    def choice(self, a):
+    def choice(self, a: list[_T]) -> _T:
         c = random.choice(a)
         return c["value"] if type(c) is dict and "value" in c else c
 
-    def zipf_choice(self, a, n=None):
+    def zipf_choice(self, a: list[_T], n: int | None=None) -> _T:
         if n is None:
             n = len(a)
         c = random.choices(a, weights=zipf_weights(n))[0]
         return c["value"] if type(c) is dict and "value" in c else c
 
-    def weighted_choice(self, a: list[dict[str, any]]) -> list[any]:
+    def weighted_choice(self, a: list[dict[str, Any]]) -> Any:
         """
         Choice weighted by the count in the original dataset.
         :param a: a list of dicts, each with a ``value`` key
@@ -110,10 +113,10 @@ class DistributionGenerator:
         c = random.choices(vs, weights=counts)[0]
         return c
 
-    def constant(self, value):
+    def constant(self, value: _T) -> _T:
         return value
 
-    def multivariate_normal_np(self, cov):
+    def multivariate_normal_np(self, cov: dict[str, Any]) -> np.typing.NDArray:
         rank = int(cov["rank"])
         if rank == 0:
             return np.empty(shape=(0,))
@@ -127,7 +130,7 @@ class DistributionGenerator:
         ]
         return self.np_gen.multivariate_normal(mean, covs)
 
-    def _select_group(self, alts: list[dict[str, any]]):
+    def _select_group(self, alts: list[dict[str, Any]]) -> Any:
         """
         Choose one of the ``alts`` weighted by their ``"count"`` elements.
         """
@@ -148,14 +151,14 @@ class DistributionGenerator:
                 return alt
         raise Exception("Internal error: ran out of choices in _select_group")
 
-    def _find_constants(self, result: dict[str, any]):
+    def _find_constants(self, result: dict[str, Any]) -> dict[int, Any]:
         """
         Find all keys ``kN``, returning a dictionary of ``N: kNN``.
 
         This can be passed into ``merge_with_constants`` as the
         ``constants_at`` argument.
         """
-        out: dict[int, any] = {}
+        out: dict[int, Any] = {}
         for k, v in result.items():
             if k.startswith("k") and k[1:].isnumeric():
                 out[int(k[1:])] = v
@@ -171,7 +174,7 @@ class DistributionGenerator:
         "with_constants_at",
     }
 
-    def multivariate_normal(self, cov):
+    def multivariate_normal(self, cov: dict[str, Any]) -> list[float]:
         """
         Produce a list of values pulled from a multivariate distribution.
 
@@ -182,9 +185,10 @@ class DistributionGenerator:
         ``M``th varaibles, with 0 <= ``N`` <= ``M`` < ``rank``.
         :return: list of ``rank`` floating point values
         """
-        return self.multivariate_normal_np(cov).tolist()
+        out: list[float] = self.multivariate_normal_np(cov).tolist()
+        return out
 
-    def multivariate_lognormal(self, cov):
+    def multivariate_lognormal(self, cov: dict[str, Any]) -> list[float]:
         """
         Produce a list of values pulled from a multivariate distribution.
 
@@ -196,16 +200,23 @@ class DistributionGenerator:
         are all the means and covariants of the logs of the data.
         :return: list of ``rank`` floating point values
         """
-        return np.exp(self.multivariate_normal_np(cov)).tolist()
+        out: list[Any] = np.exp(self.multivariate_normal_np(cov)).tolist()
+        return out
 
-    def grouped_multivariate_normal(self, covs):
+    def grouped_multivariate_normal(self, covs: list[dict[str, Any]]) -> list[Any]:
+        """
+        Produce a list of values pulled from a set of multivariate distributions.
+        """
         cov = self._select_group(covs)
         logger.debug("Multivariate normal group selected: %s", cov)
         constants = self._find_constants(cov)
         nums = self.multivariate_normal(cov)
         return list(merge_with_constants(nums, constants))
 
-    def grouped_multivariate_lognormal(self, covs):
+    def grouped_multivariate_lognormal(self, covs: list[dict[str, Any]]) -> list[Any]:
+        """
+        Produce a list of values pulled from a set of multivariate distributions.
+        """
         cov = self._select_group(covs)
         logger.debug("Multivariate lognormal group selected: %s", cov)
         constants = self._find_constants(cov)
@@ -217,8 +228,8 @@ class DistributionGenerator:
             raise Exception("%s is not a permitted generator", name)
 
     def alternatives(
-        self, alternative_configs: list[dict[str, any]], counts: list[int] | None
-    ):
+        self, alternative_configs: list[dict[str, Any]], counts: list[dict[str, int]] | None
+    ) -> Any:
         """
         A generator that picks between other generators.
 
@@ -227,6 +238,9 @@ class DistributionGenerator:
         how often to use this alternative; "name" -- which generator
         for this partition, for example "composite"; "params" -- the
         parameters for this alternative.
+        :param counts: A list of weights for each alternative. If None, the
+        "count" value of each alternative is used. Each count is a dict
+        with a "count" key.
         :return: list of values
         """
         if counts is not None:
@@ -246,8 +260,8 @@ class DistributionGenerator:
         return getattr(self, name)(**alt["params"])
 
     def with_constants_at(
-        self, constants_at: list[int], subgen: str, params: dict[str, any]
-    ):
+        self, constants_at: dict[int, _T], subgen: str, params: dict[str, _T]
+    ) -> list[_T]:
         if subgen not in self.PERMITTED_SUBGENS:
             logger.error(
                 "subgenerator %s is not a valid name. Valid names are %s.",
@@ -258,7 +272,7 @@ class DistributionGenerator:
         logger.debug("Merging constants %s", constants_at)
         return list(merge_with_constants(subout, constants_at))
 
-    def truncated_string(self, subgen_fn, params, length):
+    def truncated_string(self, subgen_fn: Callable[..., list[_T]], params: dict, length: int) -> list[_T]:
         """Calls ``subgen_fn(**params)`` and truncates the results to ``length``."""
         result = subgen_fn(**params)
         if result is None:
@@ -340,7 +354,7 @@ class FileUploader:
 
 
 class ColumnPresence:
-    def sampled(self, patterns):
+    def sampled(self, patterns: list[dict[str, Any]]) -> set[Any]:
         total = 0
         for pattern in patterns:
             total += pattern.get("row_count", 0)

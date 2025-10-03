@@ -55,7 +55,7 @@ class {{ table_data.class_name }}(TableGenerator):
     def __init__(self):
         self.initialized = False
 
-    def __call__(self, dst_db_conn, get_random):
+    def __call__(self, dst_db_conn):
         if not self.initialized:
             {% for constraint in table_data.unique_constraints %}
             query_text = f"SELECT {%
