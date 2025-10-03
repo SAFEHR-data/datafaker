@@ -12,7 +12,10 @@ from datafaker.interactive import (
     MissingnessCmd,
     update_config_generators,
 )
-from datafaker.generators import NullPartitionedNormalGeneratorFactory
+from datafaker.generators import (
+    NullPartitionedNormalGeneratorFactory,
+    ChoiceGeneratorFactory,
+)
 
 from tests.utils import RequiresDBTestCase, GeneratesDBTestCase
 from unittest.mock import MagicMock, Mock, patch
@@ -841,6 +844,11 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
     database_name = "numbers"
     schema_name = "public"
 
+    def setUp(self) -> None:
+        super().setUp()
+        ChoiceGeneratorFactory.SAMPLE_COUNT = 500
+        ChoiceGeneratorFactory.SUPPRESS_COUNT = 5
+
     def _get_cmd(self, config) -> TestGeneratorCmd:
         return TestGeneratorCmd(self.dsn, self.schema_name, self.metadata, config)
 
@@ -1314,16 +1322,16 @@ class NullPartitionedTests(GeneratesDBTestCase):
             # type 2
             self.assertAlmostEqual(two.count(), generate_count * 3 / 20, delta=generate_count * 0.5)
             self.assertAlmostEqual(two.x_mean(), 1.4, delta=0.6)
-            self.assertAlmostEqual(two.x_var(), 0.21, delta=0.4)
+            self.assertAlmostEqual(two.x_var(), 0.14, delta=0.2)
             self.assertAlmostEqual(two.y_mean(), 1.8, delta=0.8)
-            self.assertAlmostEqual(two.y_var(), 0.07, delta=0.1)
-            self.assertAlmostEqual(two.covar(), 0.5, delta=0.5)
+            self.assertAlmostEqual(two.y_var(), 0.05, delta=0.1)
+            self.assertAlmostEqual(two.covar(), 0.07, delta=0.1)
             # type 3
             self.assertAlmostEqual(three.count(), generate_count * 3 / 20, delta=generate_count * 0.2)
-            self.assertAlmostEqual(two.covar(), -0.5, delta=0.5)
+            self.assertAlmostEqual(three.covar(), -1.39, delta=1.4)
             # type 4
             self.assertAlmostEqual(four.count(), generate_count * 3 / 20, delta=generate_count * 0.2)
-            self.assertAlmostEqual(two.covar(), 0.5, delta=0.5)
+            self.assertAlmostEqual(four.covar(), 2.22, delta=2.3)
             # type 5/fish
             self.assertAlmostEqual(fish.count(), generate_count * 3 / 20, delta=generate_count * 0.2)
             self.assertAlmostEqual(fish.x_mean(), 8.1, delta=3.0)
