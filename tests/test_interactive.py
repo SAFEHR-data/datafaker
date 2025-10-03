@@ -1514,8 +1514,8 @@ class NullPartitionedTests(GeneratesDBTestCase):
             self.assertAlmostEqual(
                 fowl.count(), generate_count * 3 / 20, delta=generate_count * 0.2
             )
-            self.assertAlmostEqual(fish.x_mean(), 11.2, delta=8.0)
-            self.assertAlmostEqual(fish.x_var(), 1.24, delta=1.5)
+            self.assertAlmostEqual(fowl.x_mean(), 11.2, delta=8.0)
+            self.assertAlmostEqual(fowl.x_var(), 1.24, delta=1.5)
 
     def test_create_with_null_partitioned_grouped_sampled_and_suppressed(self):
         """Test EAV for all columns with sampled and suppressed generation."""
