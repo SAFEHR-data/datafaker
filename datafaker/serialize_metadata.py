@@ -1,13 +1,15 @@
+from typing import Callable
+
 import parsy
 from sqlalchemy import Column, Dialect, Engine, ForeignKey, MetaData, Table
 from sqlalchemy.dialects import oracle, postgresql
-from sqlalchemy.sql import sqltypes, schema
-from typing import Callable
+from sqlalchemy.sql import schema, sqltypes
 
 from datafaker.utils import make_foreign_key_name
 
 table_component_t = dict[str, any]
 table_t = dict[str, table_component_t]
+
 
 def simple(type_):
     """
@@ -17,11 +19,13 @@ def simple(type_):
     """
     return parsy.string(type_.__name__).result(type_)
 
+
 def integer():
     """
     Parses an integer, outputting that integer.
     """
     return parsy.regex(r"-?[0-9]+").map(int)
+
 
 def integer_arguments():
     """
@@ -29,17 +33,20 @@ def integer_arguments():
     The integers are surrounded by brackets and separated by
     a comma and space.
     """
-    return parsy.string("(") >> (
-        integer().sep_by(parsy.string(", "))
-    ) << parsy.string(")")
+    return (
+        parsy.string("(") >> (integer().sep_by(parsy.string(", "))) << parsy.string(")")
+    )
+
 
 def numeric_type(type_):
     """
     Parses TYPE_NAME, TYPE_NAME(2) or TYPE_NAME(2,3)
     passing any arguments to the TYPE_NAME constructor.
     """
-    return parsy.string(type_.__name__
-    ) >> integer_arguments().optional([]).combine(type_)
+    return parsy.string(type_.__name__) >> integer_arguments().optional([]).combine(
+        type_
+    )
+
 
 def string_type(type_):
     @parsy.generate(type_.__name__)
@@ -56,7 +63,9 @@ def string_type(type_):
             parsy.string(' COLLATE "') >> parsy.regex(r'[^"]*') << parsy.string('"')
         ).optional()
         return type_(length=length, collation=collation)
+
     return st_parser
+
 
 def time_type(type_, pg_type):
     @parsy.generate(type_.__name__)
@@ -70,18 +79,22 @@ def time_type(type_, pg_type):
             parsy.string("(") >> integer() << parsy.string(")")
         ).optional()
         timezone: str | None = yield (
-            parsy.string(" WITH") >> (
-                parsy.string(" ").result(True) | parsy.string("OUT ").result(False)
-            ) << parsy.string("TIME ZONE")
+            parsy.string(" WITH")
+            >> (parsy.string(" ").result(True) | parsy.string("OUT ").result(False))
+            << parsy.string("TIME ZONE")
         ).optional(False)
         if precision is None and not timezone:
             # normal sql type
             return type_
         return pg_type(precision=precision, timezone=timezone)
+
     return pgt_parser
 
+
 SIMPLE_TYPE_PARSER = parsy.alt(
-    parsy.string("DOUBLE PRECISION").result(sqltypes.DOUBLE_PRECISION), # must be before DOUBLE
+    parsy.string("DOUBLE PRECISION").result(
+        sqltypes.DOUBLE_PRECISION
+    ),  # must be before DOUBLE
     simple(sqltypes.FLOAT),
     simple(sqltypes.DOUBLE),
     simple(sqltypes.INTEGER),
@@ -110,6 +123,7 @@ SIMPLE_TYPE_PARSER = parsy.alt(
     time_type(sqltypes.TIME, postgresql.types.TIME),
 )
 
+
 @parsy.generate
 def type_parser():
     base = yield SIMPLE_TYPE_PARSER
@@ -117,6 +131,7 @@ def type_parser():
     if dimensions == 0:
         return base
     return postgresql.ARRAY(base, dimensions=dimensions)
+
 
 def column_to_dict(column: Column, dialect: Dialect) -> str:
     type_ = column.type
@@ -139,6 +154,7 @@ def column_to_dict(column: Column, dialect: Dialect) -> str:
         result["foreign_keys"] = foreign_keys
     return result
 
+
 def dict_to_column(
     table_name,
     col_name,
@@ -156,7 +172,7 @@ def dict_to_column(
             ForeignKey(
                 fk,
                 name=make_foreign_key_name(table_name, col_name),
-                ondelete='CASCADE',
+                ondelete="CASCADE",
             )
             for fk in rep["foreign_keys"]
             if not ignore_fk(fk)
@@ -171,20 +187,17 @@ def dict_to_column(
         nullable=rep.get("nullable", None),
     )
 
+
 def dict_to_unique(rep: dict) -> schema.UniqueConstraint:
-    return schema.UniqueConstraint(
-        *rep.get("columns", []),
-        name=rep.get("name", None)
-    )
+    return schema.UniqueConstraint(*rep.get("columns", []), name=rep.get("name", None))
+
 
 def unique_to_dict(constraint: schema.UniqueConstraint) -> dict:
     return {
         "name": constraint.name,
-        "columns": [
-            str(col.name)
-            for col in constraint.columns
-        ]
+        "columns": [str(col.name) for col in constraint.columns],
     }
+
 
 def table_to_dict(table: Table, dialect: Dialect) -> table_t:
     """
@@ -203,6 +216,7 @@ def table_to_dict(table: Table, dialect: Dialect) -> table_t:
         ],
     }
 
+
 def dict_to_table(
     name: str,
     meta: MetaData,
@@ -212,15 +226,17 @@ def dict_to_table(
     return Table(
         name,
         meta,
-        *[ dict_to_column(name, colname, col, ignore_fk)
+        *[
+            dict_to_column(name, colname, col, ignore_fk)
             for (colname, col) in table_dict.get("columns", {}).items()
         ],
-        *[ dict_to_unique(constraint)
-            for constraint in table_dict.get("unique", [])
-        ],
+        *[dict_to_unique(constraint) for constraint in table_dict.get("unique", [])],
     )
 
-def metadata_to_dict(meta: MetaData, schema_name: str | None, engine: Engine) -> dict[str, table_t]:
+
+def metadata_to_dict(
+    meta: MetaData, schema_name: str | None, engine: Engine
+) -> dict[str, table_t]:
     """
     Converts a SQL Alchemy MetaData object into
     a Python object ready for conversion to YAML.
@@ -248,10 +264,7 @@ def should_ignore_fk(fk: str, tables_dict: dict[str, table_t]):
     return tables_dict[fk_bits[0]].get("ignore", False)
 
 
-def dict_to_metadata(
-    obj: dict,
-    config_for_output: dict=None
-) -> MetaData:
+def dict_to_metadata(obj: dict, config_for_output: dict = None) -> MetaData:
     """
     Converts a dict to a SQL Alchemy MetaData object.
 
@@ -268,6 +281,6 @@ def dict_to_metadata(
     else:
         ignore_fk = lambda _: False
     meta = MetaData()
-    for (k, td) in tables_dict.items():
+    for k, td in tables_dict.items():
         dict_to_table(k, meta, td, ignore_fk)
     return meta

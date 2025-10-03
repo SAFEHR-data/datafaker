@@ -110,7 +110,7 @@ This command will start an interactive command shell. Don't be intimidated, just
    columns  data   help    next    peek      private  select  vocabulary
    counts   empty  ignore  generate  previous  quit     tables
 
-   (table: myfirsttable) 
+   (table: myfirsttable)
 
 You can also get help for any of the commands listed; for example to see help for the ``vocabulary`` command type ``? vocabulary`` or ``help vocabulary``:
 
@@ -134,7 +134,7 @@ Press the Tab key again to see these options:
 .. code-block:: console
 
    (table: actor) help p
-   peek      previous  private   
+   peek      previous  private
    (table: actor) help p
 
 Now you can continue with r-i-tab to get ``private``, r-e-tab to get ``previous`` or e-tab to get ``peek``. This can be very useful; try pressing Tab twice on an empty line to see quickly all the possible commands, for example!
@@ -372,7 +372,7 @@ To describe "null-partitioned grouped", let us make the generator much more comp
    |   None   |      None     |      None     |                                    Pencil on tracing paper                                     |
    |   None   |      18.5     |      24.3     |               Lithograph from an illustrated book of poems and four lithographs                |
    +----------+---------------+---------------+------------------------------------------------------------------------------------------------+
-   (artwork.depth_cm,width_cm,height_cm,medium) 
+   (artwork.depth_cm,width_cm,height_cm,medium)
 
 Here we can see that Moma understandably does not record depths for 2D artworks so we have many NULLs in that column.
 If we try to apply the standard normal or lognormal to data with many NULLs, it will ignore those rows with any NULLs.

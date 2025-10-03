@@ -1,35 +1,34 @@
 """Base table generator classes."""
+import functools
+import gzip
+import math
+import os
+import random
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
-import functools
-import math
-import numpy as np
-import os
 from pathlib import Path
-import random
 from typing import Any
 
+import numpy as np
 import yaml
-import gzip
 from sqlalchemy import Connection, insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.schema import Table
 
 from datafaker.utils import (
+    MAKE_VOCAB_PROGRESS_REPORT_EVERY,
     logger,
     stream_yaml,
-    MAKE_VOCAB_PROGRESS_REPORT_EVERY,
     table_row_count,
 )
 
+
 @functools.cache
 def zipf_weights(size):
-    total = sum(map(lambda n: 1/n, range(1, size + 1)))
-    return [
-        1 / (n * total)
-        for n in range(1, size + 1)
-    ]
+    total = sum(map(lambda n: 1 / n, range(1, size + 1)))
+    return [1 / (n * total) for n in range(1, size + 1)]
+
 
 def merge_with_constants(xs: list, constants_at: dict[int, any]):
     """
@@ -118,10 +117,7 @@ class DistributionGenerator:
         rank = int(cov["rank"])
         if rank == 0:
             return np.empty(shape=(0,))
-        mean = [
-            float(cov[f"m{i}"])
-            for i in range(rank)
-        ]
+        mean = [float(cov[f"m{i}"]) for i in range(rank)]
         covs = [
             [
                 float(cov[f"c{i}_{j}"] if i <= j else cov[f"c{j}_{i}"])
@@ -138,7 +134,9 @@ class DistributionGenerator:
         total = 0
         for alt in alts:
             if alt["count"] < 0:
-                logger.warning("Alternative count is %d, but should not be negative", alt["count"])
+                logger.warning(
+                    "Alternative count is %d, but should not be negative", alt["count"]
+                )
             else:
                 total += alt["count"]
         if total == 0:
@@ -218,7 +216,9 @@ class DistributionGenerator:
         if name not in self.PERMITTED_SUBGENS:
             raise Exception("%s is not a permitted generator", name)
 
-    def alternatives(self, alternative_configs: list[dict[str, any]], counts: list[int] | None):
+    def alternatives(
+        self, alternative_configs: list[dict[str, any]], counts: list[int] | None
+    ):
         """
         A generator that picks between other generators.
 
@@ -245,7 +245,9 @@ class DistributionGenerator:
         self._check_generator_name(name)
         return getattr(self, name)(**alt["params"])
 
-    def with_constants_at(self, constants_at: list[int], subgen: str, params: dict[str, any]):
+    def with_constants_at(
+        self, constants_at: list[int], subgen: str, params: dict[str, any]
+    ):
         if subgen not in self.PERMITTED_SUBGENS:
             logger.error(
                 "subgenerator %s is not a valid name. Valid names are %s.",
@@ -257,7 +259,7 @@ class DistributionGenerator:
         return list(merge_with_constants(subout, constants_at))
 
     def truncated_string(self, subgen_fn, params, length):
-        """ Calls ``subgen_fn(**params)`` and truncates the results to ``length``. """
+        """Calls ``subgen_fn(**params)`` and truncates the results to ``length``."""
         result = subgen_fn(**params)
         if result is None:
             return None
@@ -288,7 +290,9 @@ class FileUploader:
 
     table: Table
 
-    def _load_existing_file(self, connection: Connection, file_size: int, opener: Callable[[], Any]) -> None:
+    def _load_existing_file(
+        self, connection: Connection, file_size: int, opener: Callable[[], Any]
+    ) -> None:
         count = 0
         with opener() as fh:
             rows = stream_yaml(fh)
@@ -305,7 +309,7 @@ class FileUploader:
                         100 * fh.tell() / file_size,
                     )
 
-    def load(self, connection: Connection, base_path: Path=Path(".")) -> None:
+    def load(self, connection: Connection, base_path: Path = Path(".")) -> None:
         """Load the data from file."""
         yaml_file = base_path / Path(self.table.fullname + ".yaml")
         if yaml_file.exists():
@@ -318,7 +322,10 @@ class FileUploader:
                 logger.warning("File %s not found. Skipping...", yaml_file)
                 return
         if 0 < table_row_count(self.table, connection):
-            logger.warning("Table %s already contains data (consider running 'datafaker remove-vocab'), skipping...", self.table.name)
+            logger.warning(
+                "Table %s already contains data (consider running 'datafaker remove-vocab'), skipping...",
+                self.table.name,
+            )
             return
         try:
             file_size = os.path.getsize(yaml_file)
@@ -330,6 +337,7 @@ class FileUploader:
             logger.warning(
                 "Error inserting rows into table %s: %s", self.table.fullname, e
             )
+
 
 class ColumnPresence:
     def sampled(self, patterns):

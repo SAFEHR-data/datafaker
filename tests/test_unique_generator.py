@@ -40,6 +40,7 @@ class UniqueGeneratorTestCase(RequiresDBTestCase):
     and b which are boolean, and c which is a text column. There is a joint unique
     constraint on a and b, and a separate unique constraint on c.
     """
+
     dump_file_path = "unique_generator.dump"
 
     def setUp(self) -> None:

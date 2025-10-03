@@ -1,17 +1,14 @@
 """Functions and classes to create and populate the target database."""
-from collections import Counter
 import pathlib
 import random
+from collections import Counter
 from typing import Any, Generator, Iterable, Iterator, Mapping, Sequence, Tuple
 
 from sqlalchemy import Connection, insert, inspect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from sqlalchemy.schema import (
-    CreateSchema,
-    MetaData,
-    Table,
-)
+from sqlalchemy.schema import CreateSchema, MetaData, Table
+
 from datafaker.base import FileUploader, TableGenerator
 from datafaker.settings import get_settings
 from datafaker.utils import (
@@ -56,11 +53,11 @@ def create_db_vocab(
     metadata: MetaData,
     meta_dict: dict[str, Any],
     config: Mapping,
-    base_path: pathlib.Path | None=pathlib.Path(".")
+    base_path: pathlib.Path | None = pathlib.Path("."),
 ) -> int:
     """
     Load vocabulary tables from files.
-    
+
     arguments:
     metadata: The schema of the database
     meta_dict: The simple description of the schema from --orm-file
@@ -85,7 +82,7 @@ def create_db_vocab(
             uploader = FileUploader(table=vocab_table)
             with Session(dst_engine) as session:
                 session.begin()
-                uploader.load(session.connection(), base_path = base_path)
+                uploader.load(session.connection(), base_path=base_path)
             session.commit()
             tables_loaded.append(vocab_table_name)
         except IntegrityError:
@@ -128,9 +125,7 @@ def create_db_data_into(
     db_dsn: str,
     schema_name: str | None,
 ) -> RowCounts:
-    dst_engine = get_sync_engine(
-        create_db_engine(db_dsn, schema_name=schema_name)
-    )
+    dst_engine = get_sync_engine(create_db_engine(db_dsn, schema_name=schema_name))
 
     row_counts: Counter[str] = Counter()
     with dst_engine.connect() as dst_conn:
@@ -145,7 +140,8 @@ def create_db_data_into(
 
 
 class StoryIterator:
-    def __init__(self,
+    def __init__(
+        self,
         stories: Iterable[tuple[str, Story]],
         table_dict: Mapping[str, Table],
         table_generator_dict: Mapping[str, TableGenerator],
@@ -219,7 +215,9 @@ class StoryIterator:
                     self._table_name, self._provided_values = next(self._story)
                     return
                 else:
-                    self._table_name, self._provided_values = self._story.send(self._final_values)
+                    self._table_name, self._provided_values = self._story.send(
+                        self._final_values
+                    )
                     return
             except StopIteration:
                 try:
@@ -274,7 +272,9 @@ def populate(
         try:
             with dst_conn.begin():
                 for _ in range(table_generator.num_rows_per_pass):
-                    stmt = insert(table).values(table_generator(dst_conn, random.random))
+                    stmt = insert(table).values(
+                        table_generator(dst_conn, random.random)
+                    )
                     dst_conn.execute(stmt)
                     row_counts[table.name] = row_counts.get(table.name, 0) + 1
                 dst_conn.commit()

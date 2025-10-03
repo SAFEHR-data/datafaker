@@ -1,27 +1,20 @@
 """Utility functions."""
 import ast
+import gzip
+import importlib.util
 import json
 import logging
 import sys
-import importlib.util
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Final, Mapping, Optional, Union
-import gzip
 
+import sqlalchemy
 import yaml
 from jsonschema.exceptions import ValidationError
 from jsonschema.validators import validate
 from psycopg2.errors import UndefinedObject
-import sqlalchemy
-from sqlalchemy import (
-    Connection,
-    Engine,
-    ForeignKey,
-    create_engine,
-    event,
-    select,
-)
+from sqlalchemy import Connection, Engine, ForeignKey, create_engine, event, select
 from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.exc import IntegrityError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
@@ -96,10 +89,15 @@ def open_compressed_file(file_name):
 
 def table_row_count(table: Table, conn: Connection) -> int:
     return conn.execute(
-        select(sqlalchemy.func.count()).select_from(sqlalchemy.table(
-            table.name,
-            *[sqlalchemy.column(col.name) for col in table.primary_key.columns.values()],
-        ))
+        select(sqlalchemy.func.count()).select_from(
+            sqlalchemy.table(
+                table.name,
+                *[
+                    sqlalchemy.column(col.name)
+                    for col in table.primary_key.columns.values()
+                ],
+            )
+        )
     ).scalar_one()
 
 
@@ -117,10 +115,7 @@ def download_table(
             rowcount = table_row_count(table, conn)
             count = 0
             for row in conn.execute(stmt).mappings():
-                result = {
-                    str(col_name): value
-                    for (col_name, value) in row.items()
-                }
+                result = {str(col_name): value for (col_name, value) in row.items()}
                 yamlfile.write(yaml.dump([result]).encode())
                 count += 1
                 if count % MAKE_VOCAB_PROGRESS_REPORT_EVERY == 0:
@@ -128,7 +123,7 @@ def download_table(
                         "written row %d of %d, %.1f%%",
                         count,
                         rowcount,
-                        100*count/rowcount,
+                        100 * count / rowcount,
                     )
 
 
@@ -213,6 +208,7 @@ class StdoutHandler(logging.Handler):
     A handler that writes to stdout.
     We aren't using StreamHandler because that confuses typer.testing.CliRunner
     """
+
     def flush(self):
         self.acquire()
         try:
@@ -236,6 +232,7 @@ class StderrHandler(logging.Handler):
     A handler that writes to stderr.
     We aren't using StreamHandler because that confuses typer.testing.CliRunner
     """
+
     def flush(self):
         self.acquire()
         try:
@@ -276,8 +273,8 @@ def conf_logger(verbose: bool) -> None:
         handlers=[stdout_handler, stderr_handler],
         force=True,
     )
-    logging.getLogger('asyncio').setLevel(logging.WARNING)
-    logging.getLogger('blib2to3.pgen2.driver').setLevel(logging.WARNING)
+    logging.getLogger("asyncio").setLevel(logging.WARNING)
+    logging.getLogger("blib2to3.pgen2.driver").setLevel(logging.WARNING)
 
 
 def get_flag(maybe_dict, key):
@@ -370,7 +367,9 @@ def remove_vocab_foreign_key_constraints(metadata, config, dst_engine):
     for vocab_table_name in vocab_tables:
         vocab_table = metadata.tables[vocab_table_name]
         for fk in vocab_table.foreign_key_constraints:
-            logger.debug("Dropping constraint %s from table %s", fk.name, vocab_table_name)
+            logger.debug(
+                "Dropping constraint %s from table %s", fk.name, vocab_table_name
+            )
             with Session(dst_engine) as session:
                 session.begin()
                 try:
@@ -378,7 +377,11 @@ def remove_vocab_foreign_key_constraints(metadata, config, dst_engine):
                     session.commit()
                 except IntegrityError:
                     session.rollback()
-                    logger.exception("Dropping table %s key constraint %s failed:", vocab_table_name, fk.name)
+                    logger.exception(
+                        "Dropping table %s key constraint %s failed:",
+                        vocab_table_name,
+                        fk.name,
+                    )
                 except ProgrammingError as e:
                     session.rollback()
                     if type(e.orig) is UndefinedObject:
@@ -392,7 +395,9 @@ def reinstate_vocab_foreign_key_constraints(metadata, meta_dict, config, dst_eng
     for vocab_table_name in vocab_tables:
         vocab_table = metadata.tables[vocab_table_name]
         try:
-            for (column_name, column_dict) in meta_dict["tables"][vocab_table_name]["columns"].items():
+            for column_name, column_dict in meta_dict["tables"][vocab_table_name][
+                "columns"
+            ].items():
                 fk_targets = column_dict.get("foreign_keys", [])
                 if fk_targets:
                     fk = ForeignKeyConstraint(
@@ -407,7 +412,9 @@ def reinstate_vocab_foreign_key_constraints(metadata, meta_dict, config, dst_eng
                         session.execute(AddConstraint(fk))
                         session.commit()
         except IntegrityError:
-            logger.exception("Restoring table %s foreign keys failed:", vocab_table_name)
+            logger.exception(
+                "Restoring table %s foreign keys failed:", vocab_table_name
+            )
 
 
 def stream_yaml(yaml_file_handle):
@@ -437,7 +444,7 @@ def topological_sort(input_nodes, get_dependencies_fn):
     Topoligically sort input_nodes and find any cycles.
 
     Returns a pair (sorted, cycles).
-    
+
     'sorted' is a list of all the elements of input_nodes sorted
     so that dependencies returned by get_dependencies_fn
     come after nodes that depend on them. Cycles are
@@ -478,23 +485,21 @@ def topological_sort(input_nodes, get_dependencies_fn):
                 elif n in grey:
                     # n is in a cycle
                     cycle_start = grey.index(n)
-                    cycles.append(grey[cycle_start:len(grey)])
+                    cycles.append(grey[cycle_start : len(grey)])
     return (black, cycles)
 
 
 def sorted_non_vocabulary_tables(metadata: MetaData, config: Mapping) -> list[Table]:
-    table_names = set(
-        metadata.tables.keys()
-    ).difference(
+    table_names = set(metadata.tables.keys()).difference(
         get_vocabulary_table_names(config)
     )
     (sorted, cycles) = topological_sort(
-        table_names,
-        lambda tn: get_related_table_names(metadata.tables[tn])
+        table_names, lambda tn: get_related_table_names(metadata.tables[tn])
     )
     for cycle in cycles:
         logger.warning(f"Cycle detected between tables: {cycle}")
-    return [ metadata.tables[tn] for tn in sorted ]
+    return [metadata.tables[tn] for tn in sorted]
+
 
 def generators_require_stats(config: Mapping) -> bool:
     """
@@ -527,14 +532,16 @@ def generators_require_stats(config: Mapping) -> bool:
                 if any(name == "SRC_STATS" for name in names):
                     stats_required = True
             except SyntaxError as e:
-                errors.append((
-                    "Syntax error in argument %d of %s: %s\n%s\n%s",
-                    n + 1,
-                    where,
-                    e.msg,
-                    arg,
-                    " " * e.offset + "^" * max(1, e.end_offset - e.offset),
-                ))
+                errors.append(
+                    (
+                        "Syntax error in argument %d of %s: %s\n%s\n%s",
+                        n + 1,
+                        where,
+                        e.msg,
+                        arg,
+                        " " * e.offset + "^" * max(1, e.end_offset - e.offset),
+                    )
+                )
         for k, arg in call.get("kwargs", {}).items():
             if type(arg) is str:
                 try:
@@ -546,14 +553,16 @@ def generators_require_stats(config: Mapping) -> bool:
                     if any(name == "SRC_STATS" for name in names):
                         stats_required = True
                 except SyntaxError as e:
-                    errors.append((
-                        "Syntax error in argument %s of %s: %s\n%s\n%s",
-                        k,
-                        where,
-                        e.msg,
-                        arg,
-                        " " * e.offset + "^" * max(1, e.end_offset - e.offset),
-                    ))
+                    errors.append(
+                        (
+                            "Syntax error in argument %s of %s: %s\n%s\n%s",
+                            k,
+                            where,
+                            e.msg,
+                            arg,
+                            " " * e.offset + "^" * max(1, e.end_offset - e.offset),
+                        )
+                    )
     for error in errors:
         logger.error(*error)
     return stats_required

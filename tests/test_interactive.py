@@ -1,58 +1,66 @@
 """ Tests for the base module. """
 import copy
-from dataclasses import dataclass
 import random
 import re
+from dataclasses import dataclass
+from unittest.mock import MagicMock, Mock, patch
+
 from sqlalchemy import insert, select
 
+from datafaker.generators import NullPartitionedNormalGeneratorFactory
 from datafaker.interactive import (
     DbCmd,
-    TableCmd,
     GeneratorCmd,
     MissingnessCmd,
+    TableCmd,
     update_config_generators,
 )
-from datafaker.generators import NullPartitionedNormalGeneratorFactory
-
-from tests.utils import RequiresDBTestCase, GeneratesDBTestCase
-from unittest.mock import MagicMock, Mock, patch
+from tests.utils import GeneratesDBTestCase, RequiresDBTestCase
 
 
 class TestDbCmdMixin(DbCmd):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.reset()
+
     def reset(self):
         self.messages: list[tuple[str, list, dict[str, any]]] = []
         self.headings: list[str] = []
         self.rows: list[list[str]] = []
         self.column_items: list[str] = []
         self.columns: dict[str, list[str]] = {}
+
     def print(self, text: str, *args, **kwargs):
         self.messages.append((text, args, kwargs))
+
     def print_table(self, headings: list[str], rows: list[list[str]]):
         self.headings = headings
         self.rows = rows
+
     def print_table_by_columns(self, columns: dict[str, list[str]]):
         self.columns = columns
+
     def columnize(self, items: list[str]):
         self.column_items.append(items)
+
     def ask_save(self) -> str:
         return "yes"
 
 
 class TestTableCmd(TableCmd, TestDbCmdMixin):
-    """ TableCmd but mocked """
+    """TableCmd but mocked"""
 
 
 class ConfigureTablesTests(RequiresDBTestCase):
     """Testing configure-tables."""
+
     def _get_cmd(self, config) -> TestTableCmd:
         return TestTableCmd(self.dsn, self.schema_name, self.metadata, config)
 
 
 class ConfigureTablesSrcTests(ConfigureTablesTests):
     """Testing configure-tables with src.dump."""
+
     dump_file_path = "src.dump"
     database_name = "src"
     schema_name = "public"
@@ -70,11 +78,15 @@ class ConfigureTablesSrcTests(ConfigureTablesTests):
             for t in reversed(table_names):
                 self.assertIn(t, tc.prompt)
                 tc.do_previous("")
-            self.assertListEqual(tc.messages, [(TableCmd.ERROR_ALREADY_AT_START, (), {})])
+            self.assertListEqual(
+                tc.messages, [(TableCmd.ERROR_ALREADY_AT_START, (), {})]
+            )
             tc.reset()
             bad_table_name = "notarealtable"
             tc.do_next(bad_table_name)
-            self.assertListEqual(tc.messages, [(TableCmd.ERROR_NO_SUCH_TABLE, (bad_table_name,), {})])
+            self.assertListEqual(
+                tc.messages, [(TableCmd.ERROR_NO_SUCH_TABLE, (bad_table_name,), {})]
+            )
             tc.reset()
             good_table_name = table_names[2]
             tc.do_next(good_table_name)
@@ -107,9 +119,13 @@ class ConfigureTablesSrcTests(ConfigureTablesTests):
             tc.do_private("")
             tc.do_quit("")
             tables = tc.config["tables"]
-            self.assertFalse(tables["unique_constraint_test"].get("vocabulary_table", False))
+            self.assertFalse(
+                tables["unique_constraint_test"].get("vocabulary_table", False)
+            )
             self.assertFalse(tables["unique_constraint_test"].get("ignore", False))
-            self.assertTrue(tables["unique_constraint_test"].get("primary_private", False))
+            self.assertTrue(
+                tables["unique_constraint_test"].get("primary_private", False)
+            )
 
     def test_null_table_configuration(self) -> None:
         """A table still works if its configuration is None."""
@@ -123,9 +139,13 @@ class ConfigureTablesSrcTests(ConfigureTablesTests):
             tc.do_private("")
             tc.do_quit("")
             tables = tc.config["tables"]
-            self.assertFalse(tables["unique_constraint_test"].get("vocabulary_table", False))
+            self.assertFalse(
+                tables["unique_constraint_test"].get("vocabulary_table", False)
+            )
             self.assertFalse(tables["unique_constraint_test"].get("ignore", False))
-            self.assertTrue(tables["unique_constraint_test"].get("primary_private", False))
+            self.assertTrue(
+                tables["unique_constraint_test"].get("primary_private", False)
+            )
 
     def test_configure_tables(self) -> None:
         """Test that we can change columns to ignore, vocab or generate."""
@@ -142,7 +162,7 @@ class ConfigureTablesSrcTests(ConfigureTablesTests):
                 },
                 "empty_vocabulary": {
                     "private": True,
-                }
+                },
             },
         }
         with self._get_cmd(config) as tc:
@@ -159,9 +179,13 @@ class ConfigureTablesSrcTests(ConfigureTablesTests):
             tc.do_empty("")
             tc.do_quit("")
             tables = tc.config["tables"]
-            self.assertFalse(tables["unique_constraint_test"].get("vocabulary_table", False))
+            self.assertFalse(
+                tables["unique_constraint_test"].get("vocabulary_table", False)
+            )
             self.assertFalse(tables["unique_constraint_test"].get("ignore", False))
-            self.assertFalse(tables["unique_constraint_test"].get("primary_private", False))
+            self.assertFalse(
+                tables["unique_constraint_test"].get("primary_private", False)
+            )
             self.assertEqual(tables["unique_constraint_test"].get("num_passes", 1), 1)
             self.assertFalse(tables["no_pk_test"].get("vocabulary_table", False))
             self.assertTrue(tables["no_pk_test"].get("ignore", False))
@@ -189,10 +213,7 @@ class ConfigureTablesSrcTests(ConfigureTablesTests):
         person_table = self.metadata.tables["person"]
         with self.engine.connect() as conn:
             person_rows = conn.execute(select(person_table)).mappings().fetchall()
-            person_data = {
-                row["person_id"]: row
-                for row in person_rows
-            }
+            person_data = {row["person_id"]: row for row in person_rows}
             name_set = {row["name"] for row in person_rows}
         person_headings = ["person_id", "name", "research_opt_out", "stored_from"]
         with self._get_cmd({}) as tc:
@@ -224,11 +245,15 @@ class ConfigureTablesSrcTests(ConfigureTablesTests):
             tc.reset()
             tc.do_data(f"{to_get_count} name 13")
             self.assertEqual(len(tc.column_items), 1)
-            self.assertEqual(set(tc.column_items[0]), set(filter(lambda n: 13 <= len(n), name_set)))
+            self.assertEqual(
+                set(tc.column_items[0]), set(filter(lambda n: 13 <= len(n), name_set))
+            )
             tc.reset()
             tc.do_data(f"{to_get_count} name 16")
             self.assertEqual(len(tc.column_items), 1)
-            self.assertEqual(set(tc.column_items[0]), set(filter(lambda n: 16 <= len(n), name_set)))
+            self.assertEqual(
+                set(tc.column_items[0]), set(filter(lambda n: 16 <= len(n), name_set))
+            )
 
     def test_list_tables(self):
         """Test that we can list the tables"""
@@ -252,7 +277,7 @@ class ConfigureTablesSrcTests(ConfigureTablesTests):
             person_listed = False
             unique_constraint_test_listed = False
             no_pk_test_listed = False
-            for (text, args, kwargs) in tc.messages:
+            for text, args, kwargs in tc.messages:
                 if args[2] == "person":
                     self.assertFalse(person_listed)
                     person_listed = True
@@ -277,7 +302,8 @@ class ConfigureTablesSrcTests(ConfigureTablesTests):
 
 
 class ConfigureTablesInstrumentsTests(ConfigureTablesTests):
-    """ Testing configure-tables with the instrument.sql database. """
+    """Testing configure-tables with the instrument.sql database."""
+
     dump_file_path = "instrument.sql"
     database_name = "instrument"
     schema_name = "public"
@@ -300,10 +326,28 @@ class ConfigureTablesInstrumentsTests(ConfigureTablesTests):
             tc.reset()
             tc.do_quit("")
             self.assertEqual(tc.messages[0], (TableCmd.NOTE_TEXT_NO_CHANGES, (), {}))
-            self.assertEqual(tc.messages[1], (TableCmd.WARNING_TEXT_PROBLEMS_EXIST, (), {}))
-            self.assertEqual(tc.messages[2], (TableCmd.WARNING_TEXT_VOCAB_TO_NON_VOCAB, ("model", "manufacturer"), {}))
-            self.assertEqual(tc.messages[3], (TableCmd.WARNING_TEXT_POTENTIAL_PROBLEMS, (), {}))
-            self.assertEqual(tc.messages[4], (TableCmd.WARNING_TEXT_NON_EMPTY_TO_EMPTY, ("signature_model", "player"), {}))
+            self.assertEqual(
+                tc.messages[1], (TableCmd.WARNING_TEXT_PROBLEMS_EXIST, (), {})
+            )
+            self.assertEqual(
+                tc.messages[2],
+                (
+                    TableCmd.WARNING_TEXT_VOCAB_TO_NON_VOCAB,
+                    ("model", "manufacturer"),
+                    {},
+                ),
+            )
+            self.assertEqual(
+                tc.messages[3], (TableCmd.WARNING_TEXT_POTENTIAL_PROBLEMS, (), {})
+            )
+            self.assertEqual(
+                tc.messages[4],
+                (
+                    TableCmd.WARNING_TEXT_NON_EMPTY_TO_EMPTY,
+                    ("signature_model", "player"),
+                    {},
+                ),
+            )
 
     def test_sanity_checks_warnings_only(self):
         config = {
@@ -324,9 +368,25 @@ class ConfigureTablesInstrumentsTests(ConfigureTablesTests):
             tc.do_vocabulary("")
             tc.reset()
             tc.do_quit("")
-            self.assertEqual(tc.messages[0], (TableCmd.NOTE_TEXT_CHANGING, ("manufacturer", "ignore", "vocabulary"), {}))
-            self.assertEqual(tc.messages[1], (TableCmd.WARNING_TEXT_POTENTIAL_PROBLEMS, (), {}))
-            self.assertEqual(tc.messages[2], (TableCmd.WARNING_TEXT_NON_EMPTY_TO_EMPTY, ("signature_model", "player"), {}))
+            self.assertEqual(
+                tc.messages[0],
+                (
+                    TableCmd.NOTE_TEXT_CHANGING,
+                    ("manufacturer", "ignore", "vocabulary"),
+                    {},
+                ),
+            )
+            self.assertEqual(
+                tc.messages[1], (TableCmd.WARNING_TEXT_POTENTIAL_PROBLEMS, (), {})
+            )
+            self.assertEqual(
+                tc.messages[2],
+                (
+                    TableCmd.WARNING_TEXT_NON_EMPTY_TO_EMPTY,
+                    ("signature_model", "player"),
+                    {},
+                ),
+            )
 
     def test_sanity_checks_errors_only(self):
         config = {
@@ -347,16 +407,34 @@ class ConfigureTablesInstrumentsTests(ConfigureTablesTests):
             tc.do_empty("")
             tc.reset()
             tc.do_quit("")
-            self.assertEqual(tc.messages[0], (TableCmd.NOTE_TEXT_CHANGING, ("signature_model", "generate", "empty"), {}))
-            self.assertEqual(tc.messages[1], (TableCmd.WARNING_TEXT_PROBLEMS_EXIST, (), {}))
-            self.assertEqual(tc.messages[2], (TableCmd.WARNING_TEXT_VOCAB_TO_NON_VOCAB, ("model", "manufacturer"), {}))
+            self.assertEqual(
+                tc.messages[0],
+                (
+                    TableCmd.NOTE_TEXT_CHANGING,
+                    ("signature_model", "generate", "empty"),
+                    {},
+                ),
+            )
+            self.assertEqual(
+                tc.messages[1], (TableCmd.WARNING_TEXT_PROBLEMS_EXIST, (), {})
+            )
+            self.assertEqual(
+                tc.messages[2],
+                (
+                    TableCmd.WARNING_TEXT_VOCAB_TO_NON_VOCAB,
+                    ("model", "manufacturer"),
+                    {},
+                ),
+            )
 
 
 class TestGeneratorCmd(GeneratorCmd, TestDbCmdMixin):
-    """ GeneratorCmd but mocked """
+    """GeneratorCmd but mocked"""
+
     def get_proposals(self) -> dict[str, tuple[int, str, str, list[str]]]:
         """
-        Returns a dict of generator name to a tuple of (index, fit_string, [list,of,samples])"""
+        Returns a dict of generator name to a tuple of (index, fit_string, [list,of,samples])
+        """
         return {
             kw["name"]: (kw["index"], kw["fit"], kw["sample"].split("; "))
             for (s, _, kw) in self.messages
@@ -365,7 +443,8 @@ class TestGeneratorCmd(GeneratorCmd, TestDbCmdMixin):
 
 
 class ConfigureGeneratorsTests(RequiresDBTestCase):
-    """ Testing configure-generators. """
+    """Testing configure-generators."""
+
     dump_file_path = "instrument.sql"
     database_name = "instrument"
     schema_name = "public"
@@ -374,7 +453,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
         return TestGeneratorCmd(self.dsn, self.schema_name, self.metadata, config)
 
     def test_null_configuration(self):
-        """ Test that the tables having null configuration does not break. """
+        """Test that the tables having null configuration does not break."""
         config = {
             "tables": None,
         }
@@ -388,7 +467,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertEqual(len(gc.config["tables"][TABLE]["row_generators"]), 1)
 
     def test_null_table_configuration(self):
-        """ Test that a table having null configuration does not break. """
+        """Test that a table having null configuration does not break."""
         config = {
             "tables": {
                 "model": None,
@@ -415,10 +494,14 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
                     else:
                         self.assertNotIn("[pk]", gc.prompt)
                     gc.do_next("")
-            self.assertListEqual(gc.messages, [(GeneratorCmd.INFO_NO_MORE_TABLES, (), {})])
+            self.assertListEqual(
+                gc.messages, [(GeneratorCmd.INFO_NO_MORE_TABLES, (), {})]
+            )
             gc.reset()
             for table_name, table_meta in reversed(list(self.metadata.tables.items())):
-                for column_name, column_meta in reversed(list(table_meta.columns.items())):
+                for column_name, column_meta in reversed(
+                    list(table_meta.columns.items())
+                ):
                     self.assertIn(table_name, gc.prompt)
                     self.assertIn(column_name, gc.prompt)
                     if column_meta.primary_key:
@@ -426,19 +509,20 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
                     else:
                         self.assertNotIn("[pk]", gc.prompt)
                     gc.do_previous("")
-            self.assertListEqual(gc.messages, [(GeneratorCmd.ERROR_ALREADY_AT_START, (), {})])
+            self.assertListEqual(
+                gc.messages, [(GeneratorCmd.ERROR_ALREADY_AT_START, (), {})]
+            )
             gc.reset()
             bad_table_name = "notarealtable"
             gc.do_next(bad_table_name)
-            self.assertListEqual(gc.messages, [(
-                GeneratorCmd.ERROR_NO_SUCH_TABLE_OR_COLUMN,
-                (bad_table_name,),
-                {}
-            )])
+            self.assertListEqual(
+                gc.messages,
+                [(GeneratorCmd.ERROR_NO_SUCH_TABLE_OR_COLUMN, (bad_table_name,), {})],
+            )
             gc.reset()
 
     def test_set_generator_mimesis(self):
-        """ Test that we can set one generator to a mimesis generator. """
+        """Test that we can set one generator to a mimesis generator."""
         with self._get_cmd({}) as gc:
             TABLE = "model"
             COLUMN = "name"
@@ -455,7 +539,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             )
 
     def test_set_generator_distribution(self):
-        """ Test that we can set one generator to gaussian. """
+        """Test that we can set one generator to gaussian."""
         with self._get_cmd({}) as gc:
             TABLE = "string"
             COLUMN = "frequency"
@@ -470,12 +554,17 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             row_gen = row_gens[0]
             self.assertEqual(row_gen["name"], GENERATOR)
             self.assertListEqual(row_gen["columns_assigned"], [COLUMN])
-            self.assertDictEqual(row_gen["kwargs"], {
-                "mean": f'SRC_STATS["auto__{TABLE}"]["results"][0]["mean__{COLUMN}"]',
-                "sd": f'SRC_STATS["auto__{TABLE}"]["results"][0]["stddev__{COLUMN}"]',
-            })
+            self.assertDictEqual(
+                row_gen["kwargs"],
+                {
+                    "mean": f'SRC_STATS["auto__{TABLE}"]["results"][0]["mean__{COLUMN}"]',
+                    "sd": f'SRC_STATS["auto__{TABLE}"]["results"][0]["stddev__{COLUMN}"]',
+                },
+            )
             self.assertEqual(len(gc.config["src-stats"]), 1)
-            self.assertSetEqual(set(gc.config["src-stats"][0].keys()), {"comments", "name", "query"})
+            self.assertSetEqual(
+                set(gc.config["src-stats"][0].keys()), {"comments", "name", "query"}
+            )
             self.assertEqual(gc.config["src-stats"][0]["name"], f"auto__{TABLE}")
             self.assertEqual(
                 gc.config["src-stats"][0]["query"],
@@ -483,7 +572,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             )
 
     def test_set_generator_distribution_directly(self):
-        """ Test that we can set one generator to gaussian without going through propose. """
+        """Test that we can set one generator to gaussian without going through propose."""
         with self._get_cmd({}) as gc:
             TABLE = "string"
             COLUMN = "frequency"
@@ -494,7 +583,9 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertListEqual(gc.messages, [])
             gc.do_quit("")
             self.assertEqual(len(gc.config["src-stats"]), 1)
-            self.assertSetEqual(set(gc.config["src-stats"][0].keys()), {"comments", "name", "query"})
+            self.assertSetEqual(
+                set(gc.config["src-stats"][0].keys()), {"comments", "name", "query"}
+            )
             self.assertEqual(gc.config["src-stats"][0]["name"], f"auto__{TABLE}")
             self.assertEqual(
                 gc.config["src-stats"][0]["query"],
@@ -502,7 +593,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             )
 
     def test_set_generator_choice(self):
-        """ Test that we can set one generator to uniform choice. """
+        """Test that we can set one generator to uniform choice."""
         with self._get_cmd({}) as gc:
             TABLE = "string"
             COLUMN = "frequency"
@@ -517,19 +608,26 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             row_gen = row_gens[0]
             self.assertEqual(row_gen["name"], GENERATOR)
             self.assertListEqual(row_gen["columns_assigned"], [COLUMN])
-            self.assertDictEqual(row_gen["kwargs"], {
-                "a": f'SRC_STATS["auto__{TABLE}__{COLUMN}"]["results"]',
-            })
+            self.assertDictEqual(
+                row_gen["kwargs"],
+                {
+                    "a": f'SRC_STATS["auto__{TABLE}__{COLUMN}"]["results"]',
+                },
+            )
             self.assertEqual(len(gc.config["src-stats"]), 1)
-            self.assertSetEqual(set(gc.config["src-stats"][0].keys()), {"comments", "name", "query"})
-            self.assertEqual(gc.config["src-stats"][0]["name"], f"auto__{TABLE}__{COLUMN}")
+            self.assertSetEqual(
+                set(gc.config["src-stats"][0].keys()), {"comments", "name", "query"}
+            )
+            self.assertEqual(
+                gc.config["src-stats"][0]["name"], f"auto__{TABLE}__{COLUMN}"
+            )
             self.assertEqual(
                 gc.config["src-stats"][0]["query"],
                 f"SELECT {COLUMN} AS value FROM {TABLE} WHERE {COLUMN} IS NOT NULL GROUP BY value ORDER BY COUNT({COLUMN}) DESC",
             )
 
     def test_weighted_choice_generator_generates_choices(self):
-        """ Test that propose and compare show weighted_choice's values. """
+        """Test that propose and compare show weighted_choice's values."""
         with self._get_cmd({}) as gc:
             TABLE = "string"
             COLUMN = "position"
@@ -546,7 +644,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertSubset(set(gc.columns[col_heading]), VALUES)
 
     def test_merge_columns(self):
-        """ Test that we can merge columns and set a multivariate generator """
+        """Test that we can merge columns and set a multivariate generator"""
         TABLE = "string"
         COLUMN_1 = "frequency"
         COLUMN_2 = "position"
@@ -586,7 +684,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertListEqual(row_gen["columns_assigned"], [COLUMN_1, COLUMN_2])
 
     def test_unmerge_columns(self):
-        """ Test that we can unmerge columns and generators are removed """
+        """Test that we can unmerge columns and generators are removed"""
         TABLE = "string"
         COLUMN_1 = "frequency"
         COLUMN_2 = "position"
@@ -597,7 +695,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
                 TABLE: {
                     "row_generators": [
                         {"name": "gen1", "columns_assigned": [COLUMN_1, COLUMN_2]},
-                        { "name": REMAINING_GEN, "columns_assigned": [COLUMN_3] },
+                        {"name": REMAINING_GEN, "columns_assigned": [COLUMN_3]},
                     ]
                 }
             }
@@ -625,24 +723,28 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertListEqual(row_gen["columns_assigned"], [COLUMN_3])
 
     def test_old_generators_remain(self):
-        """ Test that we can set one generator and keep an old one. """
+        """Test that we can set one generator and keep an old one."""
         config = {
             "tables": {
                 "string": {
-                    "row_generators": [{
-                        "name": "dist_gen.normal",
-                        "columns_assigned": ["frequency"],
-                        "kwargs": {
-                            "mean": 'SRC_STATS["auto__string"][0]["mean__frequency"]',
-                            "sd": 'SRC_STATS["auto__string"][0]["stddev__frequency"]',
-                        },
-                    }]
+                    "row_generators": [
+                        {
+                            "name": "dist_gen.normal",
+                            "columns_assigned": ["frequency"],
+                            "kwargs": {
+                                "mean": 'SRC_STATS["auto__string"][0]["mean__frequency"]',
+                                "sd": 'SRC_STATS["auto__string"][0]["stddev__frequency"]',
+                            },
+                        }
+                    ]
                 }
             },
-            "src-stats": [{
-                "name": "auto__string",
-                "query": 'SELECT AVG(frequency) AS mean__frequency, STDDEV(frequency) AS stddev__frequency FROM string',
-            }]
+            "src-stats": [
+                {
+                    "name": "auto__string",
+                    "query": "SELECT AVG(frequency) AS mean__frequency, STDDEV(frequency) AS stddev__frequency FROM string",
+                }
+            ],
         }
         with self._get_cmd(config) as gc:
             TABLE = "model"
@@ -663,18 +765,23 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             row_gen = row_gens[0]
             self.assertEqual(row_gen["name"], "dist_gen.normal")
             self.assertListEqual(row_gen["columns_assigned"], ["frequency"])
-            self.assertDictEqual(row_gen["kwargs"], {
-                "mean": 'SRC_STATS["auto__string"][0]["mean__frequency"]',
-                "sd": 'SRC_STATS["auto__string"][0]["stddev__frequency"]',
-            })
+            self.assertDictEqual(
+                row_gen["kwargs"],
+                {
+                    "mean": 'SRC_STATS["auto__string"][0]["mean__frequency"]',
+                    "sd": 'SRC_STATS["auto__string"][0]["stddev__frequency"]',
+                },
+            )
             self.assertEqual(len(gc.config["src-stats"]), 1)
-            self.assertSetEqual(set(gc.config["src-stats"][0].keys()), {"comments", "name", "query"})
+            self.assertSetEqual(
+                set(gc.config["src-stats"][0].keys()), {"comments", "name", "query"}
+            )
             self.assertEqual(gc.config["src-stats"][0]["name"], f"auto__string")
             self.assertEqual(
                 gc.config["src-stats"][0]["query"],
                 "SELECT AVG(frequency) AS mean__frequency, STDDEV(frequency) AS stddev__frequency FROM string",
             )
-    
+
     def test_aggregate_queries_merge(self):
         """
         Test that we can set a generator that requires select aggregate clauses
@@ -683,20 +790,24 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
         config = {
             "tables": {
                 "string": {
-                    "row_generators": [{
-                        "name": "dist_gen.normal",
-                        "columns_assigned": ["frequency"],
-                        "kwargs": {
-                            "mean": 'SRC_STATS["auto__string"]["results"][0]["mean__frequency"]',
-                            "sd": 'SRC_STATS["auto__string"]["results"][0]["stddev__frequency"]',
-                        },
-                    }]
+                    "row_generators": [
+                        {
+                            "name": "dist_gen.normal",
+                            "columns_assigned": ["frequency"],
+                            "kwargs": {
+                                "mean": 'SRC_STATS["auto__string"]["results"][0]["mean__frequency"]',
+                                "sd": 'SRC_STATS["auto__string"]["results"][0]["stddev__frequency"]',
+                            },
+                        }
+                    ]
                 }
             },
-            "src-stats": [{
-                "name": "auto__string",
-                "query": 'SELECT AVG(frequency) AS mean__frequency, STDDEV(frequency) AS stddev__frequency FROM string',
-            }]
+            "src-stats": [
+                {
+                    "name": "auto__string",
+                    "query": "SELECT AVG(frequency) AS mean__frequency, STDDEV(frequency) AS stddev__frequency FROM string",
+                }
+            ],
         }
         with self._get_cmd(copy.deepcopy(config)) as gc:
             COLUMN = "position"
@@ -706,7 +817,9 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             proposals = gc.get_proposals()
             gc.do_set(str(proposals[f"{GENERATOR}"][0]))
             gc.do_quit("")
-            row_gens: list[dict[str,any]] = gc.config["tables"]["string"]["row_generators"]
+            row_gens: list[dict[str, any]] = gc.config["tables"]["string"][
+                "row_generators"
+            ]
             self.assertEqual(len(row_gens), 2)
             if row_gens[0]["name"] == GENERATOR:
                 row_gen0 = row_gens[0]
@@ -717,28 +830,41 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertEqual(row_gen0["name"], GENERATOR)
             self.assertEqual(row_gen1["name"], "dist_gen.normal")
             self.assertListEqual(row_gen0["columns_assigned"], [COLUMN])
-            self.assertDictEqual(row_gen0["kwargs"], {
-                "mean": f'SRC_STATS["auto__string"]["results"][0]["mean__{COLUMN}"]',
-                "sd": f'SRC_STATS["auto__string"]["results"][0]["stddev__{COLUMN}"]',
-            })
+            self.assertDictEqual(
+                row_gen0["kwargs"],
+                {
+                    "mean": f'SRC_STATS["auto__string"]["results"][0]["mean__{COLUMN}"]',
+                    "sd": f'SRC_STATS["auto__string"]["results"][0]["stddev__{COLUMN}"]',
+                },
+            )
             self.assertListEqual(row_gen1["columns_assigned"], ["frequency"])
-            self.assertDictEqual(row_gen1["kwargs"], {
-                "mean": 'SRC_STATS["auto__string"]["results"][0]["mean__frequency"]',
-                "sd": 'SRC_STATS["auto__string"]["results"][0]["stddev__frequency"]',
-            })
+            self.assertDictEqual(
+                row_gen1["kwargs"],
+                {
+                    "mean": 'SRC_STATS["auto__string"]["results"][0]["mean__frequency"]',
+                    "sd": 'SRC_STATS["auto__string"]["results"][0]["stddev__frequency"]',
+                },
+            )
             self.assertEqual(len(gc.config["src-stats"]), 1)
             self.assertEqual(gc.config["src-stats"][0]["name"], "auto__string")
-            select_match = re.match(r'SELECT (.*) FROM string', gc.config["src-stats"][0]["query"])
-            self.assertIsNotNone(select_match, "src_stats[0].query is not an aggregate select")
-            self.assertSetEqual(set(select_match.group(1).split(", ")), {
-                "AVG(frequency) AS mean__frequency",
-                "STDDEV(frequency) AS stddev__frequency",
-                f"AVG({COLUMN}) AS mean__{COLUMN}",
-                f"STDDEV({COLUMN}) AS stddev__{COLUMN}",
-            })
+            select_match = re.match(
+                r"SELECT (.*) FROM string", gc.config["src-stats"][0]["query"]
+            )
+            self.assertIsNotNone(
+                select_match, "src_stats[0].query is not an aggregate select"
+            )
+            self.assertSetEqual(
+                set(select_match.group(1).split(", ")),
+                {
+                    "AVG(frequency) AS mean__frequency",
+                    "STDDEV(frequency) AS stddev__frequency",
+                    f"AVG({COLUMN}) AS mean__{COLUMN}",
+                    f"STDDEV({COLUMN}) AS stddev__{COLUMN}",
+                },
+            )
 
     def test_next_completion(self):
-        """ Test tab completion for the next command. """
+        """Test tab completion for the next command."""
         with self._get_cmd({}) as gc:
             self.assertSetEqual(
                 set(gc.complete_next("m", "next m", 5, 6)),
@@ -756,7 +882,9 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
                 set(gc.complete_next("string.p", "next string.p", 5, 12)),
                 {"string.position"},
             )
-            self.assertListEqual(gc.complete_next("string.q", "next string.q", 5, 12), [])
+            self.assertListEqual(
+                gc.complete_next("string.q", "next string.q", 5, 12), []
+            )
             self.assertListEqual(gc.complete_next("ww", "next ww", 5, 7), [])
 
     def test_compare_reports_privacy(self):
@@ -799,10 +927,12 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
                     "primary_private": True,
                 }
             },
-            "src-stats": [{
-                "name": "kraken",
-                "query": 'SELECT MAX(frequency) AS max_frequency FROM string',
-            }]
+            "src-stats": [
+                {
+                    "name": "kraken",
+                    "query": "SELECT MAX(frequency) AS max_frequency FROM string",
+                }
+            ],
         }
         with self._get_cmd(config) as gc:
             COLUMN = "position"
@@ -812,15 +942,12 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             proposals = gc.get_proposals()
             gc.do_set(str(proposals[f"{GENERATOR}"][0]))
             gc.do_quit("")
-            src_stats = {
-                stat["name"]: stat["query"]
-                for stat in gc.config["src-stats"]
-            }
+            src_stats = {stat["name"]: stat["query"] for stat in gc.config["src-stats"]}
             self.assertEqual(src_stats["kraken"], config["src-stats"][0]["query"])
             self.assertTrue(gc.config["tables"]["string"]["primary_private"])
 
     def test_empty_tables_are_not_configured(self):
-        """ Test that tables marked as empty are not configured. """
+        """Test that tables marked as empty are not configured."""
         config = {
             "tables": {
                 "string": {
@@ -830,13 +957,14 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
         }
         with self._get_cmd(copy.deepcopy(config)) as gc:
             gc.do_tables("")
-            table_names = { m[1][0] for m in gc.messages }
+            table_names = {m[1][0] for m in gc.messages}
             self.assertIn("model", table_names)
             self.assertNotIn("string", table_names)
 
 
 class GeneratorsOutputTests(GeneratesDBTestCase):
-    """ Testing choice generation. """
+    """Testing choice generation."""
+
     dump_file_path = "choice.sql"
     database_name = "numbers"
     schema_name = "public"
@@ -845,7 +973,7 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
         return TestGeneratorCmd(self.dsn, self.schema_name, self.metadata, config)
 
     def test_create_with_sampled_choice(self):
-        """ Test that suppression works for choice and zipf_choice. """
+        """Test that suppression works for choice and zipf_choice."""
         table_name = "number_table"
         with self._get_cmd({}) as gc:
             gc.do_next("number_table.one")
@@ -869,7 +997,9 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
             self.assertIn("dist_gen.zipf_choice [sampled]", proposals)
             self.assertIn("dist_gen.choice [sampled and suppressed]", proposals)
             self.assertIn("dist_gen.zipf_choice [sampled and suppressed]", proposals)
-            gc.do_set(str(proposals["dist_gen.zipf_choice [sampled and suppressed]"][0]))
+            gc.do_set(
+                str(proposals["dist_gen.zipf_choice [sampled and suppressed]"][0])
+            )
             gc.do_next("number_table.three")
             gc.reset()
             gc.do_propose("")
@@ -899,7 +1029,7 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
             self.assertSetEqual(threes, {1, 2, 3, 4, 5})
 
     def test_create_with_choice(self):
-        """ Smoke test normal choice works. """
+        """Smoke test normal choice works."""
         table_name = "number_table"
         with self._get_cmd({}) as gc:
             gc.do_next("number_table.one")
@@ -927,7 +1057,7 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
             self.assertSetEqual(twos, {1, 2, 3, 4, 5})
 
     def test_create_with_weighted_choice(self):
-        """ Smoke test weighted choice. """
+        """Smoke test weighted choice."""
         table_name = "number_table"
         with self._get_cmd({}) as gc:
             gc.do_next("number_table.one")
@@ -936,12 +1066,16 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
             proposals = gc.get_proposals()
             self.assertIn("dist_gen.weighted_choice", proposals)
             self.assertIn("dist_gen.weighted_choice [sampled]", proposals)
-            self.assertIn("dist_gen.weighted_choice [sampled and suppressed]", proposals)
+            self.assertIn(
+                "dist_gen.weighted_choice [sampled and suppressed]", proposals
+            )
             prop = proposals["dist_gen.weighted_choice [sampled and suppressed]"]
             self.assertSubset(set(prop[2]), {"1", "4"})
             gc.reset()
             gc.do_compare(str(prop[0]))
-            col_heading = f"{prop[0]}. dist_gen.weighted_choice [sampled and suppressed]"
+            col_heading = (
+                f"{prop[0]}. dist_gen.weighted_choice [sampled and suppressed]"
+            )
             self.assertIn(col_heading, set(gc.columns.keys()))
             self.assertSubset(set(gc.columns[col_heading]), {1, 4})
             gc.do_set(str(prop[0]))
@@ -951,7 +1085,9 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
             proposals = gc.get_proposals()
             self.assertIn("dist_gen.weighted_choice", proposals)
             self.assertIn("dist_gen.weighted_choice [sampled]", proposals)
-            self.assertIn("dist_gen.weighted_choice [sampled and suppressed]", proposals)
+            self.assertIn(
+                "dist_gen.weighted_choice [sampled and suppressed]", proposals
+            )
             prop = proposals["dist_gen.weighted_choice"]
             self.assertSubset(set(prop[2]), {"1", "2", "3", "4", "5"})
             gc.reset()
@@ -966,7 +1102,9 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
             proposals = gc.get_proposals()
             self.assertIn("dist_gen.weighted_choice", proposals)
             self.assertIn("dist_gen.weighted_choice [sampled]", proposals)
-            self.assertNotIn("dist_gen.weighted_choice [sampled and suppressed]", proposals)
+            self.assertNotIn(
+                "dist_gen.weighted_choice [sampled and suppressed]", proposals
+            )
             prop = proposals["dist_gen.weighted_choice [sampled]"]
             self.assertSubset(set(prop[2]), {"1", "2", "3", "4", "5"})
             gc.do_compare(str(prop[0]))
@@ -993,10 +1131,12 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
 
 
 class TestMissingnessCmd(MissingnessCmd, TestDbCmdMixin):
-    """ MissingnessCmd but mocked """
+    """MissingnessCmd but mocked"""
+
 
 class ConfigureMissingnessTests(RequiresDBTestCase):
-    """ Testing configure-missing. """
+    """Testing configure-missing."""
+
     dump_file_path = "instrument.sql"
     database_name = "instrument"
     schema_name = "public"
@@ -1005,34 +1145,50 @@ class ConfigureMissingnessTests(RequiresDBTestCase):
         return TestMissingnessCmd(self.dsn, self.schema_name, self.metadata, config)
 
     def test_set_missingness_to_sampled(self):
-        """ Test that we can set one table to sampled missingness. """
+        """Test that we can set one table to sampled missingness."""
         with self._get_cmd({}) as mc:
             TABLE = "signature_model"
             mc.do_next(TABLE)
             mc.do_counts("")
-            self.assertListEqual(mc.messages, [(MissingnessCmd.ROW_COUNT_MSG, (6,), {})])
-            self.assertListEqual(mc.rows, [['player_id', 3], ['based_on', 2]])
+            self.assertListEqual(
+                mc.messages, [(MissingnessCmd.ROW_COUNT_MSG, (6,), {})]
+            )
+            self.assertListEqual(mc.rows, [["player_id", 3], ["based_on", 2]])
             mc.do_sampled("")
             mc.do_quit("")
             self.assertDictEqual(
                 mc.config,
-                { "tables": {TABLE: {"missingness_generators": [{
-                    "columns": ["player_id", "based_on"],
-                    "kwargs": {"patterns": 'SRC_STATS["missing_auto__signature_model__0"]'},
-                    "name": "column_presence.sampled",
-                }]}},
-                    "src-stats": [{
-                      "name": "missing_auto__signature_model__0",
-                      "query": ("SELECT COUNT(*) AS row_count, player_id__is_null, based_on__is_null FROM"
+                {
+                    "tables": {
+                        TABLE: {
+                            "missingness_generators": [
+                                {
+                                    "columns": ["player_id", "based_on"],
+                                    "kwargs": {
+                                        "patterns": 'SRC_STATS["missing_auto__signature_model__0"]'
+                                    },
+                                    "name": "column_presence.sampled",
+                                }
+                            ]
+                        }
+                    },
+                    "src-stats": [
+                        {
+                            "name": "missing_auto__signature_model__0",
+                            "query": (
+                                "SELECT COUNT(*) AS row_count, player_id__is_null, based_on__is_null FROM"
                                 " (SELECT player_id IS NULL AS player_id__is_null, based_on IS NULL AS based_on__is_null FROM"
-                                " signature_model ORDER BY RANDOM() LIMIT 1000) AS __t GROUP BY player_id__is_null, based_on__is_null")
-                    }]
-                }
+                                " signature_model ORDER BY RANDOM() LIMIT 1000) AS __t GROUP BY player_id__is_null, based_on__is_null"
+                            ),
+                        }
+                    ],
+                },
             )
 
 
 class ConfigureMissingnessTests(GeneratesDBTestCase):
-    """ Testing configure-missing with generation. """
+    """Testing configure-missing with generation."""
+
     dump_file_path = "instrument.sql"
     database_name = "instrument"
     schema_name = "public"
@@ -1041,7 +1197,7 @@ class ConfigureMissingnessTests(GeneratesDBTestCase):
         return TestMissingnessCmd(self.dsn, self.schema_name, self.metadata, config)
 
     def test_create_with_missingness(self):
-        """ Test that we can sample real missingness and reproduce it. """
+        """Test that we can sample real missingness and reproduce it."""
         random.seed(45)
         # Configure the missingness
         table_name = "signature_model"
@@ -1065,7 +1221,8 @@ class ConfigureMissingnessTests(GeneratesDBTestCase):
 
 
 class GeneratorTests(GeneratesDBTestCase):
-    """ Testing configure-generators with generation. """
+    """Testing configure-generators with generation."""
+
     dump_file_path = "instrument.sql"
     database_name = "instrument"
     schema_name = "public"
@@ -1074,7 +1231,7 @@ class GeneratorTests(GeneratesDBTestCase):
         return TestGeneratorCmd(self.dsn, self.schema_name, self.metadata, config)
 
     def test_set_null(self):
-        """ Test that we can sample real missingness and reproduce it. """
+        """Test that we can sample real missingness and reproduce it."""
         with self._get_cmd({}) as gc:
             gc.do_next("string.position")
             gc.do_set("dist_gen.constant")
@@ -1091,7 +1248,9 @@ class GeneratorTests(GeneratesDBTestCase):
             gc.do_next("signature_model.based_on")
             gc.do_set("dist_gen.constant")
             # we have got to the end of the columns, but shouldn't have any errors
-            self.assertListEqual(gc.messages, [(GeneratorCmd.INFO_NO_MORE_TABLES, (), {})])
+            self.assertListEqual(
+                gc.messages, [(GeneratorCmd.INFO_NO_MORE_TABLES, (), {})]
+            )
             gc.reset()
             gc.do_quit("")
             config = gc.config
@@ -1116,7 +1275,7 @@ class GeneratorTests(GeneratesDBTestCase):
             self.assertEqual(count, 3)
 
     def test_dist_gen_sampled_produces_ordered_src_stats(self):
-        """ Tests that choosing a sampled choice generator produces ordered src stats """
+        """Tests that choosing a sampled choice generator produces ordered src stats"""
         with self._get_cmd({}) as gc:
             gc.do_next("signature_model.player_id")
             gc.do_set("dist_gen.zipf_choice [sampled]")
@@ -1127,26 +1286,24 @@ class GeneratorTests(GeneratesDBTestCase):
             self.set_configuration(config)
             src_stats = self.get_src_stats(config)
         player_ids = [
-            s["value"]
-            for s in src_stats["auto__signature_model__player_id"]["results"]
+            s["value"] for s in src_stats["auto__signature_model__player_id"]["results"]
         ]
         self.assertListEqual(player_ids, [2, 3, 1])
         based_ons = [
-            s["value"]
-            for s in src_stats["auto__signature_model__based_on"]["results"]
+            s["value"] for s in src_stats["auto__signature_model__based_on"]["results"]
         ]
         self.assertListEqual(based_ons, [1, 3, 2])
 
     def assertAreTruncatedTo(self, xs, length):
-            maxlen = 0
-            for x in xs:
-                newlen = len(x.strip("'\""))
-                self.assertLessEqual(newlen, length)
-                maxlen = max(maxlen, newlen)
-            self.assertEqual(maxlen, length)
+        maxlen = 0
+        for x in xs:
+            newlen = len(x.strip("'\""))
+            self.assertLessEqual(newlen, length)
+            maxlen = max(maxlen, newlen)
+        self.assertEqual(maxlen, length)
 
     def test_varchar_ns_are_truncated(self):
-        """ Tests that mimesis generators for VARCHAR(N) truncate to N characters """
+        """Tests that mimesis generators for VARCHAR(N) truncate to N characters"""
         GENERATOR = "generic.text.quote"
         TABLE = "signature_model"
         COLUMN = "name"
@@ -1176,9 +1333,9 @@ class GeneratorTests(GeneratesDBTestCase):
 
 @dataclass
 class Stat:
-    n: int=0
-    x: float=0
-    x2: float=0
+    n: int = 0
+    x: float = 0
+    x2: float = 0
 
     def add(self, x: float) -> None:
         self.n += 1
@@ -1193,14 +1350,14 @@ class Stat:
 
     def x_var(self) -> float:
         x = self.x
-        return (self.x2 - x*x/self.n)/(self.n - 1)
+        return (self.x2 - x * x / self.n) / (self.n - 1)
 
 
 @dataclass
 class Correlation(Stat):
-    y: float=0
-    y2: float=0
-    xy: float=0
+    y: float = 0
+    y2: float = 0
+    xy: float = 0
 
     def add(self, x: float, y: float) -> None:
         self.n += 1
@@ -1215,14 +1372,15 @@ class Correlation(Stat):
 
     def y_var(self) -> float:
         y = self.y
-        return (self.y2 - y*y/self.n)/(self.n - 1)
+        return (self.y2 - y * y / self.n) / (self.n - 1)
 
     def covar(self) -> float:
-        return (self.xy - self.x*self.y/self.n)/(self.n - 1)
+        return (self.xy - self.x * self.y / self.n) / (self.n - 1)
 
 
 class NullPartitionedTests(GeneratesDBTestCase):
-    """ Testing null-partitioned grouped multivariate generation. """
+    """Testing null-partitioned grouped multivariate generation."""
+
     dump_file_path = "eav.sql"
     database_name = "eav"
     schema_name = "public"
@@ -1236,7 +1394,7 @@ class NullPartitionedTests(GeneratesDBTestCase):
         return TestGeneratorCmd(self.dsn, self.schema_name, self.metadata, config)
 
     def test_create_with_null_partitioned_grouped_multivariate(self):
-        """ Test EAV for all columns. """
+        """Test EAV for all columns."""
         table_name = "measurement"
         generate_count = 800
         with self._get_cmd({}) as gc:
@@ -1287,9 +1445,9 @@ class NullPartitionedTests(GeneratesDBTestCase):
                     # yes or no
                     self.assertIsNone(row.first_value)
                     self.assertIsNone(row.second_value)
-                    self.assertIn(row.third_value, {'yes', 'no'})
+                    self.assertIn(row.third_value, {"yes", "no"})
                     one_count += 1
-                    if row.third_value == 'yes':
+                    if row.third_value == "yes":
                         one_yes_count += 1
                 elif row.type == 2:
                     # positive correlation around 1.4, 1.8
@@ -1310,43 +1468,57 @@ class NullPartitionedTests(GeneratesDBTestCase):
                     self.assertIsNone(row.third_value)
                     four.add(row.first_value, row.second_value)
                 elif row.type == 5:
-                    self.assertIn(row.third_value, {'fish', 'fowl'})
+                    self.assertIn(row.third_value, {"fish", "fowl"})
                     self.assertIsNotNone(row.first_value)
                     self.assertIsNone(row.second_value)
-                    if row.third_value == 'fish':
+                    if row.third_value == "fish":
                         # mean 8.1 and sd 0.755
                         fish.add(row.first_value)
                     else:
                         # mean 11.2 and sd 1.114
                         fowl.add(row.first_value)
             # type 1
-            self.assertAlmostEqual(one_count, generate_count * 5 / 20, delta=generate_count * 0.4)
+            self.assertAlmostEqual(
+                one_count, generate_count * 5 / 20, delta=generate_count * 0.4
+            )
             # about 40% are yes
-            self.assertAlmostEqual(one_yes_count / one_count, 0.4, delta=generate_count * 0.4)
+            self.assertAlmostEqual(
+                one_yes_count / one_count, 0.4, delta=generate_count * 0.4
+            )
             # type 2
-            self.assertAlmostEqual(two.count(), generate_count * 3 / 20, delta=generate_count * 0.5)
+            self.assertAlmostEqual(
+                two.count(), generate_count * 3 / 20, delta=generate_count * 0.5
+            )
             self.assertAlmostEqual(two.x_mean(), 1.4, delta=0.6)
             self.assertAlmostEqual(two.x_var(), 0.21, delta=0.4)
             self.assertAlmostEqual(two.y_mean(), 1.8, delta=0.8)
             self.assertAlmostEqual(two.y_var(), 0.07, delta=0.1)
             self.assertAlmostEqual(two.covar(), 0.5, delta=0.5)
             # type 3
-            self.assertAlmostEqual(three.count(), generate_count * 3 / 20, delta=generate_count * 0.2)
+            self.assertAlmostEqual(
+                three.count(), generate_count * 3 / 20, delta=generate_count * 0.2
+            )
             self.assertAlmostEqual(two.covar(), -0.5, delta=0.5)
             # type 4
-            self.assertAlmostEqual(four.count(), generate_count * 3 / 20, delta=generate_count * 0.2)
+            self.assertAlmostEqual(
+                four.count(), generate_count * 3 / 20, delta=generate_count * 0.2
+            )
             self.assertAlmostEqual(two.covar(), 0.5, delta=0.5)
             # type 5/fish
-            self.assertAlmostEqual(fish.count(), generate_count * 3 / 20, delta=generate_count * 0.2)
+            self.assertAlmostEqual(
+                fish.count(), generate_count * 3 / 20, delta=generate_count * 0.2
+            )
             self.assertAlmostEqual(fish.x_mean(), 8.1, delta=3.0)
             self.assertAlmostEqual(fish.x_var(), 0.57, delta=0.8)
             # type 5/fowl
-            self.assertAlmostEqual(fowl.count(), generate_count * 3 / 20, delta=generate_count * 0.2)
+            self.assertAlmostEqual(
+                fowl.count(), generate_count * 3 / 20, delta=generate_count * 0.2
+            )
             self.assertAlmostEqual(fish.x_mean(), 11.2, delta=8.0)
             self.assertAlmostEqual(fish.x_var(), 1.24, delta=1.5)
 
     def test_create_with_null_partitioned_grouped_sampled_and_suppressed(self):
-        """ Test EAV for all columns with sampled and suppressed generation. """
+        """Test EAV for all columns with sampled and suppressed generation."""
         table_name = "measurement"
         table2_name = "observation"
         generate_count = 800
@@ -1360,8 +1532,13 @@ class NullPartitionedTests(GeneratesDBTestCase):
             proposals = gc.get_proposals()
             self.assertIn("null-partitioned grouped_multivariate_lognormal", proposals)
             self.assertIn("null-partitioned grouped_multivariate_normal", proposals)
-            self.assertIn("null-partitioned grouped_multivariate_lognormal [sampled and suppressed]", proposals)
-            dist_to_choose = "null-partitioned grouped_multivariate_normal [sampled and suppressed]"
+            self.assertIn(
+                "null-partitioned grouped_multivariate_lognormal [sampled and suppressed]",
+                proposals,
+            )
+            dist_to_choose = (
+                "null-partitioned grouped_multivariate_normal [sampled and suppressed]"
+            )
             self.assertIn(dist_to_choose, proposals)
             prop = proposals[dist_to_choose]
             gc.reset()
@@ -1377,7 +1554,9 @@ class NullPartitionedTests(GeneratesDBTestCase):
             gc.reset()
             gc.do_propose("")
             proposals = gc.get_proposals()
-            dist_to_choose = "null-partitioned grouped_multivariate_normal [sampled and suppressed]"
+            dist_to_choose = (
+                "null-partitioned grouped_multivariate_normal [sampled and suppressed]"
+            )
             prop = proposals[dist_to_choose]
             gc.do_set(str(prop[0]))
             gc.do_quit("")
@@ -1409,15 +1588,15 @@ class NullPartitionedTests(GeneratesDBTestCase):
                     # yes or no
                     self.assertIsNone(row.first_value)
                     self.assertIsNone(row.second_value)
-                    self.assertIn(row.third_value, {'yes', 'no'})
-                    if row.third_value == 'yes':
+                    self.assertIn(row.third_value, {"yes", "no"})
+                    if row.third_value == "yes":
                         one_yes_count += 1
                     one_count += 1
                 elif row.type == 5:
-                    self.assertIn(row.third_value, {'fish', 'fowl'})
+                    self.assertIn(row.third_value, {"fish", "fowl"})
                     self.assertIsNotNone(row.first_value)
                     self.assertIsNone(row.second_value)
-                    if row.third_value == 'fish':
+                    if row.third_value == "fish":
                         # mean 8.1 and sd 0.755
                         fish.add(row.first_value)
                     else:
@@ -1427,15 +1606,23 @@ class NullPartitionedTests(GeneratesDBTestCase):
             self.assertEqual(len(types), 4)
             self.assertSubset({1, 5}, types)
             # type 1
-            self.assertAlmostEqual(one_count, generate_count * 5 / 11, delta=generate_count * 0.4)
+            self.assertAlmostEqual(
+                one_count, generate_count * 5 / 11, delta=generate_count * 0.4
+            )
             # about 40% are yes
-            self.assertAlmostEqual(one_yes_count / one_count, 0.4, delta=generate_count * 0.4)
+            self.assertAlmostEqual(
+                one_yes_count / one_count, 0.4, delta=generate_count * 0.4
+            )
             # type 5/fish
-            self.assertAlmostEqual(fish.count(), generate_count * 3 / 11, delta=generate_count * 0.2)
+            self.assertAlmostEqual(
+                fish.count(), generate_count * 3 / 11, delta=generate_count * 0.2
+            )
             self.assertAlmostEqual(fish.x_mean(), 8.1, delta=3.0)
             self.assertAlmostEqual(fish.x_var(), 0.57, delta=0.8)
             # type 5/fowl
-            self.assertAlmostEqual(fowl.count(), generate_count * 3 / 11, delta=generate_count * 0.2)
+            self.assertAlmostEqual(
+                fowl.count(), generate_count * 3 / 11, delta=generate_count * 0.2
+            )
             self.assertAlmostEqual(fish.x_mean(), 11.2, delta=8.0)
             self.assertAlmostEqual(fish.x_var(), 1.24, delta=1.5)
             stmt = select(self.metadata.tables[table2_name])
@@ -1446,38 +1633,52 @@ class NullPartitionedTests(GeneratesDBTestCase):
                 self.assertEqual(row.type, 1)
                 self.assertIsNotNone(row.first_value)
                 self.assertIsNone(row.second_value)
-                self.assertIn(row.third_value, {'ham', 'eggs'})
+                self.assertIn(row.third_value, {"ham", "eggs"})
                 firsts.add(row.first_value)
             self.assertEqual(firsts.count(), 800)
-            self.assertAlmostEqual(firsts.x_mean(), 1.3, delta = generate_count * 0.3)
+            self.assertAlmostEqual(firsts.x_mean(), 1.3, delta=generate_count * 0.3)
 
 
 class NonInteractiveTests(RequiresDBTestCase):
     """
     Test the --spec SPEC_FILE option of configure-generators
     """
+
     dump_file_path = "eav.sql"
     database_name = "eav"
     schema_name = "public"
 
     @patch("datafaker.interactive.Path")
-    @patch("datafaker.interactive.csv.reader", return_value=iter([
-        ["observation", "type", "dist_gen.weighted_choice"],
-        ["observation", "first_value", "dist_gen.weighted_choice"],
-        ["observation", "third_value", "dist_gen.weighted_choice"],
-    ]))
-    def test_non_interactive_configure_generators(self, mock_csv_reader: MagicMock, mock_path: MagicMock):
+    @patch(
+        "datafaker.interactive.csv.reader",
+        return_value=iter(
+            [
+                ["observation", "type", "dist_gen.weighted_choice"],
+                ["observation", "first_value", "dist_gen.weighted_choice"],
+                ["observation", "third_value", "dist_gen.weighted_choice"],
+            ]
+        ),
+    )
+    def test_non_interactive_configure_generators(
+        self, mock_csv_reader: MagicMock, mock_path: MagicMock
+    ):
         """
         test that we can set generators from a CSV file
         """
         config = {}
         spec_csv = Mock(return_value="mock spec.csv file")
-        update_config_generators(self.dsn, self.schema_name, self.metadata, config, spec_csv)
+        update_config_generators(
+            self.dsn, self.schema_name, self.metadata, config, spec_csv
+        )
         row_gens = {
             f"{table}{sorted(rg['columns_assigned'])}": rg["name"]
             for table, tables in config.get("tables", {}).items()
             for rg in tables.get("row_generators", [])
         }
         self.assertEqual(row_gens["observation['type']"], "dist_gen.weighted_choice")
-        self.assertEqual(row_gens["observation['first_value']"], "dist_gen.weighted_choice")
-        self.assertEqual(row_gens["observation['third_value']"], "dist_gen.weighted_choice")
+        self.assertEqual(
+            row_gens["observation['first_value']"], "dist_gen.weighted_choice"
+        )
+        self.assertEqual(
+            row_gens["observation['third_value']"], "dist_gen.weighted_choice"
+        )

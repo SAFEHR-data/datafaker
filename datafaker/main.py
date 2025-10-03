@@ -1,8 +1,8 @@
 """Entrypoint for the datafaker package."""
 import asyncio
-from enum import Enum
 import json
 import sys
+from enum import Enum
 from importlib import metadata
 from pathlib import Path
 from typing import Final, Optional
@@ -15,8 +15,8 @@ from typer import Argument, Exit, Option, Typer
 from datafaker.create import create_db_data, create_db_tables, create_db_vocab
 from datafaker.dump import dump_db_tables
 from datafaker.interactive import (
-    update_config_tables,
     update_config_generators,
+    update_config_tables,
     update_missingness,
 )
 from datafaker.make import (
@@ -68,24 +68,24 @@ def _require_src_db_dsn(settings: Settings) -> str:
     return src_dsn
 
 
-def load_metadata_config(orm_file_name, config: dict | None=None):
+def load_metadata_config(orm_file_name, config: dict | None = None):
     with open(orm_file_name) as orm_fh:
         meta_dict = yaml.load(orm_fh, yaml.Loader)
         tables_dict = meta_dict.get("tables", {})
         if config is not None and "tables" in config:
             # Remove ignored tables
-            for (name, table_config) in config.get("tables", {}).items():
+            for name, table_config in config.get("tables", {}).items():
                 if get_flag(table_config, "ignore"):
                     tables_dict.pop(name, None)
         return meta_dict
 
 
-def load_metadata(orm_file_name, config: dict | None=None):
+def load_metadata(orm_file_name, config: dict | None = None):
     meta_dict = load_metadata_config(orm_file_name, config)
     return dict_to_metadata(meta_dict, None)
 
 
-def load_metadata_for_output(orm_file_name, config: dict | None=None):
+def load_metadata_for_output(orm_file_name, config: dict | None = None):
     """
     Load metadata excluding any foreign keys pointing to ignored tables.
     """
@@ -94,12 +94,9 @@ def load_metadata_for_output(orm_file_name, config: dict | None=None):
 
 
 @app.callback()
-def main(verbose: bool = Option(
-    False,
-    "--verbose",
-    "-v",
-    help="Print more information."
-)):
+def main(
+    verbose: bool = Option(False, "--verbose", "-v", help="Print more information.")
+):
     conf_logger(verbose)
 
 
@@ -108,7 +105,7 @@ def create_data(
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
     df_file: str = Option(
         DF_FILENAME,
-        help="The name of the generators file. Must be in the current working directory."
+        help="The name of the generators file. Must be in the current working directory.",
     ),
     config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
     num_passes: int = Option(1, help="Number of passes (rows or stories) to make"),
@@ -145,7 +142,9 @@ def create_data(
             num_passes,
         )
         logger.debug(
-            "Data created in %s %s.", num_passes, "pass" if num_passes == 1 else "passes"
+            "Data created in %s %s.",
+            num_passes,
+            "pass" if num_passes == 1 else "passes",
         )
         for table_name, row_count in row_counts.items():
             logger.debug(
@@ -210,9 +209,11 @@ def create_generators(
             "Statistics file (output of make-stats); default is src-stats.yaml if the "
             "config file references SRC_STATS, or None otherwise."
         ),
-        show_default=False
+        show_default=False,
     ),
-    force: bool = Option(False, "--force", "-f", help="Overwrite any existing Python generators file."),
+    force: bool = Option(
+        False, "--force", "-f", help="Overwrite any existing Python generators file."
+    ),
 ) -> None:
     """Make a datafaker file of generator classes.
 
@@ -249,7 +250,12 @@ def create_generators(
 def make_vocab(
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
     config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
-    force: bool = Option(False, "--force/--no-force", "-f/+f", help="Overwrite any existing vocabulary file."),
+    force: bool = Option(
+        False,
+        "--force/--no-force",
+        "-f/+f",
+        help="Overwrite any existing vocabulary file.",
+    ),
     compress: bool = Option(False, help="Compress file to .gz"),
     only: list[str] = Option([], help="Only download this table."),
 ) -> None:
@@ -279,7 +285,9 @@ def make_stats(
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
     config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
     stats_file: str = Option(STATS_FILENAME),
-    force: bool = Option(False, "--force", "-f", help="Overwrite any existing vocabulary file."),
+    force: bool = Option(
+        False, "--force", "-f", help="Overwrite any existing vocabulary file."
+    ),
 ) -> None:
     """Compute summary statistics from the source database.
 
@@ -309,9 +317,14 @@ def make_stats(
 
 @app.command()
 def make_tables(
-    config_file: Optional[str] = Option(None, help="The configuration file, used if you want an orm.yaml lacking data for the ignored tables"),
+    config_file: Optional[str] = Option(
+        None,
+        help="The configuration file, used if you want an orm.yaml lacking data for the ignored tables",
+    ),
     orm_file: str = Option(ORM_FILENAME, help="Path to write the ORM yaml file to"),
-    force: bool = Option(False, "--force", "-f", help="Overwrite any existing orm yaml file."),
+    force: bool = Option(
+        False, "--force", "-f", help="Overwrite any existing orm yaml file."
+    ),
 ) -> None:
     """Make a YAML file representing the tables in the schema.
 
@@ -335,7 +348,9 @@ def make_tables(
 
 @app.command()
 def configure_tables(
-    config_file: Optional[str] = Option(CONFIG_FILENAME, help="Path to write the configuration file to"),
+    config_file: Optional[str] = Option(
+        CONFIG_FILENAME, help="Path to write the configuration file to"
+    ),
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
 ):
     """
@@ -347,10 +362,14 @@ def configure_tables(
     config_file_path = Path(config_file)
     config = {}
     if config_file_path.exists():
-        config = yaml.load(config_file_path.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader)
+        config = yaml.load(
+            config_file_path.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader
+        )
     # we don't pass config here so that no tables are ignored
     metadata = load_metadata(orm_file)
-    config_updated = update_config_tables(src_dsn, settings.src_schema, metadata, config)
+    config_updated = update_config_tables(
+        src_dsn, settings.src_schema, metadata, config
+    )
     if config_updated is None:
         logger.debug("Cancelled")
         return
@@ -361,7 +380,9 @@ def configure_tables(
 
 @app.command()
 def configure_missing(
-    config_file: Optional[str] = Option(CONFIG_FILENAME, help="Path to write the configuration file to"),
+    config_file: Optional[str] = Option(
+        CONFIG_FILENAME, help="Path to write the configuration file to"
+    ),
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
 ):
     """
@@ -373,7 +394,9 @@ def configure_missing(
     config_file_path = Path(config_file)
     config = {}
     if config_file_path.exists():
-        config = yaml.load(config_file_path.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader)
+        config = yaml.load(
+            config_file_path.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader
+        )
     metadata = load_metadata(orm_file, config)
     config_updated = update_missingness(src_dsn, settings.src_schema, metadata, config)
     if config_updated is None:
@@ -386,9 +409,14 @@ def configure_missing(
 
 @app.command()
 def configure_generators(
-    config_file: Optional[str] = Option(CONFIG_FILENAME, help="Path of the configuration file to alter"),
+    config_file: Optional[str] = Option(
+        CONFIG_FILENAME, help="Path of the configuration file to alter"
+    ),
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
-    spec: Path = Option(None, help="CSV file (headerless) with fields table-name, column-name, generator-name to set non-interactively")
+    spec: Path = Option(
+        None,
+        help="CSV file (headerless) with fields table-name, column-name, generator-name to set non-interactively",
+    ),
 ):
     """
     Interactively set generators for column data.
@@ -399,9 +427,13 @@ def configure_generators(
     config_file_path = Path(config_file)
     config = {}
     if config_file_path.exists():
-        config = yaml.load(config_file_path.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader)
+        config = yaml.load(
+            config_file_path.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader
+        )
     metadata = load_metadata(orm_file, config)
-    config_updated = update_config_generators(src_dsn, settings.src_schema, metadata, config, spec_path=spec)
+    config_updated = update_config_generators(
+        src_dsn, settings.src_schema, metadata, config, spec_path=spec
+    )
     if config_updated is None:
         logger.debug("Cancelled")
         return
@@ -412,12 +444,14 @@ def configure_generators(
 
 @app.command()
 def dump_data(
-    config_file: Optional[str] = Option(CONFIG_FILENAME, help="Path of the configuration file to alter"),
+    config_file: Optional[str] = Option(
+        CONFIG_FILENAME, help="Path of the configuration file to alter"
+    ),
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
     table: str = Argument(help="The table to dump"),
     output: str | None = Option(None, help="output CSV file name"),
 ):
-    """ Dump a whole table as a CSV file (or to the console) from the destination database. """
+    """Dump a whole table as a CSV file (or to the console) from the destination database."""
     settings = get_settings()
     dst_dsn: str = settings.dst_dsn or ""
     assert dst_dsn != "", "Missing DST_DSN setting."
@@ -427,7 +461,7 @@ def dump_data(
     if output == None:
         dump_db_tables(metadata, dst_dsn, schema_name, table, sys.stdout)
         return
-    with open(output, 'wt', newline='') as out:
+    with open(output, "wt", newline="") as out:
         dump_db_tables(metadata, dst_dsn, schema_name, table, out)
 
 
@@ -452,7 +486,9 @@ def validate_config(
 def remove_data(
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
     config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
-    yes: bool = Option(False, "--yes", prompt="Are you sure?", help="Just remove, don't ask first"),
+    yes: bool = Option(
+        False, "--yes", prompt="Are you sure?", help="Just remove, don't ask first"
+    ),
 ) -> None:
     """Truncate non-vocabulary tables in the destination schema."""
     if yes:
@@ -469,7 +505,9 @@ def remove_data(
 def remove_vocab(
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
     config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
-    yes: bool = Option(False, "--yes", prompt="Are you sure?", help="Just remove, don't ask first"),
+    yes: bool = Option(
+        False, "--yes", prompt="Are you sure?", help="Just remove, don't ask first"
+    ),
 ) -> None:
     """Truncate vocabulary tables in the destination schema."""
     if yes:
@@ -487,7 +525,9 @@ def remove_vocab(
 def remove_tables(
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
     config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
-    yes: bool = Option(False, "--yes", prompt="Are you sure?", help="Just remove, don't ask first"),
+    yes: bool = Option(
+        False, "--yes", prompt="Are you sure?", help="Just remove, don't ask first"
+    ),
 ) -> None:
     """Drop all tables in the destination schema.
 

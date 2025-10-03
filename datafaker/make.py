@@ -5,13 +5,11 @@ import inspect
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import (
-    Any, Callable, Final, Mapping, Optional, Sequence, Tuple
-)
-import yaml
+from typing import Any, Callable, Final, Mapping, Optional, Sequence, Tuple
 
 import pandas as pd
 import snsql
+import yaml
 from black import FileMode, format_str
 from jinja2 import Environment, FileSystemLoader, Template
 from mimesis.providers.base import BaseProvider
@@ -26,8 +24,8 @@ from datafaker.settings import get_settings
 from datafaker.utils import (
     create_db_engine,
     download_table,
-    get_property,
     get_flag,
+    get_property,
     get_related_table_names,
     get_sync_engine,
     get_vocabulary_table_names,
@@ -73,7 +71,8 @@ class RowGeneratorInfo:
 
 @dataclass
 class ColumnChoice:
-    """ Chooses columns based on a random number in [0,1) """
+    """Chooses columns based on a random number in [0,1)"""
+
     function_name: str
     argument_values: list[str]
 
@@ -84,10 +83,7 @@ def make_column_choices(
     return [
         ColumnChoice(
             function_name=mg["name"],
-            argument_values=[
-                f"{k}={v}"
-                for k, v in mg.get("kwargs", {}).items()
-            ]
+            argument_values=[f"{k}={v}" for k, v in mg.get("kwargs", {}).items()],
         )
         for mg in table_config.get("missingness_generators", [])
         if "name" in mg
@@ -122,7 +118,9 @@ def _render_value(v) -> str:
     if type(v) is set:
         return "{" + ", ".join(_render_value(x) for x in v) + "}"
     if type(v) is dict:
-        return "{" + ", ".join(f"{repr(k)}:{_render_value(x)}" for k, x in v.items()) + "}"
+        return (
+            "{" + ", ".join(f"{repr(k)}:{_render_value(x)}" for k, x in v.items()) + "}"
+        )
     if type(v) is str:
         return v
     return str(v)
@@ -181,9 +179,7 @@ def _get_row_generator(
     return row_gen_info, columns_covered
 
 
-def _get_default_generator(
-    column: Column
-) -> RowGeneratorInfo:
+def _get_default_generator(column: Column) -> RowGeneratorInfo:
     """Get default generator information, for the given column."""
     # If it's a primary key column, we presume that primary keys are populated
     # automatically.
@@ -215,7 +211,8 @@ def _get_default_generator(
             primary_key=column.primary_key,
             variable_names=variable_names,
             function_call=_get_function_call(
-                function_name=generator_function, positional_arguments=generator_arguments
+                function_name=generator_function,
+                positional_arguments=generator_arguments,
             ),
         )
 
@@ -243,10 +240,13 @@ def _numeric_generator(column: Column) -> tuple[str, dict[str, str]]:
     column_type = column.type
     if column_type.scale is None:
         return ("generic.numeric.float_number", {})
-    return ("generic.numeric.float_number", {
-        "start": 0,
-        "end": 10 ** column_type.scale - 1,
-    })
+    return (
+        "generic.numeric.float_number",
+        {
+            "start": 0,
+            "end": 10**column_type.scale - 1,
+        },
+    )
 
 
 def _string_generator(column: Column) -> tuple[str, dict[str, str]]:
@@ -257,7 +257,8 @@ def _string_generator(column: Column) -> tuple[str, dict[str, str]]:
     column_size: Optional[int] = getattr(column.type, "length", None)
     if column_size is None:
         return ("generic.text.color", {})
-    return ("generic.person.password", { "length": str(column_size) })
+    return ("generic.person.password", {"length": str(column_size)})
+
 
 def _integer_generator(column: Column) -> tuple[str, dict[str, str]]:
     """
@@ -265,10 +266,13 @@ def _integer_generator(column: Column) -> tuple[str, dict[str, str]]:
     """
     if not column.primary_key:
         return ("generic.numeric.integer_number", {})
-    return ("generic.column_value_provider.increment", {
-        "db_connection": "dst_db_conn",
-        "column": f'metadata.tables["{column.table.name}"].columns["{column.name}"]',
-    })
+    return (
+        "generic.column_value_provider.increment",
+        {
+            "db_connection": "dst_db_conn",
+            "column": f'metadata.tables["{column.table.name}"].columns["{column.name}"]',
+        },
+    )
 
 
 _YEAR_SUMMARY_QUERY = (
@@ -316,12 +320,12 @@ _COLUMN_TYPE_TO_GENERATOR_INFO = {
     sqltypes.Date: GeneratorInfo(
         generator="generic.datetime.date",
         summary_query=_YEAR_SUMMARY_QUERY,
-        arg_types={ "start": int, "end": int }
+        arg_types={"start": int, "end": int},
     ),
     sqltypes.DateTime: GeneratorInfo(
         generator="generic.datetime.datetime",
         summary_query=_YEAR_SUMMARY_QUERY,
-        arg_types={ "start": int, "end": int }
+        arg_types={"start": int, "end": int},
     ),
     sqltypes.Integer: GeneratorInfo(  # must be before Numeric
         generator=_integer_generator,
@@ -345,7 +349,7 @@ _COLUMN_TYPE_TO_GENERATOR_INFO = {
     sqltypes.String: GeneratorInfo(
         generator=_string_generator,
         choice=True,
-    )
+    ),
 }
 
 
@@ -358,7 +362,7 @@ def _get_info_for_column_type(column_t: type) -> GeneratorInfo | None:
     callable, dict of keyword arguments to pass to the callable).
     """
     if column_t in _COLUMN_TYPE_TO_GENERATOR_INFO:
-        return  _COLUMN_TYPE_TO_GENERATOR_INFO[column_t]
+        return _COLUMN_TYPE_TO_GENERATOR_INFO[column_t]
 
     # Search exhaustively for a superclass to the columns actual type
     for key, value in _COLUMN_TYPE_TO_GENERATOR_INFO.items():
@@ -368,8 +372,9 @@ def _get_info_for_column_type(column_t: type) -> GeneratorInfo | None:
     return None
 
 
-def _get_generator_for_column(column_t: type) -> str | Callable[
-    [type_api.TypeEngine], tuple[str, dict[str, str]]]:
+def _get_generator_for_column(
+    column_t: type,
+) -> str | Callable[[type_api.TypeEngine], tuple[str, dict[str, str]]]:
     """
     Gets a generator from a column type.
 
@@ -392,7 +397,7 @@ def _get_generator_and_arguments(column: Column) -> tuple[str, dict[str, str]]:
     generator_arguments: dict[str, str] = {}
     if callable(generator_function):
         (generator_function, generator_arguments) = generator_function(column)
-    return generator_function,generator_arguments
+    return generator_function, generator_arguments
 
 
 def _get_provider_for_column(column: Column) -> Tuple[list[str], str, dict[str, str]]:
@@ -443,6 +448,7 @@ class _PrimaryConstraint:
     columns in a table comprise the primary key. Not a
     real constraint, but enough to write df.py.
     """
+
     def __init__(self, *columns: Column, name: str):
         self.name = name
         self.columns = columns
@@ -461,15 +467,11 @@ def _get_generator_for_table(
         ),
         key=_constraint_sort_key,
     )
-    primary_keys = [
-        c for c in table.columns
-        if c.primary_key
-    ]
+    primary_keys = [c for c in table.columns if c.primary_key]
     if 1 < len(primary_keys):
-        unique_constraints.append(_PrimaryConstraint(
-            *primary_keys,
-            name=f"{table.name}_primary_key"
-        ))
+        unique_constraints.append(
+            _PrimaryConstraint(*primary_keys, name=f"{table.name}_primary_key")
+        )
     column_choices = make_column_choices(table_config)
     if column_choices:
         nonnull_columns = {
@@ -522,7 +524,7 @@ def make_vocabulary_tables(
     config: Mapping,
     overwrite_files: bool,
     compress: bool,
-    table_names: set[str] | None=None,
+    table_names: set[str] | None = None,
 ):
     """
     Extracts the data from the source database for each
@@ -539,7 +541,10 @@ def make_vocabulary_tables(
     else:
         invalid_names = table_names - vocab_names
         if invalid_names:
-            logger.error("The following names are not the names of vocabulary tables: %s", invalid_names)
+            logger.error(
+                "The following names are not the names of vocabulary tables: %s",
+                invalid_names,
+            )
             logger.info("Valid names are: %s", vocab_names)
             return
     for table_name in table_names:
@@ -584,7 +589,7 @@ def make_table_generators(  # pylint: disable=too-many-locals
     tables: list[TableGeneratorInfo] = []
     vocabulary_tables: list[VocabularyTableGeneratorInfo] = []
     vocab_names = get_vocabulary_table_names(config)
-    for (table_name, table) in metadata.tables.items():
+    for table_name, table in metadata.tables.items():
         if table_name in vocab_names:
             related = get_related_table_names(table)
             related_non_vocab = related.difference(vocab_names)
@@ -593,16 +598,18 @@ def make_table_generators(  # pylint: disable=too-many-locals
                     "Making table '%s' a vocabulary table requires that also the"
                     " related tables (%s) be also vocabulary tables.",
                     table.name,
-                    related_non_vocab
+                    related_non_vocab,
                 )
             vocabulary_tables.append(
                 _get_generator_for_existing_vocabulary_table(table)
             )
         else:
-            tables.append(_get_generator_for_table(
-                tables_config.get(table.name, {}),
-                table,
-            ))
+            tables.append(
+                _get_generator_for_table(
+                    tables_config.get(table.name, {}),
+                    table,
+                )
+            )
 
     story_generators = _get_story_generators(config)
 
@@ -766,9 +773,7 @@ def fix_type(value):
 
 
 def fix_types(dics):
-    return [{
-        k: fix_type(v) for k, v in dic.items()
-    } for dic in dics]
+    return [{k: fix_type(v) for k, v in dic.items()} for dic in dics]
 
 
 async def make_src_stats(
@@ -793,7 +798,10 @@ async def make_src_stats(
     async with DbConnection(engine) as db_conn:
         return await make_src_stats_connection(config, db_conn, metadata)
 
-async def make_src_stats_connection(config: Mapping, db_conn: DbConnection, metadata: MetaData):
+
+async def make_src_stats_connection(
+    config: Mapping, db_conn: DbConnection, metadata: MetaData
+):
     date_string = datetime.today().strftime("%Y-%m-%d %H:%M:%S")
     query_blocks = config.get("src-stats", [])
     results = await asyncio.gather(

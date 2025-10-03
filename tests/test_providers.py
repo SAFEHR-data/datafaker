@@ -7,7 +7,7 @@ from sqlalchemy import Column, Integer, Text, create_engine, insert
 from sqlalchemy.ext.declarative import declarative_base
 
 from datafaker import providers
-from tests.utils import RequiresDBTestCase, DatafakerTestCase
+from tests.utils import DatafakerTestCase, RequiresDBTestCase
 
 # pylint: disable=invalid-name
 Base = declarative_base()
@@ -37,6 +37,7 @@ class BinaryProviderTestCase(DatafakerTestCase):
 
 class ColumnValueProviderTestCase(RequiresDBTestCase):
     """Tests for the ColumnValueProvider class."""
+
     dump_file_path = "providers.dump"
 
     def setUp(self) -> None:
