@@ -5,12 +5,13 @@ Generator factories for making generators for single columns.
 import decimal
 import math
 import re
+import typing
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 from itertools import chain, combinations
-from typing import Callable, Iterable, TypeVar
+from typing import Any, Callable, Iterable, Self, TypeVar
 
 import mimesis
 import mimesis.locales
@@ -108,18 +109,18 @@ class Generator(ABC):
         return {}
 
     @abstractmethod
-    def actual_kwargs(self) -> dict[str, any]:
+    def actual_kwargs(self) -> dict[str, Any]:
         """
         The kwargs (summary statistics) this generator is instantiated with.
         """
 
     @abstractmethod
-    def generate_data(self, count) -> list[any]:
+    def generate_data(self, count: int) -> list[Any]:
         """
         Generate 'count' random data points for this column.
         """
 
-    def fit(self, default=None) -> float | None:
+    def fit(self, default: float = None) -> float | None:
         """
         Return a value representing how well the distribution fits the real source data.
 
@@ -138,7 +139,7 @@ class PredefinedGenerator(Generator):
     AS_CLAUSE_RE = re.compile(r" *(.+) +AS +([A-Za-z_][A-Za-z0-9_]*) *")
     SRC_STAT_NAME_RE = re.compile(r'\bSRC_STATS\["([^]]*)"\].*')
 
-    def _get_src_stats_mentioned(self, val) -> set[str]:
+    def _get_src_stats_mentioned(self, val: Any) -> set[str]:
         if not val:
             return set()
         if type(val) is str:
@@ -159,8 +160,8 @@ class PredefinedGenerator(Generator):
     def __init__(
         self,
         table_name: str,
-        generator_object: Mapping[str, any],
-        config: Mapping[str, any],
+        generator_object: Mapping[str, Any],
+        config: Mapping[str, Any],
     ):
         """
         Initialise a generator from a config.yaml.
@@ -226,13 +227,13 @@ class PredefinedGenerator(Generator):
     def custom_queries(self) -> dict[str, dict[str, str]]:
         return self._custom_queries
 
-    def actual_kwargs(self) -> dict[str, any]:
+    def actual_kwargs(self) -> dict[str, Any]:
         # Run the queries from nominal_kwargs
         # ...
         logger.error("PredefinedGenerator.actual_kwargs not implemented yet")
         return {}
 
-    def generate_data(self, count) -> list[any]:
+    def generate_data(self, count: int) -> list[Any]:
         # Call the function if we can. This could be tricky...
         # ...
         logger.error("PredefinedGenerator.generate_data not implemented yet")
@@ -286,7 +287,9 @@ class Buckets:
             self.stddev = stddev
 
     @classmethod
-    def make_buckets(_cls, engine: Engine, table_name: str, column_name: str):
+    def make_buckets(
+        _cls, engine: Engine, table_name: str, column_name: str
+    ) -> Self | None:
         """
         Construct a Buckets object.
 
@@ -391,7 +394,7 @@ class MimesisGenerator(MimesisGeneratorBase):
     def __init__(
         self,
         function_name: str,
-        value_fn: Callable[[any], float] | None = None,
+        value_fn: Callable[[Any], float] | None = None,
         buckets: Buckets | None = None,
     ):
         """
@@ -430,16 +433,16 @@ class MimesisGeneratorTruncated(MimesisGenerator):
         self,
         function_name: str,
         length: int,
-        value_fn: Callable[[any], float] | None = None,
+        value_fn: Callable[[Any], float] | None = None,
         buckets: Buckets | None = None,
     ):
         self._length = length
         super().__init__(function_name, value_fn, buckets)
 
-    def function_name(self):
+    def function_name(self) -> str:
         return "dist_gen.truncated_string"
 
-    def name(self):
+    def name(self) -> str:
         return f"{self._name} [truncated to {self._length}]"
 
     def nominal_kwargs(self):
@@ -998,7 +1001,7 @@ class ChoiceGenerator(Generator):
                 self._annotation = "sampled and suppressed"
 
     @abstractmethod
-    def get_estimated_counts(counts):
+    def get_estimated_counts(self, counts):
         """
         The counts that we would expect if this distribution was the correct one.
         """
@@ -1008,7 +1011,7 @@ class ChoiceGenerator(Generator):
             "a": f'SRC_STATS["auto__{self.table_name}__{self.column_name}"]["results"]',
         }
 
-    def name(self):
+    def name(self) -> str:
         n = super().name()
         if self._annotation is None:
             return n
@@ -1029,24 +1032,24 @@ class ChoiceGenerator(Generator):
             },
         }
 
-    def fit(self, default=None):
+    def fit(self, default=None) -> float | None:
         return default if self._fit is None else self._fit
 
 
 class ZipfChoiceGenerator(ChoiceGenerator):
-    def get_estimated_counts(self, counts):
+    def get_estimated_counts(self, counts: list[int]) -> list[int]:
         return list(zipf_distribution(sum(counts), len(counts)))
 
-    def function_name(self):
+    def function_name(self) -> str:
         return "dist_gen.zipf_choice"
 
-    def generate_data(self, count):
+    def generate_data(self, count: int) -> list[float]:
         return [
             dist_gen.zipf_choice(self.values, len(self.values)) for _ in range(count)
         ]
 
 
-def uniform_distribution(total, bins):
+def uniform_distribution(total, bins: int) -> typing.Generator[int, None, None]:
     p = total // bins
     n = total % bins
     for _ in range(0, n):
@@ -1108,7 +1111,7 @@ class ChoiceGeneratorFactory(GeneratorFactory):
                 values = []  # The values found
                 counts = []  # The number or each value
                 cvs: list[
-                    dict[str, any]
+                    dict[str, Any]
                 ] = []  # list of dicts with keys "v" and "count"
                 for result in results:
                     c = result.f
@@ -1138,14 +1141,14 @@ class ChoiceGeneratorFactory(GeneratorFactory):
                 values = []  # All values found
                 counts = []  # The number or each value
                 cvs: list[
-                    dict[str, any]
+                    dict[str, Any]
                 ] = []  # list of dicts with keys "v" and "count"
                 values_not_suppressed = (
                     []
                 )  # All values found more than SUPPRESS_COUNT times
                 counts_not_suppressed = []  # The number for each value not suppressed
                 cvs_not_suppressed: list[
-                    dict[str, any]
+                    dict[str, Any]
                 ] = []  # list of dicts with keys "v" and "count"
                 for result in results:
                     c = result.f
@@ -1229,10 +1232,10 @@ class ConstantGenerator(Generator):
     def nominal_kwargs(self) -> dict[str, str]:
         return {"value": self.repr}
 
-    def actual_kwargs(self) -> dict[str, any]:
+    def actual_kwargs(self) -> dict[str, Any]:
         return {"value": self.value}
 
-    def generate_data(self, count) -> list[any]:
+    def generate_data(self, count) -> list[Any]:
         return [self.value for _ in range(count)]
 
 
@@ -1289,13 +1292,13 @@ class MultivariateNormalGenerator(Generator):
             }
         }
 
-    def actual_kwargs(self) -> dict[str, any]:
+    def actual_kwargs(self) -> dict[str, Any]:
         """
         The kwargs (summary statistics) this generator is instantiated with.
         """
         return {"cov": self._covariates}
 
-    def generate_data(self, count) -> list[any]:
+    def generate_data(self, count) -> list[Any]:
         """
         Generate 'count' random data points for this column.
         """
@@ -1372,7 +1375,7 @@ class MultivariateNormalGeneratorFactory(GeneratorFactory):
             f" FROM {subquery}{group_by_clause}) AS _q{suppress_clause}"
         )
 
-    def get_generators(self, columns: list[Column], engine: Engine):
+    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
         # For the case of one column we'll use GaussianGenerator
         if len(columns) < 2:
             return []
@@ -1443,9 +1446,9 @@ class RowPartition:
     # list of included column values (so once the generator has
     # been run and the included_choice values have been
     # added): {index: value}
-    constant_outputs: dict[int, any]
+    constant_outputs: dict[int, Any]
     # The actual covariates from the source database
-    covariates: dict[str, float]
+    covariates: list[dict[str, float]]
 
     def comment(self) -> str:
         caveat = ""
@@ -1506,10 +1509,10 @@ class NullPartitionedNormalGenerator(Generator):
         else:
             self._name = f"null-partitioned {function_name}"
 
-    def name(self):
+    def name(self) -> str:
         return self._name
 
-    def function_name(self):
+    def function_name(self) -> str:
         return "dist_gen.alternatives"
 
     def _nominal_kwargs_with_combinations(self, index: int, partition: RowPartition):
@@ -1599,7 +1602,7 @@ class NullPartitionedNormalGenerator(Generator):
             },
         }
 
-    def actual_kwargs(self) -> dict[str, any]:
+    def actual_kwargs(self) -> dict[str, Any]:
         """
         The kwargs (summary statistics) this generator is instantiated with.
         """
@@ -1611,7 +1614,7 @@ class NullPartitionedNormalGenerator(Generator):
             "counts": self._partition_counts,
         }
 
-    def generate_data(self, count) -> list[any]:
+    def generate_data(self, count) -> list[Any]:
         """
         Generate 'count' random data points for this column.
         """
@@ -1630,7 +1633,7 @@ def is_numeric(col: Column) -> bool:
 T = TypeVar("T")
 
 
-def powerset(input: Iterable[T]) -> Iterable[Iterable[T]]:
+def powerset(input: list[T]) -> Iterable[Iterable[T]]:
     """Returns a list of all sublists of"""
     return chain.from_iterable(combinations(input, n) for n in range(len(input) + 1))
 
@@ -1736,7 +1739,7 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
             return f'SELECT COUNT(*) AS count, {index_exp} AS "index" FROM {table} GROUP BY "index"'
         return f'SELECT count, "index" FROM (SELECT COUNT(*) AS count, {index_exp} AS "index" FROM {table} GROUP BY "index") AS _q {where}'
 
-    def get_generators(self, columns: list[Column], engine: Engine):
+    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
         if len(columns) < 2:
             return []
         nullable_columns = self.get_nullable_columns(columns)
@@ -1784,7 +1787,7 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
                 partition_def.nones,
                 {},
             )
-        gens = []
+        gens: list[Generator] = []
         try:
             with engine.connect() as connection:
                 partition_query_max = self.get_partition_count_query(
@@ -1834,7 +1837,7 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
         self,
         connection: Connection,
         partitions: dict[int, RowPartition],
-    ):
+    ) -> bool:
         """
         Execute the query in each partition, filling in the covariates.
         :return: True if all the partitions work, False if any of them fail.
@@ -1864,7 +1867,7 @@ class NullPartitionedLogNormalGeneratorFactory(NullPartitionedNormalGeneratorFac
 
 
 @lru_cache(1)
-def everything_factory():
+def everything_factory() -> GeneratorFactory:
     return MultiGeneratorFactory(
         [
             MimesisStringGeneratorFactory(),
