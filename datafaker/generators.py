@@ -1573,7 +1573,7 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
         row_partitions_ss: dict[int, RowPartition] = {}
         for partition_nonnulls in powerset(nullable_columns):
             partition_def = NullPatternPartition(columns, partition_nonnulls)
-            query = self.query(
+            query_all = self.query(
                 table=table,
                 columns=partition_def.included_numeric,
                 predicates=partition_def.predicates,
@@ -1582,14 +1582,14 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
                 constant_clauses=partition_def.constant_clauses,
             )
             row_partitions_maximal[partition_def.index] = RowPartition(
-                query,
+                query_all,
                 partition_def.included_numeric,
                 partition_def.included_choice,
                 partition_def.excluded,
                 partition_def.nones,
                 {},
             )
-            query = self.query(
+            query_sampled = self.query(
                 table=table,
                 columns=partition_def.included_numeric,
                 predicates=partition_def.predicates,
@@ -1599,14 +1599,14 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
                 sample_count=self.SAMPLE_COUNT,
             )
             row_partitions_sampled[partition_def.index] = RowPartition(
-                query,
+                query_sampled,
                 partition_def.included_numeric,
                 partition_def.included_choice,
                 partition_def.excluded,
                 partition_def.nones,
                 {},
             )
-            query = self.query(
+            query_ss = self.query(
                 table=table,
                 columns=partition_def.included_numeric,
                 predicates=partition_def.predicates,
@@ -1617,7 +1617,7 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
                 sample_count=self.SAMPLE_COUNT,
             )
             row_partitions_ss[partition_def.index] = RowPartition(
-                query,
+                query_ss,
                 partition_def.included_numeric,
                 partition_def.included_choice,
                 partition_def.excluded,
