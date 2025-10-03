@@ -12,7 +12,10 @@ from datafaker.interactive import (
     MissingnessCmd,
     update_config_generators,
 )
-from datafaker.generators import NullPartitionedNormalGeneratorFactory
+from datafaker.generators import (
+    NullPartitionedNormalGeneratorFactory,
+    ChoiceGeneratorFactory,
+)
 
 from tests.utils import RequiresDBTestCase, GeneratesDBTestCase
 from unittest.mock import MagicMock, Mock, patch
@@ -841,6 +844,11 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
     database_name = "numbers"
     schema_name = "public"
 
+    def setUp(self) -> None:
+        super().setUp()
+        ChoiceGeneratorFactory.SAMPLE_COUNT = 500
+        ChoiceGeneratorFactory.SUPPRESS_COUNT = 5
+
     def _get_cmd(self, config) -> TestGeneratorCmd:
         return TestGeneratorCmd(self.dsn, self.schema_name, self.metadata, config)
 
@@ -1240,11 +1248,7 @@ class NullPartitionedTests(GeneratesDBTestCase):
         table_name = "measurement"
         generate_count = 800
         with self._get_cmd({}) as gc:
-            gc.do_next("measurement.type")
-            gc.do_merge("first_value")
-            gc.do_merge("second_value")
-            gc.do_merge("third_value")
-            gc.reset()
+            self.merge_columns(gc, table_name, ["type", "first_value", "second_value", "third_value"])
             gc.do_propose("")
             proposals = gc.get_proposals()
             self.assertIn("null-partitioned grouped_multivariate_lognormal", proposals)
@@ -1262,15 +1266,7 @@ class NullPartitionedTests(GeneratesDBTestCase):
             self.get_src_stats(gc.config)
             self.create_generators(gc.config)
             self.remove_data(gc.config)
-            # let's add a vocab table without messing around with files
-            table = self.metadata.tables["measurement_type"]
-            with self.engine.connect() as conn:
-                conn.execute(insert(table).values({"id": 1, "name": "agreement"}))
-                conn.execute(insert(table).values({"id": 2, "name": "acceleration"}))
-                conn.execute(insert(table).values({"id": 3, "name": "velocity"}))
-                conn.execute(insert(table).values({"id": 4, "name": "position"}))
-                conn.execute(insert(table).values({"id": 5, "name": "matter"}))
-                conn.commit()
+            self.populate_measurement_type_vocab()
             self.create_data(gc.config, num_passes=generate_count)
         with self.engine.connect() as conn:
             stmt = select(self.metadata.tables[table_name])
@@ -1326,24 +1322,42 @@ class NullPartitionedTests(GeneratesDBTestCase):
             # type 2
             self.assertAlmostEqual(two.count(), generate_count * 3 / 20, delta=generate_count * 0.5)
             self.assertAlmostEqual(two.x_mean(), 1.4, delta=0.6)
-            self.assertAlmostEqual(two.x_var(), 0.21, delta=0.4)
+            self.assertAlmostEqual(two.x_var(), 0.14, delta=0.2)
             self.assertAlmostEqual(two.y_mean(), 1.8, delta=0.8)
-            self.assertAlmostEqual(two.y_var(), 0.07, delta=0.1)
-            self.assertAlmostEqual(two.covar(), 0.5, delta=0.5)
+            self.assertAlmostEqual(two.y_var(), 0.05, delta=0.1)
+            self.assertAlmostEqual(two.covar(), 0.07, delta=0.1)
             # type 3
             self.assertAlmostEqual(three.count(), generate_count * 3 / 20, delta=generate_count * 0.2)
-            self.assertAlmostEqual(two.covar(), -0.5, delta=0.5)
+            self.assertAlmostEqual(three.covar(), -1.39, delta=1.4)
             # type 4
             self.assertAlmostEqual(four.count(), generate_count * 3 / 20, delta=generate_count * 0.2)
-            self.assertAlmostEqual(two.covar(), 0.5, delta=0.5)
+            self.assertAlmostEqual(four.covar(), 2.22, delta=2.3)
             # type 5/fish
             self.assertAlmostEqual(fish.count(), generate_count * 3 / 20, delta=generate_count * 0.2)
             self.assertAlmostEqual(fish.x_mean(), 8.1, delta=3.0)
             self.assertAlmostEqual(fish.x_var(), 0.57, delta=0.8)
             # type 5/fowl
             self.assertAlmostEqual(fowl.count(), generate_count * 3 / 20, delta=generate_count * 0.2)
-            self.assertAlmostEqual(fish.x_mean(), 11.2, delta=8.0)
-            self.assertAlmostEqual(fish.x_var(), 1.24, delta=1.5)
+            self.assertAlmostEqual(fowl.x_mean(), 11.2, delta=8.0)
+            self.assertAlmostEqual(fowl.x_var(), 1.24, delta=1.5)
+
+    def populate_measurement_type_vocab(self):
+        """ Add a vocab table without messing around with files """
+        table = self.metadata.tables["measurement_type"]
+        with self.engine.connect() as conn:
+            conn.execute(insert(table).values({"id": 1, "name": "agreement"}))
+            conn.execute(insert(table).values({"id": 2, "name": "acceleration"}))
+            conn.execute(insert(table).values({"id": 3, "name": "velocity"}))
+            conn.execute(insert(table).values({"id": 4, "name": "position"}))
+            conn.execute(insert(table).values({"id": 5, "name": "matter"}))
+            conn.commit()
+
+    def merge_columns(self, gc: TestGeneratorCmd, table: str, columns: list[str]) -> None:
+        """ Merge columns in a table """
+        gc.do_next(f"{table}.{columns[0]}")
+        for col in columns[1:]:
+            gc.do_merge(col)
+        gc.reset()
 
     def test_create_with_null_partitioned_grouped_sampled_and_suppressed(self):
         """ Test EAV for all columns with sampled and suppressed generation. """
@@ -1351,11 +1365,7 @@ class NullPartitionedTests(GeneratesDBTestCase):
         table2_name = "observation"
         generate_count = 800
         with self._get_cmd({}) as gc:
-            gc.do_next("measurement.type")
-            gc.do_merge("first_value")
-            gc.do_merge("second_value")
-            gc.do_merge("third_value")
-            gc.reset()
+            self.merge_columns(gc, table_name, ["type", "first_value", "second_value", "third_value"])
             gc.do_propose("")
             proposals = gc.get_proposals()
             self.assertIn("null-partitioned grouped_multivariate_lognormal", proposals)
@@ -1369,15 +1379,9 @@ class NullPartitionedTests(GeneratesDBTestCase):
             col_heading = f"{prop[0]}. {dist_to_choose}"
             self.assertIn(col_heading, set(gc.columns.keys()))
             gc.do_set(str(prop[0]))
-            gc.reset()
-            gc.do_next("observation.type")
-            gc.do_merge("first_value")
-            gc.do_merge("second_value")
-            gc.do_merge("third_value")
-            gc.reset()
+            self.merge_columns(gc, table2_name, ["type", "first_value", "second_value", "third_value"])
             gc.do_propose("")
             proposals = gc.get_proposals()
-            dist_to_choose = "null-partitioned grouped_multivariate_normal [sampled and suppressed]"
             prop = proposals[dist_to_choose]
             gc.do_set(str(prop[0]))
             gc.do_quit("")
@@ -1385,15 +1389,7 @@ class NullPartitionedTests(GeneratesDBTestCase):
             self.get_src_stats(gc.config)
             self.create_generators(gc.config)
             self.remove_data(gc.config)
-            # let's add a vocab table without messing around with files
-            table = self.metadata.tables["measurement_type"]
-            with self.engine.connect() as conn:
-                conn.execute(insert(table).values({"id": 1, "name": "agreement"}))
-                conn.execute(insert(table).values({"id": 2, "name": "acceleration"}))
-                conn.execute(insert(table).values({"id": 3, "name": "velocity"}))
-                conn.execute(insert(table).values({"id": 4, "name": "position"}))
-                conn.execute(insert(table).values({"id": 5, "name": "matter"}))
-                conn.commit()
+            self.populate_measurement_type_vocab()
             self.create_data(gc.config, num_passes=generate_count)
         with self.engine.connect() as conn:
             stmt = select(self.metadata.tables[table_name])
@@ -1436,8 +1432,8 @@ class NullPartitionedTests(GeneratesDBTestCase):
             self.assertAlmostEqual(fish.x_var(), 0.57, delta=0.8)
             # type 5/fowl
             self.assertAlmostEqual(fowl.count(), generate_count * 3 / 11, delta=generate_count * 0.2)
-            self.assertAlmostEqual(fish.x_mean(), 11.2, delta=8.0)
-            self.assertAlmostEqual(fish.x_var(), 1.24, delta=1.5)
+            self.assertAlmostEqual(fowl.x_mean(), 11.2, delta=8.0)
+            self.assertAlmostEqual(fowl.x_var(), 1.24, delta=1.5)
             stmt = select(self.metadata.tables[table2_name])
             rows = conn.execute(stmt).fetchall()
             firsts = Stat()
@@ -1452,6 +1448,82 @@ class NullPartitionedTests(GeneratesDBTestCase):
             self.assertAlmostEqual(firsts.x_mean(), 1.3, delta = generate_count * 0.3)
 
 
+    def test_create_with_null_partitioned_grouped_sampled_only(self):
+        """ Test EAV for all columns with sampled generation but no suppression. """
+        table_name = "measurement"
+        table2_name = "observation"
+        generate_count = 800
+        with self._get_cmd({}) as gc:
+            self.merge_columns(gc, table_name, ["type", "first_value", "second_value", "third_value"])
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            self.assertIn("null-partitioned grouped_multivariate_lognormal", proposals)
+            self.assertIn("null-partitioned grouped_multivariate_normal", proposals)
+            self.assertIn("null-partitioned grouped_multivariate_lognormal [sampled and suppressed]", proposals)
+            self.assertIn("null-partitioned grouped_multivariate_normal [sampled and suppressed]", proposals)
+            self.assertIn("null-partitioned grouped_multivariate_lognormal [sampled]", proposals)
+            dist_to_choose = "null-partitioned grouped_multivariate_normal [sampled]"
+            self.assertIn(dist_to_choose, proposals)
+            prop = proposals[dist_to_choose]
+            gc.reset()
+            gc.do_compare(str(prop[0]))
+            col_heading = f"{prop[0]}. {dist_to_choose}"
+            self.assertIn(col_heading, set(gc.columns.keys()))
+            gc.do_set(str(prop[0]))
+            self.merge_columns(gc, table2_name, ["type", "first_value", "second_value", "third_value"])
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            prop = proposals[dist_to_choose]
+            gc.do_set(str(prop[0]))
+            gc.do_quit("")
+            self.set_configuration(gc.config)
+            self.get_src_stats(gc.config)
+            self.create_generators(gc.config)
+            self.remove_data(gc.config)
+            self.populate_measurement_type_vocab()
+            self.create_data(gc.config, num_passes=generate_count)
+        with self.engine.connect() as conn:
+            stmt = select(self.metadata.tables[table_name])
+            rows = conn.execute(stmt).fetchall()
+            self.assertSubset({row.type for row in rows}, {1, 2, 3, 4, 5})
+            stmt = select(self.metadata.tables[table2_name])
+            rows = conn.execute(stmt).fetchall()
+            self.assertEqual({row.third_value for row in rows}, {"ham", "eggs", "cheese"})
+
+
+    def test_create_with_null_partitioned_grouped_sampled_tiny(self):
+        """
+        Test EAV for all columns with sampled generation that only gets a tiny sample.
+        """
+        # five will ensure that at least one group will have two elements in it,
+        # but all three cannot.
+        NullPartitionedNormalGeneratorFactory.SAMPLE_COUNT = 5
+        table_name = "observation"
+        generate_count = 100
+        with self._get_cmd({}) as gc:
+            dist_to_choose = "null-partitioned grouped_multivariate_normal [sampled]"
+            self.merge_columns(gc, table_name, ["type", "first_value", "second_value", "third_value"])
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            #breakpoint()
+            prop = proposals[dist_to_choose]
+            gc.do_set(str(prop[0]))
+            gc.do_quit("")
+            self.set_configuration(gc.config)
+            self.get_src_stats(gc.config)
+            self.create_generators(gc.config)
+            self.remove_data(gc.config)
+            self.populate_measurement_type_vocab()
+            self.create_data(gc.config, num_passes=generate_count)
+        with self.engine.connect() as conn:
+            stmt = select(self.metadata.tables[table_name])
+            rows = conn.execute(stmt).fetchall()
+            # we should only have one or two of "ham", "eggs" and "cheese" represented
+            foods = {row.third_value for row in rows}
+            self.assertSubset(foods, {"ham", "eggs", "cheese"})
+            self.assertLess(len(foods), 3)
+
+
 class NonInteractiveTests(RequiresDBTestCase):
     """
     Test the --spec SPEC_FILE option of configure-generators
@@ -1462,8 +1534,9 @@ class NonInteractiveTests(RequiresDBTestCase):
 
     @patch("datafaker.interactive.Path")
     @patch("datafaker.interactive.csv.reader", return_value=iter([
-        ["observation", "type", "dist_gen.weighted_choice"],
-        ["observation", "first_value", "dist_gen.weighted_choice"],
+        ["observation", "type", "dist_gen.weighted_choice [sampled]"],
+        ["observation", "first_value", "dist_gen.weighted_choice", "dist_gen.constant"],
+        ["observation", "second_value", "dist_gen.weighted_choice", "dist_gen.weighted_choice [sampled]", "dist_gen.constant"],
         ["observation", "third_value", "dist_gen.weighted_choice"],
     ]))
     def test_non_interactive_configure_generators(self, mock_csv_reader: MagicMock, mock_path: MagicMock):
@@ -1480,4 +1553,105 @@ class NonInteractiveTests(RequiresDBTestCase):
         }
         self.assertEqual(row_gens["observation['type']"], "dist_gen.weighted_choice")
         self.assertEqual(row_gens["observation['first_value']"], "dist_gen.weighted_choice")
+        self.assertEqual(row_gens["observation['second_value']"], "dist_gen.constant")
         self.assertEqual(row_gens["observation['third_value']"], "dist_gen.weighted_choice")
+
+    @patch("datafaker.interactive.Path")
+    @patch("datafaker.interactive.csv.reader", return_value=iter([
+        [
+            "observation",
+            "type first_value second_value third_value",
+            "null-partitioned grouped_multivariate_lognormal",
+        ],
+    ]))
+    def test_non_interactive_configure_null_partitioned(self, mock_csv_reader: MagicMock, mock_path: MagicMock):
+        """
+        test that we can set multi-column generators from a CSV file
+        """
+        config = {}
+        spec_csv = Mock(return_value="mock spec.csv file")
+        update_config_generators(self.dsn, self.schema_name, self.metadata, config, spec_csv)
+        row_gens = {
+            f"{table}{sorted(rg['columns_assigned'])}": rg
+            for table, tables in config.get("tables", {}).items()
+            for rg in tables.get("row_generators", [])
+        }
+        self.assertEqual(
+            row_gens["observation['first_value', 'second_value', 'third_value', 'type']"]["name"],
+            "dist_gen.alternatives",
+        )
+        self.assertEqual(
+            row_gens[
+                "observation['first_value', 'second_value', 'third_value', 'type']"
+            ]["kwargs"]["alternative_configs"][0]["name"],
+            '"with_constants_at"',
+        )
+        self.assertEqual(
+            row_gens[
+                "observation['first_value', 'second_value', 'third_value', 'type']"
+            ]["kwargs"]["alternative_configs"][0]["params"]["subgen"],
+            '"grouped_multivariate_lognormal"',
+        )
+
+    @patch("datafaker.interactive.Path")
+    @patch(
+        "datafaker.interactive.csv.reader",
+        return_value=iter(
+            [
+                [
+                    "observation",
+                    "type first_value second_value third_value",
+                    "null-partitioned grouped_multivariate_lognormal",
+                ],
+            ]
+        ),
+    )
+    def test_non_interactive_configure_null_partitioned_where_existing_merges(
+        self, _mock_csv_reader: MagicMock, _mock_path: MagicMock
+    ) -> None:
+        """
+        test that we can set multi-column generators from a CSV file,
+        but where there are already multi-column generators configured
+        that will have to be unmerged.
+        """
+        config = {
+            "tables": {
+                "observation": {
+                    "row_generators": [{
+                        "name": "arbitrary_gen",
+                        "columns_assigned": [
+                            "type",
+                            "second_value",
+                            "first_value",
+                        ],
+                    }],
+                },
+            },
+        }
+        spec_csv = Mock(return_value="mock spec.csv file")
+        update_config_generators(
+            self.dsn, self.schema_name, self.metadata, config, spec_csv
+        )
+        row_gens = {
+            f"{table}{sorted(rg['columns_assigned'])}": rg
+            for table, tables in config.get("tables", {}).items()
+            for rg in tables.get("row_generators", [])
+        }
+        self.assertEqual(
+            row_gens[
+                "observation['first_value', 'second_value', 'third_value', 'type']"
+            ]["name"],
+            "dist_gen.alternatives",
+        )
+        self.assertEqual(
+            row_gens[
+                "observation['first_value', 'second_value', 'third_value', 'type']"
+            ]["kwargs"]["alternative_configs"][0]["name"],
+            '"with_constants_at"',
+        )
+        self.assertEqual(
+            row_gens[
+                "observation['first_value', 'second_value', 'third_value', 'type']"
+            ]["kwargs"]["alternative_configs"][0]["params"]["subgen"],
+            '"grouped_multivariate_lognormal"',
+        )

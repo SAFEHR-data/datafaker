@@ -944,7 +944,7 @@ class ChoiceGeneratorFactory(GeneratorFactory):
     All generators that want an average and standard deviation.
     """
     SAMPLE_COUNT = MAXIMUM_CHOICES
-    SUPPRESS_COUNT = 5
+    SUPPRESS_COUNT = 7
     def get_generators(self, columns: list[Column], engine: Engine):
         if len(columns) != 1:
             return []
@@ -1511,7 +1511,7 @@ class NullPatternPartition:
 
 class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
     SAMPLE_COUNT = MAXIMUM_CHOICES
-    SUPPRESS_COUNT = 5
+    SUPPRESS_COUNT = 7
 
     def function_name(self) -> str:
         return "grouped_multivariate_normal"
@@ -1567,11 +1567,13 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
         query_name = f"{table}__{columns[0].name}"
         # Partitions for minimal suppression and no sampling
         row_partitions_maximal: dict[int, RowPartition] = {}
+        # Partitions for minimal suppression but sampling
+        row_partitions_sampled: dict[int, RowPartition] = {}
         # Partitions for normal suppression and severe sampling
         row_partitions_ss: dict[int, RowPartition] = {}
         for partition_nonnulls in powerset(nullable_columns):
             partition_def = NullPatternPartition(columns, partition_nonnulls)
-            query = self.query(
+            query_all = self.query(
                 table=table,
                 columns=partition_def.included_numeric,
                 predicates=partition_def.predicates,
@@ -1580,14 +1582,31 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
                 constant_clauses=partition_def.constant_clauses,
             )
             row_partitions_maximal[partition_def.index] = RowPartition(
-                query,
+                query_all,
                 partition_def.included_numeric,
                 partition_def.included_choice,
                 partition_def.excluded,
                 partition_def.nones,
                 {},
             )
-            query = self.query(
+            query_sampled = self.query(
+                table=table,
+                columns=partition_def.included_numeric,
+                predicates=partition_def.predicates,
+                group_by_clause=partition_def.group_by_clause,
+                constants = partition_def.constants,
+                constant_clauses=partition_def.constant_clauses,
+                sample_count=self.SAMPLE_COUNT,
+            )
+            row_partitions_sampled[partition_def.index] = RowPartition(
+                query_sampled,
+                partition_def.included_numeric,
+                partition_def.included_choice,
+                partition_def.excluded,
+                partition_def.nones,
+                {},
+            )
+            query_ss = self.query(
                 table=table,
                 columns=partition_def.included_numeric,
                 predicates=partition_def.predicates,
@@ -1598,7 +1617,7 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
                 sample_count=self.SAMPLE_COUNT,
             )
             row_partitions_ss[partition_def.index] = RowPartition(
-                query,
+                query_ss,
                 partition_def.included_numeric,
                 partition_def.included_choice,
                 partition_def.excluded,
@@ -1618,6 +1637,16 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
                         query_name,
                         row_partitions_maximal,
                         self.function_name(),
+                        partition_count_query=partition_query_max,
+                        partition_counts=partition_count_max_results,
+                        partition_count_comment=count_comment,
+                    ))
+                if self._execute_partition_queries(connection, row_partitions_sampled):
+                    gens.append(NullPartitionedNormalGenerator(
+                        query_name,
+                        row_partitions_sampled,
+                        self.function_name(),
+                        name_suffix="sampled",
                         partition_count_query=partition_query_max,
                         partition_counts=partition_count_max_results,
                         partition_count_comment=count_comment,
