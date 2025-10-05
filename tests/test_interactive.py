@@ -1490,32 +1490,32 @@ class NullPartitionedTests(GeneratesDBTestCase):
                 two.count(), generate_count * 3 / 20, delta=generate_count * 0.5
             )
             self.assertAlmostEqual(two.x_mean(), 1.4, delta=0.6)
-            self.assertAlmostEqual(two.x_var(), 0.21, delta=0.4)
+            self.assertAlmostEqual(two.x_var(), 0.315, delta=0.18)
             self.assertAlmostEqual(two.y_mean(), 1.8, delta=0.8)
-            self.assertAlmostEqual(two.y_var(), 0.07, delta=0.1)
-            self.assertAlmostEqual(two.covar(), 0.5, delta=0.5)
+            self.assertAlmostEqual(two.y_var(), 0.105, delta=0.06)
+            self.assertAlmostEqual(two.covar(), 0.105, delta=0.07)
             # type 3
             self.assertAlmostEqual(
                 three.count(), generate_count * 3 / 20, delta=generate_count * 0.2
             )
-            self.assertAlmostEqual(two.covar(), -0.5, delta=0.5)
+            self.assertAlmostEqual(three.covar(), -2.085, delta=1.1)
             # type 4
             self.assertAlmostEqual(
                 four.count(), generate_count * 3 / 20, delta=generate_count * 0.2
             )
-            self.assertAlmostEqual(two.covar(), 0.5, delta=0.5)
+            self.assertAlmostEqual(four.covar(), 3.33, delta=1)
             # type 5/fish
             self.assertAlmostEqual(
                 fish.count(), generate_count * 3 / 20, delta=generate_count * 0.2
             )
             self.assertAlmostEqual(fish.x_mean(), 8.1, delta=3.0)
-            self.assertAlmostEqual(fish.x_var(), 0.57, delta=0.8)
+            self.assertAlmostEqual(fish.x_var(), 0.855, delta=0.6)
             # type 5/fowl
             self.assertAlmostEqual(
                 fowl.count(), generate_count * 3 / 20, delta=generate_count * 0.2
             )
             self.assertAlmostEqual(fowl.x_mean(), 11.2, delta=8.0)
-            self.assertAlmostEqual(fowl.x_var(), 1.24, delta=1.5)
+            self.assertAlmostEqual(fowl.x_var(), 1.86, delta=1)
 
     def test_create_with_null_partitioned_grouped_sampled_and_suppressed(self):
         """Test EAV for all columns with sampled and suppressed generation."""
@@ -1618,13 +1618,13 @@ class NullPartitionedTests(GeneratesDBTestCase):
                 fish.count(), generate_count * 3 / 11, delta=generate_count * 0.2
             )
             self.assertAlmostEqual(fish.x_mean(), 8.1, delta=3.0)
-            self.assertAlmostEqual(fish.x_var(), 0.57, delta=0.8)
+            self.assertAlmostEqual(fish.x_var(), 0.855, delta=0.5)
             # type 5/fowl
             self.assertAlmostEqual(
                 fowl.count(), generate_count * 3 / 11, delta=generate_count * 0.2
             )
             self.assertAlmostEqual(fowl.x_mean(), 11.2, delta=8.0)
-            self.assertAlmostEqual(fowl.x_var(), 1.24, delta=1.5)
+            self.assertAlmostEqual(fowl.x_var(), 1.86, delta=1)
             stmt = select(self.metadata.tables[table2_name])
             rows = conn.execute(stmt).fetchall()
             firsts = Stat()
