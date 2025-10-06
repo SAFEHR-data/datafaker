@@ -3,11 +3,12 @@ import csv
 import functools
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Collection, Mapping
+from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Iterable, cast
+from types import TracebackType
+from typing import Any, Callable, Iterable, Optional, Type, cast
 from typing_extensions import Self
 
 import sqlalchemy
@@ -16,6 +17,7 @@ from sqlalchemy import Column, ForeignKey, MetaData, Table, text
 
 from datafaker.generators import Generator, PredefinedGenerator, everything_factory
 from datafaker.utils import (
+    T,
     create_db_engine,
     fk_refers_to_ignored_table,
     logger,
@@ -30,12 +32,12 @@ try:
     import readline
 
     if not hasattr(readline, "backend"):
-        readline.backend = "readline"
+        setattr(readline, "backend", "readline")
 except:
     pass
 
 
-def or_default(v, d):
+def or_default(v: T | None, d: T) -> T:
     """Returns v if it isn't None, otherwise d."""
     return d if v is None else v
 
@@ -75,27 +77,27 @@ class AskSaveCmd(cmd.Cmd):
     prompt = "(yes/no/cancel) "
     file = None
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.result = ""
 
-    def do_yes(self, _arg):
+    def do_yes(self, _arg: str) -> bool:
         self.result = "yes"
         return True
 
-    def do_no(self, _arg):
+    def do_no(self, _arg: str) -> bool:
         self.result = "no"
         return True
 
-    def do_cancel(self, _arg):
+    def do_cancel(self, _arg: str) -> bool:
         self.result = "cancel"
         return True
 
 
-def fk_column_name(fk: ForeignKey):
+def fk_column_name(fk: ForeignKey) -> str:
     if fk_refers_to_ignored_table(fk):
         return f"{fk.target_fullname} (ignored)"
-    return fk.target_fullname
+    return str(fk.target_fullname)
 
 
 class DbCmd(ABC, cmd.Cmd):
@@ -106,16 +108,16 @@ class DbCmd(ABC, cmd.Cmd):
     ROW_COUNT_MSG = "Total row count: {}"
 
     @abstractmethod
-    def make_table_entry(self, name: str, table_config: Mapping) -> TableEntry:
+    def make_table_entry(self, name: str, table_config: Mapping) -> TableEntry | None:
         ...
 
     def __init__(
-        self, src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping[str, Any]
+        self, src_dsn: str, src_schema: str, metadata: MetaData, config: MutableMapping[str, Any]
     ):
         super().__init__()
-        self.config: Mapping[str, Any] = config
+        self.config: MutableMapping[str, Any] = config
         self.metadata = metadata
-        self._table_entries: Collection[TableEntry] = []
+        self._table_entries: list[TableEntry] = []
         tables_config: Mapping = config.get("tables", {})
         if type(tables_config) is not dict:
             tables_config = {}
@@ -125,56 +127,79 @@ class DbCmd(ABC, cmd.Cmd):
                 table_config = {}
             entry = self.make_table_entry(name, table_config)
             if entry is not None:
-                self.table_entries.append(entry)
+                self._table_entries.append(entry)
         self.table_index = 0
         self.engine = create_db_engine(src_dsn, schema_name=src_schema)
 
     def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(
+        self,
+        _exc_type: Optional[Type[BaseException]],
+        _exc_val: Optional[BaseException],
+        _exc_tb: Optional[TracebackType],
+    ) -> None:
         self.engine.dispose()
 
-    def print(self, text: str, *args, **kwargs) -> None:
+    def print(self, text: str, *args: Any, **kwargs: Any) -> None:
         print(text.format(*args, **kwargs))
 
-    def print_table(self, headings: list[str], rows: list[list[str]]) -> None:
+    def print_table(self, headings: list[str], rows: list[list[Any]]) -> None:
         output = PrettyTable()
         output.field_names = headings
         for row in rows:
             output.add_row(row)
         print(output)
 
-    def print_table_by_columns(self, columns: dict[str, list[str]]):
+    def print_table_by_columns(self, columns: dict[str, list[str]]) -> None:
         output = PrettyTable()
         row_count = max([len(col) for col in columns.values()])
         for field_name, data in columns.items():
             output.add_column(field_name, data + [None] * (row_count - len(data)))
         print(output)
 
-    def print_results(self, result):
+    def print_results(self, result: sqlalchemy.CursorResult) -> None:
         self.print_table(list(result.keys()), [list(row) for row in result.all()])
 
-    def ask_save(self):
+    def ask_save(self) -> str:
+        """
+        Ask the user if they want to save.
+        :return: ``yes``, ``no`` or ``cancel``.
+        """
         ask = AskSaveCmd()
         ask.cmdloop()
         return ask.result
 
-    def set_table_index(self, index) -> bool:
+    @abstractmethod
+    def set_prompt(self) -> None:
+        ...
+
+    def set_table_index(self, index: int) -> bool:
+        """
+        Move to a different table.
+        :param index: Index of the table to move to.
+        :return: True if there is a table with such an index to move to.
+        """
         if 0 <= index and index < len(self._table_entries):
             self.table_index = index
             self.set_prompt()
             return True
         return False
 
-    def next_table(self, report="No more tables"):
+    def next_table(self, report: str="No more tables") -> bool:
+        """
+        Move to the next table
+        :return: True if there is another table to move to.
+        """
         if not self.set_table_index(self.table_index + 1):
             self.print(report)
             return False
         return True
 
-    def table_name(self):
-        return self._table_entries[self.table_index].name
+    def table_name(self) -> str:
+        """ Get the name of the current table. """
+        return str(self._table_entries[self.table_index].name)
 
     def table_metadata(self) -> Table:
         return self.metadata.tables[self.table_name()]
@@ -182,7 +207,7 @@ class DbCmd(ABC, cmd.Cmd):
     def get_column_names(self) -> list[str]:
         return [col.name for col in self.table_metadata().columns]
 
-    def report_columns(self):
+    def report_columns(self) -> None:
         self.print_table(
             ["name", "type", "primary", "nullable", "foreign key"],
             [
@@ -204,7 +229,7 @@ class DbCmd(ABC, cmd.Cmd):
         t = ts.get(table_name)
         return t if type(t) is dict else {}
 
-    def set_table_config(self, table_name: str, config: dict[str, Any]):
+    def set_table_config(self, table_name: str, config: dict[str, Any]) -> None:
         ts = self.config.get("tables", None)
         if type(ts) is not dict:
             self.config["tables"] = {table_name: config}
@@ -228,7 +253,7 @@ class DbCmd(ABC, cmd.Cmd):
             if column.nullable
         ]
 
-    def find_entry_index_by_table_name(self, table_name) -> int | None:
+    def find_entry_index_by_table_name(self, table_name: str) -> int | None:
         return next(
             (
                 i
@@ -238,13 +263,13 @@ class DbCmd(ABC, cmd.Cmd):
             None,
         )
 
-    def find_entry_by_table_name(self, table_name) -> TableEntry | None:
+    def find_entry_by_table_name(self, table_name: str) -> TableEntry | None:
         for e in self._table_entries:
             if e.name == table_name:
                 return e
         return None
 
-    def do_counts(self, _arg):
+    def do_counts(self, _arg: str) -> None:
         "Report the column names with the counts of nulls in them"
         if len(self._table_entries) <= self.table_index:
             return
@@ -274,7 +299,7 @@ class DbCmd(ABC, cmd.Cmd):
                 ],
             )
 
-    def do_select(self, arg):
+    def do_select(self, arg: str) -> None:
         "Run a select query over the database and show the first 50 results"
         MAX_SELECT_ROWS = 50
         with self.engine.connect() as connection:
@@ -358,7 +383,7 @@ to exit this program."""
     NOTE_TEXT_NO_CHANGES = "You have made no changes."
     NOTE_TEXT_CHANGING = "Changing {0} from {1} to {2}"
 
-    def make_table_entry(self, name: str, table: Mapping) -> TableEntry:
+    def make_table_entry(self, name: str, table: Mapping) -> TableCmdTableEntry | None:
         if table.get("ignore", False):
             return TableCmdTableEntry(name, TableType.IGNORE, TableType.IGNORE)
         if table.get("vocabulary_table", False):
@@ -370,14 +395,14 @@ to exit this program."""
         return TableCmdTableEntry(name, TableType.GENERATE, TableType.GENERATE)
 
     def __init__(
-        self, src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping
+        self, src_dsn: str, src_schema: str, metadata: MetaData, config: MutableMapping[str, Any]
     ) -> None:
         super().__init__(src_dsn, src_schema, metadata, config)
         self.set_prompt()
 
     @property
     def table_entries(self) -> list[TableCmdTableEntry]:
-        return cast(TableCmdTableEntry, self._table_entries)
+        return cast(list[TableCmdTableEntry], self._table_entries)
 
     def set_prompt(self) -> None:
         if self.table_index < len(self.table_entries):
@@ -393,7 +418,6 @@ to exit this program."""
 
     def _copy_entries(self) -> None:
         for entry in self.table_entries:
-            entry: TableCmdTableEntry
             if entry.old_type != entry.new_type:
                 table = self.get_table_config(entry.name)
                 if (
@@ -654,7 +678,7 @@ Type 'help data' for examples."""
 
 
 def update_config_tables(
-    src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping
+    src_dsn: str, src_schema: str, metadata: MetaData, config: MutableMapping
 ) -> Mapping[str, Any]:
     with TableCmd(src_dsn, src_schema, metadata, config) as tc:
         tc.cmdloop()
@@ -719,7 +743,7 @@ data from the database. Use 'quit' to exit this tool."""
                     return (src_stat.get("query", None), src_stat.get("comment", None))
         return None
 
-    def make_table_entry(self, name: str, table: Mapping) -> TableEntry | None:
+    def make_table_entry(self, name: str, table: Mapping) -> MissingnessCmdTableEntry | None:
         if table.get("ignore", False):
             return None
         if table.get("vocabulary_table", False):
@@ -760,7 +784,7 @@ data from the database. Use 'quit' to exit this tool."""
         )
 
     def __init__(
-        self, src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping
+        self, src_dsn: str, src_schema: str, metadata: MetaData, config: MutableMapping
     ):
         """
         Initialise a MissingnessCmd.
@@ -774,7 +798,7 @@ data from the database. Use 'quit' to exit this tool."""
 
     @property
     def table_entries(self) -> list[MissingnessCmdTableEntry]:
-        return cast(MissingnessCmdTableEntry, self._table_entries)
+        return cast(list[MissingnessCmdTableEntry], self._table_entries)
 
     def set_prompt(self) -> None:
         """
@@ -956,7 +980,7 @@ data from the database. Use 'quit' to exit this tool."""
 
 
 def update_missingness(
-    src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping[str, Any]
+    src_dsn: str, src_schema: str, metadata: MetaData, config: MutableMapping[str, Any]
 ) -> Mapping[str, Any]:
     with MissingnessCmd(src_dsn, src_schema, metadata, config) as mc:
         mc.cmdloop()
@@ -1018,7 +1042,7 @@ information about the columns in the current table. Use 'peek',
         r'\bSRC_STATS\["([^"]+)"\](\["results"\]\[0\]\["([^"]+)"\])?'
     )
 
-    def make_table_entry(self, table_name: str, table: Mapping) -> TableEntry | None:
+    def make_table_entry(self, table_name: str, table: Mapping) -> GeneratorCmdTableEntry | None:
         if table.get("ignore", False):
             return None
         if table.get("vocabulary_table", False):
@@ -1028,7 +1052,8 @@ information about the columns in the current table. Use 'peek',
         metadata_table = self.metadata.tables[table_name]
         columns = [str(colname) for colname in metadata_table.columns.keys()]
         column_set = frozenset(columns)
-        columns_assigned_so_far = set()
+        columns_assigned_so_far: set[str] = set()
+
         new_generator_infos: list[GeneratorInfo] = []
         old_generator_infos: list[GeneratorInfo] = []
         for rg in table.get("row_generators", []):
@@ -1054,7 +1079,7 @@ information about the columns in the current table. Use 'peek',
                     )
                 actual_collist = [c for c in collist if c in columns]
                 if actual_collist:
-                    gen = PredefinedGenerator(table, rg, self.config)
+                    gen = PredefinedGenerator(table_name, rg, self.config)
                     new_generator_infos.append(
                         GeneratorInfo(
                             columns=actual_collist.copy(),
@@ -1085,7 +1110,7 @@ information about the columns in the current table. Use 'peek',
         )
 
     def __init__(
-        self, src_dsn: str, src_schema: str, metadata: MetaData, config: Mapping[str, Any]
+        self, src_dsn: str, src_schema: str, metadata: MetaData, config: MutableMapping[str, Any]
     ) -> None:
         """
         Initialise a GeneratorCmd
@@ -1096,12 +1121,12 @@ information about the columns in the current table. Use 'peek',
         """
         super().__init__(src_dsn, src_schema, metadata, config)
         self.generator_index = 0
-        self.generators_valid_columns = None
+        self.generators_valid_columns: Optional[tuple[int, list[str]]] = None
         self.set_prompt()
 
     @property
     def table_entries(self) -> list[GeneratorCmdTableEntry]:
-        return cast(GeneratorCmdTableEntry, self._table_entries)
+        return cast(list[GeneratorCmdTableEntry], self._table_entries)
 
     def set_table_index(self, index: int) -> bool:
         """
@@ -1245,7 +1270,7 @@ information about the columns in the current table. Use 'peek',
         self.config["src-stats"] = src_stats
 
     def _find_old_generator(
-        self, entry: GeneratorCmdTableEntry, columns: Iterable[list]
+        self, entry: GeneratorCmdTableEntry, columns: Iterable[str]
     ) -> Generator | None:
         """Find any generator that previously assigned to these exact same columns."""
         fc = frozenset(columns)
@@ -1869,7 +1894,7 @@ def update_config_generators(
     src_dsn: str,
     src_schema: str,
     metadata: MetaData,
-    config: Mapping[str, Any],
+    config: MutableMapping[str, Any],
     spec_path: Path | None,
 ) -> Mapping[str, Any]:
     """
