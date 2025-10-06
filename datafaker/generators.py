@@ -11,16 +11,19 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 from itertools import chain, combinations
-from typing import Any, Callable, Iterable, Self, TypeVar
+from typing import Any, Callable, Iterable, Sequence, TypeVar, Union
+from typing_extensions import Self
 
 import mimesis
 import mimesis.locales
 import sqlalchemy
-from sqlalchemy import Column, Connection, Engine, RowMapping, Sequence, text
-from sqlalchemy.types import Date, DateTime, Integer, Numeric, String, Time
+from sqlalchemy import Column, Connection, CursorResult, Engine, RowMapping, text
+from sqlalchemy.types import Date, DateTime, Integer, Numeric, String, Time, TypeEngine
 
 from datafaker.base import DistributionGenerator
 from datafaker.utils import logger
+
+numeric = Union[int, float]
 
 # How many distinct values can we have before we consider a
 # choice distribution to be infeasible?
@@ -120,7 +123,7 @@ class Generator(ABC):
         Generate 'count' random data points for this column.
         """
 
-    def fit(self, default: float = None) -> float | None:
+    def fit(self, default: float | None=None) -> float | None:
         """
         Return a value representing how well the distribution fits the real source data.
 
@@ -179,7 +182,7 @@ class PredefinedGenerator(Generator):
         self._src_stats_mentioned = self._get_src_stats_mentioned(self._kwn)
         # Need to deal with this somehow (or remove it from the schema)
         self._argn: list[str] = generator_object.get("args", [])
-        self._select_aggregate_clauses = {}
+        self._select_aggregate_clauses: dict[str, dict[str, str | Any]] = {}
         self._custom_queries = {}
         for sstat in config.get("src-stats", []):
             name: str = sstat["name"]
@@ -246,7 +249,7 @@ class GeneratorFactory(ABC):
     """
 
     @abstractmethod
-    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
         """
         Returns all the generators that might be appropriate for this column.
         """
@@ -278,7 +281,7 @@ class Buckets:
                     )
                 )
             )
-            self.buckets = [0] * 10
+            self.buckets: Sequence[int] = [0] * 10
             for rb in raw_buckets:
                 if rb.b is not None:
                     bucket = min(9, max(0, int(rb.b) + 1))
@@ -288,7 +291,7 @@ class Buckets:
 
     @classmethod
     def make_buckets(
-        _cls, engine: Engine, table_name: str, column_name: str
+        cls, engine: Engine, table_name: str, column_name: str
     ) -> Self | None:
         """
         Construct a Buckets object.
@@ -308,23 +311,23 @@ class Buckets:
                     )
                 )
             ).first()
-            if result is None or result.stddev is None or result.count < 2:
+            if result is None or result.stddev is None or getattr(result, "count") < 2:
                 return None
         try:
-            buckets = Buckets(
+            buckets = cls(
                 engine,
                 table_name,
                 column_name,
                 result.mean,
                 result.stddev,
-                result.count,
+                getattr(result, "count"),
             )
         except sqlalchemy.exc.DatabaseError as exc:
             logger.debug("Failed to instantiate Buckets object: %s", exc)
             return None
         return buckets
 
-    def fit_from_counts(self, bucket_counts: list[float]) -> float:
+    def fit_from_counts(self, bucket_counts: Sequence[float]) -> float:
         """
         Figure out the fit from bucket counts from the generator distribution.
         """
@@ -350,7 +353,7 @@ class MultiGeneratorFactory(GeneratorFactory):
         super().__init__()
         self.factories = factories
 
-    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
         return [
             generator
             for factory in self.factories
@@ -383,10 +386,10 @@ class MimesisGeneratorBase(Generator):
         self._name = "generic." + function_name
         self._generator_function = f
 
-    def function_name(self):
+    def function_name(self) -> str:
         return self._name
 
-    def generate_data(self, count):
+    def generate_data(self, count: int) -> list[Any]:
         return [self._generator_function() for _ in range(count)]
 
 
@@ -415,16 +418,16 @@ class MimesisGenerator(MimesisGeneratorBase):
             samples = [value_fn(s) for s in samples]
         self._fit = buckets.fit_from_values(samples)
 
-    def function_name(self):
+    def function_name(self) -> str:
         return self._name
 
-    def nominal_kwargs(self):
+    def nominal_kwargs(self) -> dict[str, Any]:
         return {}
 
-    def actual_kwargs(self):
+    def actual_kwargs(self) -> dict[str, Any]:
         return {}
 
-    def fit(self, default=None):
+    def fit(self, default: float | None=None) -> float | None:
         return default if self._fit is None else self._fit
 
 
@@ -445,21 +448,21 @@ class MimesisGeneratorTruncated(MimesisGenerator):
     def name(self) -> str:
         return f"{self._name} [truncated to {self._length}]"
 
-    def nominal_kwargs(self):
+    def nominal_kwargs(self) -> dict[str, Any]:
         return {
             "subgen_fn": self._name,
             "params": {},
             "length": self._length,
         }
 
-    def actual_kwargs(self):
+    def actual_kwargs(self) -> dict[str, Any]:
         return {
             "subgen_fn": self._name,
             "params": {},
             "length": self._length,
         }
 
-    def generate_data(self, count):
+    def generate_data(self, count: int) -> list[Any]:
         return [self._generator_function()[: self._length] for _ in range(count)]
 
 
@@ -472,7 +475,7 @@ class MimesisDateTimeGenerator(MimesisGeneratorBase):
         max_year: str,
         start: int,
         end: int,
-    ):
+    ) -> None:
         """
         :param column: The column to generate into
         :param function_name: The name of the mimesis function
@@ -489,7 +492,7 @@ class MimesisDateTimeGenerator(MimesisGeneratorBase):
         self._end = end
 
     @classmethod
-    def make_singleton(_cls, column: Column, engine: Engine, function_name: str):
+    def make_singleton(_cls, column: Column, engine: Engine, function_name: str) -> list[Generator]:
         extract_year = f"CAST(EXTRACT(YEAR FROM {column.name}) AS INT)"
         max_year = f"MAX({extract_year})"
         min_year = f"MIN({extract_year})"
@@ -512,13 +515,13 @@ class MimesisDateTimeGenerator(MimesisGeneratorBase):
             )
         ]
 
-    def nominal_kwargs(self):
+    def nominal_kwargs(self) -> dict[str, Any]:
         return {
             "start": f'SRC_STATS["auto__{self._column.table.name}"]["results"][0]["{self._column.name}__start"]',
             "end": f'SRC_STATS["auto__{self._column.table.name}"]["results"][0]["{self._column.name}__end"]',
         }
 
-    def actual_kwargs(self):
+    def actual_kwargs(self) -> dict[str, Any]:
         return {
             "start": self._start,
             "end": self._end,
@@ -536,14 +539,14 @@ class MimesisDateTimeGenerator(MimesisGeneratorBase):
             },
         }
 
-    def generate_data(self, count):
+    def generate_data(self, count: int) -> list[Any]:
         return [
             self._generator_function(start=self._start, end=self._end)
             for _ in range(count)
         ]
 
 
-def get_column_type(column: Column):
+def get_column_type(column: Column) -> TypeEngine:
     try:
         return column.type.as_generic()
     except NotImplementedError:
@@ -589,7 +592,7 @@ class MimesisStringGeneratorFactory(GeneratorFactory):
         "text.word",
     ]
 
-    def get_generators(self, columns: list[Column], engine: Engine):
+    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
         if len(columns) != 1:
             return []
         column = columns[0]
@@ -632,7 +635,7 @@ class MimesisFloatGeneratorFactory(GeneratorFactory):
     All Mimesis generators that return floating point numbers.
     """
 
-    def get_generators(self, columns: list[Column], engine: Engine):
+    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
         if len(columns) != 1:
             return []
         column = columns[0]
@@ -653,7 +656,7 @@ class MimesisDateGeneratorFactory(GeneratorFactory):
     All Mimesis generators that return dates.
     """
 
-    def get_generators(self, columns: list[Column], engine: Engine):
+    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
         if len(columns) != 1:
             return []
         column = columns[0]
@@ -668,7 +671,7 @@ class MimesisDateTimeGeneratorFactory(GeneratorFactory):
     All Mimesis generators that return datetimes.
     """
 
-    def get_generators(self, columns: list[Column], engine: Engine):
+    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
         if len(columns) != 1:
             return []
         column = columns[0]
@@ -685,7 +688,7 @@ class MimesisTimeGeneratorFactory(GeneratorFactory):
     All Mimesis generators that return times.
     """
 
-    def get_generators(self, columns: list[Column], engine: Engine):
+    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
         if len(columns) != 1:
             return []
         column = columns[0]
@@ -700,7 +703,7 @@ class MimesisIntegerGeneratorFactory(GeneratorFactory):
     All Mimesis generators that return integers.
     """
 
-    def get_generators(self, columns: list[Column], engine: Engine):
+    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
         if len(columns) != 1:
             return []
         column = columns[0]
@@ -710,26 +713,28 @@ class MimesisIntegerGeneratorFactory(GeneratorFactory):
         return [MimesisGenerator("person.weight")]
 
 
-def fit_from_buckets(xs: list[float], ys: list[float]):
+def fit_from_buckets(xs: Sequence[numeric], ys: Sequence[numeric]) -> float:
     sum_diff_squared = sum(map(lambda t, a: (t - a) * (t - a), xs, ys))
     count = len(ys)
     return sum_diff_squared / (count * count)
 
 
 class ContinuousDistributionGenerator(Generator):
+    expected_buckets: Sequence[numeric] = []
+
     def __init__(self, table_name: str, column_name: str, buckets: Buckets):
         super().__init__()
         self.table_name = table_name
         self.column_name = column_name
         self.buckets = buckets
 
-    def nominal_kwargs(self):
+    def nominal_kwargs(self) -> dict[str, Any]:
         return {
             "mean": f'SRC_STATS["auto__{self.table_name}"]["results"][0]["mean__{self.column_name}"]',
             "sd": f'SRC_STATS["auto__{self.table_name}"]["results"][0]["stddev__{self.column_name}"]',
         }
 
-    def actual_kwargs(self):
+    def actual_kwargs(self) -> dict[str, Any]:
         if self.buckets is None:
             return {}
         return {
@@ -751,7 +756,7 @@ class ContinuousDistributionGenerator(Generator):
             },
         }
 
-    def fit(self, default=None):
+    def fit(self, default: float | None=None) -> float | None:
         if self.buckets is None:
             return default
         return self.buckets.fit_from_counts(self.expected_buckets)
@@ -771,10 +776,10 @@ class GaussianGenerator(ContinuousDistributionGenerator):
         0.0227,
     ]
 
-    def function_name(self):
+    def function_name(self) -> str:
         return "dist_gen.normal"
 
-    def generate_data(self, count):
+    def generate_data(self, count: int) -> list[Any]:
         return [
             dist_gen.normal(self.buckets.mean, self.buckets.stddev)
             for _ in range(count)
@@ -795,10 +800,10 @@ class UniformGenerator(ContinuousDistributionGenerator):
         0,
     ]
 
-    def function_name(self):
+    def function_name(self) -> str:
         return "dist_gen.uniform_ms"
 
-    def generate_data(self, count):
+    def generate_data(self, count: int) -> list[Any]:
         return [
             dist_gen.uniform_ms(self.buckets.mean, self.buckets.stddev)
             for _ in range(count)
@@ -822,7 +827,7 @@ class ContinuousDistributionGeneratorFactory(GeneratorFactory):
             UniformGenerator(table_name, column_name, buckets),
         ]
 
-    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
         if len(columns) != 1:
             return []
         column = columns[0]
@@ -869,19 +874,19 @@ class LogNormalGenerator(Generator):
         self.logmean = logmean
         self.logstddev = logstddev
 
-    def function_name(self):
+    def function_name(self) -> str:
         return "dist_gen.lognormal"
 
-    def generate_data(self, count):
+    def generate_data(self, count: int) -> list[Any]:
         return [dist_gen.lognormal(self.logmean, self.logstddev) for _ in range(count)]
 
-    def nominal_kwargs(self):
+    def nominal_kwargs(self) -> dict[str, Any]:
         return {
             "logmean": f'SRC_STATS["auto__{self.table_name}"]["results"][0]["logmean__{self.column_name}"]',
             "logsd": f'SRC_STATS["auto__{self.table_name}"]["results"][0]["logstddev__{self.column_name}"]',
         }
 
-    def actual_kwargs(self):
+    def actual_kwargs(self) -> dict[str, Any]:
         return {
             "logmean": self.logmean,
             "logsd": self.logstddev,
@@ -901,7 +906,7 @@ class LogNormalGenerator(Generator):
             },
         }
 
-    def fit(self, default=None):
+    def fit(self, default: float | None=None) -> float | None:
         if self.buckets is None:
             return default
         return self.buckets.fit_from_counts(self.expected_buckets)
@@ -941,7 +946,15 @@ class ContinuousLogDistributionGeneratorFactory(ContinuousDistributionGeneratorF
         ]
 
 
-def zipf_distribution(total, bins):
+def zipf_distribution(total: int, bins: int) -> typing.Generator[int, None, None]:
+    """
+    Get a zipf distribution for a certain number of items distributed
+    in a certain number of bins.
+    :param total: The total number of items to be distributed.
+    :param bins: The total number of bins to distribute the items into.
+    :return: A generator of the number of items in each bin, from the
+    largest to the smallest.
+    """
     basic_dist = list(map(lambda n: 1 / n, range(1, bins + 1)))
     bd_remaining = sum(basic_dist)
     for b in basic_dist:
@@ -960,13 +973,13 @@ class ChoiceGenerator(Generator):
 
     def __init__(
         self,
-        table_name,
-        column_name,
-        values,
-        counts,
-        sample_count=None,
-        suppress_count=0,
-    ):
+        table_name: str,
+        column_name : str,
+        values: list[Any],
+        counts: list[int],
+        sample_count: int | None=None,
+        suppress_count: int=0,
+    ) -> None:
         super().__init__()
         self.table_name = table_name
         self.column_name = column_name
@@ -1001,12 +1014,12 @@ class ChoiceGenerator(Generator):
                 self._annotation = "sampled and suppressed"
 
     @abstractmethod
-    def get_estimated_counts(self, counts):
+    def get_estimated_counts(self, counts: list[int]) -> list[int]:
         """
         The counts that we would expect if this distribution was the correct one.
         """
 
-    def nominal_kwargs(self):
+    def nominal_kwargs(self) -> dict[str, Any]:
         return {
             "a": f'SRC_STATS["auto__{self.table_name}__{self.column_name}"]["results"]',
         }
@@ -1017,7 +1030,7 @@ class ChoiceGenerator(Generator):
             return n
         return f"{n} [{self._annotation}]"
 
-    def actual_kwargs(self):
+    def actual_kwargs(self) -> dict[str, Any]:
         return {
             "a": self.values,
         }
@@ -1032,7 +1045,7 @@ class ChoiceGenerator(Generator):
             },
         }
 
-    def fit(self, default=None) -> float | None:
+    def fit(self, default: float | None=None) -> float | None:
         return default if self._fit is None else self._fit
 
 
@@ -1049,7 +1062,12 @@ class ZipfChoiceGenerator(ChoiceGenerator):
         ]
 
 
-def uniform_distribution(total, bins: int) -> typing.Generator[int, None, None]:
+def uniform_distribution(total: int, bins: int) -> typing.Generator[int, None, None]:
+    """
+    A generator putting ``total`` items uniformly into ``bins`` bins.
+    If they don't fit exactly evenly, the earlier bins will have one more
+    item than the later bins so the total is as required.
+    """
     p = total // bins
     n = total % bins
     for _ in range(0, n):
@@ -1059,27 +1077,84 @@ def uniform_distribution(total, bins: int) -> typing.Generator[int, None, None]:
 
 
 class UniformChoiceGenerator(ChoiceGenerator):
-    def get_estimated_counts(self, counts):
+    """
+    A generator producing values, each roughly as frequently as each other.
+    """
+    def get_estimated_counts(self, counts: list[int]) -> list[int]:
         return list(uniform_distribution(sum(counts), len(counts)))
 
-    def function_name(self):
+    def function_name(self) -> str:
         return "dist_gen.choice"
 
-    def generate_data(self, count):
+    def generate_data(self, count: int) -> list[Any]:
         return [dist_gen.choice(self.values) for _ in range(count)]
 
 
 class WeightedChoiceGenerator(ChoiceGenerator):
     STORE_COUNTS = True
 
-    def get_estimated_counts(self, counts):
+    def get_estimated_counts(self, counts: list[int]) -> list[int]:
         return counts
 
-    def function_name(self):
+    def function_name(self) -> str:
         return "dist_gen.weighted_choice"
 
-    def generate_data(self, count):
+    def generate_data(self, count: int) -> list[Any]:
         return [dist_gen.weighted_choice(self.values) for _ in range(count)]
+
+
+class ValueGatherer:
+    """
+    Gathers values from a query of values and counts.
+    
+    The query must return columns ``v`` for a value and ``f`` for the
+    count of how many of those values there are.
+    These values will be gathered into a number of properties:
+    ``values``: the list of ``v`` values, ``counts``: the list of ``f`` counts
+    in the same order as ``v``, ``cvs``: list of dicts with keys ``value`` and
+    ``count`` giving these values and counts. ``counts_not_suppressed``,
+    ``values_not_suppressed`` and ``cvs_not_suppressed`` are the
+    equivalents with the counts less than or equal to ``suppress_count``
+    removed.
+
+    :param suppress_count: value with a count of this or fewer will be excluded
+    from the suppressed values.
+    """
+    def __init__(self, results: CursorResult, suppress_count: int=0) -> None:
+        values = []  # All values found
+        counts = []  # The number or each value
+        cvs: list[
+            dict[str, Any]
+        ] = []  # list of dicts with keys "v" and "count"
+        values_not_suppressed = (
+            []
+        )  # All values found more than SUPPRESS_COUNT times
+        counts_not_suppressed = []  # The number for each value not suppressed
+        cvs_not_suppressed: list[
+            dict[str, Any]
+        ] = []  # list of dicts with keys "v" and "count"
+        for result in results:
+            c = result.f
+            if c != 0:
+                counts.append(c)
+                v = result.v
+                if type(v) is decimal.Decimal:
+                    v = float(v)
+                values.append(v)
+                cvs.append({"value": v, "count": c})
+            if suppress_count < c:
+                counts_not_suppressed.append(c)
+                v = result.v
+                if type(v) is decimal.Decimal:
+                    v = float(v)
+                values_not_suppressed.append(v)
+                cvs_not_suppressed.append({"value": v, "count": c})
+        self.values = values
+        self.counts = counts
+        self.cvs = cvs
+        self.values_not_suppressed = values_not_suppressed
+        self.counts_not_suppressed = counts_not_suppressed
+        self.cvs_not_suppressed = cvs_not_suppressed
 
 
 class ChoiceGeneratorFactory(GeneratorFactory):
@@ -1090,7 +1165,7 @@ class ChoiceGeneratorFactory(GeneratorFactory):
     SAMPLE_COUNT = MAXIMUM_CHOICES
     SUPPRESS_COUNT = 5
 
-    def get_generators(self, columns: list[Column], engine: Engine):
+    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
         if len(columns) != 1:
             return []
         column = columns[0]
@@ -1108,25 +1183,12 @@ class ChoiceGeneratorFactory(GeneratorFactory):
                 )
             )
             if results is not None and results.rowcount <= MAXIMUM_CHOICES:
-                values = []  # The values found
-                counts = []  # The number or each value
-                cvs: list[
-                    dict[str, Any]
-                ] = []  # list of dicts with keys "v" and "count"
-                for result in results:
-                    c = result.f
-                    if c != 0:
-                        counts.append(c)
-                        v = result.v
-                        if type(v) is decimal.Decimal:
-                            v = float(v)
-                        values.append(v)
-                        cvs.append({"value": v, "count": c})
-                if counts:
+                vg = ValueGatherer(results, self.SUPPRESS_COUNT)
+                if vg.counts:
                     generators += [
-                        ZipfChoiceGenerator(table_name, column_name, values, counts),
-                        UniformChoiceGenerator(table_name, column_name, values, counts),
-                        WeightedChoiceGenerator(table_name, column_name, cvs, counts),
+                        ZipfChoiceGenerator(table_name, column_name, vg.values, vg.counts),
+                        UniformChoiceGenerator(table_name, column_name, vg.values, vg.counts),
+                        WeightedChoiceGenerator(table_name, column_name, vg.cvs, vg.counts),
                     ]
             results = connection.execute(
                 text(
@@ -1138,81 +1200,59 @@ class ChoiceGeneratorFactory(GeneratorFactory):
                 )
             )
             if results is not None:
-                values = []  # All values found
-                counts = []  # The number or each value
-                cvs: list[
-                    dict[str, Any]
-                ] = []  # list of dicts with keys "v" and "count"
-                values_not_suppressed = (
-                    []
-                )  # All values found more than SUPPRESS_COUNT times
-                counts_not_suppressed = []  # The number for each value not suppressed
-                cvs_not_suppressed: list[
-                    dict[str, Any]
-                ] = []  # list of dicts with keys "v" and "count"
-                for result in results:
-                    c = result.f
-                    if c != 0:
-                        counts.append(c)
-                        v = result.v
-                        if type(v) is decimal.Decimal:
-                            v = float(v)
-                        values.append(v)
-                        cvs.append({"value": v, "count": c})
-                    if self.SUPPRESS_COUNT < c:
-                        counts_not_suppressed.append(c)
-                        v = result.v
-                        if type(v) is decimal.Decimal:
-                            v = float(v)
-                        values_not_suppressed.append(v)
-                        cvs_not_suppressed.append({"value": v, "count": c})
-                if counts:
+                vg = ValueGatherer(results, self.SUPPRESS_COUNT)
+                if vg.counts:
+                    generators += [
+                        ZipfChoiceGenerator(table_name, column_name, vg.values, vg.counts),
+                        UniformChoiceGenerator(table_name, column_name, vg.values, vg.counts),
+                        WeightedChoiceGenerator(table_name, column_name, vg.cvs, vg.counts),
+                    ]
                     generators += [
                         ZipfChoiceGenerator(
                             table_name,
                             column_name,
-                            values,
-                            counts,
+                            vg.values,
+                            vg.counts,
                             sample_count=self.SAMPLE_COUNT,
                         ),
                         UniformChoiceGenerator(
                             table_name,
                             column_name,
-                            values,
-                            counts,
+                            vg.values,
+                            vg.counts,
                             sample_count=self.SAMPLE_COUNT,
                         ),
                         WeightedChoiceGenerator(
                             table_name,
                             column_name,
-                            cvs,
-                            counts,
+                            vg.cvs,
+                            vg.counts,
                             sample_count=self.SAMPLE_COUNT,
                         ),
                     ]
-                if counts_not_suppressed:
+                if vg.counts_not_suppressed:
                     generators += [
                         ZipfChoiceGenerator(
                             table_name,
                             column_name,
-                            values_not_suppressed,
-                            counts_not_suppressed,
+                            vg.values_not_suppressed,
+                            vg.counts_not_suppressed,
                             sample_count=self.SAMPLE_COUNT,
                             suppress_count=self.SUPPRESS_COUNT,
                         ),
                         UniformChoiceGenerator(
                             table_name,
                             column_name,
-                            values_not_suppressed,
-                            counts_not_suppressed,
+                            vg.values_not_suppressed,
+                            vg.counts_not_suppressed,
                             sample_count=self.SAMPLE_COUNT,
                             suppress_count=self.SUPPRESS_COUNT,
                         ),
                         WeightedChoiceGenerator(
                             table_name=table_name,
                             column_name=column_name,
-                            values=cvs_not_suppressed,
-                            counts=counts,
+                            values=vg.cvs_not_suppressed,
+                            counts=vg.counts_not_suppressed,
                             sample_count=self.SAMPLE_COUNT,
                             suppress_count=self.SUPPRESS_COUNT,
                         ),
@@ -1221,7 +1261,7 @@ class ChoiceGeneratorFactory(GeneratorFactory):
 
 
 class ConstantGenerator(Generator):
-    def __init__(self, value):
+    def __init__(self, value: Any) -> None:
         super().__init__()
         self.value = value
         self.repr = repr(value)
@@ -1235,7 +1275,7 @@ class ConstantGenerator(Generator):
     def actual_kwargs(self) -> dict[str, Any]:
         return {"value": self.value}
 
-    def generate_data(self, count) -> list[Any]:
+    def generate_data(self, count: int) -> list[Any]:
         return [self.value for _ in range(count)]
 
 
@@ -1244,7 +1284,7 @@ class ConstantGeneratorFactory(GeneratorFactory):
     Just the null generator
     """
 
-    def get_generators(self, columns: list[Column], engine: Engine):
+    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
         if len(columns) != 1:
             return []
         column = columns[0]
@@ -1261,29 +1301,32 @@ class ConstantGeneratorFactory(GeneratorFactory):
 
 
 class MultivariateNormalGenerator(Generator):
+    """
+    Generator of multiple values drawn from a multivariate normal distribution.
+    """
     def __init__(
         self,
-        table_name: list[str],
+        table_name: str,
         column_names: list[str],
         query: str,
-        covariates: dict[str, float],
+        covariates: RowMapping,
         function_name: str,
-    ):
+    ) -> None:
         self._table = table_name
         self._columns = column_names
         self._query = query
         self._covariates = covariates
         self._function_name = function_name
 
-    def function_name(self):
+    def function_name(self) -> str:
         return "dist_gen." + self._function_name
 
-    def nominal_kwargs(self):
+    def nominal_kwargs(self) -> dict[str, Any]:
         return {
             "cov": f'SRC_STATS["auto__cov__{self._table}"]["results"][0]',
         }
 
-    def custom_queries(self):
+    def custom_queries(self) -> dict[str, Any]:
         cols = ", ".join(self._columns)
         return {
             f"auto__cov__{self._table}": {
@@ -1298,7 +1341,7 @@ class MultivariateNormalGenerator(Generator):
         """
         return {"cov": self._covariates}
 
-    def generate_data(self, count) -> list[Any]:
+    def generate_data(self, count: int) -> list[Any]:
         """
         Generate 'count' random data points for this column.
         """
@@ -1307,7 +1350,7 @@ class MultivariateNormalGenerator(Generator):
             for _ in range(count)
         ]
 
-    def fit(self, default=None) -> float | None:
+    def fit(self, default: float | None=None) -> float | None:
         return default
 
 
@@ -1375,7 +1418,7 @@ class MultivariateNormalGeneratorFactory(GeneratorFactory):
             f" FROM {subquery}{group_by_clause}) AS _q{suppress_clause}"
         )
 
-    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
         # For the case of one column we'll use GaussianGenerator
         if len(columns) < 2:
             return []
@@ -1417,17 +1460,23 @@ class MultivariateLogNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
         return f"LN({column})"
 
 
-def text_list(items: list[str]) -> str:
+def text_list(items: Iterable[str]) -> str:
     """
     Concatenate the items with commas and one "and".
     """
-    if not hasattr(items, "__getitem__"):
-        items = list(items)
-    if len(items) == 0:
+    item_i = iter(items)
+    try:
+        last_item = next(item_i)
+    except StopIteration:
         return ""
-    if len(items) == 1:
-        return items[0]
-    return ", ".join(items[:-1]) + " and " + items[-1]
+    try:
+        so_far = next(item_i)
+    except StopIteration:
+        return last_item
+    for item in item_i:
+        so_far += ", " + last_item
+        last_item = item
+    return so_far + " and " + last_item
 
 
 @dataclass
@@ -1448,7 +1497,7 @@ class RowPartition:
     # added): {index: value}
     constant_outputs: dict[int, Any]
     # The actual covariates from the source database
-    covariates: list[dict[str, float]]
+    covariates: Sequence[RowMapping]
 
     def comment(self) -> str:
         caveat = ""
@@ -1495,7 +1544,7 @@ class NullPartitionedNormalGenerator(Generator):
         function_name: str = "grouped_multivariate_lognormal",
         name_suffix: str | None = None,
         partition_count_query: str | None = None,
-        partition_counts: Sequence[RowMapping] | None = None,
+        partition_counts: Iterable[RowMapping] = [],
         partition_count_comment: str | None = None,
     ):
         self._query_name = query_name
@@ -1515,7 +1564,7 @@ class NullPartitionedNormalGenerator(Generator):
     def function_name(self) -> str:
         return "dist_gen.alternatives"
 
-    def _nominal_kwargs_with_combinations(self, index: int, partition: RowPartition):
+    def _nominal_kwargs_with_combinations(self, index: int, partition: RowPartition) -> dict[str, Any]:
         count = f'sum(r["count"] for r in SRC_STATS["auto__cov__{self._query_name}__alt_{index}"]["results"])'
         if not partition.included_numeric and not partition.included_choice:
             return {
@@ -1542,12 +1591,10 @@ class NullPartitionedNormalGenerator(Generator):
             },
         }
 
-    def _count_query_name(self):
-        if self._partition_count_query:
-            return f"auto__cov__{self._query_name}__counts"
-        return None
+    def _count_query_name(self) -> str:
+        return f"auto__cov__{self._query_name}__counts"
 
-    def nominal_kwargs(self):
+    def nominal_kwargs(self) -> dict[str, Any]:
         return {
             "alternative_configs": [
                 self._nominal_kwargs_with_combinations(index, self._partitions[index])
@@ -1556,7 +1603,7 @@ class NullPartitionedNormalGenerator(Generator):
             "counts": f'SRC_STATS["{self._count_query_name()}"]["results"]',
         }
 
-    def custom_queries(self):
+    def custom_queries(self) -> dict[str, Any]:
         partitions = {
             f"auto__cov__{self._query_name}__alt_{index}": {
                 "comment": partition.comment(),
@@ -1574,7 +1621,7 @@ class NullPartitionedNormalGenerator(Generator):
             **partitions,
         }
 
-    def _actual_kwargs_with_combinations(self, partition: RowPartition):
+    def _actual_kwargs_with_combinations(self, partition: RowPartition) -> dict[str, Any]:
         count = sum(row["count"] for row in partition.covariates)
         if not partition.included_numeric and not partition.included_choice:
             return {
@@ -1614,14 +1661,14 @@ class NullPartitionedNormalGenerator(Generator):
             "counts": self._partition_counts,
         }
 
-    def generate_data(self, count) -> list[Any]:
+    def generate_data(self, count: int) -> list[Any]:
         """
         Generate 'count' random data points for this column.
         """
         kwargs = self.actual_kwargs()
         return [dist_gen.alternatives(**kwargs) for _ in range(count)]
 
-    def fit(self, default=None) -> float | None:
+    def fit(self, default: float | None=None) -> float | None:
         return default
 
 
@@ -1690,6 +1737,12 @@ class NullPatternPartition:
 class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
     SAMPLE_COUNT = MAXIMUM_CHOICES
     SUPPRESS_COUNT = 5
+    EMPTY_RESULT = [RowMapping(
+        parent=sqlalchemy.engine.result.ResultMetaData(),
+        processors=None,
+        key_to_index={"count": 0},
+        data=(0,)
+    )]
 
     def function_name(self) -> str:
         return "grouped_multivariate_normal"
@@ -1739,7 +1792,7 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
             return f'SELECT COUNT(*) AS count, {index_exp} AS "index" FROM {table} GROUP BY "index"'
         return f'SELECT count, "index" FROM (SELECT COUNT(*) AS count, {index_exp} AS "index" FROM {table} GROUP BY "index") AS _q {where}'
 
-    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
         if len(columns) < 2:
             return []
         nullable_columns = self.get_nullable_columns(columns)
@@ -1767,7 +1820,7 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
                 partition_def.included_choice,
                 partition_def.excluded,
                 partition_def.nones,
-                {},
+                [],
             )
             query = self.query(
                 table=table,
@@ -1785,7 +1838,7 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
                 partition_def.included_choice,
                 partition_def.excluded,
                 partition_def.nones,
-                {},
+                [],
             )
         gens: list[Generator] = []
         try:
@@ -1846,7 +1899,7 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
         for rp in partitions.values():
             rp.covariates = connection.execute(text(rp.query)).mappings().fetchall()
             if not rp.covariates or rp.covariates[0]["count"] is None:
-                rp.covariates = [{"count": 0}]
+                rp.covariates = self.EMPTY_RESULT
             else:
                 found_nonzero = True
         return found_nonzero
