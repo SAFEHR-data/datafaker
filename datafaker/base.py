@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Generator, TypeVar
+from typing import Any, Callable, Generator
 
 import numpy as np
 import yaml
@@ -18,13 +18,11 @@ from sqlalchemy.schema import Table
 
 from datafaker.utils import (
     MAKE_VOCAB_PROGRESS_REPORT_EVERY,
+    T,
     logger,
     stream_yaml,
     table_row_count,
 )
-
-
-_T = TypeVar("_T")
 
 
 @functools.cache
@@ -33,7 +31,7 @@ def zipf_weights(size: int) -> list[float]:
     return [1 / (n * total) for n in range(1, size + 1)]
 
 
-def merge_with_constants(xs: list[_T], constants_at: dict[int, _T]) -> Generator[_T, None, None]:
+def merge_with_constants(xs: list[T], constants_at: dict[int, T]) -> Generator[T, None, None]:
     """
     Merge a list of items with other items that must be placed at certain indices.
     :param constants_at: A map of indices to objects that must be placed at
@@ -86,11 +84,11 @@ class DistributionGenerator:
     def lognormal(self, logmean: float, logsd: float) -> float:
         return random.lognormvariate(float(logmean), float(logsd))
 
-    def choice(self, a: list[_T]) -> _T:
+    def choice(self, a: list[T]) -> T:
         c = random.choice(a)
         return c["value"] if type(c) is dict and "value" in c else c
 
-    def zipf_choice(self, a: list[_T], n: int | None=None) -> _T:
+    def zipf_choice(self, a: list[T], n: int | None=None) -> T:
         if n is None:
             n = len(a)
         c = random.choices(a, weights=zipf_weights(n))[0]
@@ -113,7 +111,7 @@ class DistributionGenerator:
         c = random.choices(vs, weights=counts)[0]
         return c
 
-    def constant(self, value: _T) -> _T:
+    def constant(self, value: T) -> T:
         return value
 
     def multivariate_normal_np(self, cov: dict[str, Any]) -> np.typing.NDArray:
@@ -260,8 +258,8 @@ class DistributionGenerator:
         return getattr(self, name)(**alt["params"])
 
     def with_constants_at(
-        self, constants_at: dict[int, _T], subgen: str, params: dict[str, _T]
-    ) -> list[_T]:
+        self, constants_at: dict[int, T], subgen: str, params: dict[str, T]
+    ) -> list[T]:
         if subgen not in self.PERMITTED_SUBGENS:
             logger.error(
                 "subgenerator %s is not a valid name. Valid names are %s.",
@@ -272,7 +270,7 @@ class DistributionGenerator:
         logger.debug("Merging constants %s", constants_at)
         return list(merge_with_constants(subout, constants_at))
 
-    def truncated_string(self, subgen_fn: Callable[..., list[_T]], params: dict, length: int) -> list[_T]:
+    def truncated_string(self, subgen_fn: Callable[..., list[T]], params: dict, length: int) -> list[T]:
         """Calls ``subgen_fn(**params)`` and truncates the results to ``length``."""
         result = subgen_fn(**params)
         if result is None:

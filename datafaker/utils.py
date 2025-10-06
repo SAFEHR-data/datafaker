@@ -7,7 +7,7 @@ import logging
 import sys
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Final, Mapping, Optional, Union
+from typing import Any, Final, Mapping, Optional, TypeVar, Union
 
 import sqlalchemy
 import yaml
@@ -37,6 +37,8 @@ MAKE_VOCAB_PROGRESS_REPORT_EVERY = 10000
 CONFIG_SCHEMA_PATH: Final[Path] = (
     Path(__file__).parent / "json_schemas/config_schema.json"
 )
+
+T = TypeVar("T")
 
 
 def read_config_file(path: str) -> dict:

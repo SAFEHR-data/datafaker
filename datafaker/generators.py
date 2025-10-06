@@ -123,7 +123,7 @@ class Generator(ABC):
         Generate 'count' random data points for this column.
         """
 
-    def fit(self, default: float | None=None) -> float | None:
+    def fit(self, default: float=-1) -> float:
         """
         Return a value representing how well the distribution fits the real source data.
 
@@ -249,7 +249,7 @@ class GeneratorFactory(ABC):
     """
 
     @abstractmethod
-    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
         """
         Returns all the generators that might be appropriate for this column.
         """
@@ -353,7 +353,7 @@ class MultiGeneratorFactory(GeneratorFactory):
         super().__init__()
         self.factories = factories
 
-    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
         return [
             generator
             for factory in self.factories
@@ -427,7 +427,7 @@ class MimesisGenerator(MimesisGeneratorBase):
     def actual_kwargs(self) -> dict[str, Any]:
         return {}
 
-    def fit(self, default: float | None=None) -> float | None:
+    def fit(self, default: float=-1) -> float:
         return default if self._fit is None else self._fit
 
 
@@ -592,7 +592,7 @@ class MimesisStringGeneratorFactory(GeneratorFactory):
         "text.word",
     ]
 
-    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
         if len(columns) != 1:
             return []
         column = columns[0]
@@ -635,7 +635,7 @@ class MimesisFloatGeneratorFactory(GeneratorFactory):
     All Mimesis generators that return floating point numbers.
     """
 
-    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
         if len(columns) != 1:
             return []
         column = columns[0]
@@ -656,7 +656,7 @@ class MimesisDateGeneratorFactory(GeneratorFactory):
     All Mimesis generators that return dates.
     """
 
-    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
         if len(columns) != 1:
             return []
         column = columns[0]
@@ -671,7 +671,7 @@ class MimesisDateTimeGeneratorFactory(GeneratorFactory):
     All Mimesis generators that return datetimes.
     """
 
-    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
         if len(columns) != 1:
             return []
         column = columns[0]
@@ -688,7 +688,7 @@ class MimesisTimeGeneratorFactory(GeneratorFactory):
     All Mimesis generators that return times.
     """
 
-    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
         if len(columns) != 1:
             return []
         column = columns[0]
@@ -703,7 +703,7 @@ class MimesisIntegerGeneratorFactory(GeneratorFactory):
     All Mimesis generators that return integers.
     """
 
-    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
         if len(columns) != 1:
             return []
         column = columns[0]
@@ -756,7 +756,7 @@ class ContinuousDistributionGenerator(Generator):
             },
         }
 
-    def fit(self, default: float | None=None) -> float | None:
+    def fit(self, default: float=-1) -> float:
         if self.buckets is None:
             return default
         return self.buckets.fit_from_counts(self.expected_buckets)
@@ -827,7 +827,7 @@ class ContinuousDistributionGeneratorFactory(GeneratorFactory):
             UniformGenerator(table_name, column_name, buckets),
         ]
 
-    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
         if len(columns) != 1:
             return []
         column = columns[0]
@@ -906,7 +906,7 @@ class LogNormalGenerator(Generator):
             },
         }
 
-    def fit(self, default: float | None=None) -> float | None:
+    def fit(self, default: float=-1) -> float:
         if self.buckets is None:
             return default
         return self.buckets.fit_from_counts(self.expected_buckets)
@@ -1045,7 +1045,7 @@ class ChoiceGenerator(Generator):
             },
         }
 
-    def fit(self, default: float | None=None) -> float | None:
+    def fit(self, default: float=-1) -> float:
         return default if self._fit is None else self._fit
 
 
@@ -1165,7 +1165,7 @@ class ChoiceGeneratorFactory(GeneratorFactory):
     SAMPLE_COUNT = MAXIMUM_CHOICES
     SUPPRESS_COUNT = 5
 
-    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
         if len(columns) != 1:
             return []
         column = columns[0]
@@ -1284,7 +1284,7 @@ class ConstantGeneratorFactory(GeneratorFactory):
     Just the null generator
     """
 
-    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
         if len(columns) != 1:
             return []
         column = columns[0]
@@ -1350,7 +1350,7 @@ class MultivariateNormalGenerator(Generator):
             for _ in range(count)
         ]
 
-    def fit(self, default: float | None=None) -> float | None:
+    def fit(self, default: float=-1) -> float:
         return default
 
 
@@ -1418,7 +1418,7 @@ class MultivariateNormalGeneratorFactory(GeneratorFactory):
             f" FROM {subquery}{group_by_clause}) AS _q{suppress_clause}"
         )
 
-    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
         # For the case of one column we'll use GaussianGenerator
         if len(columns) < 2:
             return []
@@ -1668,7 +1668,7 @@ class NullPartitionedNormalGenerator(Generator):
         kwargs = self.actual_kwargs()
         return [dist_gen.alternatives(**kwargs) for _ in range(count)]
 
-    def fit(self, default: float | None=None) -> float | None:
+    def fit(self, default: float=-1) -> float:
         return default
 
 
@@ -1792,7 +1792,7 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
             return f'SELECT COUNT(*) AS count, {index_exp} AS "index" FROM {table} GROUP BY "index"'
         return f'SELECT count, "index" FROM (SELECT COUNT(*) AS count, {index_exp} AS "index" FROM {table} GROUP BY "index") AS _q {where}'
 
-    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
         if len(columns) < 2:
             return []
         nullable_columns = self.get_nullable_columns(columns)
