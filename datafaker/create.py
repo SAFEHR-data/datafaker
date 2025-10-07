@@ -276,9 +276,7 @@ def populate(
         try:
             with dst_conn.begin():
                 for _ in range(table_generator.num_rows_per_pass):
-                    stmt = insert(table).values(
-                        table_generator(dst_conn)
-                    )
+                    stmt = insert(table).values(table_generator(dst_conn))
                     dst_conn.execute(stmt)
                     row_counts[table.name] = row_counts.get(table.name, 0) + 1
                 dst_conn.commit()

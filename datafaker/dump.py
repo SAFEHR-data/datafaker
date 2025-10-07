@@ -10,6 +10,7 @@ from datafaker.utils import create_db_engine, get_sync_engine, logger
 if TYPE_CHECKING:
     from _csv import Writer
 
+
 def _make_csv_writer(file: io.TextIOBase) -> "Writer":
     """Make the standard CSV file writer"""
     return csv.writer(file, quoting=csv.QUOTE_MINIMAL)

@@ -1,10 +1,10 @@
+import typing
 from typing import Callable, Protocol
 
 import parsy
 from sqlalchemy import Column, Dialect, Engine, ForeignKey, MetaData, Table
 from sqlalchemy.dialects import oracle, postgresql
 from sqlalchemy.sql import schema, sqltypes
-import typing
 
 from datafaker.utils import make_foreign_key_name
 
@@ -268,7 +268,7 @@ def should_ignore_fk(fk: str, tables_dict: dict[str, table_t]) -> bool:
     return bool(tables_dict[fk_bits[0]].get("ignore", False))
 
 
-def dict_to_metadata(obj: dict, config_for_output: dict | None=None) -> MetaData:
+def dict_to_metadata(obj: dict, config_for_output: dict | None = None) -> MetaData:
     """
     Converts a dict to a SQL Alchemy MetaData object.
 

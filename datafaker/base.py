@@ -31,7 +31,9 @@ def zipf_weights(size: int) -> list[float]:
     return [1 / (n * total) for n in range(1, size + 1)]
 
 
-def merge_with_constants(xs: list[T], constants_at: dict[int, T]) -> Generator[T, None, None]:
+def merge_with_constants(
+    xs: list[T], constants_at: dict[int, T]
+) -> Generator[T, None, None]:
     """
     Merge a list of items with other items that must be placed at certain indices.
     :param constants_at: A map of indices to objects that must be placed at
@@ -88,7 +90,7 @@ class DistributionGenerator:
         c = random.choice(a)
         return c["value"] if type(c) is dict and "value" in c else c
 
-    def zipf_choice(self, a: list[T], n: int | None=None) -> T:
+    def zipf_choice(self, a: list[T], n: int | None = None) -> T:
         if n is None:
             n = len(a)
         c = random.choices(a, weights=zipf_weights(n))[0]
@@ -226,7 +228,9 @@ class DistributionGenerator:
             raise Exception("%s is not a permitted generator", name)
 
     def alternatives(
-        self, alternative_configs: list[dict[str, Any]], counts: list[dict[str, int]] | None
+        self,
+        alternative_configs: list[dict[str, Any]],
+        counts: list[dict[str, int]] | None,
     ) -> Any:
         """
         A generator that picks between other generators.
@@ -270,7 +274,9 @@ class DistributionGenerator:
         logger.debug("Merging constants %s", constants_at)
         return list(merge_with_constants(subout, constants_at))
 
-    def truncated_string(self, subgen_fn: Callable[..., list[T]], params: dict, length: int) -> list[T]:
+    def truncated_string(
+        self, subgen_fn: Callable[..., list[T]], params: dict, length: int
+    ) -> list[T]:
         """Calls ``subgen_fn(**params)`` and truncates the results to ``length``."""
         result = subgen_fn(**params)
         if result is None:

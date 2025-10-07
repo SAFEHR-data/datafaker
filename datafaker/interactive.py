@@ -9,18 +9,18 @@ from enum import Enum
 from pathlib import Path
 from types import TracebackType
 from typing import Any, Callable, Iterable, Optional, Type, cast
-from typing_extensions import Self
 
 import sqlalchemy
 from prettytable import PrettyTable
 from sqlalchemy import Column, Engine, ForeignKey, MetaData, Table, text
+from typing_extensions import Self
 
 from datafaker.generators import Generator, PredefinedGenerator, everything_factory
 from datafaker.utils import (
     T,
     create_db_engine,
-    get_sync_engine,
     fk_refers_to_ignored_table,
+    get_sync_engine,
     logger,
     primary_private_fks,
     table_is_private,
@@ -113,7 +113,11 @@ class DbCmd(ABC, cmd.Cmd):
         ...
 
     def __init__(
-        self, src_dsn: str, src_schema: str | None, metadata: MetaData, config: MutableMapping[str, Any]
+        self,
+        src_dsn: str,
+        src_schema: str | None,
+        metadata: MetaData,
+        config: MutableMapping[str, Any],
     ):
         super().__init__()
         self.config: MutableMapping[str, Any] = config
@@ -192,7 +196,7 @@ class DbCmd(ABC, cmd.Cmd):
             return True
         return False
 
-    def next_table(self, report: str="No more tables") -> bool:
+    def next_table(self, report: str = "No more tables") -> bool:
         """
         Move to the next table
         :return: True if there is another table to move to.
@@ -203,7 +207,7 @@ class DbCmd(ABC, cmd.Cmd):
         return True
 
     def table_name(self) -> str:
-        """ Get the name of the current table. """
+        """Get the name of the current table."""
         return str(self._table_entries[self.table_index].name)
 
     def table_metadata(self) -> Table:
@@ -351,7 +355,9 @@ class DbCmd(ABC, cmd.Cmd):
             rows = [row._tuple() for row in result.fetchmany(MAX_PEEK_ROWS)]
             self.print_table(list(result.keys()), rows)
 
-    def complete_peek(self, text: str, _line: str, _begidx: int, _endidx: int) -> list[str]:
+    def complete_peek(
+        self, text: str, _line: str, _begidx: int, _endidx: int
+    ) -> list[str]:
         if len(self._table_entries) <= self.table_index:
             return []
         return [
@@ -400,7 +406,11 @@ to exit this program."""
         return TableCmdTableEntry(name, TableType.GENERATE, TableType.GENERATE)
 
     def __init__(
-        self, src_dsn: str, src_schema: str | None, metadata: MetaData, config: MutableMapping[str, Any]
+        self,
+        src_dsn: str,
+        src_schema: str | None,
+        metadata: MetaData,
+        config: MutableMapping[str, Any],
     ) -> None:
         super().__init__(src_dsn, src_schema, metadata, config)
         self.set_prompt()
@@ -561,7 +571,9 @@ to exit this program."""
             return
         self.next_table(self.INFO_NO_MORE_TABLES)
 
-    def complete_next(self, text: str, _line: str, _begidx: int, _endidx: int) -> list[str]:
+    def complete_next(
+        self, text: str, _line: str, _begidx: int, _endidx: int
+    ) -> list[str]:
         return [
             entry.name for entry in self.table_entries if entry.name.startswith(text)
         ]
@@ -645,7 +657,9 @@ Type 'help data' for examples."""
                 number = 48
             self.print_column_data(column, number, min_length)
 
-    def complete_data(self, text: str, line: str, begidx: int, _endidx: int) -> list[str]:
+    def complete_data(
+        self, text: str, line: str, begidx: int, _endidx: int
+    ) -> list[str]:
         previous_parts = line[: begidx - 1].split()
         if len(previous_parts) != 2:
             return []
@@ -757,7 +771,9 @@ data from the database. Use 'quit' to exit this tool."""
                     return (query, src_stat.get("comment", ""))
         return None
 
-    def make_table_entry(self, name: str, table: Mapping) -> MissingnessCmdTableEntry | None:
+    def make_table_entry(
+        self, name: str, table: Mapping
+    ) -> MissingnessCmdTableEntry | None:
         if table.get("ignore", False):
             return None
         if table.get("vocabulary_table", False):
@@ -798,7 +814,11 @@ data from the database. Use 'quit' to exit this tool."""
         )
 
     def __init__(
-        self, src_dsn: str, src_schema: str | None, metadata: MetaData, config: MutableMapping
+        self,
+        src_dsn: str,
+        src_schema: str | None,
+        metadata: MetaData,
+        config: MutableMapping,
     ):
         """
         Initialise a MissingnessCmd.
@@ -814,7 +834,9 @@ data from the database. Use 'quit' to exit this tool."""
     def table_entries(self) -> list[MissingnessCmdTableEntry]:
         return cast(list[MissingnessCmdTableEntry], self._table_entries)
 
-    def find_entry_by_table_name(self, table_name: str) -> MissingnessCmdTableEntry | None:
+    def find_entry_by_table_name(
+        self, table_name: str
+    ) -> MissingnessCmdTableEntry | None:
         entry = super().find_entry_by_table_name(table_name)
         if entry is None:
             return None
@@ -927,7 +949,9 @@ data from the database. Use 'quit' to exit this tool."""
             return
         self.next_table(self.INFO_NO_MORE_TABLES)
 
-    def complete_next(self, text: str, _line: str, _begidx: int, _endidx: int) -> list[str]:
+    def complete_next(
+        self, text: str, _line: str, _begidx: int, _endidx: int
+    ) -> list[str]:
         return [
             entry.name for entry in self.table_entries if entry.name.startswith(text)
         ]
@@ -1000,7 +1024,10 @@ data from the database. Use 'quit' to exit this tool."""
 
 
 def update_missingness(
-    src_dsn: str, src_schema: str | None, metadata: MetaData, config: MutableMapping[str, Any]
+    src_dsn: str,
+    src_schema: str | None,
+    metadata: MetaData,
+    config: MutableMapping[str, Any],
 ) -> Mapping[str, Any]:
     with MissingnessCmd(src_dsn, src_schema, metadata, config) as mc:
         mc.cmdloop()
@@ -1012,6 +1039,7 @@ class GeneratorInfo:
     """
     A generator and the columns it assigns to.
     """
+
     columns: list[str]
     gen: Generator | None
 
@@ -1023,6 +1051,7 @@ class GeneratorCmdTableEntry(TableEntry):
     Includes the original setting and the currently configured
     generators.
     """
+
     old_generators: list[GeneratorInfo]
     new_generators: list[GeneratorInfo]
 
@@ -1031,6 +1060,7 @@ class GeneratorCmd(DbCmd):
     """
     Interactive command shell for setting generators.
     """
+
     intro = "Interactive generator configuration. Type ? for help.\n"
     doc_leader = """Use command 'propose' for a list of generators applicable to the
 current column, then command 'compare' to see how these perform
@@ -1062,7 +1092,9 @@ information about the columns in the current table. Use 'peek',
         r'\bSRC_STATS\["([^"]+)"\](\["results"\]\[0\]\["([^"]+)"\])?'
     )
 
-    def make_table_entry(self, table_name: str, table: Mapping) -> GeneratorCmdTableEntry | None:
+    def make_table_entry(
+        self, table_name: str, table: Mapping
+    ) -> GeneratorCmdTableEntry | None:
         if table.get("ignore", False):
             return None
         if table.get("vocabulary_table", False):
@@ -1130,7 +1162,11 @@ information about the columns in the current table. Use 'peek',
         )
 
     def __init__(
-        self, src_dsn: str, src_schema: str | None, metadata: MetaData, config: MutableMapping[str, Any]
+        self,
+        src_dsn: str,
+        src_schema: str | None,
+        metadata: MetaData,
+        config: MutableMapping[str, Any],
     ) -> None:
         """
         Initialise a GeneratorCmd
@@ -1148,7 +1184,9 @@ information about the columns in the current table. Use 'peek',
     def table_entries(self) -> list[GeneratorCmdTableEntry]:
         return cast(list[GeneratorCmdTableEntry], self._table_entries)
 
-    def find_entry_by_table_name(self, table_name: str) -> GeneratorCmdTableEntry | None:
+    def find_entry_by_table_name(
+        self, table_name: str
+    ) -> GeneratorCmdTableEntry | None:
         entry = super().find_entry_by_table_name(table_name)
         if entry is None:
             return None
@@ -1465,7 +1503,9 @@ information about the columns in the current table. Use 'peek',
         self.generator_index = next_gi
         self.set_prompt()
 
-    def complete_next(self, text: str, _line: str, _begidx: int, _endidx: int) -> list[str]:
+    def complete_next(
+        self, text: str, _line: str, _begidx: int, _endidx: int
+    ) -> list[str]:
         parts = text.split(".", 1)
         first_part = parts[0]
         if 1 < len(parts):
@@ -1628,7 +1668,9 @@ information about the columns in the current table. Use 'peek',
                 cq_key2args[cq_key],
             )
 
-    def _get_custom_queries_from(self, out: dict[str, Any], nominal: Any, actual: Any) -> None:
+    def _get_custom_queries_from(
+        self, out: dict[str, Any], nominal: Any, actual: Any
+    ) -> None:
         if type(nominal) is str:
             src_stat_groups = self.SRC_STAT_RE.search(nominal)
             if src_stat_groups:
@@ -1689,7 +1731,9 @@ information about the columns in the current table. Use 'peek',
         select_q = self._get_aggregate_query([gen], table_name)
         self.print("{0}; providing the following values: {1}", select_q, vals)
 
-    def _get_column_data(self, count: int, to_str: Callable[[Any], str]=repr) -> list[list[str]]:
+    def _get_column_data(
+        self, count: int, to_str: Callable[[Any], str] = repr
+    ) -> list[list[str]]:
         columns = self.get_column_names()
         columns_string = ", ".join(columns)
         pred = " AND ".join(f"{column} IS NOT NULL" for column in columns)
@@ -1852,7 +1896,9 @@ information about the columns in the current table. Use 'peek',
         table_entry.new_generators = new_new_generators
         self.set_prompt()
 
-    def complete_merge(self, text: str, _line: str, _begidx: int, _endidx: int) -> list[str]:
+    def complete_merge(
+        self, text: str, _line: str, _begidx: int, _endidx: int
+    ) -> list[str]:
         last_arg = text.split()[-1]
         table_entry: GeneratorCmdTableEntry | None = self.get_table()
         if table_entry is None:
@@ -1905,7 +1951,9 @@ information about the columns in the current table. Use 'peek',
         )
         self.set_prompt()
 
-    def complete_unmerge(self, text: str, _line: str, _begidx: int, _endidx: int) -> list[str]:
+    def complete_unmerge(
+        self, text: str, _line: str, _begidx: int, _endidx: int
+    ) -> list[str]:
         last_arg = text.split()[-1]
         table_entry: GeneratorCmdTableEntry | None = self.get_table()
         if table_entry is None:
