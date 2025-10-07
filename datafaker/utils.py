@@ -2,12 +2,23 @@
 import ast
 import gzip
 import importlib.util
+import io
 import json
 import logging
 import sys
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Final, Mapping, Optional, TypeVar, Union
+from typing import (
+    Any,
+    Callable,
+    Final,
+    Generator,
+    Iterable,
+    Mapping,
+    Optional,
+    TypeVar,
+    Union,
+)
 
 import sqlalchemy
 import yaml
@@ -39,6 +50,7 @@ CONFIG_SCHEMA_PATH: Final[Path] = (
 )
 
 T = TypeVar("T")
+_K = TypeVar("_K")
 
 
 def read_config_file(path: str) -> dict:
@@ -76,16 +88,18 @@ def import_file(file_path: str) -> ModuleType:
         ModuleType
     """
     spec = importlib.util.spec_from_file_location("df", file_path)
+    if spec is None or spec.loader is None:
+        raise Exception(f"No loadable module at {file_path}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
-def open_file(file_name):
+def open_file(file_name: str | Path) -> io.BufferedWriter:
     return Path(file_name).open("wb")
 
 
-def open_compressed_file(file_name):
+def open_compressed_file(file_name: str | Path) -> gzip.GzipFile:
     return gzip.GzipFile(file_name, "wb")
 
 
@@ -211,14 +225,14 @@ class StdoutHandler(logging.Handler):
     We aren't using StreamHandler because that confuses typer.testing.CliRunner
     """
 
-    def flush(self):
+    def flush(self) -> None:
         self.acquire()
         try:
             sys.stdout.flush()
         finally:
             self.release()
 
-    def emit(self, record):
+    def emit(self, record: Any) -> None:
         try:
             msg = self.format(record)
             sys.stdout.write(msg + "\n")
@@ -235,14 +249,14 @@ class StderrHandler(logging.Handler):
     We aren't using StreamHandler because that confuses typer.testing.CliRunner
     """
 
-    def flush(self):
+    def flush(self) -> None:
         self.acquire()
         try:
             sys.stderr.flush()
         finally:
             self.release()
 
-    def emit(self, record):
+    def emit(self, record: Any) -> None:
         try:
             msg = self.format(record)
             sys.stderr.write(msg + "\n")
@@ -279,17 +293,17 @@ def conf_logger(verbose: bool) -> None:
     logging.getLogger("blib2to3.pgen2.driver").setLevel(logging.WARNING)
 
 
-def get_flag(maybe_dict, key):
+def get_flag(maybe_dict: Any, key: Any) -> Any:
     """Returns maybe_dict[key] or False if that doesn't exist"""
     return type(maybe_dict) is dict and maybe_dict.get(key, False)
 
 
-def get_property(maybe_dict, key, default):
+def get_property(maybe_dict: Mapping[_K, Any], key: _K, default: T) -> T:
     """Returns maybe_dict[key] or default if that doesn't exist"""
     return maybe_dict.get(key, default) if type(maybe_dict) is dict else default
 
 
-def fk_refers_to_ignored_table(fk: ForeignKey):
+def fk_refers_to_ignored_table(fk: ForeignKey) -> bool:
     """
     Does this foreign key refer to a table that is configured as ignore in config.yaml
     """
@@ -300,7 +314,7 @@ def fk_refers_to_ignored_table(fk: ForeignKey):
     return False
 
 
-def fk_constraint_refers_to_ignored_table(fk: ForeignKeyConstraint):
+def fk_constraint_refers_to_ignored_table(fk: ForeignKeyConstraint) -> bool:
     """
     Does this foreign key constraint refer to a table that is configured as ignore in config.yaml
     """
@@ -331,7 +345,8 @@ def table_is_private(config: Mapping, table_name: str) -> bool:
     if type(ts) is not dict:
         return False
     t = ts.get(table_name, {})
-    return t.get("primary_private", False)
+    ret = t.get("primary_private", False)
+    return ret if type(ret) is bool else False
 
 
 def primary_private_fks(config: Mapping, table: Table) -> list[str]:
@@ -364,7 +379,11 @@ def make_foreign_key_name(table_name: str, col_name: str) -> str:
     return f"{table_name}_{col_name}_fkey"
 
 
-def remove_vocab_foreign_key_constraints(metadata, config, dst_engine):
+def remove_vocab_foreign_key_constraints(
+    metadata: MetaData,
+    config: Mapping[str, Any],
+    dst_engine: Connection | Engine,
+) -> None:
     vocab_tables = get_vocabulary_table_names(config)
     for vocab_table_name in vocab_tables:
         vocab_table = metadata.tables[vocab_table_name]
@@ -392,7 +411,20 @@ def remove_vocab_foreign_key_constraints(metadata, config, dst_engine):
                         raise e
 
 
-def reinstate_vocab_foreign_key_constraints(metadata, meta_dict, config, dst_engine):
+def reinstate_vocab_foreign_key_constraints(
+    metadata: MetaData,
+    meta_dict: Mapping[str, Any],
+    config: Mapping[str, Any],
+    dst_engine: Connection | Engine,
+) -> None:
+    """
+    Put the removed foreign keys back into the destination database.
+    :param metadata: The SQLAlchemy metadata for the destination database.
+    :param meta_dict: The ``orm.yaml`` configuration that ``metadata`` was
+    created from.
+    :param config: The ``config.yaml`` data.
+    :param dst_engine: The connection to the destination database.
+    """
     vocab_tables = get_vocabulary_table_names(config)
     for vocab_table_name in vocab_tables:
         vocab_table = metadata.tables[vocab_table_name]
@@ -419,7 +451,7 @@ def reinstate_vocab_foreign_key_constraints(metadata, meta_dict, config, dst_eng
             )
 
 
-def stream_yaml(yaml_file_handle):
+def stream_yaml(yaml_file_handle: io.TextIOBase) -> Generator[Any]:
     """
     Stream a yaml list into an iterator.
 
@@ -441,23 +473,24 @@ def stream_yaml(yaml_file_handle):
         buf += line
 
 
-def topological_sort(input_nodes, get_dependencies_fn):
+def topological_sort(
+    input_nodes: Iterable[T], get_dependencies_fn: Callable[[T], set[T]]
+) -> tuple[list[T], list[list[T]]]:
     """
     Topoligically sort input_nodes and find any cycles.
 
-    Returns a pair (sorted, cycles).
+    Returns a pair ``(sorted, cycles)``.
 
-    'sorted' is a list of all the elements of input_nodes sorted
+    ``sorted`` is a list of all the elements of input_nodes sorted
     so that dependencies returned by get_dependencies_fn
     come after nodes that depend on them. Cycles are
     arbitrarily broken for this.
 
-    'cycles' is a list of lists of dependency cycles.
+    ``cycles`` is a list of lists of dependency cycles.
 
-    arguments:
-    input_nodes: an iterator of nodes to sort. Duplicates
+    :param input_nodes: an iterator of nodes to sort. Duplicates
     are discarded.
-    get_dependencies_fn: a function that takes an input
+    :param get_dependencies_fn: a function that takes an input
     node and returns a list of its dependencies. Any
     dependencies not in the input_nodes list are ignored.
     """
@@ -503,6 +536,21 @@ def sorted_non_vocabulary_tables(metadata: MetaData, config: Mapping) -> list[Ta
     return [metadata.tables[tn] for tn in sorted]
 
 
+def underline_error(e: SyntaxError) -> str:
+    """
+    Make an underline for this error.
+    :return: string beginning ``\n`` then spaces then ``^^^^``
+    underlining the error, or a null string if this was not possible.
+    """
+    start = e.offset
+    if start is None:
+        return ""
+    end = e.end_offset
+    if end is None or end <= start:
+        end = start + 1
+    return "\n" + " " * start + "^" * (end - start)
+
+
 def generators_require_stats(config: Mapping) -> bool:
     """
     Returns true if any of the arguments for any of the generators reference SRC_STATS.
@@ -536,12 +584,12 @@ def generators_require_stats(config: Mapping) -> bool:
             except SyntaxError as e:
                 errors.append(
                     (
-                        "Syntax error in argument %d of %s: %s\n%s\n%s",
+                        "Syntax error in argument %d of %s: %s\n%s%s",
                         n + 1,
                         where,
                         e.msg,
                         arg,
-                        " " * e.offset + "^" * max(1, e.end_offset - e.offset),
+                        underline_error(e),
                     )
                 )
         for k, arg in call.get("kwargs", {}).items():
@@ -557,12 +605,12 @@ def generators_require_stats(config: Mapping) -> bool:
                 except SyntaxError as e:
                     errors.append(
                         (
-                            "Syntax error in argument %s of %s: %s\n%s\n%s",
+                            "Syntax error in argument %s of %s: %s\n%s%s",
                             k,
                             where,
                             e.msg,
                             arg,
-                            " " * e.offset + "^" * max(1, e.end_offset - e.offset),
+                            underline_error(e),
                         )
                     )
     for error in errors:

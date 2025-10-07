@@ -5,7 +5,9 @@ import inspect
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Final, Mapping, Optional, Sequence, Tuple
+from types import TracebackType
+from typing import Any, Callable, Final, Mapping, Optional, Sequence, Tuple, Type
+from typing_extensions import Self
 
 import pandas as pd
 import snsql
@@ -13,15 +15,17 @@ import yaml
 from black import FileMode, format_str
 from jinja2 import Environment, FileSystemLoader, Template
 from mimesis.providers.base import BaseProvider
-from sqlalchemy import Engine, MetaData, UniqueConstraint, text
+from sqlalchemy import CursorResult, Engine, MetaData, UniqueConstraint, text
 from sqlalchemy.dialects import postgresql
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.engine import Connection
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from sqlalchemy.schema import Column, Table
-from sqlalchemy.sql import sqltypes, type_api
+from sqlalchemy.sql import Executable, sqltypes, type_api
 
 from datafaker import providers
 from datafaker.settings import get_settings
 from datafaker.utils import (
+    MaybeAsyncEngine,
     create_db_engine,
     download_table,
     get_flag,
@@ -91,6 +95,18 @@ def make_column_choices(
 
 
 @dataclass
+class _PrimaryConstraint:
+    """
+    Describes a Uniqueness constraint for when multiple
+    columns in a table comprise the primary key. Not a
+    real constraint, but enough to write df.py.
+    """
+
+    columns: list[Column]
+    name: str
+
+
+@dataclass
 class TableGeneratorInfo:
     """Contains the df.py content related to regular tables."""
 
@@ -100,7 +116,9 @@ class TableGeneratorInfo:
     column_choices: list[ColumnChoice]
     rows_per_pass: int
     row_gens: list[RowGeneratorInfo] = field(default_factory=list)
-    unique_constraints: list[UniqueConstraint] = field(default_factory=list)
+    unique_constraints: Sequence[UniqueConstraint | _PrimaryConstraint] = field(
+        default_factory=list
+    )
 
 
 @dataclass
@@ -112,7 +130,7 @@ class StoryGeneratorInfo:
     num_stories_per_pass: int
 
 
-def _render_value(v) -> str:
+def _render_value(v: Any) -> str:
     if type(v) is list:
         return "[" + ", ".join(_render_value(x) for x in v) + "]"
     if type(v) is set:
@@ -150,7 +168,7 @@ def _get_row_generator(
 ) -> tuple[list[RowGeneratorInfo], list[str]]:
     """Get the row generators information, for the given table."""
     row_gen_info: list[RowGeneratorInfo] = []
-    config: list[dict[str, Any]] = get_property(table_config, "row_generators", [])
+    config: list[Mapping[str, Any]] = get_property(table_config, "row_generators", [])
     columns_covered = []
     for gen_conf in config:
         name: str = gen_conf["name"]
@@ -220,14 +238,14 @@ def _get_default_generator(column: Column) -> RowGeneratorInfo:
     (
         variable_names,
         generator_function,
-        generator_arguments,
+        generator_kwargs,
     ) = _get_provider_for_column(column)
 
     return RowGeneratorInfo(
         primary_key=column.primary_key,
         variable_names=variable_names,
         function_call=_get_function_call(
-            function_name=generator_function, keyword_arguments=generator_arguments
+            function_name=generator_function, keyword_arguments=generator_kwargs
         ),
     )
 
@@ -238,13 +256,14 @@ def _numeric_generator(column: Column) -> tuple[str, dict[str, str]]:
     that limit its range to the permitted scale.
     """
     column_type = column.type
-    if column_type.scale is None:
+    scale = getattr(column_type, "scale", None)
+    if scale is None:
         return ("generic.numeric.float_number", {})
     return (
         "generic.numeric.float_number",
         {
-            "start": 0,
-            "end": 10**column_type.scale - 1,
+            "start": "0",
+            "end": str(10**scale - 1),
         },
     )
 
@@ -284,7 +303,7 @@ _YEAR_SUMMARY_QUERY = (
 @dataclass
 class GeneratorInfo:
     # Name or function to generate random objects of this type (not using summary data)
-    generator: str | Callable[[Column], str]
+    generator: str | Callable[[Column], tuple[str, dict[str, str]]]
     # SQL query that gets the data to supply as arguments to the generator
     # ({column} and {table} will be interpolated)
     summary_query: str | None = None
@@ -298,13 +317,18 @@ class GeneratorInfo:
     choice: bool = False
 
 
-def get_result_mappings(info: GeneratorInfo, results) -> dict[str, Any]:
+def get_result_mappings(
+    info: GeneratorInfo, results: CursorResult
+) -> dict[str, Any] | None:
     """
     Gets a mapping from the results of a database query as a Python
     dictionary converted according to the GeneratorInfo provided.
     """
-    kw = {}
-    for k, v in results.mappings().first().items():
+    kw: dict[str, Any] = {}
+    mapping = results.mappings().first()
+    if mapping is None:
+        return kw
+    for k, v in mapping.items():
         if v is None:
             return None
         conv_fn = info.arg_types.get(k, float)
@@ -374,7 +398,7 @@ def _get_info_for_column_type(column_t: type) -> GeneratorInfo | None:
 
 def _get_generator_for_column(
     column_t: type,
-) -> str | Callable[[type_api.TypeEngine], tuple[str, dict[str, str]]]:
+) -> str | Callable[[Column], tuple[str, dict[str, str]]] | None:
     """
     Gets a generator from a column type.
 
@@ -386,7 +410,7 @@ def _get_generator_for_column(
     return None if info is None else info.generator
 
 
-def _get_generator_and_arguments(column: Column) -> tuple[str, dict[str, str]]:
+def _get_generator_and_arguments(column: Column) -> tuple[str | None, dict[str, str]]:
     """
     Gets the generator and its arguments from the column type, returning
     a tuple of a string representing the generator callable and a dict of
@@ -442,18 +466,6 @@ def _constraint_sort_key(constraint: UniqueConstraint) -> str:
     )
 
 
-class _PrimaryConstraint:
-    """
-    Describes a Uniqueness constraint for when multiple
-    columns in a table comprise the primary key. Not a
-    real constraint, but enough to write df.py.
-    """
-
-    def __init__(self, *columns: Column, name: str):
-        self.name = name
-        self.columns = columns
-
-
 def _get_generator_for_table(
     table_config: Mapping[str, Any],
     table: Table,
@@ -468,10 +480,12 @@ def _get_generator_for_table(
         key=_constraint_sort_key,
     )
     primary_keys = [c for c in table.columns if c.primary_key]
+    constraints: Sequence[UniqueConstraint | _PrimaryConstraint] = unique_constraints
     if 1 < len(primary_keys):
-        unique_constraints.append(
-            _PrimaryConstraint(*primary_keys, name=f"{table.name}_primary_key")
+        primary_constraint = _PrimaryConstraint(
+            columns=primary_keys, name=f"{table.name}_primary_key"
         )
+        constraints = unique_constraints + [primary_constraint]
     column_choices = make_column_choices(table_config)
     if column_choices:
         nonnull_columns = {
@@ -487,7 +501,7 @@ def _get_generator_for_table(
         nonnull_columns=nonnull_columns,
         column_choices=column_choices,
         rows_per_pass=get_property(table_config, "num_rows_per_pass", 1),
-        unique_constraints=unique_constraints,
+        unique_constraints=constraints,
     )
 
     row_gen_info_data, columns_covered = _get_row_generator(table_config)
@@ -525,7 +539,7 @@ def make_vocabulary_tables(
     overwrite_files: bool,
     compress: bool,
     table_names: set[str] | None = None,
-):
+) -> None:
     """
     Extracts the data from the source database for each
     vocabulary table.
@@ -660,8 +674,8 @@ def _generate_vocabulary_table(
     table: Table,
     engine: Engine,
     overwrite_files: bool = False,
-    compress=False,
-):
+    compress: bool = False,
+) -> None:
     """
     Pulls data out of the source database to make a vocabulary YAML file
     """
@@ -712,33 +726,42 @@ def make_tables_file(
 
 
 class DbConnection:
-    def __init__(self, engine):
-        self._engine = engine
+    def __init__(self, engine: MaybeAsyncEngine) -> None:
+        """
+        Initialise an unopened database connection.
 
-    async def __aenter__(self):
+        Could be synchronous or asynchronous.
+        """
+        self._engine = engine
+        self._connection: Connection | AsyncConnection
+
+    async def __aenter__(self) -> Self:
         if isinstance(self._engine, AsyncEngine):
             self._connection = await self._engine.connect()
         else:
             self._connection = self._engine.connect()
         return self
 
-    async def __aexit__(self, _type, _value, _tb):
-        if isinstance(self._engine, AsyncEngine):
+    async def __aexit__(
+        self,
+        _type: Optional[Type[BaseException]],
+        _value: Optional[BaseException],
+        _tb: Optional[TracebackType],
+    ) -> None:
+        if isinstance(self._connection, AsyncConnection):
             await self._connection.close()
-        else:
-            self._connection.close()
+        self._connection.close()
 
-    async def execute_raw_query(self, query):
-        if isinstance(self._engine, AsyncEngine):
+    async def execute_raw_query(self, query: Executable) -> CursorResult:
+        if isinstance(self._connection, AsyncConnection):
             return await self._connection.execute(query)
-        else:
-            return self._connection.execute(query)
+        return self._connection.execute(query)
 
-    async def table_row_count(self, table_name: str):
+    async def table_row_count(self, table_name: str) -> int:
         with await self.execute_raw_query(
             text(f"SELECT COUNT(*) FROM {table_name}")
         ) as result:
-            return result.scalar_one()
+            return int(result.scalar_one())
 
     async def execute_query(self, query_block: Mapping[str, Any]) -> Any:
         """Execute query in query_block."""
@@ -766,19 +789,19 @@ class DbConnection:
         return final_result
 
 
-def fix_type(value):
+def fix_type(value: Any) -> Any:
     if type(value) is decimal.Decimal:
         return float(value)
     return value
 
 
-def fix_types(dics):
+def fix_types(dics: list[dict]) -> list[dict]:
     return [{k: fix_type(v) for k, v in dic.items()} for dic in dics]
 
 
 async def make_src_stats(
     dsn: str, config: Mapping, metadata: MetaData, schema_name: Optional[str] = None
-) -> dict[str, list[dict]]:
+) -> dict[str, dict[str, Any]]:
     """Run the src-stats queries specified by the configuration.
 
     Query the src database with the queries in the src-stats block of the `config`
@@ -801,7 +824,7 @@ async def make_src_stats(
 
 async def make_src_stats_connection(
     config: Mapping, db_conn: DbConnection, metadata: MetaData
-):
+) -> dict[str, dict[str, Any]]:
     date_string = datetime.today().strftime("%Y-%m-%d %H:%M:%S")
     query_blocks = config.get("src-stats", [])
     results = await asyncio.gather(
