@@ -113,7 +113,7 @@ class DbCmd(ABC, cmd.Cmd):
         ...
 
     def __init__(
-        self, src_dsn: str, src_schema: str, metadata: MetaData, config: MutableMapping[str, Any]
+        self, src_dsn: str, src_schema: str | None, metadata: MetaData, config: MutableMapping[str, Any]
     ):
         super().__init__()
         self.config: MutableMapping[str, Any] = config
@@ -400,7 +400,7 @@ to exit this program."""
         return TableCmdTableEntry(name, TableType.GENERATE, TableType.GENERATE)
 
     def __init__(
-        self, src_dsn: str, src_schema: str, metadata: MetaData, config: MutableMapping[str, Any]
+        self, src_dsn: str, src_schema: str | None, metadata: MetaData, config: MutableMapping[str, Any]
     ) -> None:
         super().__init__(src_dsn, src_schema, metadata, config)
         self.set_prompt()
@@ -689,7 +689,7 @@ Type 'help data' for examples."""
 
 
 def update_config_tables(
-    src_dsn: str, src_schema: str, metadata: MetaData, config: MutableMapping
+    src_dsn: str, src_schema: str | None, metadata: MetaData, config: MutableMapping
 ) -> Mapping[str, Any]:
     with TableCmd(src_dsn, src_schema, metadata, config) as tc:
         tc.cmdloop()
@@ -798,7 +798,7 @@ data from the database. Use 'quit' to exit this tool."""
         )
 
     def __init__(
-        self, src_dsn: str, src_schema: str, metadata: MetaData, config: MutableMapping
+        self, src_dsn: str, src_schema: str | None, metadata: MetaData, config: MutableMapping
     ):
         """
         Initialise a MissingnessCmd.
@@ -1000,7 +1000,7 @@ data from the database. Use 'quit' to exit this tool."""
 
 
 def update_missingness(
-    src_dsn: str, src_schema: str, metadata: MetaData, config: MutableMapping[str, Any]
+    src_dsn: str, src_schema: str | None, metadata: MetaData, config: MutableMapping[str, Any]
 ) -> Mapping[str, Any]:
     with MissingnessCmd(src_dsn, src_schema, metadata, config) as mc:
         mc.cmdloop()
@@ -1130,7 +1130,7 @@ information about the columns in the current table. Use 'peek',
         )
 
     def __init__(
-        self, src_dsn: str, src_schema: str, metadata: MetaData, config: MutableMapping[str, Any]
+        self, src_dsn: str, src_schema: str | None, metadata: MetaData, config: MutableMapping[str, Any]
     ) -> None:
         """
         Initialise a GeneratorCmd
@@ -1530,8 +1530,8 @@ information about the columns in the current table. Use 'peek',
         if self.generators is None:
             columns = self.column_metadata()
             gens = everything_factory().get_generators(columns, self.sync_engine)
-            gens.sort(key=lambda g: g.fit(9999))
-            self.generators = gens
+            sorted_gens = sorted(gens, key=lambda g: g.fit(9999))
+            self.generators = sorted_gens
             self.generators_valid_columns = (
                 self.table_index,
                 self.get_column_names().copy(),
@@ -1919,7 +1919,7 @@ information about the columns in the current table. Use 'peek',
 
 def update_config_generators(
     src_dsn: str,
-    src_schema: str,
+    src_schema: str | None,
     metadata: MetaData,
     config: MutableMapping[str, Any],
     spec_path: Path | None,

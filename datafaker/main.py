@@ -1,11 +1,12 @@
 """Entrypoint for the datafaker package."""
 import asyncio
+import io
 import json
 import sys
 from enum import Enum
 from importlib import metadata
 from pathlib import Path
-from typing import Final, Optional
+from typing import Any, Final, Optional
 
 import yaml
 from jsonschema.exceptions import ValidationError
@@ -68,7 +69,7 @@ def _require_src_db_dsn(settings: Settings) -> str:
     return src_dsn
 
 
-def load_metadata_config(orm_file_name, config: dict | None = None):
+def load_metadata_config(orm_file_name: str, config: dict | None = None) -> Any:
     with open(orm_file_name) as orm_fh:
         meta_dict = yaml.load(orm_fh, yaml.Loader)
         tables_dict = meta_dict.get("tables", {})
@@ -80,12 +81,12 @@ def load_metadata_config(orm_file_name, config: dict | None = None):
         return meta_dict
 
 
-def load_metadata(orm_file_name, config: dict | None = None):
+def load_metadata(orm_file_name: str, config: dict | None = None) -> Any:
     meta_dict = load_metadata_config(orm_file_name, config)
     return dict_to_metadata(meta_dict, None)
 
 
-def load_metadata_for_output(orm_file_name, config: dict | None = None):
+def load_metadata_for_output(orm_file_name: str, config: dict | None = None) -> Any:
     """
     Load metadata excluding any foreign keys pointing to ignored tables.
     """
@@ -96,7 +97,7 @@ def load_metadata_for_output(orm_file_name, config: dict | None = None):
 @app.callback()
 def main(
     verbose: bool = Option(False, "--verbose", "-v", help="Print more information.")
-):
+) -> None:
     conf_logger(verbose)
 
 
@@ -202,7 +203,7 @@ def create_tables(
 def create_generators(
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
     df_file: str = Option(DF_FILENAME, help="Path to write Python generators to."),
-    config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
+    config_file: str = Option(CONFIG_FILENAME, help="The configuration file"),
     stats_file: Optional[str] = Option(
         None,
         help=(
@@ -348,11 +349,11 @@ def make_tables(
 
 @app.command()
 def configure_tables(
-    config_file: Optional[str] = Option(
+    config_file: str = Option(
         CONFIG_FILENAME, help="Path to write the configuration file to"
     ),
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
-):
+) -> None:
     """
     Interactively set tables to ignored, vocabulary or primary private.
     """
@@ -380,11 +381,11 @@ def configure_tables(
 
 @app.command()
 def configure_missing(
-    config_file: Optional[str] = Option(
+    config_file: str = Option(
         CONFIG_FILENAME, help="Path to write the configuration file to"
     ),
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
-):
+) -> None:
     """
     Interactively set the missingness of the generated data.
     """
@@ -392,11 +393,13 @@ def configure_missing(
     settings = get_settings()
     src_dsn: str = _require_src_db_dsn(settings)
     config_file_path = Path(config_file)
-    config = {}
+    config: dict[str, Any] = {}
     if config_file_path.exists():
-        config = yaml.load(
+        config_any = yaml.load(
             config_file_path.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader
         )
+        if type(config_any) is dict:
+            config = config_any
     metadata = load_metadata(orm_file, config)
     config_updated = update_missingness(src_dsn, settings.src_schema, metadata, config)
     if config_updated is None:
@@ -409,7 +412,7 @@ def configure_missing(
 
 @app.command()
 def configure_generators(
-    config_file: Optional[str] = Option(
+    config_file: str = Option(
         CONFIG_FILENAME, help="Path of the configuration file to alter"
     ),
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
@@ -417,7 +420,7 @@ def configure_generators(
         None,
         help="CSV file (headerless) with fields table-name, column-name, generator-name to set non-interactively",
     ),
-):
+) -> None:
     """
     Interactively set generators for column data.
     """
@@ -450,7 +453,7 @@ def dump_data(
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
     table: str = Argument(help="The table to dump"),
     output: str | None = Option(None, help="output CSV file name"),
-):
+) -> None:
     """Dump a whole table as a CSV file (or to the console) from the destination database."""
     settings = get_settings()
     dst_dsn: str = settings.dst_dsn or ""
@@ -459,7 +462,8 @@ def dump_data(
     config = read_config_file(config_file) if config_file is not None else {}
     metadata = load_metadata_for_output(orm_file, config)
     if output == None:
-        dump_db_tables(metadata, dst_dsn, schema_name, table, sys.stdout)
+        if isinstance(sys.stdout, io.TextIOBase):
+            dump_db_tables(metadata, dst_dsn, schema_name, table, sys.stdout)
         return
     with open(output, "wt", newline="") as out:
         dump_db_tables(metadata, dst_dsn, schema_name, table, out)

@@ -1,17 +1,21 @@
-from typing import Callable
+from typing import Callable, Protocol
 
 import parsy
 from sqlalchemy import Column, Dialect, Engine, ForeignKey, MetaData, Table
 from sqlalchemy.dialects import oracle, postgresql
 from sqlalchemy.sql import schema, sqltypes
+import typing
 
 from datafaker.utils import make_foreign_key_name
 
-table_component_t = dict[str, any]
-table_t = dict[str, table_component_t]
+table_t = dict[str, typing.Any]
 
 
-def simple(type_):
+# We will change this to parsy.Parser when parsy exports its types properly
+ParserType = typing.Any
+
+
+def simple(type_: type) -> ParserType:
     """
     Parses a simple sqltypes type.
     For example, simple(sqltypes.UUID) takes the string "UUID" and outputs
@@ -20,14 +24,14 @@ def simple(type_):
     return parsy.string(type_.__name__).result(type_)
 
 
-def integer():
+def integer() -> ParserType:
     """
     Parses an integer, outputting that integer.
     """
     return parsy.regex(r"-?[0-9]+").map(int)
 
 
-def integer_arguments():
+def integer_arguments() -> ParserType:
     """
     Parses a list of integers.
     The integers are surrounded by brackets and separated by
@@ -38,7 +42,7 @@ def integer_arguments():
     )
 
 
-def numeric_type(type_):
+def numeric_type(type_: type) -> ParserType:
     """
     Parses TYPE_NAME, TYPE_NAME(2) or TYPE_NAME(2,3)
     passing any arguments to the TYPE_NAME constructor.
@@ -48,9 +52,9 @@ def numeric_type(type_):
     )
 
 
-def string_type(type_):
+def string_type(type_: type) -> ParserType:
     @parsy.generate(type_.__name__)
-    def st_parser():
+    def st_parser() -> typing.Generator[ParserType, None, typing.Any]:
         """
         Parses TYPE_NAME, TYPE_NAME(32), TYPE_NAME COLLATE "fr"
         or TYPE_NAME(32) COLLATE "fr"
@@ -67,9 +71,9 @@ def string_type(type_):
     return st_parser
 
 
-def time_type(type_, pg_type):
+def time_type(type_: type, pg_type: type) -> ParserType:
     @parsy.generate(type_.__name__)
-    def pgt_parser():
+    def pgt_parser() -> typing.Generator[ParserType, None, typing.Any]:
         """
         Parses TYPE_NAME, TYPE_NAME(32), TYPE_NAME WITH TIME ZONE
         or TYPE_NAME(32) WITH TIME ZONE
@@ -125,7 +129,7 @@ SIMPLE_TYPE_PARSER = parsy.alt(
 
 
 @parsy.generate
-def type_parser():
+def type_parser() -> ParserType:
     base = yield SIMPLE_TYPE_PARSER
     dimensions = yield parsy.string("[]").many().map(len)
     if dimensions == 0:
@@ -133,7 +137,7 @@ def type_parser():
     return postgresql.ARRAY(base, dimensions=dimensions)
 
 
-def column_to_dict(column: Column, dialect: Dialect) -> str:
+def column_to_dict(column: Column, dialect: Dialect) -> dict[str, typing.Any]:
     type_ = column.type
     if isinstance(type_, postgresql.DOMAIN):
         # Instead of creating a restricted type, we'll just use the base type.
@@ -156,8 +160,8 @@ def column_to_dict(column: Column, dialect: Dialect) -> str:
 
 
 def dict_to_column(
-    table_name,
-    col_name,
+    table_name: str,
+    col_name: str,
     rep: dict,
     ignore_fk: Callable[[str], bool],
 ) -> Column:
@@ -236,7 +240,7 @@ def dict_to_table(
 
 def metadata_to_dict(
     meta: MetaData, schema_name: str | None, engine: Engine
-) -> dict[str, table_t]:
+) -> dict[str, typing.Any]:
     """
     Converts a SQL Alchemy MetaData object into
     a Python object ready for conversion to YAML.
@@ -251,7 +255,7 @@ def metadata_to_dict(
     }
 
 
-def should_ignore_fk(fk: str, tables_dict: dict[str, table_t]):
+def should_ignore_fk(fk: str, tables_dict: dict[str, table_t]) -> bool:
     """
     Tell if this foreign key should be ignored because it points to an
     ignored table.
@@ -261,10 +265,10 @@ def should_ignore_fk(fk: str, tables_dict: dict[str, table_t]):
         return True
     if fk_bits[0] not in tables_dict:
         return False
-    return tables_dict[fk_bits[0]].get("ignore", False)
+    return bool(tables_dict[fk_bits[0]].get("ignore", False))
 
 
-def dict_to_metadata(obj: dict, config_for_output: dict = None) -> MetaData:
+def dict_to_metadata(obj: dict, config_for_output: dict | None=None) -> MetaData:
     """
     Converts a dict to a SQL Alchemy MetaData object.
 
