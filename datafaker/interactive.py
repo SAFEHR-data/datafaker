@@ -13,12 +13,13 @@ from typing_extensions import Self
 
 import sqlalchemy
 from prettytable import PrettyTable
-from sqlalchemy import Column, ForeignKey, MetaData, Table, text
+from sqlalchemy import Column, Engine, ForeignKey, MetaData, Table, text
 
 from datafaker.generators import Generator, PredefinedGenerator, everything_factory
 from datafaker.utils import (
     T,
     create_db_engine,
+    get_sync_engine,
     fk_refers_to_ignored_table,
     logger,
     primary_private_fks,
@@ -130,6 +131,10 @@ class DbCmd(ABC, cmd.Cmd):
                 self._table_entries.append(entry)
         self.table_index = 0
         self.engine = create_db_engine(src_dsn, schema_name=src_schema)
+
+    @property
+    def sync_engine(self) -> Engine:
+        return get_sync_engine(self.engine)
 
     def __enter__(self) -> Self:
         return self
@@ -276,7 +281,7 @@ class DbCmd(ABC, cmd.Cmd):
         table_name = self.table_name()
         nonnull_columns = self.get_nonnull_columns(table_name)
         colcounts = [", COUNT({0}) AS {0}".format(nnc) for nnc in nonnull_columns]
-        with self.engine.connect() as connection:
+        with self.sync_engine.connect() as connection:
             result = connection.execute(
                 text(
                     "SELECT COUNT(*) AS row_count{colcounts} FROM {table}".format(
@@ -302,7 +307,7 @@ class DbCmd(ABC, cmd.Cmd):
     def do_select(self, arg: str) -> None:
         "Run a select query over the database and show the first 50 results"
         MAX_SELECT_ROWS = 50
-        with self.engine.connect() as connection:
+        with self.sync_engine.connect() as connection:
             try:
                 result = connection.execute(text("SELECT " + arg))
             except sqlalchemy.exc.DatabaseError as exc:
@@ -330,7 +335,7 @@ class DbCmd(ABC, cmd.Cmd):
         if not col_names:
             col_names = self.get_column_names()
         nonnulls = [cn + " IS NOT NULL" for cn in col_names]
-        with self.engine.connect() as connection:
+        with self.sync_engine.connect() as connection:
             query = "SELECT {cols} FROM {table} {where} {nonnull} ORDER BY RANDOM() LIMIT {max}".format(
                 cols=",".join(col_names),
                 table=table_name,
@@ -403,6 +408,12 @@ to exit this program."""
     @property
     def table_entries(self) -> list[TableCmdTableEntry]:
         return cast(list[TableCmdTableEntry], self._table_entries)
+
+    def find_entry_by_table_name(self, table_name: str) -> TableCmdTableEntry | None:
+        entry = super().find_entry_by_table_name(table_name)
+        if entry is None:
+            return None
+        return cast(TableCmdTableEntry, entry)
 
     def set_prompt(self) -> None:
         if self.table_index < len(self.table_entries):
@@ -648,7 +659,7 @@ Type 'help data' for examples."""
                 column=column,
                 len=min_length,
             )
-        with self.engine.connect() as connection:
+        with self.sync_engine.connect() as connection:
             result = connection.execute(
                 text(
                     "SELECT {column} FROM {table} {where} ORDER BY RANDOM() LIMIT {count}".format(
@@ -662,7 +673,7 @@ Type 'help data' for examples."""
             self.columnize([str(x[0]) for x in result.all()])
 
     def print_row_data(self, count: int) -> None:
-        with self.engine.connect() as connection:
+        with self.sync_engine.connect() as connection:
             result = connection.execute(
                 text(
                     "SELECT * FROM {table} ORDER BY RANDOM() LIMIT {count}".format(
@@ -715,7 +726,7 @@ class MissingnessType:
 @dataclass
 class MissingnessCmdTableEntry(TableEntry):
     old_type: MissingnessType
-    new_type: MissingnessType
+    new_type: MissingnessType | None
 
 
 class MissingnessCmd(DbCmd):
@@ -731,7 +742,7 @@ data from the database. Use 'quit' to exit this tool."""
 
     def find_missingness_query(
         self, missingness_generator: Mapping
-    ) -> tuple[str | None, str | None] | None:
+    ) -> tuple[str, str] | None:
         """Find query and comment from src-stats for the passed missingness generator."""
         kwargs = missingness_generator.get("kwargs", {})
         patterns = kwargs.get("patterns", "")
@@ -740,7 +751,10 @@ data from the database. Use 'quit' to exit this tool."""
             key = pattern_match.group(1)
             for src_stat in self.config["src-stats"]:
                 if src_stat.get("name") == key:
-                    return (src_stat.get("query", None), src_stat.get("comment", None))
+                    query = src_stat.get("query", None)
+                    if type(query) is not str:
+                        return None
+                    return (query, src_stat.get("comment", ""))
         return None
 
     def make_table_entry(self, name: str, table: Mapping) -> MissingnessCmdTableEntry | None:
@@ -800,6 +814,12 @@ data from the database. Use 'quit' to exit this tool."""
     def table_entries(self) -> list[MissingnessCmdTableEntry]:
         return cast(list[MissingnessCmdTableEntry], self._table_entries)
 
+    def find_entry_by_table_name(self, table_name: str) -> MissingnessCmdTableEntry | None:
+        entry = super().find_entry_by_table_name(table_name)
+        if entry is None:
+            return None
+        return cast(MissingnessCmdTableEntry, entry)
+
     def set_prompt(self) -> None:
         """
         Sets the prompt according to the current table and missingness.
@@ -814,7 +834,7 @@ data from the database. Use 'quit' to exit this tool."""
         else:
             self.prompt = "(missingness) "
 
-    def set_type(self, t_type: TableType) -> None:
+    def set_type(self, t_type: MissingnessType) -> None:
         if self.table_index < len(self.table_entries):
             entry = self.table_entries[self.table_index]
             entry.new_type = t_type
@@ -1128,6 +1148,12 @@ information about the columns in the current table. Use 'peek',
     def table_entries(self) -> list[GeneratorCmdTableEntry]:
         return cast(list[GeneratorCmdTableEntry], self._table_entries)
 
+    def find_entry_by_table_name(self, table_name: str) -> GeneratorCmdTableEntry | None:
+        entry = super().find_entry_by_table_name(table_name)
+        if entry is None:
+            return None
+        return cast(GeneratorCmdTableEntry, entry)
+
     def set_table_index(self, index: int) -> bool:
         """
         Moves to a new table.
@@ -1239,7 +1265,7 @@ information about the columns in the current table. Use 'peek',
                                 else [],
                             }
                         )
-                    rg = {
+                    rg: dict[str, Any] = {
                         "name": generator.gen.function_name(),
                         "columns_assigned": generator.columns,
                     }
@@ -1431,6 +1457,7 @@ information about the columns in the current table. Use 'peek',
         table = self.get_table()
         if table is None:
             self.print("No more tables")
+            return
         next_gi = self.generator_index + 1
         if next_gi == len(table.new_generators):
             self.next_table(self.INFO_NO_MORE_TABLES)
@@ -1502,7 +1529,7 @@ information about the columns in the current table. Use 'peek',
             self.generators = None
         if self.generators is None:
             columns = self.column_metadata()
-            gens = everything_factory().get_generators(columns, self.engine)
+            gens = everything_factory().get_generators(columns, self.sync_engine)
             gens.sort(key=lambda g: g.fit(9999))
             self.generators = gens
             self.generators_valid_columns = (
@@ -1666,7 +1693,7 @@ information about the columns in the current table. Use 'peek',
         columns = self.get_column_names()
         columns_string = ", ".join(columns)
         pred = " AND ".join(f"{column} IS NOT NULL" for column in columns)
-        with self.engine.connect() as connection:
+        with self.sync_engine.connect() as connection:
             result = connection.execute(
                 text(
                     f"SELECT {columns_string} FROM {self.table_name()} WHERE {pred} ORDER BY RANDOM() LIMIT {count}"

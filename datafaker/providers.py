@@ -29,7 +29,7 @@ class ColumnValueProvider(BaseProvider):
             return getattr(random_row, column_name)
         return None
 
-    def __init__(self, *, seed=None, **kwargs):
+    def __init__(self, *, seed: int | None=None, **kwargs: Any) -> None:
         super().__init__(seed=seed, **kwargs)
         self.accumulators: dict[str, int] = {}
 

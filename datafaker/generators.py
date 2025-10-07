@@ -11,7 +11,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 from itertools import chain, combinations
-from typing import Any, Callable, Iterable, Sequence, TypeVar, Union
+from typing import Any, Callable, Iterable, MutableSequence, Sequence, TypeVar, Union
 from typing_extensions import Self
 
 import mimesis
@@ -249,7 +249,7 @@ class GeneratorFactory(ABC):
     """
 
     @abstractmethod
-    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
         """
         Returns all the generators that might be appropriate for this column.
         """
@@ -353,7 +353,7 @@ class MultiGeneratorFactory(GeneratorFactory):
         super().__init__()
         self.factories = factories
 
-    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
         return [
             generator
             for factory in self.factories
@@ -492,7 +492,7 @@ class MimesisDateTimeGenerator(MimesisGeneratorBase):
         self._end = end
 
     @classmethod
-    def make_singleton(_cls, column: Column, engine: Engine, function_name: str) -> list[Generator]:
+    def make_singleton(_cls, column: Column, engine: Engine, function_name: str) -> Sequence[Generator]:
         extract_year = f"CAST(EXTRACT(YEAR FROM {column.name}) AS INT)"
         max_year = f"MAX({extract_year})"
         min_year = f"MIN({extract_year})"
@@ -592,7 +592,7 @@ class MimesisStringGeneratorFactory(GeneratorFactory):
         "text.word",
     ]
 
-    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
         if len(columns) != 1:
             return []
         column = columns[0]
@@ -635,7 +635,7 @@ class MimesisFloatGeneratorFactory(GeneratorFactory):
     All Mimesis generators that return floating point numbers.
     """
 
-    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
         if len(columns) != 1:
             return []
         column = columns[0]
@@ -656,7 +656,7 @@ class MimesisDateGeneratorFactory(GeneratorFactory):
     All Mimesis generators that return dates.
     """
 
-    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
         if len(columns) != 1:
             return []
         column = columns[0]
@@ -671,7 +671,7 @@ class MimesisDateTimeGeneratorFactory(GeneratorFactory):
     All Mimesis generators that return datetimes.
     """
 
-    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
         if len(columns) != 1:
             return []
         column = columns[0]
@@ -688,7 +688,7 @@ class MimesisTimeGeneratorFactory(GeneratorFactory):
     All Mimesis generators that return times.
     """
 
-    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
         if len(columns) != 1:
             return []
         column = columns[0]
@@ -703,7 +703,7 @@ class MimesisIntegerGeneratorFactory(GeneratorFactory):
     All Mimesis generators that return integers.
     """
 
-    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
         if len(columns) != 1:
             return []
         column = columns[0]
@@ -821,13 +821,13 @@ class ContinuousDistributionGeneratorFactory(GeneratorFactory):
         table_name: str,
         column_name: str,
         buckets: Buckets,
-    ) -> list[Generator]:
+    ) -> Sequence[Generator]:
         return [
             GaussianGenerator(table_name, column_name, buckets),
             UniformGenerator(table_name, column_name, buckets),
         ]
 
-    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
         if len(columns) != 1:
             return []
         column = columns[0]
@@ -923,7 +923,7 @@ class ContinuousLogDistributionGeneratorFactory(ContinuousDistributionGeneratorF
         table_name: str,
         column_name: str,
         buckets: Buckets,
-    ) -> list[Generator]:
+    ) -> Sequence[Generator]:
         with engine.connect() as connection:
             result = connection.execute(
                 text(
@@ -1165,7 +1165,7 @@ class ChoiceGeneratorFactory(GeneratorFactory):
     SAMPLE_COUNT = MAXIMUM_CHOICES
     SUPPRESS_COUNT = 5
 
-    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
         if len(columns) != 1:
             return []
         column = columns[0]
@@ -1284,7 +1284,7 @@ class ConstantGeneratorFactory(GeneratorFactory):
     Just the null generator
     """
 
-    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
         if len(columns) != 1:
             return []
         column = columns[0]
@@ -1418,7 +1418,7 @@ class MultivariateNormalGeneratorFactory(GeneratorFactory):
             f" FROM {subquery}{group_by_clause}) AS _q{suppress_clause}"
         )
 
-    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
         # For the case of one column we'll use GaussianGenerator
         if len(columns) < 2:
             return []
@@ -1792,7 +1792,7 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
             return f'SELECT COUNT(*) AS count, {index_exp} AS "index" FROM {table} GROUP BY "index"'
         return f'SELECT count, "index" FROM (SELECT COUNT(*) AS count, {index_exp} AS "index" FROM {table} GROUP BY "index") AS _q {where}'
 
-    def get_generators(self, columns: list[Column], engine: Engine) -> list[Generator]:
+    def get_generators(self, columns: list[Column], engine: Engine) -> Sequence[Generator]:
         if len(columns) < 2:
             return []
         nullable_columns = self.get_nullable_columns(columns)

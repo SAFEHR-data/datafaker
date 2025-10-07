@@ -1,14 +1,15 @@
+from _csv import Writer
 import csv
 import io
 
 import sqlalchemy
 from sqlalchemy.schema import MetaData
 
-from datafaker.settings import get_settings
 from datafaker.utils import create_db_engine, get_sync_engine, logger
 
 
-def _make_csv_writer(file):
+def _make_csv_writer(file: io.TextIOBase) -> Writer:
+    """Make the standard CSV file writer"""
     return csv.writer(file, quoting=csv.QUOTE_MINIMAL)
 
 
