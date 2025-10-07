@@ -81,12 +81,12 @@ class TestDownload(RequiresDBTestCase):
         """Test the download_table function."""
         # pylint: disable=protected-access
 
-        with self.engine.connect() as conn:
+        with self.sync_engine.connect() as conn:
             conn.execute(insert(MyTable).values({"id": 1}))
             conn.commit()
 
         download_table(
-            MyTable.__table__, self.engine, self.mytable_file_path, compress=False
+            MyTable.__table__, self.sync_engine, self.mytable_file_path, compress=False
         )
 
         # The .strip() gets rid of any possible empty lines at the end of the file.
@@ -287,7 +287,7 @@ class TestUtils(DatafakerTestCase):
         )
 
     @patch("datafaker.utils.logger")
-    def test_testing_generators_finds_syntax_errors(self, logger: MagicMock):
+    def test_testing_generators_finds_syntax_errors(self, logger: MagicMock) -> None:
         generators_require_stats(
             {
                 "story_generators": [
@@ -309,20 +309,20 @@ class TestUtils(DatafakerTestCase):
         logger.error.assert_has_calls(
             [
                 call(
-                    "Syntax error in argument %s of %s: %s\n%s\n%s",
+                    "Syntax error in argument %s of %s: %s\n%s%s",
                     "b",
                     "story_generators[0]",
                     "unterminated string literal (detected at line 1)",
                     "'unclosed",
-                    " ^",
+                    "\n ^",
                 ),
                 call(
-                    "Syntax error in argument %d of %s: %s\n%s\n%s",
+                    "Syntax error in argument %d of %s: %s\n%s%s",
                     1,
                     "tables.things.row_generators[0]",
                     "invalid syntax",
                     "1 2",
-                    "   ^",
+                    "\n   ^",
                 ),
             ]
         )

@@ -2,9 +2,10 @@
 import os
 import shutil
 from pathlib import Path
+from typing import Any, Mapping
 
 from sqlalchemy import create_engine, inspect
-from typer.testing import CliRunner
+from typer.testing import CliRunner, Result
 
 from datafaker.main import app
 from tests.utils import RequiresDBTestCase
@@ -431,7 +432,7 @@ class DBFunctionalTestCase(RequiresDBTestCase):
             completed_process.stdout,
         )
 
-    def invoke(self, *args, expected_error: str = None, env={}):
+    def invoke(self, *args: Any, expected_error: str | None=None, env: Mapping[str, str]={}) -> Result:
         res = self.runner.invoke(app, args, env=env)
         if expected_error is None:
             self.assertNoException(res)

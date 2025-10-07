@@ -4,7 +4,7 @@ import os
 import random
 from collections import Counter
 from pathlib import Path
-from typing import Any, Generator, Tuple
+from typing import Any, Generator, Mapping, Tuple
 from unittest.mock import MagicMock, call, patch
 
 from sqlalchemy import Connection, select
@@ -39,11 +39,11 @@ class TestCreate(GeneratesDBTestCase):
                 },
             }
             self.set_configuration(config)
-            meta_dict = metadata_to_dict(self.metadata, self.schema_name, self.engine)
+            meta_dict = metadata_to_dict(self.metadata, self.schema_name, self.sync_engine)
             self.remove_data(config)
             remove_db_vocab(self.metadata, meta_dict, config)
             create_db_vocab(self.metadata, meta_dict, config, Path("./tests/examples"))
-        with self.engine.connect() as conn:
+        with self.sync_engine.connect() as conn:
             stmt = select(self.metadata.tables["player"])
             rows = list(conn.execute(stmt).mappings().fetchall())
             self.assertEqual(len(rows), 3)
@@ -60,9 +60,9 @@ class TestCreate(GeneratesDBTestCase):
     def test_make_table_generators(self) -> None:
         """Test that we can handle column defaults in stories."""
         random.seed(56)
-        config = {}
+        config: Mapping[str, Any] = {}
         self.generate_data(config, num_passes=2)
-        with self.engine.connect() as conn:
+        with self.sync_engine.connect() as conn:
             stmt = select(self.metadata.tables["string"])
             rows = list(conn.execute(stmt).mappings().fetchall())
             a = rows[0]

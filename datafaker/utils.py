@@ -451,7 +451,7 @@ def reinstate_vocab_foreign_key_constraints(
             )
 
 
-def stream_yaml(yaml_file_handle: io.TextIOBase) -> Generator[Any]:
+def stream_yaml(yaml_file_handle: io.TextIOBase) -> Generator[Any, None, None]:
     """
     Stream a yaml list into an iterator.
 

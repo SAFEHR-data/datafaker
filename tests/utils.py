@@ -7,7 +7,7 @@ from functools import lru_cache
 from pathlib import Path
 from subprocess import run
 from tempfile import mkstemp
-from typing import Any
+from typing import Any, Mapping
 from unittest import TestCase, skipUnless
 
 import testing.postgresql
@@ -19,7 +19,7 @@ from datafaker import settings
 from datafaker.create import create_db_data_into
 from datafaker.make import make_src_stats, make_table_generators, make_tables_file
 from datafaker.remove import remove_db_data_from
-from datafaker.utils import create_db_engine, get_sync_engine, import_file, sorted_non_vocabulary_tables
+from datafaker.utils import create_db_engine, get_sync_engine, import_file, sorted_non_vocabulary_tables, T
 
 
 class SysExit(Exception):
@@ -47,7 +47,7 @@ class DatafakerTestCase(TestCase):
         self.maxDiff = None  # pylint: disable=invalid-name
         super().__init__(*args, **kwargs)
 
-    def setUp(self):
+    def setUp(self) -> None:
         settings.get_settings.cache_clear()
 
     def assertReturnCode(  # pylint: disable=invalid-name
@@ -74,7 +74,7 @@ class DatafakerTestCase(TestCase):
             return
         self.fail("".join(traceback.format_exception(result.exception)))
 
-    def assertSubset(self, set1, set2, msg=None):
+    def assertSubset(self, set1: set[T], set2: set[T], msg: str | None=None) -> None:
         """Assert a set is a (non-strict) subset.
 
         Args:
@@ -117,21 +117,23 @@ class RequiresDBTestCase(DatafakerTestCase):
 
     schema_name: str | None = None
     use_asyncio = False
-    examples_dir = "tests/examples"
+    examples_dir = Path("tests/examples")
     dump_file_path: str | None = None
     database_name: str | None = None
     Postgresql = None
 
     @classmethod
-    def setUpClass(cls):
+    def setUpClass(cls) -> None:
         cls.Postgresql = testing.postgresql.PostgresqlFactory(cache_initialized_db=True)
 
     @classmethod
-    def tearDownClass(cls):
-        cls.Postgresql.clear_cache()
+    def tearDownClass(cls) -> None:
+        if cls.Postgresql is not None:
+            cls.Postgresql.clear_cache()
 
     def setUp(self) -> None:
         super().setUp()
+        assert self.Postgresql is not None
         self.postgresql = self.Postgresql()
         if self.dump_file_path is not None:
             self.run_psql(Path(self.examples_dir) / Path(self.dump_file_path))
@@ -142,17 +144,20 @@ class RequiresDBTestCase(DatafakerTestCase):
         )
         self.sync_engine = get_sync_engine(self.engine)
         self.metadata = MetaData()
-        self.metadata.reflect(self.engine)
+        self.metadata.reflect(self.sync_engine)
 
     def tearDown(self) -> None:
         self.postgresql.stop()
         super().tearDown()
 
     @property
-    def dsn(self):
+    def dsn(self) -> str:
         if self.database_name:
-            return self.postgresql.url(database=self.database_name)
-        return self.postgresql.url()
+            url = self.postgresql.url(database=self.database_name)
+        else:
+            url = self.postgresql.url()
+        assert type(url) is str
+        return url
 
     def run_psql(self, dump_file: Path) -> None:
         """Run psql and pass dump_file_name as the --file option."""
@@ -187,7 +192,7 @@ class GeneratesDBTestCase(RequiresDBTestCase):
         with os.fdopen(self.orm_fd, "w", encoding="utf-8") as orm_fh:
             orm_fh.write(make_tables_file(self.dsn, self.schema_name, {}))
 
-    def set_configuration(self, config) -> None:
+    def set_configuration(self, config: Mapping[str, Any]) -> None:
         """
         Accepts a configuration file, writes it out.
         """
@@ -195,7 +200,7 @@ class GeneratesDBTestCase(RequiresDBTestCase):
         with os.fdopen(self.config_fd, "w", encoding="utf-8") as config_fh:
             config_fh.write(yaml.dump(config))
 
-    def get_src_stats(self, config) -> dict[str, any]:
+    def get_src_stats(self, config: Mapping[str, Any]) -> dict[str, Any]:
         """
         Runs `make-stats` producing `src-stats.yaml`
         :return: Python dictionary representation of the contents of the src-stats file
@@ -212,7 +217,7 @@ class GeneratesDBTestCase(RequiresDBTestCase):
             stats_fh.write(yaml.dump(src_stats))
         return src_stats
 
-    def create_generators(self, config) -> None:
+    def create_generators(self, config: Mapping[str, Any]) -> None:
         """``create-generators`` with ``src-stats.yaml`` and the rest, producing ``df.py``"""
         datafaker_content = make_table_generators(
             self.metadata,
@@ -225,12 +230,12 @@ class GeneratesDBTestCase(RequiresDBTestCase):
         with os.fdopen(generators_fd, "w", encoding="utf-8") as datafaker_fh:
             datafaker_fh.write(datafaker_content)
 
-    def remove_data(self, config):
+    def remove_data(self, config: Mapping[str, Any]) -> None:
         """Remove source data from the DB."""
         # `remove-data` so we don't have to use a separate database for the destination
         remove_db_data_from(self.metadata, config, self.dsn, self.schema_name)
 
-    def create_data(self, config, num_passes=1):
+    def create_data(self, config: Mapping[str, Any], num_passes: int=1) -> None:
         """Create fake data in the DB."""
         # `create-data` with all this stuff
         datafaker_module = import_file(self.generators_file_path)
@@ -245,7 +250,7 @@ class GeneratesDBTestCase(RequiresDBTestCase):
             self.schema_name,
         )
 
-    def generate_data(self, config, num_passes=1):
+    def generate_data(self, config: Mapping[str, Any], num_passes: int=1) -> Mapping[str, Any]:
         """
         Replaces the DB's source data with generated data.
         :return: A Python dictionary representation of the src-stats.yaml file, for what it's worth.

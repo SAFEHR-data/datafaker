@@ -49,7 +49,7 @@ class ColumnValueProviderTestCase(RequiresDBTestCase):
         """Test the key method."""
         # pylint: disable=invalid-name
 
-        with self.engine.connect() as conn:
+        with self.sync_engine.connect() as conn:
             stmt = insert(Person).values(sex="M")
             conn.execute(stmt)
 
@@ -61,7 +61,7 @@ class ColumnValueProviderTestCase(RequiresDBTestCase):
     def test_column_value_missing(self) -> None:
         """Test the generator when there are no values in the source table."""
 
-        with self.engine.connect() as connection:
+        with self.sync_engine.connect() as connection:
             provider: providers.ColumnValueProvider = providers.ColumnValueProvider()
             generated_value: Any = provider.column_value(connection, Person, "sex")
 
