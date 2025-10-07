@@ -1,4 +1,5 @@
 """Tests for the base module."""
+import io
 from unittest.mock import MagicMock, call, patch
 
 from sqlalchemy.schema import MetaData
@@ -17,9 +18,9 @@ class DumpTests(RequiresDBTestCase):
     @patch("datafaker.dump._make_csv_writer")
     def test_dump_data(self, make_csv_writer: MagicMock) -> None:
         """Test dump-data."""
-        TEST_OUTPUT_FILE = "test_output_file_object"
+        TEST_OUTPUT_FILE = io.StringIO()
         metadata = MetaData()
-        metadata.reflect(self.engine)
+        metadata.reflect(self.sync_engine)
         dump_db_tables(metadata, self.dsn, self.schema_name, "player", TEST_OUTPUT_FILE)
         make_csv_writer.assert_called_once_with(TEST_OUTPUT_FILE)
         make_csv_writer.assert_has_calls(

@@ -19,7 +19,7 @@ from datafaker import settings
 from datafaker.create import create_db_data_into
 from datafaker.make import make_src_stats, make_table_generators, make_tables_file
 from datafaker.remove import remove_db_data_from
-from datafaker.utils import create_db_engine, import_file, sorted_non_vocabulary_tables
+from datafaker.utils import create_db_engine, get_sync_engine, import_file, sorted_non_vocabulary_tables
 
 
 class SysExit(Exception):
@@ -115,11 +115,11 @@ class RequiresDBTestCase(DatafakerTestCase):
     reflected from that engine.
     """
 
-    schema_name = None
+    schema_name: str | None = None
     use_asyncio = False
     examples_dir = "tests/examples"
-    dump_file_path = None
-    database_name = None
+    dump_file_path: str | None = None
+    database_name: str | None = None
     Postgresql = None
 
     @classmethod
@@ -140,6 +140,7 @@ class RequiresDBTestCase(DatafakerTestCase):
             schema_name=self.schema_name,
             use_asyncio=self.use_asyncio,
         )
+        self.sync_engine = get_sync_engine(self.engine)
         self.metadata = MetaData()
         self.metadata.reflect(self.engine)
 
