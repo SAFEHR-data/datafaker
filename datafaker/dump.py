@@ -1,3 +1,4 @@
+""" Data dumping functions. """
 import csv
 import io
 from typing import TYPE_CHECKING
@@ -12,7 +13,7 @@ if TYPE_CHECKING:
 
 
 def _make_csv_writer(file: io.TextIOBase) -> "Writer":
-    """Make the standard CSV file writer"""
+    """Make the standard CSV file writer."""
     return csv.writer(file, quoting=csv.QUOTE_MINIMAL)
 
 

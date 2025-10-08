@@ -1673,14 +1673,16 @@ information about the columns in the current table. Use 'peek',
     ) -> None:
         if type(nominal) is str:
             src_stat_groups = self.SRC_STAT_RE.search(nominal)
+            # Do we have a SRC_STAT reference?
             if src_stat_groups:
+                # Get its name
                 cq_key = src_stat_groups.group(1)
-                if cq_key not in out:
-                    out[cq_key] = []
+                # Are we pulling a specific part of this result?
                 sub = src_stat_groups.group(3)
                 if sub:
                     actual = {sub: actual}
-                out[cq_key].append(actual)
+                else:
+                    out[cq_key] = actual
         elif type(nominal) is list and type(actual) is list:
             for i in range(min(len(nominal), len(actual))):
                 self._get_custom_queries_from(out, nominal[i], actual[i])
@@ -1780,10 +1782,11 @@ information about the columns in the current table. Use 'peek',
             )
 
     def do_p(self, arg: str) -> None:
-        """Synonym for propose"""
+        """Synonym for propose."""
         self.do_propose(arg)
 
     def get_proposed_generator_by_name(self, gen_name: str) -> Generator | None:
+        """Find a generator by name from the list of proposals."""
         for gen in self._get_generator_proposals():
             if gen.name() == gen_name:
                 return gen
@@ -1792,7 +1795,7 @@ information about the columns in the current table. Use 'peek',
     def do_set(self, arg: str) -> None:
         """
         Set one of the proposals as a generator.
-        Takes a single integer argument.
+        :param arg: A single integer (as a string).
         """
         if arg.isdigit() and not self._generators_valid():
             self.print("Please run 'propose' before 'set <number>'")
@@ -1820,9 +1823,7 @@ information about the columns in the current table. Use 'peek',
         self._go_next()
 
     def set_generator(self, gen: Generator | None) -> None:
-        """
-        Set the current column's generator.
-        """
+        """Set the current column's generator."""
         (table, gen_info) = self.get_table_and_generator()
         if table is None:
             self.print("Error: no table")
@@ -1833,18 +1834,21 @@ information about the columns in the current table. Use 'peek',
         gen_info.gen = gen
 
     def do_s(self, arg: str) -> None:
-        """Synonym for set"""
+        """Synonym for set."""
         self.do_set(arg)
 
     def do_unset(self, _arg: str) -> None:
-        """
-        Remove any generator set for this column.
-        """
+        """Remove any generator set for this column."""
         self.set_generator(None)
         self._go_next()
 
     def do_merge(self, arg: str) -> None:
-        """Add this column(s) to the specified column(s), so one generator covers them all."""
+        """
+        Add this column(s) to the specified column(s).
+
+        After this, one generator will cover them all.
+        :param arg: space separated list of column names to merge.
+        """
         cols = arg.split()
         if not cols:
             self.print("Error: merge requires a column argument")
@@ -1899,6 +1903,7 @@ information about the columns in the current table. Use 'peek',
     def complete_merge(
         self, text: str, _line: str, _begidx: int, _endidx: int
     ) -> list[str]:
+        """Complete column names."""
         last_arg = text.split()[-1]
         table_entry: GeneratorCmdTableEntry | None = self.get_table()
         if table_entry is None:
@@ -1954,6 +1959,7 @@ information about the columns in the current table. Use 'peek',
     def complete_unmerge(
         self, text: str, _line: str, _begidx: int, _endidx: int
     ) -> list[str]:
+        """Complete column names to unmerge."""
         last_arg = text.split()[-1]
         table_entry: GeneratorCmdTableEntry | None = self.get_table()
         if table_entry is None:
@@ -1969,7 +1975,7 @@ def update_config_generators(
     src_dsn: str,
     src_schema: str | None,
     metadata: MetaData,
-    config: Mapping[str, Any],
+    config: MutableMapping[str, Any],
     spec_path: Path | None,
 ) -> Mapping[str, Any]:
     """
@@ -1981,7 +1987,7 @@ def update_config_generators(
     :param src_dsn: Address of the source database
     :param src_schema: Name of the source database schema to read from
     :param metadata: SQLAlchemy representation of the source database
-    :param config: Existing configuration (will not be destructively updated)
+    :param config: Existing configuration (will be destructively updated)
     :param spec_path: The path of the CSV file containing the specification
     :return: Updated configuration.
     """

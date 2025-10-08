@@ -288,6 +288,7 @@ class TestUtils(DatafakerTestCase):
 
     @patch("datafaker.utils.logger")
     def test_testing_generators_finds_syntax_errors(self, logger: MagicMock) -> None:
+        """Test that looking for ``SRC_STATS`` references finds Python syntax errors."""
         generators_require_stats(
             {
                 "story_generators": [

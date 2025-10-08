@@ -1,5 +1,6 @@
+"""Convert between a Python dict describing a database schema and a SQLAlchemy MetaData."""
 import typing
-from typing import Callable, Protocol
+from typing import Callable
 
 import parsy
 from sqlalchemy import Column, Dialect, Engine, ForeignKey, MetaData, Table
@@ -8,7 +9,7 @@ from sqlalchemy.sql import schema, sqltypes
 
 from datafaker.utils import make_foreign_key_name
 
-table_t = dict[str, typing.Any]
+TableT = dict[str, typing.Any]
 
 
 # We will change this to parsy.Parser when parsy exports its types properly
@@ -17,7 +18,8 @@ ParserType = typing.Any
 
 def simple(type_: type) -> ParserType:
     """
-    Parses a simple sqltypes type.
+    Get a parser for a simple sqltypes type.
+
     For example, simple(sqltypes.UUID) takes the string "UUID" and outputs
     a UUID class, or fails with any other string.
     """
@@ -26,14 +28,15 @@ def simple(type_: type) -> ParserType:
 
 def integer() -> ParserType:
     """
-    Parses an integer, outputting that integer.
+    Get a parser for an integer, outputting that integer.
     """
     return parsy.regex(r"-?[0-9]+").map(int)
 
 
 def integer_arguments() -> ParserType:
     """
-    Parses a list of integers.
+    Get a parser for a list of integers.
+
     The integers are surrounded by brackets and separated by
     a comma and space.
     """
@@ -44,6 +47,8 @@ def integer_arguments() -> ParserType:
 
 def numeric_type(type_: type) -> ParserType:
     """
+    Make a parser for a SQL numeric type.
+
     Parses TYPE_NAME, TYPE_NAME(2) or TYPE_NAME(2,3)
     passing any arguments to the TYPE_NAME constructor.
     """
@@ -53,12 +58,16 @@ def numeric_type(type_: type) -> ParserType:
 
 
 def string_type(type_: type) -> ParserType:
+    """
+    Make a parser for a SQL string type.
+
+    Parses TYPE_NAME, TYPE_NAME(32), TYPE_NAME COLLATE "fr"
+    or TYPE_NAME(32) COLLATE "fr"
+    """
+
     @parsy.generate(type_.__name__)
     def st_parser() -> typing.Generator[ParserType, None, typing.Any]:
-        """
-        Parses TYPE_NAME, TYPE_NAME(32), TYPE_NAME COLLATE "fr"
-        or TYPE_NAME(32) COLLATE "fr"
-        """
+        """Parse the specific type."""
         yield parsy.string(type_.__name__)
         length: int | None = yield (
             parsy.string("(") >> integer() << parsy.string(")")
@@ -72,12 +81,22 @@ def string_type(type_: type) -> ParserType:
 
 
 def time_type(type_: type, pg_type: type) -> ParserType:
+    """
+    Make a parser for a SQL date/time type.
+
+    Parses TYPE_NAME, TYPE_NAME(32), TYPE_NAME WITH TIME ZONE
+    or TYPE_NAME(32) WITH TIME ZONE
+
+    :param type_: The SQLAlchemy type we would like to parse.
+    :param pg_type: The PostgreSQL type we would like to parse if precision
+    or timezone is provided.
+    :return: ``type_`` if neither precision nor timezone are provided in the
+    parsed text, ``pg_type(precision, timezone)`` otherwise.
+    """
+
     @parsy.generate(type_.__name__)
     def pgt_parser() -> typing.Generator[ParserType, None, typing.Any]:
-        """
-        Parses TYPE_NAME, TYPE_NAME(32), TYPE_NAME WITH TIME ZONE
-        or TYPE_NAME(32) WITH TIME ZONE
-        """
+        """Parse the actual type."""
         yield parsy.string(type_.__name__)
         precision: int | None = yield (
             parsy.string("(") >> integer() << parsy.string(")")
@@ -130,6 +149,11 @@ SIMPLE_TYPE_PARSER = parsy.alt(
 
 @parsy.generate
 def type_parser() -> ParserType:
+    """
+    Make a parser for a simple type or an array.
+
+    Arrays produce a PostgreSQL-specific type.
+    """
     base = yield SIMPLE_TYPE_PARSER
     dimensions = yield parsy.string("[]").many().map(len)
     if dimensions == 0:
@@ -138,6 +162,11 @@ def type_parser() -> ParserType:
 
 
 def column_to_dict(column: Column, dialect: Dialect) -> dict[str, typing.Any]:
+    """
+    Produce a dict description of a column.
+    :param column: The SQLAlchemy column to translate.
+    :param dialect: The SQL dialect in which to render the type name.
+    """
     type_ = column.type
     if isinstance(type_, postgresql.DOMAIN):
         # Instead of creating a restricted type, we'll just use the base type.
@@ -165,6 +194,20 @@ def dict_to_column(
     rep: dict,
     ignore_fk: Callable[[str], bool],
 ) -> Column:
+    """
+    Produce column from aspects of its dict description.
+    :param table_name: The name of the table the column appears in.
+    :param col_name: The name of the column.
+    :param rep: The dict description of the column.
+    :ignore_fk: A predicate, called with the name of any foreign key target
+    (in other words, the name of any table referred to by this column). If it
+    returns True, this foreign key constraint will not be applied to the
+    returned column. This is useful in a situation where we want a foreign
+    key constraint to be present when we are determining what generators
+    might be appropriate for it, but we don't want the foreign key constraint
+    actually applied to the destination database because (for example) the
+    target table will be ignored.
+    """
     type_sql = rep["type"]
     try:
         type_ = type_parser.parse(type_sql)
@@ -193,21 +236,20 @@ def dict_to_column(
 
 
 def dict_to_unique(rep: dict) -> schema.UniqueConstraint:
+    """Make a uniqueness constraint from its dict representation."""
     return schema.UniqueConstraint(*rep.get("columns", []), name=rep.get("name", None))
 
 
 def unique_to_dict(constraint: schema.UniqueConstraint) -> dict:
+    """Render a dict representation of a uniqueness constraint."""
     return {
         "name": constraint.name,
         "columns": [str(col.name) for col in constraint.columns],
     }
 
 
-def table_to_dict(table: Table, dialect: Dialect) -> table_t:
-    """
-    Converts a SQL Alchemy Table object into a
-    Python object ready for conversion to YAML.
-    """
+def table_to_dict(table: Table, dialect: Dialect) -> TableT:
+    """Converts a SQL Alchemy Table object into a Python dict."""
     return {
         "columns": {
             str(column.key): column_to_dict(column, dialect)
@@ -224,9 +266,10 @@ def table_to_dict(table: Table, dialect: Dialect) -> table_t:
 def dict_to_table(
     name: str,
     meta: MetaData,
-    table_dict: table_t,
+    table_dict: TableT,
     ignore_fk: Callable[[str], bool],
 ) -> Table:
+    """Create a Table from its description."""
     return Table(
         name,
         meta,
@@ -255,7 +298,7 @@ def metadata_to_dict(
     }
 
 
-def should_ignore_fk(fk: str, tables_dict: dict[str, table_t]) -> bool:
+def should_ignore_fk(fk: str, tables_dict: dict[str, TableT]) -> bool:
     """
     Tell if this foreign key should be ignored because it points to an
     ignored table.

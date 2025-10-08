@@ -19,7 +19,7 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from sqlalchemy.schema import Column, Table
-from sqlalchemy.sql import Executable, sqltypes, type_api
+from sqlalchemy.sql import Executable, sqltypes
 from typing_extensions import Self
 
 from datafaker import providers
@@ -825,6 +825,12 @@ async def make_src_stats(
 async def make_src_stats_connection(
     config: Mapping, db_conn: DbConnection, metadata: MetaData
 ) -> dict[str, dict[str, Any]]:
+    """
+    Make the ``src-stats.yaml`` file given the database connection to read from.
+    :param config: configuration from ``config.yaml``.
+    :param db_conn: Source database connection.
+    :param metadata: Source database metadata from ``orm.yaml``.
+    """
     date_string = datetime.today().strftime("%Y-%m-%d %H:%M:%S")
     query_blocks = config.get("src-stats", [])
     results = await asyncio.gather(

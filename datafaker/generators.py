@@ -11,7 +11,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 from itertools import chain, combinations
-from typing import Any, Callable, Iterable, MutableSequence, Sequence, TypeVar, Union
+from typing import Any, Callable, Iterable, Sequence, Union
 
 import mimesis
 import mimesis.locales
@@ -21,7 +21,7 @@ from sqlalchemy.types import Date, DateTime, Integer, Numeric, String, Time, Typ
 from typing_extensions import Self
 
 from datafaker.base import DistributionGenerator
-from datafaker.utils import logger
+from datafaker.utils import logger, T
 
 numeric = Union[int, float]
 
@@ -1670,13 +1670,14 @@ class NullPartitionedNormalGenerator(Generator):
                 "name": "constant",
                 "params": {"value": [None] * len(partition.excluded_columns)},
             }
-        if not partition.excluded_columns:
+        covariates = {
+            "covs": partition.covariates,
+        }
+        if not partition.constant_outputs:
             return {
                 "count": count,
                 "name": self._function_name,
-                "params": {
-                    "covs": partition.covariates,
-                },
+                "params": covariates,
             }
         return {
             "count": count,
@@ -1684,9 +1685,7 @@ class NullPartitionedNormalGenerator(Generator):
             "params": {
                 "constants_at": partition.constant_outputs,
                 "subgen": self._function_name,
-                "params": {
-                    "covs": partition.covariates,
-                },
+                "params": covariates,
             },
         }
 
@@ -1716,9 +1715,6 @@ class NullPartitionedNormalGenerator(Generator):
 def is_numeric(col: Column) -> bool:
     ct = get_column_type(col)
     return (isinstance(ct, Numeric) or isinstance(ct, Integer)) and not col.foreign_keys
-
-
-T = TypeVar("T")
 
 
 def powerset(input: list[T]) -> Iterable[Iterable[T]]:
@@ -1780,7 +1776,7 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
     SUPPRESS_COUNT = 5
     EMPTY_RESULT = [
         RowMapping(
-            parent=sqlalchemy.engine.result.ResultMetaData(),
+            parent=sqlalchemy.engine.result.SimpleResultMetaData(["count"]),
             processors=None,
             key_to_index={"count": 0},
             data=(0,),
@@ -1942,10 +1938,11 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
         """
         found_nonzero = False
         for rp in partitions.values():
-            rp.covariates = connection.execute(text(rp.query)).mappings().fetchall()
-            if not rp.covariates or rp.covariates[0]["count"] is None:
+            covs = connection.execute(text(rp.query)).mappings().fetchall()
+            if not covs or covs.count == 0 or covs[0]["count"] is None:
                 rp.covariates = self.EMPTY_RESULT
             else:
+                rp.covariates = covs
                 found_nonzero = True
         return found_nonzero
 

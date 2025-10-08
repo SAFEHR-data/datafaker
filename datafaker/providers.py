@@ -30,6 +30,7 @@ class ColumnValueProvider(BaseProvider):
         return None
 
     def __init__(self, *, seed: int | None = None, **kwargs: Any) -> None:
+        """Initialise the column value provider."""
         super().__init__(seed=seed, **kwargs)
         self.accumulators: dict[str, int] = {}
 

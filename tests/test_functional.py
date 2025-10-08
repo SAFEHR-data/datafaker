@@ -117,8 +117,18 @@ class DBFunctionalTestCase(RequiresDBTestCase):
         self.assertNoException(completed_process)
         self.assertEqual(
             {
-                "Unsupported SQLAlchemy type CIDR for column column_with_unusual_type. Setting this column to NULL always, you may want to configure a row generator for it instead.",
-                "Unsupported SQLAlchemy type BIT for column column_with_unusual_type_and_length. Setting this column to NULL always, you may want to configure a row generator for it instead.",
+                (
+                    "Unsupported SQLAlchemy type CIDR for column "
+                    "column_with_unusual_type. Setting this column to NULL "
+                    "always, you may want to configure a row generator for "
+                    "it instead."
+                ),
+                (
+                    "Unsupported SQLAlchemy type BIT for column "
+                    "column_with_unusual_type_and_length. Setting this column "
+                    "to NULL always, you may want to configure a row generator "
+                    "for it instead."
+                ),
             },
             set(completed_process.stderr.split("\n")) - {""},
         )
@@ -309,7 +319,10 @@ class DBFunctionalTestCase(RequiresDBTestCase):
         self.assertSetEqual(
             {
                 "Dropping constraint concept_concept_type_id_fkey from table concept",
-                "Dropping constraint ref_to_unignorable_table_ref_fkey from table ref_to_unignorable_table",
+                (
+                    "Dropping constraint ref_to_unignorable_table_ref_fkey from "
+                    "table ref_to_unignorable_table"
+                ),
                 "Dropping constraint concept_type_mitigation_type_id_fkey from table concept_type",
                 "Restoring foreign key constraint concept_concept_type_id_fkey",
                 "Restoring foreign key constraint ref_to_unignorable_table_ref_fkey",
@@ -408,8 +421,14 @@ class DBFunctionalTestCase(RequiresDBTestCase):
                 'Truncating vocabulary table "mitigation_type".',
                 'Truncating vocabulary table "empty_vocabulary".',
                 "Vocabulary tables truncated.",
-                "Dropping constraint concept_type_mitigation_type_id_fkey from table concept_type",
-                "Dropping constraint ref_to_unignorable_table_ref_fkey from table ref_to_unignorable_table",
+                (
+                    "Dropping constraint concept_type_mitigation_type_id_fkey "
+                    "from table concept_type"
+                ),
+                (
+                    "Dropping constraint ref_to_unignorable_table_ref_fkey from "
+                    "table ref_to_unignorable_table"
+                ),
                 "Dropping constraint concept_concept_type_id_fkey from table concept",
                 "Restoring foreign key constraint concept_type_mitigation_type_id_fkey",
                 "Restoring foreign key constraint ref_to_unignorable_table_ref_fkey",

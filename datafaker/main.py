@@ -1,16 +1,17 @@
 """Entrypoint for the datafaker package."""
 import asyncio
+import importlib
 import io
 import json
 import sys
 from enum import Enum
-from importlib import metadata
 from pathlib import Path
 from typing import Any, Final, Optional
 
 import yaml
 from jsonschema.exceptions import ValidationError
 from jsonschema.validators import validate
+from sqlalchemy import MetaData
 from typer import Argument, Exit, Option, Typer
 
 from datafaker.create import create_db_data, create_db_tables, create_db_vocab
@@ -81,7 +82,13 @@ def load_metadata_config(orm_file_name: str, config: dict | None = None) -> Any:
         return meta_dict
 
 
-def load_metadata(orm_file_name: str, config: dict | None = None) -> Any:
+def load_metadata(orm_file_name: str, config: dict | None = None) -> MetaData:
+    """
+    Load metadata from ``orm.yaml``
+    :param orm_file_name: ``orm.yaml`` or alternative name to load metadata from.
+    :param config: Used to exclude tables that are marked as ``ignore: true``.
+    :return: SQLAlchemy MetaData object representing the database described by the loaded file.
+    """
     meta_dict = load_metadata_config(orm_file_name, config)
     return dict_to_metadata(meta_dict, None)
 
@@ -548,16 +555,16 @@ def remove_tables(
 
 
 class TableType(str, Enum):
-    all = "all"
-    vocab = "vocab"
-    generated = "generated"
+    ALL = "all"
+    VOCAB = "vocab"
+    GENERATED = "generated"
 
 
 @app.command()
 def list_tables(
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
     config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
-    tables: TableType = Option(TableType.generated, help="Which tables to list"),
+    tables: TableType = Option(TableType.GENERATED, help="Which tables to list"),
 ) -> None:
     """List the names of tables described in the metadata file."""
     config = read_config_file(config_file) if config_file is not None else {}
@@ -568,9 +575,9 @@ def list_tables(
         for (table_name, table_config) in config.get("tables", {}).items()
         if get_flag(table_config, "vocabulary_table")
     }
-    if tables == TableType.all:
+    if tables == TableType.ALL:
         names = all_table_names
-    elif tables == TableType.generated:
+    elif tables == TableType.GENERATED:
         names = all_table_names - vocab_table_names
     else:
         names = vocab_table_names
@@ -584,7 +591,7 @@ def version() -> None:
     logger.info(
         "%s version %s",
         __package__,
-        metadata.version(__package__),
+        importlib.metadata.version(__package__),
     )
 
 

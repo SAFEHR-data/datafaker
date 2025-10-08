@@ -1,6 +1,5 @@
 """Functions and classes to create and populate the target database."""
 import pathlib
-import random
 from collections import Counter
 from typing import Any, Generator, Iterable, Iterator, Mapping, Sequence, Tuple
 
@@ -125,6 +124,19 @@ def create_db_data_into(
     db_dsn: str,
     schema_name: str | None,
 ) -> RowCounts:
+    """
+    Populate the database.
+
+    :param sorted_tables: The table names to populate, sorted so that foreign
+    keys' targets are populated before the foreign keys themselves.
+    :param table_generator_dict: A mapping  of table names to the generators
+    used to make data for them.
+    :param story_generator_list: A list of story generators to be run after the
+    table generators on each pass.
+    :param num_passes: Number of passes to perform.
+    :param db_dsn: Connection string for the destination database.
+    :param schema_name: Destination schema name.
+    """
     dst_engine = get_sync_engine(create_db_engine(db_dsn, schema_name=schema_name))
 
     row_counts: Counter[str] = Counter()
@@ -140,6 +152,8 @@ def create_db_data_into(
 
 
 class StoryIterator:
+    """Iterates through all the rows produced by all the stories."""
+
     def __init__(
         self,
         stories: Iterable[tuple[str, Story]],
@@ -147,6 +161,7 @@ class StoryIterator:
         table_generator_dict: Mapping[str, TableGenerator],
         dst_conn: Connection,
     ):
+        """Initialise a Story Iterator."""
         self._stories: Iterator[tuple[str, Story]] = iter(stories)
         self._table_dict: Mapping[str, Table] = table_dict
         self._table_generator_dict: Mapping[str, TableGenerator] = table_generator_dict
@@ -162,27 +177,31 @@ class StoryIterator:
 
     def is_ended(self) -> bool:
         """
-        Do we have another row to process?
+        Check if we have another row to process.
+
         If so, insert() can be called.
         """
         return self._table_name is None
 
     def has_table(self, table_name: str) -> bool:
-        """
-        Do we have a row for table table_name?
-        """
+        """Check if we have a row for table ``table_name``."""
         return table_name == self._table_name
 
     def table_name(self) -> str | None:
         """
-        The name of the current table (or None if no more stories to process)
+        Get the name of the current table.
+
+        :return: The table name, or None if there are  no more stories
+        to process.
         """
         return self._table_name
 
     def insert(self) -> None:
         """
-        Perform the insert. Call this after __init__ or next, and after checking
-        that is_ended returns False.
+        Put the row in the table.
+
+        Call this after __init__ or next, and after checking that is_ended
+        returns False.
         """
         if self._table_name is None:
             raise StopIteration("StoryIterator.insert after is_ended")
@@ -210,9 +229,7 @@ class StoryIterator:
         cursor.close()
 
     def next(self) -> None:
-        """
-        Advance to the next table row.
-        """
+        """Advance to the next row."""
         while True:
             try:
                 if self._final_values is None:
