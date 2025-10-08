@@ -1969,7 +1969,7 @@ def update_config_generators(
     src_dsn: str,
     src_schema: str | None,
     metadata: MetaData,
-    config: MutableMapping[str, Any],
+    config: Mapping[str, Any],
     spec_path: Path | None,
 ) -> Mapping[str, Any]:
     """

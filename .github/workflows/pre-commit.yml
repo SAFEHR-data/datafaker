@@ -9,7 +9,7 @@ on:
 env:
   # This should be the default but we'll be explicit
   PRE_COMMIT_HOME: ~/.caches/pre-commit
-  PYTHON_VERSION: "3.9"
+  PYTHON_VERSION: "3.10"
 jobs:
   the_job:
     runs-on: ubuntu-latest

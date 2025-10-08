@@ -7,7 +7,6 @@ from datetime import datetime
 from pathlib import Path
 from types import TracebackType
 from typing import Any, Callable, Final, Mapping, Optional, Sequence, Tuple, Type
-from typing_extensions import Self
 
 import pandas as pd
 import snsql
@@ -21,6 +20,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from sqlalchemy.schema import Column, Table
 from sqlalchemy.sql import Executable, sqltypes, type_api
+from typing_extensions import Self
 
 from datafaker import providers
 from datafaker.settings import get_settings

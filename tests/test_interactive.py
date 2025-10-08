@@ -3,6 +3,7 @@ import copy
 import random
 import re
 from dataclasses import dataclass
+from typing import Any, Iterable, Mapping, MutableMapping
 from unittest.mock import MagicMock, Mock, patch
 
 from sqlalchemy import insert, select
@@ -19,31 +20,39 @@ from tests.utils import GeneratesDBTestCase, RequiresDBTestCase
 
 
 class TestDbCmdMixin(DbCmd):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Initialize a TestDbCmdMixin"""
         super().__init__(*args, **kwargs)
         self.reset()
 
-    def reset(self):
-        self.messages: list[tuple[str, list, dict[str, any]]] = []
+    def reset(self) -> None:
+        """Reset all the debug messages collected so far."""
+        self.messages: list[tuple[str, tuple[Any, ...], dict[str, Any]]] = []
         self.headings: list[str] = []
         self.rows: list[list[str]] = []
-        self.column_items: list[str] = []
-        self.columns: dict[str, list[str]] = {}
+        self.column_items: list[list[str]] = []
+        self.columns: dict[str, list[Any]] = {}
 
-    def print(self, text: str, *args, **kwargs):
+    def print(self, text: str, *args: Any, **kwargs: Any) -> None:
+        """Capture the printed message."""
         self.messages.append((text, args, kwargs))
 
-    def print_table(self, headings: list[str], rows: list[list[str]]):
+    def print_table(self, headings: list[str], rows: list[list[str]]) -> None:
+        """Capture the printed table."""
         self.headings = headings
         self.rows = rows
 
-    def print_table_by_columns(self, columns: dict[str, list[str]]):
+    def print_table_by_columns(self, columns: dict[str, list[str]]) -> None:
+        """Capture the printed table."""
         self.columns = columns
 
-    def columnize(self, items: list[str]):
-        self.column_items.append(items)
+    def columnize(self, items: list[str] | None, displaywidth: int = 80) -> None:
+        """Capture the printed table."""
+        if items is not None:
+            self.column_items.append(items)
 
     def ask_save(self) -> str:
+        """Quitting always works without needing to ask the user."""
         return "yes"
 
 
@@ -54,7 +63,7 @@ class TestTableCmd(TableCmd, TestDbCmdMixin):
 class ConfigureTablesTests(RequiresDBTestCase):
     """Testing configure-tables."""
 
-    def _get_cmd(self, config) -> TestTableCmd:
+    def _get_cmd(self, config: MutableMapping[str, Any]) -> TestTableCmd:
         return TestTableCmd(self.dsn, self.schema_name, self.metadata, config)
 
 
@@ -67,7 +76,7 @@ class ConfigureTablesSrcTests(ConfigureTablesTests):
 
     def test_table_name_prompts(self) -> None:
         """Test that the prompts follow the names of the tables."""
-        config = {}
+        config: MutableMapping[str, Any] = {}
         with self._get_cmd(config) as tc:
             table_names = list(self.metadata.tables.keys())
             for t in table_names:
@@ -95,7 +104,7 @@ class ConfigureTablesSrcTests(ConfigureTablesTests):
 
     def test_column_display(self) -> None:
         """Test that we can see the names of the columns."""
-        config = {}
+        config: MutableMapping[str, Any] = {}
         with self._get_cmd(config) as tc:
             tc.do_next("unique_constraint_test")
             tc.do_columns("")
@@ -211,7 +220,7 @@ class ConfigureTablesSrcTests(ConfigureTablesTests):
     def test_print_data(self) -> None:
         """Test that we can print random rows from the table and random data from columns."""
         person_table = self.metadata.tables["person"]
-        with self.engine.connect() as conn:
+        with self.sync_engine.connect() as conn:
             person_rows = conn.execute(select(person_table)).mappings().fetchall()
             person_data = {row["person_id"]: row for row in person_rows}
             name_set = {row["name"] for row in person_rows}
@@ -255,7 +264,7 @@ class ConfigureTablesSrcTests(ConfigureTablesTests):
                 set(tc.column_items[0]), set(filter(lambda n: 16 <= len(n), name_set))
             )
 
-    def test_list_tables(self):
+    def test_list_tables(self) -> None:
         """Test that we can list the tables"""
         config = {
             "tables": {
@@ -308,7 +317,10 @@ class ConfigureTablesInstrumentsTests(ConfigureTablesTests):
     database_name = "instrument"
     schema_name = "public"
 
-    def test_sanity_checks_both(self):
+    def test_sanity_checks_both(self) -> None:
+        """
+        Test ``configure-tables`` sanity checks.
+        """
         config = {
             "tables": {
                 "model": {
@@ -349,7 +361,10 @@ class ConfigureTablesInstrumentsTests(ConfigureTablesTests):
                 ),
             )
 
-    def test_sanity_checks_warnings_only(self):
+    def test_sanity_checks_warnings_only(self) -> None:
+        """
+        Test ``configure-tables`` sanity checks.
+        """
         config = {
             "tables": {
                 "model": {
@@ -388,7 +403,10 @@ class ConfigureTablesInstrumentsTests(ConfigureTablesTests):
                 ),
             )
 
-    def test_sanity_checks_errors_only(self):
+    def test_sanity_checks_errors_only(self) -> None:
+        """
+        Test ``configure-tables`` sanity checks.
+        """
         config = {
             "tables": {
                 "model": {
@@ -431,7 +449,7 @@ class ConfigureTablesInstrumentsTests(ConfigureTablesTests):
 class TestGeneratorCmd(GeneratorCmd, TestDbCmdMixin):
     """GeneratorCmd but mocked"""
 
-    def get_proposals(self) -> dict[str, tuple[int, str, str, list[str]]]:
+    def get_proposals(self) -> dict[str, tuple[int, str, list[str]]]:
         """
         Returns a dict of generator name to a tuple of (index, fit_string, [list,of,samples])
         """
@@ -449,10 +467,11 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
     database_name = "instrument"
     schema_name = "public"
 
-    def _get_cmd(self, config) -> TestGeneratorCmd:
+    def _get_cmd(self, config: MutableMapping[str, Any]) -> TestGeneratorCmd:
+        """Get the command we are using for this test case."""
         return TestGeneratorCmd(self.dsn, self.schema_name, self.metadata, config)
 
-    def test_null_configuration(self):
+    def test_null_configuration(self) -> None:
         """Test that the tables having null configuration does not break."""
         config = {
             "tables": None,
@@ -466,7 +485,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             gc.do_quit("")
             self.assertEqual(len(gc.config["tables"][TABLE]["row_generators"]), 1)
 
-    def test_null_table_configuration(self):
+    def test_null_table_configuration(self) -> None:
         """Test that a table having null configuration does not break."""
         config = {
             "tables": {
@@ -483,7 +502,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
 
     def test_prompts(self) -> None:
         """Test that the prompts follow the names of the columns and assigned generators."""
-        config = {}
+        config: MutableMapping[str, Any] = {}
         with self._get_cmd(config) as gc:
             for table_name, table_meta in self.metadata.tables.items():
                 for column_name, column_meta in table_meta.columns.items():
@@ -521,7 +540,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             )
             gc.reset()
 
-    def test_set_generator_mimesis(self):
+    def test_set_generator_mimesis(self) -> None:
         """Test that we can set one generator to a mimesis generator."""
         with self._get_cmd({}) as gc:
             TABLE = "model"
@@ -538,7 +557,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
                 {"name": f"generic.{GENERATOR}", "columns_assigned": [COLUMN]},
             )
 
-    def test_set_generator_distribution(self):
+    def test_set_generator_distribution(self) -> None:
         """Test that we can set one generator to gaussian."""
         with self._get_cmd({}) as gc:
             TABLE = "string"
@@ -571,7 +590,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
                 f"SELECT AVG({COLUMN}) AS mean__{COLUMN}, STDDEV({COLUMN}) AS stddev__{COLUMN} FROM {TABLE}",
             )
 
-    def test_set_generator_distribution_directly(self):
+    def test_set_generator_distribution_directly(self) -> None:
         """Test that we can set one generator to gaussian without going through propose."""
         with self._get_cmd({}) as gc:
             TABLE = "string"
@@ -592,7 +611,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
                 f"SELECT AVG({COLUMN}) AS mean__{COLUMN}, STDDEV({COLUMN}) AS stddev__{COLUMN} FROM {TABLE}",
             )
 
-    def test_set_generator_choice(self):
+    def test_set_generator_choice(self) -> None:
         """Test that we can set one generator to uniform choice."""
         with self._get_cmd({}) as gc:
             TABLE = "string"
@@ -626,7 +645,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
                 f"SELECT {COLUMN} AS value FROM {TABLE} WHERE {COLUMN} IS NOT NULL GROUP BY value ORDER BY COUNT({COLUMN}) DESC",
             )
 
-    def test_weighted_choice_generator_generates_choices(self):
+    def test_weighted_choice_generator_generates_choices(self) -> None:
         """Test that propose and compare show weighted_choice's values."""
         with self._get_cmd({}) as gc:
             TABLE = "string"
@@ -643,7 +662,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertIn(col_heading, gc.columns)
             self.assertSubset(set(gc.columns[col_heading]), VALUES)
 
-    def test_merge_columns(self):
+    def test_merge_columns(self) -> None:
         """Test that we can merge columns and set a multivariate generator"""
         TABLE = "string"
         COLUMN_1 = "frequency"
@@ -683,7 +702,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertEqual(row_gen["name"], GENERATOR)
             self.assertListEqual(row_gen["columns_assigned"], [COLUMN_1, COLUMN_2])
 
-    def test_unmerge_columns(self):
+    def test_unmerge_columns(self) -> None:
         """Test that we can unmerge columns and generators are removed"""
         TABLE = "string"
         COLUMN_1 = "frequency"
@@ -722,7 +741,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertEqual(row_gen["name"], REMAINING_GEN)
             self.assertListEqual(row_gen["columns_assigned"], [COLUMN_3])
 
-    def test_old_generators_remain(self):
+    def test_old_generators_remain(self) -> None:
         """Test that we can set one generator and keep an old one."""
         config = {
             "tables": {
@@ -782,7 +801,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
                 "SELECT AVG(frequency) AS mean__frequency, STDDEV(frequency) AS stddev__frequency FROM string",
             )
 
-    def test_aggregate_queries_merge(self):
+    def test_aggregate_queries_merge(self) -> None:
         """
         Test that we can set a generator that requires select aggregate clauses
         and keep an old one, resulting in a merged query.
@@ -817,7 +836,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             proposals = gc.get_proposals()
             gc.do_set(str(proposals[f"{GENERATOR}"][0]))
             gc.do_quit("")
-            row_gens: list[dict[str, any]] = gc.config["tables"]["string"][
+            row_gens: list[dict[str, Any]] = gc.config["tables"]["string"][
                 "row_generators"
             ]
             self.assertEqual(len(row_gens), 2)
@@ -850,9 +869,9 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             select_match = re.match(
                 r"SELECT (.*) FROM string", gc.config["src-stats"][0]["query"]
             )
-            self.assertIsNotNone(
-                select_match, "src_stats[0].query is not an aggregate select"
-            )
+            assert (
+                select_match is not None
+            ), "src_stats[0].query is not an aggregate select"
             self.assertSetEqual(
                 set(select_match.group(1).split(", ")),
                 {
@@ -863,7 +882,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
                 },
             )
 
-    def test_next_completion(self):
+    def test_next_completion(self) -> None:
         """Test tab completion for the next command."""
         with self._get_cmd({}) as gc:
             self.assertSetEqual(
@@ -887,7 +906,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             )
             self.assertListEqual(gc.complete_next("ww", "next ww", 5, 7), [])
 
-    def test_compare_reports_privacy(self):
+    def test_compare_reports_privacy(self) -> None:
         """
         Test that compare reports whether the current table is primary private,
         secondary private or not private.
@@ -917,11 +936,11 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertEqual(text, gc.SECONDARY_PRIVATE_TEXT)
             self.assertSequenceEqual(args, [["model"]])
 
-    def test_existing_configuration_remains(self):
+    def test_existing_configuration_remains(self) -> None:
         """
         Test setting a generator does not remove other information.
         """
-        config = {
+        config: MutableMapping[str, Any] = {
             "tables": {
                 "string": {
                     "primary_private": True,
@@ -946,7 +965,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertEqual(src_stats["kraken"], config["src-stats"][0]["query"])
             self.assertTrue(gc.config["tables"]["string"]["primary_private"])
 
-    def test_empty_tables_are_not_configured(self):
+    def test_empty_tables_are_not_configured(self) -> None:
         """Test that tables marked as empty are not configured."""
         config = {
             "tables": {
@@ -969,10 +988,10 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
     database_name = "numbers"
     schema_name = "public"
 
-    def _get_cmd(self, config) -> TestGeneratorCmd:
+    def _get_cmd(self, config: MutableMapping[str, Any]) -> TestGeneratorCmd:
         return TestGeneratorCmd(self.dsn, self.schema_name, self.metadata, config)
 
-    def test_create_with_sampled_choice(self):
+    def test_create_with_sampled_choice(self) -> None:
         """Test that suppression works for choice and zipf_choice."""
         table_name = "number_table"
         with self._get_cmd({}) as gc:
@@ -1013,7 +1032,7 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
             gc.do_set(str(proposals["dist_gen.choice [sampled]"][0]))
             gc.do_quit("")
             self.generate_data(gc.config, num_passes=200)
-        with self.engine.connect() as conn:
+        with self.sync_engine.connect() as conn:
             stmt = select(self.metadata.tables[table_name])
             rows = conn.execute(stmt).fetchall()
             ones = set()
@@ -1028,7 +1047,7 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
             self.assertSetEqual(twos, {2, 3})
             self.assertSetEqual(threes, {1, 2, 3, 4, 5})
 
-    def test_create_with_choice(self):
+    def test_create_with_choice(self) -> None:
         """Smoke test normal choice works."""
         table_name = "number_table"
         with self._get_cmd({}) as gc:
@@ -1044,7 +1063,7 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
             gc.do_set(str(proposals["dist_gen.zipf_choice"][0]))
             gc.do_quit("")
             self.generate_data(gc.config, num_passes=200)
-        with self.engine.connect() as conn:
+        with self.sync_engine.connect() as conn:
             stmt = select(self.metadata.tables[table_name])
             rows = conn.execute(stmt).fetchall()
             ones = set()
@@ -1056,7 +1075,7 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
             self.assertSetEqual(ones, {1, 2, 3, 4, 5})
             self.assertSetEqual(twos, {1, 2, 3, 4, 5})
 
-    def test_create_with_weighted_choice(self):
+    def test_create_with_weighted_choice(self) -> None:
         """Smoke test weighted choice."""
         table_name = "number_table"
         with self._get_cmd({}) as gc:
@@ -1077,7 +1096,8 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
                 f"{prop[0]}. dist_gen.weighted_choice [sampled and suppressed]"
             )
             self.assertIn(col_heading, set(gc.columns.keys()))
-            self.assertSubset(set(gc.columns[col_heading]), {1, 4})
+            col_set: set[int] = set(gc.columns[col_heading])
+            self.assertSubset(col_set, {1, 4})
             gc.do_set(str(prop[0]))
             gc.do_next("number_table.two")
             gc.reset()
@@ -1094,7 +1114,8 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
             gc.do_compare(str(prop[0]))
             col_heading = f"{prop[0]}. dist_gen.weighted_choice"
             self.assertIn(col_heading, set(gc.columns.keys()))
-            self.assertSubset(set(gc.columns[col_heading]), {1, 2, 3, 4, 5})
+            col_set2: set[int] = set(gc.columns[col_heading])
+            self.assertSubset(col_set2, {1, 2, 3, 4, 5})
             gc.do_set(str(prop[0]))
             gc.do_next("number_table.three")
             gc.reset()
@@ -1110,11 +1131,12 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
             gc.do_compare(str(prop[0]))
             col_heading = f"{prop[0]}. dist_gen.weighted_choice [sampled]"
             self.assertIn(col_heading, set(gc.columns.keys()))
-            self.assertSubset(set(gc.columns[col_heading]), {1, 2, 3, 4, 5})
+            col_set3: set[int] = set(gc.columns[col_heading])
+            self.assertSubset(col_set3, {1, 2, 3, 4, 5})
             gc.do_set(str(prop[0]))
             gc.do_quit("")
             self.generate_data(gc.config, num_passes=200)
-        with self.engine.connect() as conn:
+        with self.sync_engine.connect() as conn:
             stmt = select(self.metadata.tables[table_name])
             rows = conn.execute(stmt).fetchall()
             ones = set()
@@ -1141,62 +1163,60 @@ class ConfigureMissingnessTests(RequiresDBTestCase):
     database_name = "instrument"
     schema_name = "public"
 
-    def _get_cmd(self, config) -> TestMissingnessCmd:
+    def _get_cmd(self, config: MutableMapping[str, Any]) -> TestMissingnessCmd:
+        """We are using configure-missingness."""
         return TestMissingnessCmd(self.dsn, self.schema_name, self.metadata, config)
 
-    def test_set_missingness_to_sampled(self):
+    def test_set_missingness_to_sampled(self) -> None:
         """Test that we can set one table to sampled missingness."""
         with self._get_cmd({}) as mc:
             TABLE = "signature_model"
             mc.do_next(TABLE)
             mc.do_counts("")
             self.assertListEqual(
-                mc.messages, [(MissingnessCmd.ROW_COUNT_MSG, (6,), {})]
+                mc.messages, [(MissingnessCmd.ROW_COUNT_MSG, (10,), {})]
             )
-            self.assertListEqual(mc.rows, [["player_id", 3], ["based_on", 2]])
+            # Check the counts of NULLs in each column
+            self.assertListEqual(mc.rows, [["player_id", 4], ["based_on", 3]])
             mc.do_sampled("")
             mc.do_quit("")
-            self.assertDictEqual(
-                mc.config,
-                {
-                    "tables": {
-                        TABLE: {
-                            "missingness_generators": [
-                                {
-                                    "columns": ["player_id", "based_on"],
-                                    "kwargs": {
-                                        "patterns": 'SRC_STATS["missing_auto__signature_model__0"]'
-                                    },
-                                    "name": "column_presence.sampled",
-                                }
-                            ]
-                        }
-                    },
-                    "src-stats": [
-                        {
-                            "name": "missing_auto__signature_model__0",
-                            "query": (
-                                "SELECT COUNT(*) AS row_count, player_id__is_null, based_on__is_null FROM"
-                                " (SELECT player_id IS NULL AS player_id__is_null, based_on IS NULL AS based_on__is_null FROM"
-                                " signature_model ORDER BY RANDOM() LIMIT 1000) AS __t GROUP BY player_id__is_null, based_on__is_null"
-                            ),
-                        }
-                    ],
-                },
+            self.assertListEqual(
+                mc.config["tables"][TABLE]["missingness_generators"],
+                [
+                    {
+                        "columns": ["player_id", "based_on"],
+                        "kwargs": {
+                            "patterns": 'SRC_STATS["missing_auto__signature_model__0"]["results"]'
+                        },
+                        "name": "column_presence.sampled",
+                    }
+                ],
+            )
+            self.assertEqual(
+                mc.config["src-stats"][0]["name"],
+                "missing_auto__signature_model__0",
+            )
+            self.assertEqual(
+                mc.config["src-stats"][0]["query"],
+                (
+                    "SELECT COUNT(*) AS row_count, player_id__is_null, based_on__is_null FROM"
+                    " (SELECT player_id IS NULL AS player_id__is_null, based_on IS NULL AS based_on__is_null FROM"
+                    " signature_model ORDER BY RANDOM() LIMIT 1000) AS __t GROUP BY player_id__is_null, based_on__is_null"
+                ),
             )
 
 
-class ConfigureMissingnessTests(GeneratesDBTestCase):
+class ConfigureMissingnessTestsWithGeneration(GeneratesDBTestCase):
     """Testing configure-missing with generation."""
 
     dump_file_path = "instrument.sql"
     database_name = "instrument"
     schema_name = "public"
 
-    def _get_cmd(self, config) -> TestMissingnessCmd:
+    def _get_cmd(self, config: MutableMapping[str, Any]) -> TestMissingnessCmd:
         return TestMissingnessCmd(self.dsn, self.schema_name, self.metadata, config)
 
-    def test_create_with_missingness(self):
+    def test_create_with_missingness(self) -> None:
         """Test that we can sample real missingness and reproduce it."""
         random.seed(45)
         # Configure the missingness
@@ -1208,7 +1228,7 @@ class ConfigureMissingnessTests(GeneratesDBTestCase):
             config = mc.config
             self.generate_data(config, num_passes=100)
         # Test that each missingness pattern is present in the database
-        with self.engine.connect() as conn:
+        with self.sync_engine.connect() as conn:
             stmt = select(self.metadata.tables[table_name])
             rows = conn.execute(stmt).mappings().fetchall()
             patterns: set[int] = set()
@@ -1227,10 +1247,11 @@ class GeneratorTests(GeneratesDBTestCase):
     database_name = "instrument"
     schema_name = "public"
 
-    def _get_cmd(self, config) -> TestGeneratorCmd:
+    def _get_cmd(self, config: MutableMapping[str, Any]) -> TestGeneratorCmd:
+        """We are using configure-generators."""
         return TestGeneratorCmd(self.dsn, self.schema_name, self.metadata, config)
 
-    def test_set_null(self):
+    def test_set_null(self) -> None:
         """Test that we can sample real missingness and reproduce it."""
         with self._get_cmd({}) as gc:
             gc.do_next("string.position")
@@ -1256,8 +1277,13 @@ class GeneratorTests(GeneratesDBTestCase):
             config = gc.config
             self.generate_data(config, num_passes=3)
         # Test that each missingness pattern is present in the database
-        with self.engine.connect() as conn:
-            stmt = select(self.metadata.tables["string"].c["position", "frequency"])
+        with self.sync_engine.connect() as conn:
+            # select(self.metadata.tables["string"].c["position", "frequency"]) would be nicer
+            # but mypy doesn't like it
+            stmt = select(
+                self.metadata.tables["string"].c["position"],
+                self.metadata.tables["string"].c["frequency"],
+            )
             rows = conn.execute(stmt).fetchall()
             count = 0
             for row in rows:
@@ -1265,7 +1291,12 @@ class GeneratorTests(GeneratesDBTestCase):
                 self.assertEqual(row.position, 0)
                 self.assertEqual(row.frequency, 0.0)
             self.assertEqual(count, 3)
-            stmt = select(self.metadata.tables["signature_model"].c["name", "based_on"])
+            # select(self.metadata.tables["signature_model"].c["name", "based_on"]) would be nicer
+            # but mypy doesn't like it
+            stmt = select(
+                self.metadata.tables["signature_model"].c["name"],
+                self.metadata.tables["signature_model"].c["based_on"],
+            )
             rows = conn.execute(stmt).fetchall()
             count = 0
             for row in rows:
@@ -1274,7 +1305,7 @@ class GeneratorTests(GeneratesDBTestCase):
                 self.assertIsNone(row.based_on)
             self.assertEqual(count, 3)
 
-    def test_dist_gen_sampled_produces_ordered_src_stats(self):
+    def test_dist_gen_sampled_produces_ordered_src_stats(self) -> None:
         """Tests that choosing a sampled choice generator produces ordered src stats"""
         with self._get_cmd({}) as gc:
             gc.do_next("signature_model.player_id")
@@ -1294,7 +1325,11 @@ class GeneratorTests(GeneratesDBTestCase):
         ]
         self.assertListEqual(based_ons, [1, 3, 2])
 
-    def assertAreTruncatedTo(self, xs, length):
+    def assertAreTruncatedTo(self, xs: Iterable[str], length: int) -> None:
+        """
+        Check that none of the strings are longer than ``length`` (after
+        removing surrounding quotes).
+        """
         maxlen = 0
         for x in xs:
             newlen = len(x.strip("'\""))
@@ -1302,7 +1337,7 @@ class GeneratorTests(GeneratesDBTestCase):
             maxlen = max(maxlen, newlen)
         self.assertEqual(maxlen, length)
 
-    def test_varchar_ns_are_truncated(self):
+    def test_varchar_ns_are_truncated(self) -> None:
         """Tests that mimesis generators for VARCHAR(N) truncate to N characters"""
         GENERATOR = "generic.text.quote"
         TABLE = "signature_model"
@@ -1325,7 +1360,7 @@ class GeneratorTests(GeneratesDBTestCase):
             gc.do_quit("")
             config = gc.config
             self.generate_data(config, num_passes=15)
-        with self.engine.connect() as conn:
+        with self.sync_engine.connect() as conn:
             stmt = select(self.metadata.tables[TABLE].c[COLUMN])
             rows = conn.execute(stmt).scalars().fetchall()
             self.assertAreTruncatedTo(rows, 20)
@@ -1359,7 +1394,7 @@ class Correlation(Stat):
     y2: float = 0
     xy: float = 0
 
-    def add(self, x: float, y: float) -> None:
+    def add2(self, x: float, y: float) -> None:
         self.n += 1
         self.x += x
         self.x2 += x * x
@@ -1386,14 +1421,16 @@ class NullPartitionedTests(GeneratesDBTestCase):
     schema_name = "public"
 
     def setUp(self) -> None:
+        """Set up the test with specific sample and suppress counts."""
         super().setUp()
         NullPartitionedNormalGeneratorFactory.SAMPLE_COUNT = 8
         NullPartitionedNormalGeneratorFactory.SUPPRESS_COUNT = 2
 
-    def _get_cmd(self, config) -> TestGeneratorCmd:
+    def _get_cmd(self, config: MutableMapping[str, Any]) -> TestGeneratorCmd:
+        """Get the configure-generators object as our command."""
         return TestGeneratorCmd(self.dsn, self.schema_name, self.metadata, config)
 
-    def test_create_with_null_partitioned_grouped_multivariate(self):
+    def test_create_with_null_partitioned_grouped_multivariate(self) -> None:
         """Test EAV for all columns."""
         table_name = "measurement"
         generate_count = 800
@@ -1422,7 +1459,7 @@ class NullPartitionedTests(GeneratesDBTestCase):
             self.remove_data(gc.config)
             # let's add a vocab table without messing around with files
             table = self.metadata.tables["measurement_type"]
-            with self.engine.connect() as conn:
+            with self.sync_engine.connect() as conn:
                 conn.execute(insert(table).values({"id": 1, "name": "agreement"}))
                 conn.execute(insert(table).values({"id": 2, "name": "acceleration"}))
                 conn.execute(insert(table).values({"id": 3, "name": "velocity"}))
@@ -1430,7 +1467,7 @@ class NullPartitionedTests(GeneratesDBTestCase):
                 conn.execute(insert(table).values({"id": 5, "name": "matter"}))
                 conn.commit()
             self.create_data(gc.config, num_passes=generate_count)
-        with self.engine.connect() as conn:
+        with self.sync_engine.connect() as conn:
             stmt = select(self.metadata.tables[table_name])
             rows = conn.execute(stmt).fetchall()
             one_count = 0
@@ -1454,19 +1491,19 @@ class NullPartitionedTests(GeneratesDBTestCase):
                     self.assertIsNotNone(row.first_value)
                     self.assertIsNotNone(row.second_value)
                     self.assertIsNone(row.third_value)
-                    two.add(row.first_value, row.second_value)
+                    two.add2(row.first_value, row.second_value)
                 elif row.type == 3:
                     # negative correlation around 11.8, 12.1
                     self.assertIsNotNone(row.first_value)
                     self.assertIsNotNone(row.second_value)
                     self.assertIsNone(row.third_value)
-                    three.add(row.first_value, row.second_value)
+                    three.add2(row.first_value, row.second_value)
                 elif row.type == 4:
                     # positive correlation around 21.4, 23.4
                     self.assertIsNotNone(row.first_value)
                     self.assertIsNotNone(row.second_value)
                     self.assertIsNone(row.third_value)
-                    four.add(row.first_value, row.second_value)
+                    four.add2(row.first_value, row.second_value)
                 elif row.type == 5:
                     self.assertIn(row.third_value, {"fish", "fowl"})
                     self.assertIsNotNone(row.first_value)
@@ -1517,7 +1554,7 @@ class NullPartitionedTests(GeneratesDBTestCase):
             self.assertAlmostEqual(fowl.x_mean(), 11.2, delta=8.0)
             self.assertAlmostEqual(fowl.x_var(), 1.86, delta=1)
 
-    def test_create_with_null_partitioned_grouped_sampled_and_suppressed(self):
+    def test_create_with_null_partitioned_grouped_sampled_and_suppressed(self) -> None:
         """Test EAV for all columns with sampled and suppressed generation."""
         table_name = "measurement"
         table2_name = "observation"
@@ -1566,7 +1603,7 @@ class NullPartitionedTests(GeneratesDBTestCase):
             self.remove_data(gc.config)
             # let's add a vocab table without messing around with files
             table = self.metadata.tables["measurement_type"]
-            with self.engine.connect() as conn:
+            with self.sync_engine.connect() as conn:
                 conn.execute(insert(table).values({"id": 1, "name": "agreement"}))
                 conn.execute(insert(table).values({"id": 2, "name": "acceleration"}))
                 conn.execute(insert(table).values({"id": 3, "name": "velocity"}))
@@ -1574,7 +1611,7 @@ class NullPartitionedTests(GeneratesDBTestCase):
                 conn.execute(insert(table).values({"id": 5, "name": "matter"}))
                 conn.commit()
             self.create_data(gc.config, num_passes=generate_count)
-        with self.engine.connect() as conn:
+        with self.sync_engine.connect() as conn:
             stmt = select(self.metadata.tables[table_name])
             rows = conn.execute(stmt).fetchall()
             one_count = 0
@@ -1661,11 +1698,11 @@ class NonInteractiveTests(RequiresDBTestCase):
     )
     def test_non_interactive_configure_generators(
         self, mock_csv_reader: MagicMock, mock_path: MagicMock
-    ):
+    ) -> None:
         """
         test that we can set generators from a CSV file
         """
-        config = {}
+        config: Mapping[str, Any] = {}
         spec_csv = Mock(return_value="mock spec.csv file")
         update_config_generators(
             self.dsn, self.schema_name, self.metadata, config, spec_csv

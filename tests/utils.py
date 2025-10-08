@@ -19,7 +19,13 @@ from datafaker import settings
 from datafaker.create import create_db_data_into
 from datafaker.make import make_src_stats, make_table_generators, make_tables_file
 from datafaker.remove import remove_db_data_from
-from datafaker.utils import create_db_engine, get_sync_engine, import_file, sorted_non_vocabulary_tables, T
+from datafaker.utils import (
+    T,
+    create_db_engine,
+    get_sync_engine,
+    import_file,
+    sorted_non_vocabulary_tables,
+)
 
 
 class SysExit(Exception):
@@ -74,14 +80,22 @@ class DatafakerTestCase(TestCase):
             return
         self.fail("".join(traceback.format_exception(result.exception)))
 
-    def assertSubset(self, set1: set[T], set2: set[T], msg: str | None=None) -> None:
+    def assertGreaterAndNotNone(self, left: float | None, right: float) -> None:
+        """
+        Assert left is not None and greater than right
+        """
+        if left is None:
+            self.fail("first argument is None")
+        else:
+            self.assertGreater(left, right)
+
+    def assertSubset(self, set1: set[T], set2: set[T], msg: str | None = None) -> None:
         """Assert a set is a (non-strict) subset.
 
-        Args:
-            set1: The asserted subset.
-            set2: The asserted superset.
-            msg: Optional message to use on failure instead of a list of
-                    differences.
+        :param set1: The asserted subset.
+        :param set2: The asserted superset.
+        :param msg: Optional message to use on failure instead of a list of
+        differences.
         """
         try:
             difference = set1.difference(set2)
@@ -235,7 +249,7 @@ class GeneratesDBTestCase(RequiresDBTestCase):
         # `remove-data` so we don't have to use a separate database for the destination
         remove_db_data_from(self.metadata, config, self.dsn, self.schema_name)
 
-    def create_data(self, config: Mapping[str, Any], num_passes: int=1) -> None:
+    def create_data(self, config: Mapping[str, Any], num_passes: int = 1) -> None:
         """Create fake data in the DB."""
         # `create-data` with all this stuff
         datafaker_module = import_file(self.generators_file_path)
@@ -250,7 +264,9 @@ class GeneratesDBTestCase(RequiresDBTestCase):
             self.schema_name,
         )
 
-    def generate_data(self, config: Mapping[str, Any], num_passes: int=1) -> Mapping[str, Any]:
+    def generate_data(
+        self, config: Mapping[str, Any], num_passes: int = 1
+    ) -> Mapping[str, Any]:
         """
         Replaces the DB's source data with generated data.
         :return: A Python dictionary representation of the src-stats.yaml file, for what it's worth.

@@ -432,7 +432,9 @@ class DBFunctionalTestCase(RequiresDBTestCase):
             completed_process.stdout,
         )
 
-    def invoke(self, *args: Any, expected_error: str | None=None, env: Mapping[str, str]={}) -> Result:
+    def invoke(
+        self, *args: Any, expected_error: str | None = None, env: Mapping[str, str] = {}
+    ) -> Result:
         res = self.runner.invoke(app, args, env=env)
         if expected_error is None:
             self.assertNoException(res)

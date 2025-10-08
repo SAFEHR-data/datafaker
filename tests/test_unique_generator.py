@@ -2,14 +2,7 @@
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from sqlalchemy import (
-    Boolean,
-    Column,
-    Integer,
-    Text,
-    UniqueConstraint,
-    insert,
-)
+from sqlalchemy import Boolean, Column, Integer, Text, UniqueConstraint, insert
 from sqlalchemy.ext.declarative import declarative_base
 
 from datafaker.unique_generator import UniqueGenerator
