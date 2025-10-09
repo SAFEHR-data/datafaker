@@ -18,11 +18,11 @@ class DumpTests(RequiresDBTestCase):
     @patch("datafaker.dump._make_csv_writer")
     def test_dump_data(self, make_csv_writer: MagicMock) -> None:
         """Test dump-data."""
-        TEST_OUTPUT_FILE = io.StringIO()
+        test_output_file = io.StringIO()
         metadata = MetaData()
         metadata.reflect(self.sync_engine)
-        dump_db_tables(metadata, self.dsn, self.schema_name, "player", TEST_OUTPUT_FILE)
-        make_csv_writer.assert_called_once_with(TEST_OUTPUT_FILE)
+        dump_db_tables(metadata, self.dsn, self.schema_name, "player", test_output_file)
+        make_csv_writer.assert_called_once_with(test_output_file)
         make_csv_writer.assert_has_calls(
             [
                 call().writerow(["id", "given_name", "family_name"]),

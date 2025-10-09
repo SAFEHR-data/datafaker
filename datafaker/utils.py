@@ -50,7 +50,6 @@ CONFIG_SCHEMA_PATH: Final[Path] = (
 )
 
 T = TypeVar("T")
-_K = TypeVar("_K")
 
 
 def read_config_file(path: str) -> dict:
@@ -96,14 +95,29 @@ def import_file(file_path: str) -> ModuleType:
 
 
 def open_file(file_name: str | Path) -> io.BufferedWriter:
+    """Open a file for writing."""
     return Path(file_name).open("wb")
 
 
 def open_compressed_file(file_name: str | Path) -> gzip.GzipFile:
+    """
+    Open a gzip-compressed file for writing.
+
+    :param file_name: The name of the file to open.
+    :return: A file object; it can be written to as a normal uncompressed
+    file and it will do the compression.
+    """
     return gzip.GzipFile(file_name, "wb")
 
 
 def table_row_count(table: Table, conn: Connection) -> int:
+    """
+    Count the rows in the table.
+
+    :param table: The table to count.
+    :param conn: The connection to the database.
+    :return: The number of rows in the table.
+    """
     return conn.execute(
         select(sqlalchemy.func.count()).select_from(
             sqlalchemy.table(
@@ -222,10 +236,12 @@ def warning_or_higher(record: logging.LogRecord) -> bool:
 class StdoutHandler(logging.Handler):
     """
     A handler that writes to stdout.
+
     We aren't using StreamHandler because that confuses typer.testing.CliRunner
     """
 
     def flush(self) -> None:
+        """Flush the buffer."""
         self.acquire()
         try:
             sys.stdout.flush()
@@ -233,6 +249,7 @@ class StdoutHandler(logging.Handler):
             self.release()
 
     def emit(self, record: Any) -> None:
+        """Write the record."""
         try:
             msg = self.format(record)
             sys.stdout.write(msg + "\n")
@@ -246,10 +263,12 @@ class StdoutHandler(logging.Handler):
 class StderrHandler(logging.Handler):
     """
     A handler that writes to stderr.
+
     We aren't using StreamHandler because that confuses typer.testing.CliRunner
     """
 
     def flush(self) -> None:
+        """Flush the buffer."""
         self.acquire()
         try:
             sys.stderr.flush()
@@ -257,6 +276,7 @@ class StderrHandler(logging.Handler):
             self.release()
 
     def emit(self, record: Any) -> None:
+        """Write the record."""
         try:
             msg = self.format(record)
             sys.stderr.write(msg + "\n")
@@ -293,19 +313,37 @@ def conf_logger(verbose: bool) -> None:
     logging.getLogger("blib2to3.pgen2.driver").setLevel(logging.WARNING)
 
 
-def get_flag(maybe_dict: Any, key: Any) -> Any:
-    """Returns maybe_dict[key] or False if that doesn't exist"""
-    return type(maybe_dict) is dict and maybe_dict.get(key, False)
+def get_flag(maybe_dict: Any, key: Any) -> bool:
+    """
+    Get a boolean from a mapping, or False if that does not make sense.
+
+    :param maybe_dict: A mapping, or possibly not.
+    :param key: A key in ``maybe_dict``, or possibly not.
+    :return: True only if ``maybe_dict`` is a mapping, ``maybe_dict[key]``
+    exists and ``maybe_dict[key]`` is truthy.
+    """
+    return isinstance(maybe_dict, Mapping) and maybe_dict.get(key, False)
 
 
-def get_property(maybe_dict: Mapping[_K, Any], key: _K, default: T) -> T:
-    """Returns maybe_dict[key] or default if that doesn't exist"""
-    return maybe_dict.get(key, default) if type(maybe_dict) is dict else default
+def get_property(maybe_dict: Any, key: Any, default: T) -> T:
+    """
+    Get a specific property from a dict or a default if that does not exist.
+
+    :param maybe_dict: A mapping, or possibly not.
+    :param key: A key in ``maybe_dict``, or possibly not.
+    :param default: The return value if ``maybe_dict`` is not a mapping,
+    or if ``key`` is not a key of ``maybe_dict``.
+    :return: ``maybe_dict[key]`` if this makes sense, or ``default`` if not.
+    """
+    return maybe_dict.get(key, default) if isinstance(maybe_dict, Mapping) else default
 
 
 def fk_refers_to_ignored_table(fk: ForeignKey) -> bool:
     """
-    Does this foreign key refer to a table that is configured as ignore in config.yaml
+    Test if this foreign key refers to an ignored table.
+
+    :param fk: The foreign key to test.
+    :return: True if the table referred to is ignored in ``config.yaml``.
     """
     try:
         fk.column
@@ -316,7 +354,10 @@ def fk_refers_to_ignored_table(fk: ForeignKey) -> bool:
 
 def fk_constraint_refers_to_ignored_table(fk: ForeignKeyConstraint) -> bool:
     """
-    Does this foreign key constraint refer to a table that is configured as ignore in config.yaml
+    Test if the constraint refers to a table marked as ignored in ``config.yaml``.
+
+    :param fk: The foreign key constraint.
+    :return: True if ``fk`` refers to an ignored table.
     """
     try:
         fk.referred_table
@@ -328,6 +369,10 @@ def fk_constraint_refers_to_ignored_table(fk: ForeignKeyConstraint) -> bool:
 def get_related_table_names(table: Table) -> set[str]:
     """
     Get the names of all tables for which there exist foreign keys from this table.
+
+    :param table: SQLAlchemy table object.
+    :return: The set of the names of the tables referred to by foreign keys
+    in ``table``.
     """
     return {
         str(fk.referred_table.name)
@@ -338,8 +383,11 @@ def get_related_table_names(table: Table) -> set[str]:
 
 def table_is_private(config: Mapping, table_name: str) -> bool:
     """
-    Return True if the table with name table_name is a primary private table
-    according to config.
+    Test if the named table is private.
+
+    :param config: The ``config.yaml`` object.
+    :param table_name: The name of the table to test.
+    :return: True if the table is marked as private in ``config``.
     """
     ts = config.get("tables", {})
     if type(ts) is not dict:
@@ -351,10 +399,14 @@ def table_is_private(config: Mapping, table_name: str) -> bool:
 
 def primary_private_fks(config: Mapping, table: Table) -> list[str]:
     """
-    Returns the list of columns in the table that refer to primary private tables.
+    Get the list of columns in the table that refer to primary private tables.
 
     A table that is not primary private but has a non-empty list of
     primary_private_fks is secondary private.
+
+    :param config: The ``config.yaml`` object.
+    :param table: The table to examine.
+    :return: A list of names of columns that refer to private tables.
     """
     return [
         str(fk.referred_table.name)
@@ -365,9 +417,7 @@ def primary_private_fks(config: Mapping, table: Table) -> list[str]:
 
 
 def get_vocabulary_table_names(config: Mapping) -> set[str]:
-    """
-    Extract the table names with a vocabulary_table: true property.
-    """
+    """Extract the table names with a vocabulary_table: true property."""
     return {
         table_name
         for (table_name, table_config) in config.get("tables", {}).items()
@@ -376,6 +426,7 @@ def get_vocabulary_table_names(config: Mapping) -> set[str]:
 
 
 def make_foreign_key_name(table_name: str, col_name: str) -> str:
+    """Make a suitable foreign key name."""
     return f"{table_name}_{col_name}_fkey"
 
 
@@ -384,6 +435,16 @@ def remove_vocab_foreign_key_constraints(
     config: Mapping[str, Any],
     dst_engine: Connection | Engine,
 ) -> None:
+    """
+    Remove the foreign key constraints from vocabulary tables.
+
+    This allows vocabulary tables to be loaded without worrying about
+    topologically sorting them or circular dependencies.
+
+    :param metadata: The SQLAlchemy metadata from ``orm.yaml``.
+    :param config: The ``config.yaml`` object.
+    :param dst_engine: The destination database or a connection to it.
+    """
     vocab_tables = get_vocabulary_table_names(config)
     for vocab_table_name in vocab_tables:
         vocab_table = metadata.tables[vocab_table_name]
@@ -419,6 +480,7 @@ def reinstate_vocab_foreign_key_constraints(
 ) -> None:
     """
     Put the removed foreign keys back into the destination database.
+
     :param metadata: The SQLAlchemy metadata for the destination database.
     :param meta_dict: The ``orm.yaml`` configuration that ``metadata`` was
     created from.
@@ -525,6 +587,14 @@ def topological_sort(
 
 
 def sorted_non_vocabulary_tables(metadata: MetaData, config: Mapping) -> list[Table]:
+    """
+    Get the list of non-vocabulary tables, topologically sorted.
+
+    :param metadata: SQLAlchemy database description.
+    :param config: The ``config.yaml`` object.
+    :return: The list of non-vocabulary tables, ordered such that the targets
+    of all the foreign keys come before their sources.
+    """
     table_names = set(metadata.tables.keys()).difference(
         get_vocabulary_table_names(config)
     )
@@ -537,8 +607,9 @@ def sorted_non_vocabulary_tables(metadata: MetaData, config: Mapping) -> list[Ta
 
 
 def underline_error(e: SyntaxError) -> str:
-    """
+    r"""
     Make an underline for this error.
+
     :return: string beginning ``\n`` then spaces then ``^^^^``
     underlining the error, or a null string if this was not possible.
     """
@@ -553,7 +624,11 @@ def underline_error(e: SyntaxError) -> str:
 
 def generators_require_stats(config: Mapping) -> bool:
     """
-    Returns true if any of the arguments for any of the generators reference SRC_STATS.
+    Test if the generator references ``SRC_STATS``.
+
+    :param config: ``config.yaml`` object.
+    :return: True if any of the arguments for any of the generators
+    reference ``SRC_STATS``.
     """
     ois = {
         f"object_instantiation.{k}": call

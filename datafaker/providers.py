@@ -38,7 +38,7 @@ class ColumnValueProvider(BaseProvider):
         """Return incrementing value for the column specified."""
         name = f"{column.table.name}.{column.name}"
         result = self.accumulators.get(name, None)
-        if result == None:
+        if result is None:
             row = db_connection.execute(select(func.max(column))).first()
             result = 0 if row is None or row[0] is None else row[0]
         value = result + 1

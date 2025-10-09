@@ -75,7 +75,7 @@ class RowGeneratorInfo:
 
 @dataclass
 class ColumnChoice:
-    """Chooses columns based on a random number in [0,1)"""
+    """Choose columns based on a random number in [0,1)."""
 
     function_name: str
     argument_values: list[str]
@@ -84,6 +84,14 @@ class ColumnChoice:
 def make_column_choices(
     table_config: Mapping[str, Any],
 ) -> list[ColumnChoice]:
+    """
+    Convert ``missingness_generators`` from ``config.yaml`` into functions to call.
+
+    :param table_config: The ``tables`` part of ``config.yaml``.
+    :return: A list of ``ColumnChoice`` objects; that is, descriptions of
+    functions and their arguments to call to reveal a list of columns that
+    should have values generated for them.
+    """
     return [
         ColumnChoice(
             function_name=mg["name"],
@@ -97,9 +105,9 @@ def make_column_choices(
 @dataclass
 class _PrimaryConstraint:
     """
-    Describes a Uniqueness constraint for when multiple
-    columns in a table comprise the primary key. Not a
-    real constraint, but enough to write df.py.
+    Describes a Uniqueness constraint for a multi-column primary key.
+
+    Not a real constraint, but enough to write df.py.
     """
 
     columns: list[Column]
@@ -252,8 +260,10 @@ def _get_default_generator(column: Column) -> RowGeneratorInfo:
 
 def _numeric_generator(column: Column) -> tuple[str, dict[str, str]]:
     """
-    Returns the name of a generator and maybe arguments
-    that limit its range to the permitted scale.
+    Get the default generator name and arguments.
+
+    :param column: The column to get the generator for.
+    :return: The name of a generator and its arguments.
     """
     column_type = column.type
     scale = getattr(column_type, "scale", None)
@@ -270,8 +280,10 @@ def _numeric_generator(column: Column) -> tuple[str, dict[str, str]]:
 
 def _string_generator(column: Column) -> tuple[str, dict[str, str]]:
     """
-    Returns the name of a string generator and maybe arguments
-    that limit its length.
+    Get the name of the default string generator for a column.
+
+    :param column: The column to get the generator for.
+    :return: The name of the generator and its arguments.
     """
     column_size: Optional[int] = getattr(column.type, "length", None)
     if column_size is None:
@@ -281,7 +293,11 @@ def _string_generator(column: Column) -> tuple[str, dict[str, str]]:
 
 def _integer_generator(column: Column) -> tuple[str, dict[str, str]]:
     """
-    Returns the name of an integer generator.
+    Get the name of the default integer generator.
+
+    :param column: The column to get the generator for.
+    :return: A pair consisting of the name of a generator and its
+    arguments.
     """
     if not column.primary_key:
         return ("generic.numeric.integer_number", {})
@@ -302,6 +318,8 @@ _YEAR_SUMMARY_QUERY = (
 
 @dataclass
 class GeneratorInfo:
+    """Description of a generator."""
+
     # Name or function to generate random objects of this type (not using summary data)
     generator: str | Callable[[Column], tuple[str, dict[str, str]]]
     # SQL query that gets the data to supply as arguments to the generator
@@ -321,8 +339,9 @@ def get_result_mappings(
     info: GeneratorInfo, results: CursorResult
 ) -> dict[str, Any] | None:
     """
-    Gets a mapping from the results of a database query as a Python
-    dictionary converted according to the GeneratorInfo provided.
+    Get a mapping from the results of a database query.
+
+    :return: A Python dictionary converted according to the GeneratorInfo provided.
     """
     kw: dict[str, Any] = {}
     mapping = results.mappings().first()
@@ -379,7 +398,7 @@ _COLUMN_TYPE_TO_GENERATOR_INFO = {
 
 def _get_info_for_column_type(column_t: type) -> GeneratorInfo | None:
     """
-    Gets a generator from a column type.
+    Get a generator from a column type.
 
     Returns either a string representing the callable, or a callable that,
     given the column.type will return a tuple (string representing generator
@@ -400,7 +419,7 @@ def _get_generator_for_column(
     column_t: type,
 ) -> str | Callable[[Column], tuple[str, dict[str, str]]] | None:
     """
-    Gets a generator from a column type.
+    Get a generator from a column type.
 
     Returns either a string representing the callable, or a callable that,
     given the column.type will return a tuple (string representing generator
@@ -412,8 +431,9 @@ def _get_generator_for_column(
 
 def _get_generator_and_arguments(column: Column) -> tuple[str | None, dict[str, str]]:
     """
-    Gets the generator and its arguments from the column type, returning
-    a tuple of a string representing the generator callable and a dict of
+    Get the generator and its arguments from the column type.
+
+    :return: A tuple of a string representing the generator callable and a dict of
     keyword arguments to supply to it.
     """
     generator_function = _get_generator_for_column(type(column.type))
@@ -540,10 +560,7 @@ def make_vocabulary_tables(
     compress: bool,
     table_names: set[str] | None = None,
 ) -> None:
-    """
-    Extracts the data from the source database for each
-    vocabulary table.
-    """
+    """Extract the data from the source database for each vocabulary table."""
     settings = get_settings()
     src_dsn: str = settings.src_dsn or ""
     assert src_dsn != "", "Missing SRC_DSN setting."
@@ -660,9 +677,7 @@ def generate_df_content(template_context: Mapping[str, Any]) -> str:
 def _get_generator_for_existing_vocabulary_table(
     table: Table,
 ) -> VocabularyTableGeneratorInfo:
-    """
-    Turns an existing vocabulary YAML file into a VocabularyTableGeneratorInfo.
-    """
+    """Turn an existing vocabulary YAML file into a VocabularyTableGeneratorInfo."""
     return VocabularyTableGeneratorInfo(
         dictionary_entry=table.name,
         variable_name=f"{table.name.lower()}_vocab",
@@ -676,9 +691,7 @@ def _generate_vocabulary_table(
     overwrite_files: bool = False,
     compress: bool = False,
 ) -> None:
-    """
-    Pulls data out of the source database to make a vocabulary YAML file
-    """
+    """Pull data out of the source database to make a vocabulary YAML file."""
     yaml_file_name: str = table.fullname + ".yaml"
     if compress:
         yaml_file_name += ".gz"
@@ -692,9 +705,7 @@ def _generate_vocabulary_table(
 def make_tables_file(
     db_dsn: str, schema_name: Optional[str], config: Mapping[str, Any]
 ) -> str:
-    """
-    Construct the YAML file representing the schema.
-    """
+    """Construct the YAML file representing the schema."""
     tables_config = config.get("tables", {})
     engine = get_sync_engine(create_db_engine(db_dsn, schema_name=schema_name))
 
@@ -726,6 +737,8 @@ def make_tables_file(
 
 
 class DbConnection:
+    """A connection to a database."""
+
     def __init__(self, engine: MaybeAsyncEngine) -> None:
         """
         Initialise an unopened database connection.
@@ -736,6 +749,7 @@ class DbConnection:
         self._connection: Connection | AsyncConnection
 
     async def __aenter__(self) -> Self:
+        """Enter the ``with`` section, opening a connection."""
         if isinstance(self._engine, AsyncEngine):
             self._connection = await self._engine.connect()
         else:
@@ -748,16 +762,19 @@ class DbConnection:
         _value: Optional[BaseException],
         _tb: Optional[TracebackType],
     ) -> None:
+        """Exit the ``with`` section, closing the connection."""
         if isinstance(self._connection, AsyncConnection):
             await self._connection.close()
         self._connection.close()
 
     async def execute_raw_query(self, query: Executable) -> CursorResult:
+        """Execute the query on the owned connection."""
         if isinstance(self._connection, AsyncConnection):
             return await self._connection.execute(query)
         return self._connection.execute(query)
 
     async def table_row_count(self, table_name: str) -> int:
+        """Count the number of rows in the named table."""
         with await self.execute_raw_query(
             text(f"SELECT COUNT(*) FROM {table_name}")
         ) as result:
@@ -790,12 +807,14 @@ class DbConnection:
 
 
 def fix_type(value: Any) -> Any:
+    """Make this value suitable for yaml output."""
     if type(value) is decimal.Decimal:
         return float(value)
     return value
 
 
 def fix_types(dics: list[dict]) -> list[dict]:
+    """Make all the items in this list suitable for yaml output."""
     return [{k: fix_type(v) for k, v in dic.items()} for dic in dics]
 
 
@@ -827,6 +846,7 @@ async def make_src_stats_connection(
 ) -> dict[str, dict[str, Any]]:
     """
     Make the ``src-stats.yaml`` file given the database connection to read from.
+
     :param config: configuration from ``config.yaml``.
     :param db_conn: Source database connection.
     :param metadata: Source database metadata from ``orm.yaml``.

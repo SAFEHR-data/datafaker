@@ -3,7 +3,7 @@ import copy
 import random
 import re
 from dataclasses import dataclass
-from typing import Any, Iterable, Mapping, MutableMapping
+from typing import Any, Iterable, MutableMapping
 from unittest.mock import MagicMock, Mock, patch
 
 from sqlalchemy import insert, select
@@ -46,7 +46,7 @@ class TestDbCmdMixin(DbCmd):
         """Capture the printed table."""
         self.columns = columns
 
-    def columnize(self, items: list[str] | None, displaywidth: int = 80) -> None:
+    def columnize(self, items: list[str] | None, _displaywidth: int = 80) -> None:
         """Capture the printed table."""
         if items is not None:
             self.column_items.append(items)
@@ -587,7 +587,10 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertEqual(gc.config["src-stats"][0]["name"], f"auto__{table}")
             self.assertEqual(
                 gc.config["src-stats"][0]["query"],
-                f"SELECT AVG({column}) AS mean__{column}, STDDEV({column}) AS stddev__{column} FROM {table}",
+                (
+                    f"SELECT AVG({column}) AS mean__{column}, STDDEV({column})"
+                    f" AS stddev__{column} FROM {table}"
+                ),
             )
 
     def test_set_generator_distribution_directly(self) -> None:
@@ -608,7 +611,10 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertEqual(gc.config["src-stats"][0]["name"], f"auto__{table}")
             self.assertEqual(
                 gc.config["src-stats"][0]["query"],
-                f"SELECT AVG({column}) AS mean__{column}, STDDEV({column}) AS stddev__{column} FROM {table}",
+                (
+                    f"SELECT AVG({column}) AS mean__{column}, STDDEV({column})"
+                    f" AS stddev__{column} FROM {table}"
+                ),
             )
 
     def test_set_generator_choice(self) -> None:
@@ -642,7 +648,11 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             )
             self.assertEqual(
                 gc.config["src-stats"][0]["query"],
-                f"SELECT {column} AS value FROM {table} WHERE {column} IS NOT NULL GROUP BY value ORDER BY COUNT({column}) DESC",
+                (
+                    f"SELECT {column} AS value FROM {table}"
+                    f" WHERE {column} IS NOT NULL"
+                    f" GROUP BY value ORDER BY COUNT({column}) DESC"
+                ),
             )
 
     def test_weighted_choice_generator_generates_choices(self) -> None:
@@ -761,7 +771,10 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             "src-stats": [
                 {
                     "name": "auto__string",
-                    "query": "SELECT AVG(frequency) AS mean__frequency, STDDEV(frequency) AS stddev__frequency FROM string",
+                    "query": (
+                        "SELECT AVG(frequency) AS mean__frequency,"
+                        " STDDEV(frequency) AS stddev__frequency FROM string"
+                    ),
                 }
             ],
         }
@@ -798,7 +811,10 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertEqual(gc.config["src-stats"][0]["name"], "auto__string")
             self.assertEqual(
                 gc.config["src-stats"][0]["query"],
-                "SELECT AVG(frequency) AS mean__frequency, STDDEV(frequency) AS stddev__frequency FROM string",
+                (
+                    "SELECT AVG(frequency) AS mean__frequency,"
+                    " STDDEV(frequency) AS stddev__frequency FROM string"
+                ),
             )
 
     def test_aggregate_queries_merge(self) -> None:
@@ -824,7 +840,10 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             "src-stats": [
                 {
                     "name": "auto__string",
-                    "query": "SELECT AVG(frequency) AS mean__frequency, STDDEV(frequency) AS stddev__frequency FROM string",
+                    "query": (
+                        "SELECT AVG(frequency) AS mean__frequency,"
+                        " STDDEV(frequency) AS stddev__frequency FROM string"
+                    ),
                 }
             ],
         }
@@ -1712,7 +1731,7 @@ class NonInteractiveTests(RequiresDBTestCase):
         ),
     )
     def test_non_interactive_configure_generators(
-        self, mock_csv_reader: MagicMock, mock_path: MagicMock
+        self, _mock_csv_reader: MagicMock, _mock_path: MagicMock
     ) -> None:
         """
         test that we can set generators from a CSV file

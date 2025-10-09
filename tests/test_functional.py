@@ -349,33 +349,50 @@ class DBFunctionalTestCase(RequiresDBTestCase):
         )
         self.assertEqual("", completed_process.stderr)
         self.assertEqual(
-            {
-                "Creating data.",
-                "Generating data for story 'story_generators.short_story'",
-                "Generating data for story 'story_generators.short_story'",
-                "Generating data for story 'story_generators.short_story'",
-                "Generating data for story 'story_generators.full_row_story'",
-                "Generating data for story 'story_generators.long_story'",
-                "Generating data for story 'story_generators.long_story'",
-                "Generating data for table 'data_type_test'",
-                "Generating data for table 'no_pk_test'",
-                "Generating data for table 'person'",
-                "Generating data for table 'strange_type_table'",
-                "Generating data for table 'unique_constraint_test'",
-                "Generating data for table 'unique_constraint_test2'",
-                "Generating data for table 'test_entity'",
-                "Generating data for table 'hospital_visit'",
-                "Data created in 2 passes.",
-                f"person: {2*(3+1+2+2)} rows created.",
-                f"hospital_visit: {2*(2*2+3)} rows created.",
-                "data_type_test: 2 rows created.",
-                "no_pk_test: 2 rows created.",
-                "strange_type_table: 2 rows created.",
-                "unique_constraint_test: 2 rows created.",
-                "unique_constraint_test2: 2 rows created.",
-                "test_entity: 2 rows created.",
-            },
-            set(completed_process.stdout.split("\n")) - {""},
+            sorted(
+                [
+                    "Creating data.",
+                    "Generating data for story 'story_generators.short_story'",
+                    "Generating data for story 'story_generators.short_story'",
+                    "Generating data for story 'story_generators.short_story'",
+                    "Generating data for story 'story_generators.short_story'",
+                    "Generating data for story 'story_generators.short_story'",
+                    "Generating data for story 'story_generators.short_story'",
+                    "Generating data for story 'story_generators.full_row_story'",
+                    "Generating data for story 'story_generators.full_row_story'",
+                    "Generating data for story 'story_generators.long_story'",
+                    "Generating data for story 'story_generators.long_story'",
+                    "Generating data for story 'story_generators.long_story'",
+                    "Generating data for story 'story_generators.long_story'",
+                    "Generating data for table 'data_type_test'",
+                    "Generating data for table 'data_type_test'",
+                    "Generating data for table 'no_pk_test'",
+                    "Generating data for table 'no_pk_test'",
+                    "Generating data for table 'person'",
+                    "Generating data for table 'person'",
+                    "Generating data for table 'strange_type_table'",
+                    "Generating data for table 'strange_type_table'",
+                    "Generating data for table 'unique_constraint_test'",
+                    "Generating data for table 'unique_constraint_test'",
+                    "Generating data for table 'unique_constraint_test2'",
+                    "Generating data for table 'unique_constraint_test2'",
+                    "Generating data for table 'test_entity'",
+                    "Generating data for table 'test_entity'",
+                    "Generating data for table 'hospital_visit'",
+                    "Generating data for table 'hospital_visit'",
+                    "Data created in 2 passes.",
+                    f"person: {2*(3+1+2+2)} rows created.",
+                    f"hospital_visit: {2*(2*2+3)} rows created.",
+                    "data_type_test: 2 rows created.",
+                    "no_pk_test: 2 rows created.",
+                    "strange_type_table: 2 rows created.",
+                    "unique_constraint_test: 2 rows created.",
+                    "unique_constraint_test2: 2 rows created.",
+                    "test_entity: 2 rows created.",
+                    "",
+                ]
+            ),
+            sorted(completed_process.stdout.split("\n")),
         )
 
         completed_process = self.invoke(
@@ -452,8 +469,20 @@ class DBFunctionalTestCase(RequiresDBTestCase):
         )
 
     def invoke(
-        self, *args: Any, expected_error: str | None = None, env: Mapping[str, str] = {}
+        self,
+        *args: Any,
+        expected_error: str | None = None,
+        env: Mapping[str, str] | None = None,
     ) -> Result:
+        """
+        Run datafaker with the given arguments and environment.
+
+        :param args: Arguments to provide to datafaker.
+        :param expected_error: If None, will assert that the invocation
+        passes successfully without throwing an exception. Otherwise,
+        the suggested error must be present in the standard error stream.
+        :param env: The environment variables to be set during invocation.
+        """
         res = self.runner.invoke(app, args, env=env)
         if expected_error is None:
             self.assertNoException(res)

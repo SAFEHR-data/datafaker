@@ -18,12 +18,14 @@ class RemoveThingsTestCase(RequiresDBTestCase):
     schema_name = "public"
 
     def count_rows(self, connection: Connection, table_name: str) -> int | None:
+        """Count the rows in a table."""
         return connection.execute(
             select(func.count()).select_from(self.metadata.tables[table_name])
         ).scalar()
 
     @patch("datafaker.remove.get_settings")
     def test_remove_data(self, mock_get_settings: MagicMock) -> None:
+        """Test that data can be removed from non-vocabulary tables."""
         mock_get_settings.return_value = Settings(
             src_dsn=self.dsn,
             dst_dsn=self.dsn,
@@ -67,6 +69,7 @@ class RemoveThingsTestCase(RequiresDBTestCase):
 
     @patch("datafaker.remove.get_settings")
     def test_remove_vocab(self, mock_get_settings: MagicMock) -> None:
+        """Test that vocabulary tables can be removed."""
         mock_get_settings.return_value = Settings(
             src_dsn=self.dsn,
             dst_dsn=self.dsn,
@@ -114,6 +117,7 @@ class RemoveThingsTestCase(RequiresDBTestCase):
 
     @patch("datafaker.remove.get_settings")
     def test_remove_tables(self, mock_get_settings: MagicMock) -> None:
+        """Test that destination tables can be removed."""
         mock_get_settings.return_value = Settings(
             src_dsn=self.dsn,
             dst_dsn=self.dsn,

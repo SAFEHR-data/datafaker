@@ -1,4 +1,4 @@
-""" Data dumping functions. """
+"""Data dumping functions."""
 import csv
 import io
 from typing import TYPE_CHECKING
@@ -35,4 +35,4 @@ def dump_db_tables(
     with engine.connect() as connection:
         result = connection.execute(sqlalchemy.select(table))
         for row in result:
-            csv_out.writerow(row._tuple())
+            csv_out.writerow(row)

@@ -194,7 +194,7 @@ class TestCLI(DatafakerTestCase):
     @patch("datafaker.main.read_config_file")
     @patch("datafaker.main.load_metadata_for_output")
     def test_create_tables(
-        self, mock_load_meta: MagicMock, mock_config: MagicMock, mock_create: MagicMock
+        self, mock_load_meta: MagicMock, _mock_config: MagicMock, mock_create: MagicMock
     ) -> None:
         """Test the create-tables sub-command."""
 

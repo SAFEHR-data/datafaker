@@ -1,6 +1,6 @@
 """Convert between a Python dict describing a database schema and a SQLAlchemy MetaData."""
 import typing
-from typing import Callable
+from functools import partial
 
 import parsy
 from sqlalchemy import Column, Dialect, Engine, ForeignKey, MetaData, Table
@@ -27,9 +27,7 @@ def simple(type_: type) -> ParserType:
 
 
 def integer() -> ParserType:
-    """
-    Get a parser for an integer, outputting that integer.
-    """
+    """Get a parser for an integer, outputting that integer."""
     return parsy.regex(r"-?[0-9]+").map(int)
 
 
@@ -164,6 +162,7 @@ def type_parser() -> ParserType:
 def column_to_dict(column: Column, dialect: Dialect) -> dict[str, typing.Any]:
     """
     Produce a dict description of a column.
+
     :param column: The SQLAlchemy column to translate.
     :param dialect: The SQL dialect in which to render the type name.
     """
@@ -192,10 +191,11 @@ def dict_to_column(
     table_name: str,
     col_name: str,
     rep: dict,
-    ignore_fk: Callable[[str], bool],
+    ignore_fk: typing.Callable[[str], bool],
 ) -> Column:
     """
     Produce column from aspects of its dict description.
+
     :param table_name: The name of the table the column appears in.
     :param col_name: The name of the column.
     :param rep: The dict description of the column.
@@ -249,7 +249,7 @@ def unique_to_dict(constraint: schema.UniqueConstraint) -> dict:
 
 
 def table_to_dict(table: Table, dialect: Dialect) -> TableT:
-    """Converts a SQL Alchemy Table object into a Python dict."""
+    """Convert a SQL Alchemy Table object into a Python dict."""
     return {
         "columns": {
             str(column.key): column_to_dict(column, dialect)
@@ -267,7 +267,7 @@ def dict_to_table(
     name: str,
     meta: MetaData,
     table_dict: TableT,
-    ignore_fk: Callable[[str], bool],
+    ignore_fk: typing.Callable[[str], bool],
 ) -> Table:
     """Create a Table from its description."""
     return Table(
@@ -285,8 +285,9 @@ def metadata_to_dict(
     meta: MetaData, schema_name: str | None, engine: Engine
 ) -> dict[str, typing.Any]:
     """
-    Converts a SQL Alchemy MetaData object into
-    a Python object ready for conversion to YAML.
+    Convert a metadata object into a Python dict.
+
+    The output will be ready for output to ``orm.yaml``.
     """
     return {
         "tables": {
@@ -298,10 +299,13 @@ def metadata_to_dict(
     }
 
 
-def should_ignore_fk(fk: str, tables_dict: dict[str, TableT]) -> bool:
+def should_ignore_fk(tables_dict: dict[str, TableT], fk: str) -> bool:
     """
-    Tell if this foreign key should be ignored because it points to an
-    ignored table.
+    Test if this foreign key points to an ignored table.
+
+    If so, this foreign key should be ignored.
+    :param tables_dict: The ``tables`` value from ``config.yaml``.
+    :param fk: The name of the foreign key.
     """
     fk_bits = fk.split(".", 2)
     if len(fk_bits) != 2:
@@ -311,9 +315,13 @@ def should_ignore_fk(fk: str, tables_dict: dict[str, TableT]) -> bool:
     return bool(tables_dict[fk_bits[0]].get("ignore", False))
 
 
+def _always_false(_: str) -> bool:
+    return False
+
+
 def dict_to_metadata(obj: dict, config_for_output: dict | None = None) -> MetaData:
     """
-    Converts a dict to a SQL Alchemy MetaData object.
+    Convert a dict to a SQL Alchemy MetaData object.
 
     :param config_for_output: The configuration object. Should be None if
     the metadata object is being used for connecting to the source database.
@@ -322,11 +330,12 @@ def dict_to_metadata(obj: dict, config_for_output: dict | None = None) -> MetaDa
     constraint to an ignored table.
     """
     tables_dict = obj.get("tables", {})
+    ignore_fk: typing.Callable[[str], bool]
     if config_for_output and "tables" in config_for_output:
         tables_config = config_for_output["tables"]
-        ignore_fk = lambda fk: should_ignore_fk(fk, tables_config)
+        ignore_fk = partial(should_ignore_fk, tables_config)
     else:
-        ignore_fk = lambda _: False
+        ignore_fk = _always_false
     meta = MetaData()
     for k, td in tables_dict.items():
         dict_to_table(k, meta, td, ignore_fk)

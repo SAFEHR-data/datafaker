@@ -7,6 +7,10 @@ from unittest import TestCase
 from restructuredtext_lint import lint_file
 
 
+def _level_to_string(level: int) -> str:
+    return ["Severe", "Error", "Warning"][level]
+
+
 class RstTests(TestCase):
     """Linting for the doc .rst files."""
 
@@ -44,7 +48,11 @@ class RstTests(TestCase):
         ]
 
         if filtered_errors:
-            self.fail(msg="\n".join([
-                f"{err.source}({err.line}): {["Severe", "Error", "Warning"][err.level]}: {err.full_message}"
-                for err in filtered_errors
-            ]))
+            self.fail(
+                msg="\n".join(
+                    [
+                        f"{err.source}({err.line}): {_level_to_string(err.level)}: {err.full_message}"
+                        for err in filtered_errors
+                    ]
+                )
+            )

@@ -70,9 +70,22 @@ def _require_src_db_dsn(settings: Settings) -> str:
     return src_dsn
 
 
-def load_metadata_config(orm_file_name: str, config: dict | None = None) -> Any:
-    with open(orm_file_name) as orm_fh:
+def load_metadata_config(
+    orm_file_name: str, config: dict | None = None
+) -> dict[str, Any]:
+    """
+    Load the ``orm.yaml`` file, returning a dict representation.
+
+    :param orm_file_name: The name of the file to load.
+    :param config: The ``config.yaml`` file object. Ignored tables will be
+    excluded from the output.
+    :return: A dict representing the ``orm.yaml`` file, with the tables
+    the ``config`` says to ignore removed.
+    """
+    with open(orm_file_name, encoding="utf-8") as orm_fh:
         meta_dict = yaml.load(orm_fh, yaml.Loader)
+        if not isinstance(meta_dict, dict):
+            return {}
         tables_dict = meta_dict.get("tables", {})
         if config is not None and "tables" in config:
             # Remove ignored tables
@@ -84,7 +97,8 @@ def load_metadata_config(orm_file_name: str, config: dict | None = None) -> Any:
 
 def load_metadata(orm_file_name: str, config: dict | None = None) -> MetaData:
     """
-    Load metadata from ``orm.yaml``
+    Load metadata from ``orm.yaml``.
+
     :param orm_file_name: ``orm.yaml`` or alternative name to load metadata from.
     :param config: Used to exclude tables that are marked as ``ignore: true``.
     :return: SQLAlchemy MetaData object representing the database described by the loaded file.
@@ -94,9 +108,7 @@ def load_metadata(orm_file_name: str, config: dict | None = None) -> MetaData:
 
 
 def load_metadata_for_output(orm_file_name: str, config: dict | None = None) -> Any:
-    """
-    Load metadata excluding any foreign keys pointing to ignored tables.
-    """
+    """Load metadata excluding any foreign keys pointing to ignored tables."""
     meta_dict = load_metadata_config(orm_file_name, config)
     return dict_to_metadata(meta_dict, config)
 
@@ -105,6 +117,7 @@ def load_metadata_for_output(orm_file_name: str, config: dict | None = None) -> 
 def main(
     verbose: bool = Option(False, "--verbose", "-v", help="Print more information.")
 ) -> None:
+    """Set the global parameters."""
     conf_logger(verbose)
 
 
@@ -327,7 +340,10 @@ def make_stats(
 def make_tables(
     config_file: Optional[str] = Option(
         None,
-        help="The configuration file, used if you want an orm.yaml lacking data for the ignored tables",
+        help=(
+            "The configuration file, used if you want"
+            " an orm.yaml lacking data for the ignored tables"
+        ),
     ),
     orm_file: str = Option(ORM_FILENAME, help="Path to write the ORM yaml file to"),
     force: bool = Option(
@@ -361,9 +377,7 @@ def configure_tables(
     ),
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
 ) -> None:
-    """
-    Interactively set tables to ignored, vocabulary or primary private.
-    """
+    """Interactively set tables to ignored, vocabulary or primary private."""
     logger.debug("Configuring tables in %s.", config_file)
     settings = get_settings()
     src_dsn: str = _require_src_db_dsn(settings)
@@ -393,9 +407,7 @@ def configure_missing(
     ),
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
 ) -> None:
-    """
-    Interactively set the missingness of the generated data.
-    """
+    """Interactively set the missingness of the generated data."""
     logger.debug("Configuring missingness in %s.", config_file)
     settings = get_settings()
     src_dsn: str = _require_src_db_dsn(settings)
@@ -405,7 +417,7 @@ def configure_missing(
         config_any = yaml.load(
             config_file_path.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader
         )
-        if type(config_any) is dict:
+        if isinstance(config_any, dict):
             config = config_any
     metadata = load_metadata(orm_file, config)
     config_updated = update_missingness(src_dsn, settings.src_schema, metadata, config)
@@ -428,9 +440,7 @@ def configure_generators(
         help="CSV file (headerless) with fields table-name, column-name, generator-name to set non-interactively",
     ),
 ) -> None:
-    """
-    Interactively set generators for column data.
-    """
+    """Interactively set generators for column data."""
     logger.debug("Configuring generators in %s.", config_file)
     settings = get_settings()
     src_dsn: str = _require_src_db_dsn(settings)
@@ -468,7 +478,7 @@ def dump_data(
     schema_name = settings.dst_schema
     config = read_config_file(config_file) if config_file is not None else {}
     metadata = load_metadata_for_output(orm_file, config)
-    if output == None:
+    if output is None:
         if isinstance(sys.stdout, io.TextIOBase):
             dump_db_tables(metadata, dst_dsn, schema_name, table, sys.stdout)
         return
@@ -555,6 +565,8 @@ def remove_tables(
 
 
 class TableType(str, Enum):
+    """Types of tables for the ``list-tables`` command."""
+
     ALL = "all"
     VOCAB = "vocab"
     GENERATED = "generated"
