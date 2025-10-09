@@ -46,10 +46,10 @@ class TestDbCmdMixin(DbCmd):
         """Capture the printed table."""
         self.columns = columns
 
-    def columnize(self, items: list[str] | None, _displaywidth: int = 80) -> None:
+    def columnize(self, list: list[str] | None, _displaywidth: int = 80) -> None:
         """Capture the printed table."""
-        if items is not None:
-            self.column_items.append(items)
+        if list is not None:
+            self.column_items.append(list)
 
     def ask_save(self) -> str:
         """Quitting always works without needing to ask the user."""

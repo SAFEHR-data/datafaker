@@ -21,7 +21,7 @@ from typing_extensions import Self
 from datafaker.base import DistributionGenerator
 from datafaker.utils import T, logger
 
-numeric = Union[int, float]
+NumericT = Union[int, float]
 
 # How many distinct values can we have before we consider a
 # choice distribution to be infeasible?
@@ -754,7 +754,7 @@ class MimesisIntegerGeneratorFactory(GeneratorFactory):
         return [MimesisGenerator("person.weight")]
 
 
-def fit_from_buckets(xs: Sequence[numeric], ys: Sequence[numeric]) -> float:
+def fit_from_buckets(xs: Sequence[NumericT], ys: Sequence[NumericT]) -> float:
     """Calculate the fit by comparing a pair of lists of buckets."""
     sum_diff_squared = sum(map(lambda t, a: (t - a) * (t - a), xs, ys))
     count = len(ys)
@@ -764,7 +764,7 @@ def fit_from_buckets(xs: Sequence[numeric], ys: Sequence[numeric]) -> float:
 class ContinuousDistributionGenerator(Generator):
     """Base class for generators producing continuous distributions."""
 
-    expected_buckets: Sequence[numeric] = []
+    expected_buckets: Sequence[NumericT] = []
 
     def __init__(self, table_name: str, column_name: str, buckets: Buckets):
         """Initialise a ContinuousDistributionGenerator."""

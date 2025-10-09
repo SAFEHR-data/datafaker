@@ -390,11 +390,11 @@ def table_is_private(config: Mapping, table_name: str) -> bool:
     :return: True if the table is marked as private in ``config``.
     """
     ts = config.get("tables", {})
-    if type(ts) is not dict:
+    if not isinstance(ts, Mapping):
         return False
     t = ts.get(table_name, {})
     ret = t.get("primary_private", False)
-    return ret if type(ret) is bool else False
+    return ret if isinstance(ret, bool) else False
 
 
 def primary_private_fks(config: Mapping, table: Table) -> list[str]:
@@ -466,7 +466,7 @@ def remove_vocab_foreign_key_constraints(
                     )
                 except ProgrammingError as e:
                     session.rollback()
-                    if type(e.orig) is UndefinedObject:
+                    if isinstance(e.orig, UndefinedObject):
                         logger.debug("Constraint does not exist")
                     else:
                         raise e
@@ -501,7 +501,7 @@ def reinstate_vocab_foreign_key_constraints(
                         name=make_foreign_key_name(vocab_table_name, column_name),
                         refcolumns=fk_targets,
                     )
-                    logger.debug(f"Restoring foreign key constraint {fk.name}")
+                    logger.debug("Restoring foreign key constraint %s", fk.name)
                     with Session(dst_engine) as session:
                         session.begin()
                         vocab_table.append_constraint(fk)
@@ -598,12 +598,12 @@ def sorted_non_vocabulary_tables(metadata: MetaData, config: Mapping) -> list[Ta
     table_names = set(metadata.tables.keys()).difference(
         get_vocabulary_table_names(config)
     )
-    (sorted, cycles) = topological_sort(
+    (sorted_tables, cycles) = topological_sort(
         table_names, lambda tn: get_related_table_names(metadata.tables[tn])
     )
     for cycle in cycles:
         logger.warning(f"Cycle detected between tables: {cycle}")
-    return [metadata.tables[tn] for tn in sorted]
+    return [metadata.tables[tn] for tn in sorted_tables]
 
 
 def underline_error(e: SyntaxError) -> str:

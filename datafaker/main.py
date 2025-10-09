@@ -437,7 +437,10 @@ def configure_generators(
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
     spec: Path = Option(
         None,
-        help="CSV file (headerless) with fields table-name, column-name, generator-name to set non-interactively",
+        help=(
+            "CSV file (headerless) with fields table-name,"
+            " column-name, generator-name to set non-interactively"
+        ),
     ),
 ) -> None:
     """Interactively set generators for column data."""
@@ -482,7 +485,7 @@ def dump_data(
         if isinstance(sys.stdout, io.TextIOBase):
             dump_db_tables(metadata, dst_dsn, schema_name, table, sys.stdout)
         return
-    with open(output, "wt", newline="") as out:
+    with open(output, "wt", newline="", encoding="utf-8") as out:
         dump_db_tables(metadata, dst_dsn, schema_name, table, out)
 
 
