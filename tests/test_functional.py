@@ -81,6 +81,13 @@ class DBFunctionalTestCase(RequiresDBTestCase):
         os.chdir(self.start_dir)
         super().tearDown()
 
+    def assert_silent_success(self, completed_process: Result) -> None:
+        """Assert that the process completed successfully without producing output."""
+        self.assertNoException(completed_process)
+        self.assertSuccess(completed_process)
+        self.assertEqual(completed_process.stderr, "")
+        self.assertEqual(completed_process.stdout, "")
+
     def test_workflow_minimal_args(self) -> None:
         """Test the recommended CLI workflow runs without errors."""
         shutil.copy(self.config_file_path, "config.yaml")
@@ -88,26 +95,19 @@ class DBFunctionalTestCase(RequiresDBTestCase):
             "make-tables",
             "--force",
         )
-        self.assertNoException(completed_process)
-        self.assertSuccess(completed_process)
-        self.assertEqual(completed_process.stderr, "")
-        self.assertEqual(completed_process.stdout, "")
+        self.assert_silent_success(completed_process)
 
         completed_process = self.invoke(
             "make-vocab",
             "--force",
         )
-        self.assertNoException(completed_process)
-        self.assertSuccess(completed_process)
-        self.assertEqual(completed_process.stdout, "")
+        self.assert_silent_success(completed_process)
 
         completed_process = self.invoke(
             "make-stats",
             "--force",
         )
-        self.assertNoException(completed_process)
-        self.assertSuccess(completed_process)
-        self.assertEqual(completed_process.stdout, "")
+        self.assert_silent_success(completed_process)
 
         completed_process = self.invoke(
             "create-generators",
@@ -138,27 +138,18 @@ class DBFunctionalTestCase(RequiresDBTestCase):
         completed_process = self.invoke(
             "create-tables",
         )
-        self.assertNoException(completed_process)
-        self.assertEqual("", completed_process.stderr)
-        self.assertSuccess(completed_process)
-        self.assertEqual("", completed_process.stdout)
+        self.assert_silent_success(completed_process)
 
         completed_process = self.invoke(
             "create-vocab",
         )
-        self.assertNoException(completed_process)
-        self.assertEqual("", completed_process.stderr)
-        self.assertSuccess(completed_process)
-        self.assertEqual("", completed_process.stdout)
+        self.assert_silent_success(completed_process)
 
         completed_process = self.invoke(
             "make-stats",
             "--force",
         )
-        self.assertNoException(completed_process)
-        self.assertEqual("", completed_process.stderr)
-        self.assertSuccess(completed_process)
-        self.assertEqual("", completed_process.stdout)
+        self.assert_silent_success(completed_process)
 
         completed_process = self.invoke("create-data")
         self.assertNoException(completed_process)
@@ -514,7 +505,6 @@ class DBFunctionalTestCase(RequiresDBTestCase):
             "make-stats",
             f"--stats-file={self.stats_file_path}",
             f"--config-file={self.config_file_path}",
-            f"--orm-file={self.alt_orm_file_path}",
             "--force",
         )
         self.invoke(

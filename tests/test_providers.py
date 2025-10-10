@@ -1,9 +1,8 @@
 """Tests for the providers module."""
 import datetime as dt
-from pathlib import Path
 from typing import Any
 
-from sqlalchemy import Column, Integer, Text, create_engine, insert
+from sqlalchemy import Column, Integer, Text, insert
 from sqlalchemy.ext.declarative import declarative_base
 
 from datafaker import providers

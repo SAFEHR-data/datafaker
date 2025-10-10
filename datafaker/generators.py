@@ -21,7 +21,7 @@ from typing_extensions import Self
 from datafaker.base import DistributionGenerator
 from datafaker.utils import T, logger
 
-NumericT = Union[int, float]
+NumericType = Union[int, float]
 
 # How many distinct values can we have before we consider a
 # choice distribution to be infeasible?
@@ -102,7 +102,8 @@ class Generator(ABC):
             "query": "SELECT one, too AS two FROM mytable WHERE too > 1",
             "comment": "big enough one and two from table mytable"
         }}
-        will populate SRC_STATS["myquery"]["results"][0]["one"] and SRC_STATS["myquery"]["results"][0]["two"]
+        will populate SRC_STATS["myquery"]["results"][0]["one"]
+        and SRC_STATS["myquery"]["results"][0]["two"]
         in the src-stats.yaml file.
 
         Keys should be chosen to minimize the chances of clashing with other queries,
@@ -142,18 +143,17 @@ class PredefinedGenerator(Generator):
     def _get_src_stats_mentioned(self, val: Any) -> set[str]:
         if not val:
             return set()
-        if type(val) is str:
+        if isinstance(val, str):
             ss = self.SRC_STAT_NAME_RE.match(val)
             if ss:
                 ss_name = ss.group(1)
                 logger.debug("Found SRC_STATS reference %s", ss_name)
                 return set([ss_name])
-            else:
-                logger.debug("Value %s does not seem to be a SRC_STATS reference", val)
-                return set()
-        if type(val) is list:
+            logger.debug("Value %s does not seem to be a SRC_STATS reference", val)
+            return set()
+        if isinstance(val, list):
             return set.union(*(self._get_src_stats_mentioned(v) for v in val))
-        if type(val) is dict:
+        if isinstance(val, dict):
             return set.union(*(self._get_src_stats_mentioned(v) for v in val.values()))
         return set()
 
@@ -278,12 +278,9 @@ class Buckets:
         with engine.connect() as connection:
             raw_buckets = connection.execute(
                 text(
-                    "SELECT COUNT({column}) AS f, FLOOR(({column} - {x})/{w}) AS b FROM {table} GROUP BY b".format(
-                        column=column_name,
-                        table=table_name,
-                        x=mean - 2 * stddev,
-                        w=stddev / 2,
-                    )
+                    f"SELECT COUNT({column_name}) AS f,"
+                    f" FLOOR(({column_name} - {mean - 2 * stddev})/{stddev / 2}) AS b"
+                    f" FROM {table_name} GROUP BY b"
                 )
             )
             self.buckets: Sequence[int] = [0] * 10
@@ -310,10 +307,9 @@ class Buckets:
         with engine.connect() as connection:
             result = connection.execute(
                 text(
-                    "SELECT AVG({column}) AS mean, STDDEV({column}) AS stddev, COUNT({column}) AS count FROM {table}".format(
-                        table=table_name,
-                        column=column_name,
-                    )
+                    f"SELECT AVG({column_name}) AS mean,"
+                    f" STDDEV({column_name}) AS stddev,"
+                    f" COUNT({column_name}) AS count FROM {table_name}"
                 )
             ).first()
             if result is None or result.stddev is None or getattr(result, "count") < 2:
@@ -388,7 +384,8 @@ class MimesisGeneratorBase(Generator):
             f = getattr(f, part)
         if not callable(f):
             raise Exception(
-                f"Mimesis object {function_name} is not a callable, so cannot be used as a generator"
+                f"Mimesis object {function_name} is not a callable,"
+                " so cannot be used as a generator"
             )
         self._name = "generic." + function_name
         self._generator_function = f
@@ -520,7 +517,7 @@ class MimesisDateTimeGenerator(MimesisGeneratorBase):
 
     @classmethod
     def make_singleton(
-        _cls, column: Column, engine: Engine, function_name: str
+        cls, column: Column, engine: Engine, function_name: str
     ) -> Sequence[Generator]:
         """Make the appropriate generation configuration for this column."""
         extract_year = f"CAST(EXTRACT(YEAR FROM {column.name}) AS INT)"
@@ -548,8 +545,14 @@ class MimesisDateTimeGenerator(MimesisGeneratorBase):
     def nominal_kwargs(self) -> dict[str, Any]:
         """Get the arguments to be entered into ``config.yaml``."""
         return {
-            "start": f'SRC_STATS["auto__{self._column.table.name}"]["results"][0]["{self._column.name}__start"]',
-            "end": f'SRC_STATS["auto__{self._column.table.name}"]["results"][0]["{self._column.name}__end"]',
+            "start": (
+                f'SRC_STATS["auto__{self._column.table.name}"]["results"]'
+                f'[0]["{self._column.name}__start"]'
+            ),
+            "end": (
+                f'SRC_STATS["auto__{self._column.table.name}"]["results"]'
+                f'[0]["{self._column.name}__end"]'
+            ),
         }
 
     def actual_kwargs(self) -> dict[str, Any]:
@@ -564,11 +567,17 @@ class MimesisDateTimeGenerator(MimesisGeneratorBase):
         return {
             f"{self._column.name}__start": {
                 "clause": self._min_year,
-                "comment": f"Earliest year found for column {self._column.name} in table {self._column.table.name}",
+                "comment": (
+                    f"Earliest year found for column {self._column.name}"
+                    f" in table {self._column.table.name}"
+                ),
             },
             f"{self._column.name}__end": {
                 "clause": self._max_year,
-                "comment": f"Latest year found for column {self._column.name} in table {self._column.table.name}",
+                "comment": (
+                    f"Latest year found for column {self._column.name}"
+                    f" in table {self._column.table.name}"
+                ),
             },
         }
 
@@ -642,7 +651,7 @@ class MimesisStringGeneratorFactory(GeneratorFactory):
                 f"LENGTH({column.name})",
             )
             fitness_fn = len
-        except Exception as exc:
+        except Exception:
             # Some column types that appear to be strings (such as enums)
             # cannot have their lengths measured. In this case we cannot
             # detect fitness using lengths.
@@ -754,7 +763,7 @@ class MimesisIntegerGeneratorFactory(GeneratorFactory):
         return [MimesisGenerator("person.weight")]
 
 
-def fit_from_buckets(xs: Sequence[NumericT], ys: Sequence[NumericT]) -> float:
+def fit_from_buckets(xs: Sequence[NumericType], ys: Sequence[NumericType]) -> float:
     """Calculate the fit by comparing a pair of lists of buckets."""
     sum_diff_squared = sum(map(lambda t, a: (t - a) * (t - a), xs, ys))
     count = len(ys)
@@ -764,7 +773,7 @@ def fit_from_buckets(xs: Sequence[NumericT], ys: Sequence[NumericT]) -> float:
 class ContinuousDistributionGenerator(Generator):
     """Base class for generators producing continuous distributions."""
 
-    expected_buckets: Sequence[NumericT] = []
+    expected_buckets: Sequence[NumericType] = []
 
     def __init__(self, table_name: str, column_name: str, buckets: Buckets):
         """Initialise a ContinuousDistributionGenerator."""
@@ -776,8 +785,14 @@ class ContinuousDistributionGenerator(Generator):
     def nominal_kwargs(self) -> dict[str, Any]:
         """Get the arguments to be entered into ``config.yaml``."""
         return {
-            "mean": f'SRC_STATS["auto__{self.table_name}"]["results"][0]["mean__{self.column_name}"]',
-            "sd": f'SRC_STATS["auto__{self.table_name}"]["results"][0]["stddev__{self.column_name}"]',
+            "mean": (
+                f'SRC_STATS["auto__{self.table_name}"]["results"]'
+                f'[0]["mean__{self.column_name}"]'
+            ),
+            "sd": (
+                f'SRC_STATS["auto__{self.table_name}"]["results"]'
+                f'[0]["stddev__{self.column_name}"]'
+            ),
         }
 
     def actual_kwargs(self) -> dict[str, Any]:
@@ -946,8 +961,14 @@ class LogNormalGenerator(Generator):
     def nominal_kwargs(self) -> dict[str, Any]:
         """Get the arguments to be entered into ``config.yaml``."""
         return {
-            "logmean": f'SRC_STATS["auto__{self.table_name}"]["results"][0]["logmean__{self.column_name}"]',
-            "logsd": f'SRC_STATS["auto__{self.table_name}"]["results"][0]["logstddev__{self.column_name}"]',
+            "logmean": (
+                f'SRC_STATS["auto__{self.table_name}"]["results"][0]'
+                f'["logmean__{self.column_name}"]'
+            ),
+            "logsd": (
+                f'SRC_STATS["auto__{self.table_name}"]["results"][0]'
+                f'["logstddev__{self.column_name}"]'
+            ),
         }
 
     def actual_kwargs(self) -> dict[str, Any]:
@@ -963,12 +984,21 @@ class LogNormalGenerator(Generator):
         return {
             **clauses,
             f"logmean__{self.column_name}": {
-                "clause": f"AVG(CASE WHEN 0<{self.column_name} THEN LN({self.column_name}) ELSE NULL END)",
+                "clause": (
+                    f"AVG(CASE WHEN 0<{self.column_name} THEN LN({self.column_name})"
+                    " ELSE NULL END)"
+                ),
                 "comment": f"Mean of logs of {self.column_name} from table {self.table_name}",
             },
             f"logstddev__{self.column_name}": {
-                "clause": f"STDDEV(CASE WHEN 0<{self.column_name} THEN LN({self.column_name}) ELSE NULL END)",
-                "comment": f"Standard deviation of logs of {self.column_name} from table {self.table_name}",
+                "clause": (
+                    f"STDDEV(CASE WHEN 0<{self.column_name}"
+                    f" THEN LN({self.column_name}) ELSE NULL END)"
+                ),
+                "comment": (
+                    f"Standard deviation of logs of {self.column_name}"
+                    f" from table {self.table_name}"
+                ),
             },
         }
 
@@ -992,10 +1022,10 @@ class ContinuousLogDistributionGeneratorFactory(ContinuousDistributionGeneratorF
         with engine.connect() as connection:
             result = connection.execute(
                 text(
-                    "SELECT AVG(CASE WHEN 0<{column} THEN LN({column}) ELSE NULL END) AS logmean, STDDEV(CASE WHEN 0<{column} THEN LN({column}) ELSE NULL END) AS logstddev FROM {table}".format(
-                        table=table_name,
-                        column=column_name,
-                    )
+                    f"SELECT AVG(CASE WHEN 0<{column_name} THEN LN({column_name})"
+                    " ELSE NULL END) AS logmean,"
+                    f" STDDEV(CASE WHEN 0<{column_name} THEN LN({column_name}) ELSE NULL END)"
+                    f" AS logstddev FROM {table_name}"
                 )
             ).first()
             if result is None or result.logstddev is None:
@@ -1064,21 +1094,56 @@ class ChoiceGenerator(Generator):
             extra_comment = " and their counts"
         if suppress_count == 0:
             if sample_count is None:
-                self._query = f"SELECT {column_name} AS value{extra_results} FROM {table_name} WHERE {column_name} IS NOT NULL GROUP BY value ORDER BY COUNT({column_name}) DESC"
-                self._comment = f"All the values{extra_comment} that appear in column {column_name} of table {table_name}"
+                self._query = (
+                    f"SELECT {column_name} AS value{extra_results} FROM {table_name}"
+                    f" WHERE {column_name} IS NOT NULL GROUP BY value"
+                    f" ORDER BY COUNT({column_name}) DESC"
+                )
+                self._comment = (
+                    f"All the values{extra_comment} that appear in column {column_name}"
+                    f" of table {table_name}"
+                )
                 self._annotation = None
             else:
-                self._query = f"SELECT {column_name} AS value{extra_results} FROM (SELECT {column_name} FROM {table_name} WHERE {column_name} IS NOT NULL ORDER BY RANDOM() LIMIT {sample_count}) AS _inner GROUP BY value ORDER BY COUNT({column_name}) DESC"
-                self._comment = f"The values{extra_comment} that appear in column {column_name} of a random sample of {sample_count} rows of table {table_name}"
+                self._query = (
+                    f"SELECT {column_name} AS value{extra_results} FROM"
+                    f" (SELECT {column_name} FROM {table_name}"
+                    f" WHERE {column_name} IS NOT NULL"
+                    f" ORDER BY RANDOM() LIMIT {sample_count})"
+                    f" AS _inner GROUP BY value ORDER BY COUNT({column_name}) DESC"
+                )
+                self._comment = (
+                    f"The values{extra_comment} that appear in column {column_name}"
+                    f" of a random sample of {sample_count} rows of table {table_name}"
+                )
                 self._annotation = "sampled"
         else:
             if sample_count is None:
-                self._query = f"SELECT value{extra_expo} FROM (SELECT {column_name} AS value, COUNT({column_name}) AS count FROM {table_name} WHERE {column_name} IS NOT NULL GROUP BY value ORDER BY count DESC) AS _inner WHERE {suppress_count} < count"
-                self._comment = f"All the values{extra_comment} that appear in column {column_name} of table {table_name} more than {suppress_count} times"
+                self._query = (
+                    f"SELECT value{extra_expo} FROM"
+                    f" (SELECT {column_name} AS value, COUNT({column_name}) AS count"
+                    f" FROM {table_name} WHERE {column_name} IS NOT NULL"
+                    f" GROUP BY value ORDER BY count DESC) AS _inner"
+                    f" WHERE {suppress_count} < count"
+                )
+                self._comment = (
+                    f"All the values{extra_comment} that appear in column {column_name}"
+                    f" of table {table_name} more than {suppress_count} times"
+                )
                 self._annotation = "suppressed"
             else:
-                self._query = f"SELECT value{extra_expo} FROM (SELECT value, COUNT(value) AS count FROM (SELECT {column_name} AS value FROM {table_name} WHERE {column_name} IS NOT NULL ORDER BY RANDOM() LIMIT {sample_count}) AS _inner GROUP BY value ORDER BY count DESC) AS _inner WHERE {suppress_count} < count"
-                self._comment = f"The values{extra_comment} that appear more than {suppress_count} times in column {column_name}, out of a random sample of {sample_count} rows of table {table_name}"
+                self._query = (
+                    f"SELECT value{extra_expo} FROM (SELECT value, COUNT(value) AS count FROM"
+                    f" (SELECT {column_name} AS value FROM {table_name}"
+                    f" WHERE {column_name} IS NOT NULL ORDER BY RANDOM() LIMIT {sample_count})"
+                    f" AS _inner GROUP BY value ORDER BY count DESC)"
+                    f" AS _inner WHERE {suppress_count} < count"
+                )
+                self._comment = (
+                    f"The values{extra_comment} that appear more than {suppress_count} times"
+                    f" in column {column_name}, out of a random sample of {sample_count} rows"
+                    f" of table {table_name}"
+                )
                 self._annotation = "sampled and suppressed"
 
     @abstractmethod
@@ -1220,14 +1285,14 @@ class ValueGatherer:
             if c != 0:
                 counts.append(c)
                 v = result.v
-                if type(v) is decimal.Decimal:
+                if isinstance(v, decimal.Decimal):
                     v = float(v)
                 values.append(v)
                 cvs.append({"value": v, "count": c})
             if suppress_count < c:
                 counts_not_suppressed.append(c)
                 v = result.v
-                if type(v) is decimal.Decimal:
+                if isinstance(v, decimal.Decimal):
                     v = float(v)
                 values_not_suppressed.append(v)
                 cvs_not_suppressed.append({"value": v, "count": c})
@@ -1258,11 +1323,9 @@ class ChoiceGeneratorFactory(GeneratorFactory):
         with engine.connect() as connection:
             results = connection.execute(
                 text(
-                    "SELECT {column} AS v, COUNT({column}) AS f FROM {table} GROUP BY v ORDER BY f DESC LIMIT {limit}".format(
-                        table=table_name,
-                        column=column_name,
-                        limit=MAXIMUM_CHOICES + 1,
-                    )
+                    f"SELECT {column_name} AS v, COUNT({column_name})"
+                    f" AS f FROM {table_name} GROUP BY v"
+                    f" ORDER BY f DESC LIMIT {MAXIMUM_CHOICES + 1}"
                 )
             )
             if results is not None and results.rowcount <= MAXIMUM_CHOICES:
@@ -1281,11 +1344,10 @@ class ChoiceGeneratorFactory(GeneratorFactory):
                     ]
             results = connection.execute(
                 text(
-                    "SELECT v, COUNT(v) AS f FROM (SELECT {column} as v FROM {table} ORDER BY RANDOM() LIMIT {sample_count}) AS _inner GROUP BY v ORDER BY f DESC".format(
-                        table=table_name,
-                        column=column_name,
-                        sample_count=self.SAMPLE_COUNT,
-                    )
+                    f"SELECT v, COUNT(v) AS f FROM"
+                    f" (SELECT {column_name} as v FROM {table_name}"
+                    f" ORDER BY RANDOM() LIMIT {self.SAMPLE_COUNT})"
+                    f" AS _inner GROUP BY v ORDER BY f DESC"
                 )
             )
             if results is not None:
@@ -1436,7 +1498,10 @@ class MultivariateNormalGenerator(Generator):
         cols = ", ".join(self._columns)
         return {
             f"auto__cov__{self._table}": {
-                "comment": f"Means and covariate matrix for the columns {cols}, so that we can produce the relatedness between these in the fake data.",
+                "comment": (
+                    f"Means and covariate matrix for the columns {cols},"
+                    " so that we can produce the relatedness between these in the fake data."
+                ),
                 "query": self._query,
             }
         }
@@ -1511,14 +1576,20 @@ class MultivariateNormalGeneratorFactory(GeneratorFactory):
         )
         means = "".join(f", _q.m{i}" for i in range(len(columns)))
         covs = "".join(
-            f", (_q.s{ix}_{iy} - _q.count * _q.m{ix} * _q.m{iy})/NULLIF(_q.count - 1, 0) AS c{ix}_{iy}"
+            (
+                f", (_q.s{ix}_{iy} - _q.count * _q.m{ix} * _q.m{iy})"
+                f"/NULLIF(_q.count - 1, 0) AS c{ix}_{iy}"
+            )
             for iy in range(len(columns))
             for ix in range(iy + 1)
         )
         if sample_count is None:
             subquery = table + where
         else:
-            subquery = f"(SELECT * FROM {table}{where} ORDER BY RANDOM() LIMIT {sample_count}) AS _sampled"
+            subquery = (
+                f"(SELECT * FROM {table}{where} ORDER BY RANDOM()"
+                f" LIMIT {sample_count}) AS _sampled"
+            )
         # if there are any numeric columns we need at least two rows to make any (co)variances at all
         suppress_clause = f" WHERE {suppress_count} < _q.count" if columns else ""
         return (
@@ -1689,7 +1760,10 @@ class NullPartitionedNormalGenerator(Generator):
         self, index: int, partition: RowPartition
     ) -> dict[str, Any]:
         """Get the arguments to be entered into ``config.yaml`` for a single partition."""
-        count = f'sum(r["count"] for r in SRC_STATS["auto__cov__{self._query_name}__alt_{index}"]["results"])'
+        count = (
+            'sum(r["count"] for r in'
+            f' SRC_STATS["auto__cov__{self._query_name}__alt_{index}"]["results"])'
+        )
         if not partition.included_numeric and not partition.included_choice:
             return {
                 "count": count,
@@ -1799,12 +1873,12 @@ class NullPartitionedNormalGenerator(Generator):
 def is_numeric(col: Column) -> bool:
     """Test if this column stores a numeric value."""
     ct = get_column_type(col)
-    return (isinstance(ct, Numeric) or isinstance(ct, Integer)) and not col.foreign_keys
+    return isinstance(ct, (Numeric, Integer)) and not col.foreign_keys
 
 
-def powerset(input: list[T]) -> Iterable[Iterable[T]]:
+def powerset(xs: list[T]) -> Iterable[Iterable[T]]:
     """Get a list of all sublists of ``input``."""
-    return chain.from_iterable(combinations(input, n) for n in range(len(input) + 1))
+    return chain.from_iterable(combinations(xs, n) for n in range(len(xs) + 1))
 
 
 @dataclass
@@ -1911,7 +1985,11 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
         )
         if where is None:
             return f'SELECT COUNT(*) AS count, {index_exp} AS "index" FROM {table} GROUP BY "index"'
-        return f'SELECT count, "index" FROM (SELECT COUNT(*) AS count, {index_exp} AS "index" FROM {table} GROUP BY "index") AS _q {where}'
+        return (
+            'SELECT count, "index" FROM (SELECT COUNT(*) AS count,'
+            f' {index_exp} AS "index"'
+            f' FROM {table} GROUP BY "index") AS _q {where}'
+        )
 
     def get_generators(
         self, columns: list[Column], engine: Engine
@@ -1973,7 +2051,11 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
                 partition_count_max_results = (
                     connection.execute(text(partition_query_max)).mappings().fetchall()
                 )
-                count_comment = f"Number of rows for each combination of the columns { {nc.column.name for nc in nullable_columns} } of the table {table} being null"
+                count_comment = (
+                    "Number of rows for each combination of the columns"
+                    f" { {nc.column.name for nc in nullable_columns} }"
+                    f" of the table {table} being null"
+                )
                 if self._execute_partition_queries(connection, row_partitions_maximal):
                     gens.append(
                         NullPartitionedNormalGenerator(

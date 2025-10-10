@@ -6,19 +6,10 @@ import io
 import json
 import logging
 import sys
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from types import ModuleType
-from typing import (
-    Any,
-    Callable,
-    Final,
-    Generator,
-    Iterable,
-    Mapping,
-    Optional,
-    TypeVar,
-    Union,
-)
+from typing import Any, Callable, Final, Generator, Iterable, Optional, TypeVar, Union
 
 import sqlalchemy
 import yaml
@@ -119,6 +110,7 @@ def table_row_count(table: Table, conn: Connection) -> int:
     :return: The number of rows in the table.
     """
     return conn.execute(
+        # pylint: disable=not-callable
         select(sqlalchemy.func.count()).select_from(
             sqlalchemy.table(
                 table.name,
@@ -527,7 +519,7 @@ def stream_yaml(yaml_file_handle: io.TextIOBase) -> Generator[Any, None, None]:
         if not line or line.startswith("-"):
             if buf:
                 yl = yaml.load(buf, yaml.Loader)
-                assert type(yl) is list and len(yl) == 1
+                assert isinstance(yl, Sequence) and len(yl) == 1
                 yield yl[0]
             if not line:
                 return
@@ -602,7 +594,7 @@ def sorted_non_vocabulary_tables(metadata: MetaData, config: Mapping) -> list[Ta
         table_names, lambda tn: get_related_table_names(metadata.tables[tn])
     )
     for cycle in cycles:
-        logger.warning(f"Cycle detected between tables: {cycle}")
+        logger.warning("Cycle detected between tables: %s", cycle)
     return [metadata.tables[tn] for tn in sorted_tables]
 
 
@@ -652,7 +644,7 @@ def generators_require_stats(config: Mapping) -> bool:
                 names = (
                     node.id
                     for node in ast.walk(ast.parse(arg))
-                    if type(node) is ast.Name
+                    if isinstance(node, ast.Name)
                 )
                 if any(name == "SRC_STATS" for name in names):
                     stats_required = True
@@ -668,12 +660,12 @@ def generators_require_stats(config: Mapping) -> bool:
                     )
                 )
         for k, arg in call.get("kwargs", {}).items():
-            if type(arg) is str:
+            if isinstance(arg, str):
                 try:
                     names = (
                         node.id
                         for node in ast.walk(ast.parse(arg))
-                        if type(node) is ast.Name
+                        if isinstance(node, ast.Name)
                     )
                     if any(name == "SRC_STATS" for name in names):
                         stats_required = True

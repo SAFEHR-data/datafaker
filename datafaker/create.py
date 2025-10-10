@@ -235,11 +235,10 @@ class StoryIterator:
                 if self._final_values is None:
                     self._table_name, self._provided_values = next(self._story)
                     return
-                else:
-                    self._table_name, self._provided_values = self._story.send(
-                        self._final_values
-                    )
-                    return
+                self._table_name, self._provided_values = self._story.send(
+                    self._final_values
+                )
+                return
             except StopIteration:
                 try:
                     name, self._story = next(self._stories)

@@ -20,6 +20,7 @@ class RemoveThingsTestCase(RequiresDBTestCase):
     def count_rows(self, connection: Connection, table_name: str) -> int | None:
         """Count the rows in a table."""
         return connection.execute(
+            # pylint: disable=not-callable.
             select(func.count()).select_from(self.metadata.tables[table_name])
         ).scalar()
 
@@ -40,8 +41,8 @@ class RemoveThingsTestCase(RequiresDBTestCase):
             },
         )
         with self.sync_engine.connect() as conn:
-            self.assertGreaterAndNotNone(self.count_rows(conn, "manufacturer"), 0)
-            self.assertGreaterAndNotNone(self.count_rows(conn, "model"), 0)
+            self.assert_greater_and_not_none(self.count_rows(conn, "manufacturer"), 0)
+            self.assert_greater_and_not_none(self.count_rows(conn, "model"), 0)
             self.assertEqual(self.count_rows(conn, "player"), 0)
             self.assertEqual(self.count_rows(conn, "string"), 0)
             self.assertEqual(self.count_rows(conn, "signature_model"), 0)

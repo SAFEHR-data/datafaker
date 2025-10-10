@@ -5,10 +5,11 @@ import math
 import os
 import random
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from io import TextIOWrapper
 from pathlib import Path
-from typing import Any, Callable, Generator
+from typing import Any, Generator
 
 import numpy as np
 import yaml
@@ -59,8 +60,7 @@ def merge_with_constants(
             yield xs[xi]
             xi += 1
         outi += 1
-    for x in xs[xi:]:
-        yield x
+    yield from xs[xi:]
 
 
 class NothingToGenerateException(Exception):
@@ -132,7 +132,7 @@ class DistributionGenerator:
         :return: The chosen value.
         """
         c = random.choice(a)
-        return c["value"] if type(c) is dict and "value" in c else c
+        return c["value"] if isinstance(c, Mapping) and "value" in c else c
 
     def zipf_choice(self, a: list[T], n: int | None = None) -> T:
         """
@@ -149,7 +149,7 @@ class DistributionGenerator:
         if n is None:
             n = len(a)
         c = random.choices(a, weights=zipf_weights(n))[0]
-        return c["value"] if type(c) is dict and "value" in c else c
+        return c["value"] if isinstance(c, Mapping) and "value" in c else c
 
     def weighted_choice(self, a: list[dict[str, Any]]) -> Any:
         """
@@ -403,17 +403,26 @@ class FileUploader:
         """Load the data from file."""
         yaml_file = base_path / Path(self.table.fullname + ".yaml")
         if yaml_file.exists():
-            opener = lambda: open(yaml_file, mode="r", encoding="utf-8")
+
+            def opener() -> TextIOWrapper:
+                return open(yaml_file, mode="r", encoding="utf-8")
+
         else:
             yaml_file = base_path / Path(self.table.fullname + ".yaml.gz")
             if yaml_file.exists():
-                opener = lambda: gzip.open(yaml_file, mode="rt")
+
+                def opener() -> TextIOWrapper:
+                    return gzip.open(yaml_file, mode="rt")
+
             else:
                 logger.warning("File %s not found. Skipping...", yaml_file)
                 return
         if 0 < table_row_count(self.table, connection):
             logger.warning(
-                "Table %s already contains data (consider running 'datafaker remove-vocab'), skipping...",
+                (
+                    "Table %s already contains data"
+                    " (consider running 'datafaker remove-vocab'), skipping..."
+                ),
                 self.table.name,
             )
             return

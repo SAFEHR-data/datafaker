@@ -139,15 +139,15 @@ class StoryGeneratorInfo:
 
 
 def _render_value(v: Any) -> str:
-    if type(v) is list:
+    if isinstance(v, list):
         return "[" + ", ".join(_render_value(x) for x in v) + "]"
-    if type(v) is set:
+    if isinstance(v, set):
         return "{" + ", ".join(_render_value(x) for x in v) + "}"
-    if type(v) is dict:
+    if isinstance(v, dict):
         return (
             "{" + ", ".join(f"{repr(k)}:{_render_value(x)}" for k, x in v.items()) + "}"
         )
-    if type(v) is str:
+    if isinstance(v, str):
         return v
     return str(v)
 
@@ -603,8 +603,10 @@ def make_table_generators(  # pylint: disable=too-many-locals
     Args:
       metadata: database ORM
       config: Configuration to control the generator creation.
-      orm_filename: "orm.yaml" file path so that the generator file can load the MetaData object
-      config_filename: "config.yaml" file path so that the generator file can load the MetaData object
+      orm_filename: "orm.yaml" file path so that the generator
+      file can load the MetaData object
+      config_filename: "config.yaml" file path so that the generator
+      file can load the MetaData object
       src_stats_filename: A filename for where to read src stats from.
         Optional, if `None` this feature will be skipped
       overwrite_files: Whether to overwrite pre-existing vocabulary files
@@ -765,7 +767,8 @@ class DbConnection:
         """Exit the ``with`` section, closing the connection."""
         if isinstance(self._connection, AsyncConnection):
             await self._connection.close()
-        self._connection.close()
+        else:
+            self._connection.close()
 
     async def execute_raw_query(self, query: Executable) -> CursorResult:
         """Execute the query on the owned connection."""
@@ -808,7 +811,7 @@ class DbConnection:
 
 def fix_type(value: Any) -> Any:
     """Make this value suitable for yaml output."""
-    if type(value) is decimal.Decimal:
+    if isinstance(value, decimal.Decimal):
         return float(value)
     return value
 
@@ -819,37 +822,34 @@ def fix_types(dics: list[dict]) -> list[dict]:
 
 
 async def make_src_stats(
-    dsn: str, config: Mapping, metadata: MetaData, schema_name: Optional[str] = None
+    dsn: str, config: Mapping, schema_name: Optional[str] = None
 ) -> dict[str, dict[str, Any]]:
-    """Run the src-stats queries specified by the configuration.
+    """
+    Run the src-stats queries specified by the configuration.
 
     Query the src database with the queries in the src-stats block of the `config`
     dictionary, using the differential privacy parameters set in the `smartnoise-sql`
     block of `config`. Record the results in a dictionary and return it.
-    Args:
-        dsn: database connection string
-        config: a dictionary with the necessary configuration
-        metadata: the database ORM
-        schema_name: name of the database schema
 
-    Returns:
-        The dictionary of src-stats.
+    :param dsn: database connection string
+    :param config: a dictionary with the necessary configuration
+    :param schema_name: name of the database schema
+    :return: The dictionary of src-stats.
     """
     use_asyncio = config.get("use-asyncio", False)
     engine = create_db_engine(dsn, schema_name=schema_name, use_asyncio=use_asyncio)
     async with DbConnection(engine) as db_conn:
-        return await make_src_stats_connection(config, db_conn, metadata)
+        return await make_src_stats_connection(config, db_conn)
 
 
 async def make_src_stats_connection(
-    config: Mapping, db_conn: DbConnection, metadata: MetaData
+    config: Mapping, db_conn: DbConnection
 ) -> dict[str, dict[str, Any]]:
     """
     Make the ``src-stats.yaml`` file given the database connection to read from.
 
     :param config: configuration from ``config.yaml``.
     :param db_conn: Source database connection.
-    :param metadata: Source database metadata from ``orm.yaml``.
     """
     date_string = datetime.today().strftime("%Y-%m-%d %H:%M:%S")
     query_blocks = config.get("src-stats", [])

@@ -1,5 +1,4 @@
 """Tests for the unique_generator module."""
-from pathlib import Path
 from unittest.mock import MagicMock
 
 from sqlalchemy import Boolean, Column, Integer, Text, UniqueConstraint, insert

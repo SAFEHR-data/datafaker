@@ -55,7 +55,7 @@ class RstTests(TestCase):
             for file_error in file_errors
             # Only worry about ERRORs and WARNINGs
             if file_error.level <= 2
-            if not any(filter(lambda m: m in file_error.full_message, allowed_errors))
+            if not any(m in file_error.full_message for m in allowed_errors)
         ]
 
         if filtered_errors:

@@ -12,7 +12,6 @@ from unittest import TestCase, skipUnless
 
 import testing.postgresql
 import yaml
-from sqlalchemy import MetaData
 from sqlalchemy.schema import MetaData
 
 from datafaker import settings
@@ -80,7 +79,7 @@ class DatafakerTestCase(TestCase):
             return
         self.fail("".join(traceback.format_exception(result.exception)))
 
-    def assertGreaterAndNotNone(self, left: float | None, right: float) -> None:
+    def assert_greater_and_not_none(self, left: float | None, right: float) -> None:
         """
         Assert left is not None and greater than right
         """
@@ -89,7 +88,7 @@ class DatafakerTestCase(TestCase):
         else:
             self.assertGreater(left, right)
 
-    def assertSubset(self, set1: set[T], set2: set[T], msg: str | None = None) -> None:
+    def assert_subset(self, set1: set[T], set2: set[T], msg: str | None = None) -> None:
         """Assert a set is a (non-strict) subset.
 
         :param set1: The asserted subset.
@@ -100,9 +99,9 @@ class DatafakerTestCase(TestCase):
         try:
             difference = set1.difference(set2)
         except TypeError as e:
-            self.fail("invalid type when attempting set difference: %s" % e)
+            self.fail(f"invalid type when attempting set difference: {e}")
         except AttributeError as e:
-            self.fail("first argument does not support set difference: %s" % e)
+            self.fail(f"first argument does not support set difference: {e}")
 
         if not difference:
             return
@@ -113,8 +112,8 @@ class DatafakerTestCase(TestCase):
             for item in difference:
                 lines.append(repr(item))
 
-        standardMsg = "\n".join(lines)
-        self.fail(self._formatMessage(msg, standardMsg))
+        standard_msg = "\n".join(lines)
+        self.fail(self._formatMessage(msg, standard_msg))
 
 
 @skipUnless(shutil.which("psql"), "need to find 'psql': install PostgreSQL to enable")
@@ -148,7 +147,7 @@ class RequiresDBTestCase(DatafakerTestCase):
     def setUp(self) -> None:
         super().setUp()
         assert self.Postgresql is not None
-        self.postgresql = self.Postgresql()
+        self.postgresql = self.Postgresql()  # pylint: disable=not-callable
         if self.dump_file_path is not None:
             self.run_psql(Path(self.examples_dir) / Path(self.dump_file_path))
         self.engine = create_db_engine(
@@ -166,11 +165,12 @@ class RequiresDBTestCase(DatafakerTestCase):
 
     @property
     def dsn(self) -> str:
+        """Get the database connection string."""
         if self.database_name:
             url = self.postgresql.url(database=self.database_name)
         else:
             url = self.postgresql.url()
-        assert type(url) is str
+        assert isinstance(url, str)
         return url
 
     def run_psql(self, dump_file: Path) -> None:
@@ -199,7 +199,19 @@ class RequiresDBTestCase(DatafakerTestCase):
 
 
 class GeneratesDBTestCase(RequiresDBTestCase):
+    """A test case for which a database is generated."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Initialise a GeneratedDB test case."""
+        super().__init__(*args, **kwargs)
+        self.generators_file_path = ""
+        self.stats_fd = 0
+        self.stats_file_path = ""
+        self.config_file_path = ""
+        self.config_fd = 0
+
     def setUp(self) -> None:
+        """Set up the test case with an actual orm.yaml file."""
         super().setUp()
         # Generate the `orm.yaml` from the database
         (self.orm_fd, self.orm_file_path) = mkstemp(".yaml", "orm_", text=True)
@@ -207,21 +219,20 @@ class GeneratesDBTestCase(RequiresDBTestCase):
             orm_fh.write(make_tables_file(self.dsn, self.schema_name, {}))
 
     def set_configuration(self, config: Mapping[str, Any]) -> None:
-        """
-        Accepts a configuration file, writes it out.
-        """
+        """Accepts a configuration file, writes it out."""
         (self.config_fd, self.config_file_path) = mkstemp(".yaml", "config_", text=True)
         with os.fdopen(self.config_fd, "w", encoding="utf-8") as config_fh:
             config_fh.write(yaml.dump(config))
 
     def get_src_stats(self, config: Mapping[str, Any]) -> dict[str, Any]:
         """
-        Runs `make-stats` producing `src-stats.yaml`
+        Runs `make-stats` producing `src-stats.yaml`.
+
         :return: Python dictionary representation of the contents of the src-stats file
         """
         loop = asyncio.new_event_loop()
         src_stats = loop.run_until_complete(
-            make_src_stats(self.dsn, config, self.metadata, self.schema_name)
+            make_src_stats(self.dsn, config, self.schema_name)
         )
         loop.close()
         (self.stats_fd, self.stats_file_path) = mkstemp(
