@@ -2,17 +2,17 @@
 
 from typing import Any, Sequence
 
+from sqlalchemy import Column, Engine, RowMapping, text
+from sqlalchemy.types import Integer, Numeric
+
 from datafaker.generators.base import (
     Buckets,
     Generator,
     GeneratorFactory,
     NumericType,
+    dist_gen,
     get_column_type,
 )
-from sqlalchemy import Column, Engine, RowMapping, text
-from sqlalchemy.types import Integer, Numeric
-
-from datafaker.generators.base import dist_gen
 from datafaker.utils import logger
 
 

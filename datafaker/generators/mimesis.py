@@ -4,16 +4,16 @@ from typing import Any, Callable, Sequence, Union
 
 import mimesis
 import mimesis.locales
+from sqlalchemy import Column, Engine, text
+from sqlalchemy.types import Date, DateTime, Integer, Numeric, String, Time
+
+from datafaker.base import DistributionGenerator
 from datafaker.generators.base import (
     Buckets,
     Generator,
     GeneratorFactory,
     get_column_type,
 )
-from sqlalchemy import Column, Engine, text
-from sqlalchemy.types import Date, DateTime, Integer, Numeric, String, Time
-
-from datafaker.base import DistributionGenerator
 
 NumericType = Union[int, float]
 

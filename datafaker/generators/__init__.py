@@ -7,26 +7,24 @@ from datafaker.generators.base import (
     GeneratorFactory,
     MultiGeneratorFactory,
 )
-from datafaker.generators.choice import (
-    ChoiceGeneratorFactory,
-)
+from datafaker.generators.choice import ChoiceGeneratorFactory
 from datafaker.generators.continuous import (
     ContinuousDistributionGeneratorFactory,
     ContinuousLogDistributionGeneratorFactory,
-    MultivariateNormalGeneratorFactory,
     MultivariateLogNormalGeneratorFactory,
+    MultivariateNormalGeneratorFactory,
 )
 from datafaker.generators.mimesis import (
-    MimesisStringGeneratorFactory,
-    MimesisIntegerGeneratorFactory,
-    MimesisFloatGeneratorFactory,
     MimesisDateGeneratorFactory,
     MimesisDateTimeGeneratorFactory,
+    MimesisFloatGeneratorFactory,
+    MimesisIntegerGeneratorFactory,
+    MimesisStringGeneratorFactory,
     MimesisTimeGeneratorFactory,
 )
-from datafaker.generators.partitioned import(
-    NullPartitionedNormalGeneratorFactory,
+from datafaker.generators.partitioned import (
     NullPartitionedLogNormalGeneratorFactory,
+    NullPartitionedNormalGeneratorFactory,
 )
 
 

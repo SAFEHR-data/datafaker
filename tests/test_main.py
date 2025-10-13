@@ -239,8 +239,7 @@ class TestCLI(DatafakerTestCase):
 
         mock_create.assert_called_once_with(
             mock_tables.return_value,
-            mock_import.return_value.table_generator_dict,
-            mock_import.return_value.story_generator_list,
+            mock_import.return_value,
             1,
         )
         self.assertSuccess(result)

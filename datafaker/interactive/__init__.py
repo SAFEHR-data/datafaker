@@ -1,14 +1,15 @@
 """Interactive configuration commands."""
 import csv
+import itertools
 from collections.abc import Mapping, MutableMapping
 from pathlib import Path
 from typing import Any
 
 from sqlalchemy import MetaData
 
-from datafaker.interactive.table import TableCmd
-from datafaker.interactive.generators import GeneratorCmd
+from datafaker.interactive.generators import GeneratorCmd, try_setting_generator
 from datafaker.interactive.missingness import MissingnessCmd
+from datafaker.interactive.table import TableCmd
 from datafaker.utils import logger
 
 # Monkey patch pyreadline3 v3.5 so that it works with Python 3.13
@@ -83,13 +84,17 @@ def update_config_generators(
         for line in csv.reader(spec):
             line_no += 1
             if line:
-                if len(line) != 3:
+                if len(line) < 3:
                     logger.error(
-                        "line %d of file %s does not have three values",
+                        "line {0} of file {1} has fewer than three values",
                         line_no,
                         spec_path,
                     )
-                if gc.go_to(f"{line[0]}.{line[1]}"):
-                    gc.do_set(line[2])
+                cols = line[1].split(maxsplit=1)
+                if gc.go_to(f"{line[0]}.{cols[0]}"):
+                    if len(cols) == 1 or gc.set_merged_columns(cols[0], cols[1]):
+                        try_setting_generator(gc, itertools.islice(line, 2, None))
+                else:
+                    logger.warning("no such column {0}[{1}]", line[0], line[1])
         gc.do_quit("yes")
         return gc.config

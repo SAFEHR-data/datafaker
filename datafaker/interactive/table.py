@@ -1,12 +1,19 @@
 """Table configuration command shell."""
 from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
+from typing import Any, cast
 
 import sqlalchemy
 from sqlalchemy import MetaData
-from typing import Any, cast
 
-from datafaker.interactive.base import TableType, DbCmd, TableEntry, TYPE_LETTER, TYPE_PROMPT
+from datafaker.interactive.base import (
+    TYPE_LETTER,
+    TYPE_PROMPT,
+    DbCmd,
+    TableEntry,
+    TableType,
+)
+
 
 @dataclass
 class TableCmdTableEntry(TableEntry):

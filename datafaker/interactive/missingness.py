@@ -1,12 +1,13 @@
 """Missingness configuration shell."""
-from dataclasses import dataclass
-from collections.abc import Iterable, Mapping, MutableMapping
 import re
+from collections.abc import Iterable, Mapping, MutableMapping
+from dataclasses import dataclass
 from typing import cast
 
 from sqlalchemy import MetaData
 
 from datafaker.interactive.base import DbCmd, TableEntry
+
 
 @dataclass
 class MissingnessType:

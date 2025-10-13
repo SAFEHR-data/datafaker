@@ -6,13 +6,14 @@ import typing
 from abc import abstractmethod
 from typing import Any, Sequence, Union
 
+from sqlalchemy import Column, CursorResult, Engine, text
+
 from datafaker.generators.base import (
     Generator,
     GeneratorFactory,
     dist_gen,
     fit_from_buckets,
 )
-from sqlalchemy import Column, CursorResult, Engine, text
 
 NumericType = Union[int, float]
 
@@ -289,7 +290,7 @@ class ChoiceGeneratorFactory(GeneratorFactory):
     """All generators that want an average and standard deviation."""
 
     SAMPLE_COUNT = MAXIMUM_CHOICES
-    SUPPRESS_COUNT = 5
+    SUPPRESS_COUNT = 7
 
     def get_generators(
         self, columns: list[Column], engine: Engine

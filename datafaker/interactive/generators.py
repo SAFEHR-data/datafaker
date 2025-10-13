@@ -1,17 +1,18 @@
 """Generator configuration shell."""
-from dataclasses import dataclass
-from collections.abc import Mapping, Sequence, Iterable, MutableMapping
 import functools
 import re
-from typing import Any, Optional, cast, Callable
+from collections.abc import Iterable, Mapping, MutableMapping, Sequence
+from dataclasses import dataclass
+from typing import Any, Callable, Optional, cast
 
 import sqlalchemy
 from sqlalchemy import Column, MetaData
 
 from datafaker.generators import everything_factory
 from datafaker.generators.base import Generator, PredefinedGenerator
-from datafaker.interactive.base import TableEntry, DbCmd, fk_column_name, or_default
-from datafaker.utils import logger, table_is_private, primary_private_fks
+from datafaker.interactive.base import DbCmd, TableEntry, fk_column_name, or_default
+from datafaker.utils import logger, primary_private_fks, table_is_private
+
 
 @dataclass
 class GeneratorInfo:
@@ -852,7 +853,7 @@ information about the columns in the current table. Use 'peek',
         self.set_generator(None)
         self._go_next()
 
-    def do_merge(self, arg: str) -> None:
+    def merge_columns(self, arg: str) -> None:
         """
         Add this column(s) to the specified column(s).
 
@@ -864,7 +865,7 @@ information about the columns in the current table. Use 'peek',
         table_entry: GeneratorCmdTableEntry | None = self.get_table()
         if table_entry is None:
             self.print(self.ERROR_NO_SUCH_TABLE)
-            return
+            return False
         cols_available = functools.reduce(
             lambda x, y: x | y,
             [frozenset(gen.columns) for gen in table_entry.new_generators],
@@ -874,14 +875,14 @@ information about the columns in the current table. Use 'peek',
         if unknown_cols:
             for uc in unknown_cols:
                 self.print(self.ERROR_NO_SUCH_COLUMN, uc)
-            return
+            return False
         gen_info = table_entry.new_generators[self.generator_index]
         current_columns = frozenset(gen_info.columns)
         stated_current_columns = cols_to_merge & current_columns
         if stated_current_columns:
             for c in stated_current_columns:
                 self.print(self.ERROR_COLUMN_ALREADY_MERGED, c)
-            return
+            return False
         # Remove cols_to_merge from each generator
         new_new_generators: list[GeneratorInfo] = []
         for gen in table_entry.new_generators:
@@ -908,6 +909,11 @@ information about the columns in the current table. Use 'peek',
                     )
         table_entry.new_generators = new_new_generators
         self.set_prompt()
+        return True
+
+    def do_merge(self, arg: str):
+        """Add this column(s) to the specified column(s), so one generator covers them all."""
+        self.merge_columns(arg)
 
     def complete_merge(
         self, text: str, _line: str, _begidx: int, _endidx: int
@@ -978,3 +984,41 @@ information about the columns in the current table. Use 'peek',
             for column in table_entry.new_generators[self.generator_index].columns
             if column.startswith(last_arg)
         ]
+
+    def get_current_columns(self) -> set[str]:
+        """Get the current colums."""
+        table_entry: GeneratorCmdTableEntry = self.get_table()
+        gen_info = table_entry.new_generators[self.generator_index]
+        return set(gen_info.columns)
+
+    def set_merged_columns(self, first_col: str, other_cols: str) -> bool:
+        """
+        Merge columns, after unmerging everything we don't want.
+
+        :param first_col: The first column we want in the merge, must already
+        be in this column set.
+        :param other_cols: all the columns we want merged other than
+        first_col, in order, space-separated.
+        :return: True if the merge worked, false if there was an error
+        """
+        existing = self.get_current_columns()
+        existing.discard(first_col)
+        for to_remove in existing:
+            self.do_unmerge(to_remove)
+        return self.merge_columns(other_cols)
+
+
+def try_setting_generator(gc: GeneratorCmd, gens: Iterable[str]) -> bool:
+    """
+    Set the current generator by name if possible.
+
+    :param gc: The interactive ``GeneratorCmd`` to use.
+    :param gens: A list of names of generators to try, in order.
+    :return: True if one of the generators was successfully set, False otherwise.
+    """
+    for gen in gens:
+        new_gen = gc.get_proposed_generator_by_name(gen)
+        if new_gen is not None:
+            gc.set_generator(new_gen)
+            return True
+    return False
