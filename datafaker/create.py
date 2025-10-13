@@ -1,6 +1,7 @@
 """Functions and classes to create and populate the target database."""
 import pathlib
 from collections import Counter
+from types import ModuleType
 from typing import Any, Generator, Iterable, Iterator, Mapping, Sequence, Tuple
 
 from sqlalchemy import Connection, insert, inspect
@@ -97,8 +98,7 @@ def create_db_vocab(
 
 def create_db_data(
     sorted_tables: Sequence[Table],
-    table_generator_dict: Mapping[str, TableGenerator],
-    story_generator_list: Sequence[Mapping[str, Any]],
+    df_module: ModuleType,
     num_passes: int,
 ) -> RowCounts:
     """Connect to a database and populate it with data."""
@@ -108,8 +108,7 @@ def create_db_data(
 
     return create_db_data_into(
         sorted_tables,
-        table_generator_dict,
-        story_generator_list,
+        df_module,
         num_passes,
         dst_dsn,
         settings.dst_schema,
@@ -118,8 +117,7 @@ def create_db_data(
 
 def create_db_data_into(
     sorted_tables: Sequence[Table],
-    table_generator_dict: Mapping[str, TableGenerator],
-    story_generator_list: Sequence[Mapping[str, Any]],
+    df_module: ModuleType,
     num_passes: int,
     db_dsn: str,
     schema_name: str | None,
@@ -145,12 +143,13 @@ def create_db_data_into(
             row_counts += populate(
                 dst_conn,
                 sorted_tables,
-                table_generator_dict,
-                story_generator_list,
+                df_module.table_generator_dict,
+                df_module.story_generator_list,
             )
     return row_counts
 
 
+# pylint: disable=too-many-instance-attributes
 class StoryIterator:
     """Iterates through all the rows produced by all the stories."""
 
@@ -305,7 +304,9 @@ def populate(
         story_iterator.insert()
         t = story_iterator.table_name()
         if t is None:
-            raise Exception("Internal error")
+            raise AssertionError(
+                "Internal error: story iterator returns None but not is_ended"
+            )
         row_counts[t] = row_counts.get(t, 0) + 1
         story_iterator.next()
 

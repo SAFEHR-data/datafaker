@@ -26,6 +26,10 @@ from datafaker.utils import (
 )
 
 
+class InappropriateGeneratorException(Exception):
+    """Exception thrown if a generator is requested that is not appropriate."""
+
+
 @functools.cache
 def zipf_weights(size: int) -> list[float]:
     """Get the weights of a Zipf distribution of a given size."""
@@ -122,19 +126,26 @@ class DistributionGenerator:
         """
         return random.lognormvariate(float(logmean), float(logsd))
 
-    def choice(self, a: list[T]) -> T:
+    def choice_direct(self, a: list[T]) -> T:
         """
         Choose a value with equal probability.
 
-        :param a: The list of values to output. Each element is either
-        the value itself, or a mapping with a key ``value`` and the key
-        is the value to return.
+        :param a: The list of values to output.
         :return: The chosen value.
         """
-        c = random.choice(a)
-        return c["value"] if isinstance(c, Mapping) and "value" in c else c
+        return random.choice(a)
 
-    def zipf_choice(self, a: list[T], n: int | None = None) -> T:
+    def choice(self, a: list[Mapping[str, T]]) -> T | None:
+        """
+        Choose a value with equal probability.
+
+        :param a: The list of values to output. Each element is a mapping with
+        a key ``value`` and the key is the value to return.
+        :return: The chosen value.
+        """
+        return self.choice_direct(a).get("value", None)
+
+    def zipf_choice_direct(self, a: list[T], n: int | None = None) -> T:
         """
         Choose a value according to the Zipf distribution.
 
@@ -142,14 +153,26 @@ class DistributionGenerator:
         1/n times as frequently as the first value is chosen.
 
         :param a: The list of values to output, most frequent first.
-        Each element is either the value itself, or a mapping with
-        a key ``value`` and the key is the value to return.
         :return: The chosen value.
         """
         if n is None:
             n = len(a)
-        c = random.choices(a, weights=zipf_weights(n))[0]
-        return c["value"] if isinstance(c, Mapping) and "value" in c else c
+        return random.choices(a, weights=zipf_weights(n))[0]
+
+    def zipf_choice(self, a: list[Mapping[str, T]], n: int | None = None) -> T | None:
+        """
+        Choose a value according to the Zipf distribution.
+
+        The nth value (starting from 1) is chosen with a frequency
+        1/n times as frequently as the first value is chosen.
+
+        :param a: The list of rows to choose between, most frequent first.
+        Each element is a mapping with a key ``value`` and the key is the
+        value to return.
+        :return: The chosen value.
+        """
+        c = self.zipf_choice_direct(a, n)
+        return c.get("value", None)
 
     def weighted_choice(self, a: list[dict[str, Any]]) -> Any:
         """
@@ -214,7 +237,9 @@ class DistributionGenerator:
             choice -= alt["count"]
             if choice < 0:
                 return alt
-        raise Exception("Internal error: ran out of choices in _select_group")
+        raise NothingToGenerateException(
+            "Internal error: ran out of choices in _select_group"
+        )
 
     def _find_constants(self, result: dict[str, Any]) -> dict[int, Any]:
         """
@@ -286,7 +311,9 @@ class DistributionGenerator:
 
     def _check_generator_name(self, name: str) -> None:
         if name not in self.PERMITTED_SUBGENS:
-            raise Exception("%s is not a permitted generator", name)
+            raise InappropriateGeneratorException(
+                f"{name} is not a permitted generator"
+            )
 
     def alternatives(
         self,

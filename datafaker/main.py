@@ -153,13 +153,10 @@ def create_data(
     config = read_config_file(config_file) if config_file is not None else {}
     orm_metadata = load_metadata_for_output(orm_file, config)
     df_module = import_file(df_file)
-    table_generator_dict = df_module.table_generator_dict
-    story_generator_list = df_module.story_generator_list
     try:
         row_counts = create_db_data(
             sorted_non_vocabulary_tables(orm_metadata, config),
-            table_generator_dict,
-            story_generator_list,
+            df_module,
             num_passes,
         )
         logger.debug(

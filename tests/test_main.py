@@ -398,9 +398,7 @@ class TestCLI(DatafakerTestCase):
         self.assertSuccess(result)
         with open(example_conf_path, "r", encoding="utf8") as f:
             config = yaml.safe_load(f)
-        mock_make.assert_called_once_with(
-            get_test_settings().src_dsn, config, None
-        )
+        mock_make.assert_called_once_with(get_test_settings().src_dsn, config, None)
         mock_path.return_value.write_text.assert_called_once_with(
             "a: 1\n", encoding="utf-8"
         )

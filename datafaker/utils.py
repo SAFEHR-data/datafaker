@@ -11,11 +11,11 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, Callable, Final, Generator, Iterable, Optional, TypeVar, Union
 
+import psycopg2
 import sqlalchemy
 import yaml
 from jsonschema.exceptions import ValidationError
 from jsonschema.validators import validate
-from psycopg2.errors import UndefinedObject
 from sqlalchemy import Connection, Engine, ForeignKey, create_engine, event, select
 from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.exc import IntegrityError, ProgrammingError
@@ -79,7 +79,7 @@ def import_file(file_path: str) -> ModuleType:
     """
     spec = importlib.util.spec_from_file_location("df", file_path)
     if spec is None or spec.loader is None:
-        raise Exception(f"No loadable module at {file_path}")
+        raise ImportError(f"No loadable module at {file_path}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -248,7 +248,7 @@ class StdoutHandler(logging.Handler):
             sys.stdout.flush()
         except RecursionError:
             raise
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             self.handleError(record)
 
 
@@ -275,7 +275,7 @@ class StderrHandler(logging.Handler):
             sys.stderr.flush()
         except RecursionError:
             raise
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             self.handleError(record)
 
 
@@ -458,7 +458,8 @@ def remove_vocab_foreign_key_constraints(
                     )
                 except ProgrammingError as e:
                     session.rollback()
-                    if isinstance(e.orig, UndefinedObject):
+                    # pylint: disable=no-member
+                    if isinstance(e.orig, psycopg2.errors.UndefinedObject):
                         logger.debug("Constraint does not exist")
                     else:
                         raise e

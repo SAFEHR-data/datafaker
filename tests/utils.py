@@ -3,6 +3,7 @@ import asyncio
 import os
 import shutil
 import traceback
+from collections.abc import MutableSequence, Sequence
 from functools import lru_cache
 from pathlib import Path
 from subprocess import run
@@ -16,6 +17,7 @@ from sqlalchemy.schema import MetaData
 
 from datafaker import settings
 from datafaker.create import create_db_data_into
+from datafaker.interactive.base import DbCmd
 from datafaker.make import make_src_stats, make_table_generators, make_tables_file
 from datafaker.remove import remove_db_data_from
 from datafaker.utils import (
@@ -264,12 +266,9 @@ class GeneratesDBTestCase(RequiresDBTestCase):
         """Create fake data in the DB."""
         # `create-data` with all this stuff
         datafaker_module = import_file(self.generators_file_path)
-        table_generator_dict = datafaker_module.table_generator_dict
-        story_generator_list = datafaker_module.story_generator_list
         create_db_data_into(
             sorted_non_vocabulary_tables(self.metadata, config),
-            table_generator_dict,
-            story_generator_list,
+            datafaker_module,
             num_passes,
             self.dsn,
             self.schema_name,
@@ -288,3 +287,45 @@ class GeneratesDBTestCase(RequiresDBTestCase):
         self.remove_data(config)
         self.create_data(config, num_passes)
         return src_stats
+
+
+class TestDbCmdMixin(DbCmd):
+    """A mixin for capturing output from interactive commands."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Initialize a TestDbCmdMixin"""
+        super().__init__(*args, **kwargs)
+        self.reset()
+
+    def reset(self) -> None:
+        """Reset all the debug messages collected so far."""
+        self.messages: list[tuple[str, tuple[Any, ...], dict[str, Any]]] = []
+        self.headings: Sequence[str] = []
+        self.rows: Sequence[Sequence[str]] = []
+        self.column_items: MutableSequence[Sequence[str]] = []
+        self.columns: Mapping[str, Sequence[Any]] = {}
+
+    def print(self, text: str, *args: Any, **kwargs: Any) -> None:
+        """Capture the printed message."""
+        self.messages.append((text, args, kwargs))
+
+    def print_table(
+        self, headings: Sequence[str], rows: Sequence[Sequence[str]]
+    ) -> None:
+        """Capture the printed table."""
+        self.headings = headings
+        self.rows = rows
+
+    def print_table_by_columns(self, columns: Mapping[str, Sequence[str]]) -> None:
+        """Capture the printed table."""
+        self.columns = columns
+
+    # pylint: disable=arguments-renamed
+    def columnize(self, items: Sequence[str] | None, _displaywidth: int = 80) -> None:
+        """Capture the printed table."""
+        if items is not None:
+            self.column_items.append(items)
+
+    def ask_save(self) -> str:
+        """Quitting always works without needing to ask the user."""
+        return "yes"
