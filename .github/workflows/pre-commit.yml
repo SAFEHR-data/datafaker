@@ -59,6 +59,10 @@ jobs:
         shell: bash
         run: |
           pre-commit run --all-files
+      - name: Start PostgreSQL
+        shell: bash
+        run: |
+          sudo systemctl start postgresql.service
       - name: Run tests
         shell: bash
         run: |
