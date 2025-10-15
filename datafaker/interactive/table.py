@@ -1,5 +1,5 @@
 """Table configuration command shell."""
-from collections.abc import Mapping, MutableMapping, Sequence
+from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass
 from typing import Any, cast
 

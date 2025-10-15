@@ -28,9 +28,11 @@ from datafaker.utils import (
     MaybeAsyncEngine,
     create_db_engine,
     download_table,
+    get_columns_assigned,
     get_flag,
     get_property,
     get_related_table_names,
+    get_row_generators,
     get_sync_engine,
     get_vocabulary_table_names,
     logger,
@@ -176,27 +178,15 @@ def _get_row_generator(
 ) -> tuple[list[RowGeneratorInfo], list[str]]:
     """Get the row generators information, for the given table."""
     row_gen_info: list[RowGeneratorInfo] = []
-    config: list[Mapping[str, Any]] = get_property(table_config, "row_generators", [])
     columns_covered = []
-    for gen_conf in config:
-        name: str = gen_conf["name"]
-        columns_assigned = gen_conf["columns_assigned"]
+    for name, gen_conf in get_row_generators(table_config):
+        columns_assigned = list(get_columns_assigned(gen_conf))
         keyword_arguments: Mapping[str, Any] = gen_conf.get("kwargs", {})
         positional_arguments: Sequence[str] = gen_conf.get("args", [])
-
-        if isinstance(columns_assigned, str):
-            columns_assigned = [columns_assigned]
-
-        variable_names: list[str] = columns_assigned
-        try:
-            columns_covered += columns_assigned
-        except TypeError:
-            # Might be a single string, rather than a list of strings.
-            columns_covered.append(columns_assigned)
-
+        columns_covered += columns_assigned
         row_gen_info.append(
             RowGeneratorInfo(
-                variable_names=variable_names,
+                variable_names=columns_assigned,
                 function_call=_get_function_call(
                     name, positional_arguments, keyword_arguments
                 ),

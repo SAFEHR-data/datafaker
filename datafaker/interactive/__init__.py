@@ -20,7 +20,7 @@ try:
 
     if not hasattr(readline, "backend"):
         setattr(readline, "backend", "readline")
-except:
+except ImportError:
     pass
 
 
@@ -86,7 +86,7 @@ def update_config_generators(
             if line:
                 if len(line) < 3:
                     logger.error(
-                        "line {0} of file {1} has fewer than three values",
+                        "line %d of file %s has fewer than three values",
                         line_no,
                         spec_path,
                     )
@@ -95,6 +95,6 @@ def update_config_generators(
                     if len(cols) == 1 or gc.set_merged_columns(cols[0], cols[1]):
                         try_setting_generator(gc, itertools.islice(line, 2, None))
                 else:
-                    logger.warning("no such column {0}[{1}]", line[0], line[1])
+                    logger.warning("no such column %s[%s]", line[0], line[1])
         gc.do_quit("yes")
         return gc.config

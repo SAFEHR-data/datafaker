@@ -1,8 +1,11 @@
 """Generator factories for making generators of continuous distributions."""
 
-from typing import Any, Sequence
+import itertools
+from collections.abc import Iterable, Sequence
+from typing import Any
 
 from sqlalchemy import Column, Engine, RowMapping, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.types import Integer, Numeric
 
 from datafaker.generators.base import (
@@ -13,7 +16,7 @@ from datafaker.generators.base import (
     dist_gen,
     get_column_type,
 )
-from datafaker.utils import logger
+from datafaker.utils import Empty, logger
 
 
 class ContinuousDistributionGenerator(Generator):
@@ -166,20 +169,26 @@ class ContinuousDistributionGeneratorFactory(GeneratorFactory):
 class LogNormalGenerator(Generator):
     """Generator producing numbers in a log-normal distribution."""
 
-    # TODO: figure out the real buckets here (this was from a random sample in R)
+    # R:
+    # > xs<-seq(-2,2,0.5)*sqrt((exp(1)-1)*exp(1))+exp(0.5)
+    # > ys <- plnorm(xs)
+    # > c(ys, 1) - c(0,ys)
+    #  [1] 0.00000000 0.00000000 0.00000000 0.28589471 0.40556775 0.15086088
+    #  [7] 0.06716451 0.03428958 0.01924848 0.03697409
     expected_buckets = [
         0,
         0,
         0,
-        0.28627,
-        0.40607,
-        0.14937,
-        0.06735,
-        0.03492,
-        0.01918,
-        0.03684,
+        0.28589471,
+        0.40556775,
+        0.15086088,
+        0.06716451,
+        0.03428958,
+        0.01924848,
+        0.03697409,
     ]
 
+    # pylint: disable=too-many-arguments too-many-positional-arguments
     def __init__(
         self,
         table_name: str,
@@ -290,6 +299,7 @@ class ContinuousLogDistributionGeneratorFactory(ContinuousDistributionGeneratorF
 class MultivariateNormalGenerator(Generator):
     """Generator of multiple values drawn from a multivariate normal distribution."""
 
+    # pylint: disable=too-many-arguments too-many-positional-arguments
     def __init__(
         self,
         table_name: str,
@@ -359,11 +369,12 @@ class MultivariateNormalGeneratorFactory(GeneratorFactory):
         """Get the SQL expression of the value to query for this column."""
         return column
 
+    # pylint: disable=too-many-arguments too-many-positional-arguments
     def query(
         self,
         table: str,
-        columns: list[Column],
-        predicates: list[str] = [],
+        columns: Sequence[Column],
+        predicates: Iterable[str] = Empty.iterable(),
         group_by_clause: str = "",
         constant_clauses: str = "",
         constants: str = "",
@@ -385,17 +396,6 @@ class MultivariateNormalGeneratorFactory(GeneratorFactory):
         :param suppress_count: a group smaller than this will be suppressed.
         :param sample_count: this many samples will be taken from each partition.
         """
-        preds = [self.query_predicate(col) for col in columns] + predicates
-        where = " WHERE " + " AND ".join(preds) if preds else ""
-        avgs = "".join(
-            f", AVG({self.query_var(col.name)}) AS m{i}"
-            for i, col in enumerate(columns)
-        )
-        multiples = "".join(
-            f", SUM({self.query_var(colx.name)} * {self.query_var(coly.name)}) AS s{ix}_{iy}"
-            for iy, coly in enumerate(columns)
-            for ix, colx in enumerate(columns[: iy + 1])
-        )
         means = "".join(f", _q.m{i}" for i in range(len(columns)))
         covs = "".join(
             (
@@ -405,20 +405,58 @@ class MultivariateNormalGeneratorFactory(GeneratorFactory):
             for iy in range(len(columns))
             for ix in range(iy + 1)
         )
-        if sample_count is None:
-            subquery = table + where
-        else:
-            subquery = (
-                f"(SELECT * FROM {table}{where} ORDER BY RANDOM()"
-                f" LIMIT {sample_count}) AS _sampled"
-            )
-        # if there are any numeric columns we need at least#
+        subquery = self._inner_query(table, columns, predicates, sample_count)
+        # if there are any numeric columns we need at least
         # two rows to make any (co)variances at all
         suppress_clause = f" WHERE {suppress_count} < _q.count" if columns else ""
         return (
             f"SELECT {len(columns)} AS rank{constant_clauses}, _q.count AS count{means}{covs}"
-            f" FROM (SELECT COUNT(*) AS count{multiples}{avgs}{constants}"
-            f" FROM {subquery}{group_by_clause}) AS _q{suppress_clause}"
+            f" FROM ({self._middle_query(columns, constants, subquery, group_by_clause)})"
+            f" AS _q{suppress_clause}"
+        )
+
+    def _inner_query(
+        self,
+        table: str,
+        columns: Sequence[Column],
+        predicates: Iterable[str],
+        sample_count: int | None,
+    ) -> str:
+        """Get the rows from the table that we are interested in."""
+        preds = itertools.chain(
+            (self.query_predicate(col) for col in columns),
+            predicates,
+        )
+        where = " AND ".join(preds) if preds else ""
+        if where:
+            where = " WHERE " + where
+        if sample_count is None:
+            return table + where
+        return (
+            f"(SELECT * FROM {table}{where} ORDER BY RANDOM()"
+            f" LIMIT {sample_count}) AS _sampled"
+        )
+
+    def _middle_query(
+        self,
+        columns: Sequence[Column],
+        constants: str,
+        inner_query: str,
+        group_by_clause: str,
+    ) -> str:
+        """Get the basic statistics (and constants) from the inner query."""
+        multiples = "".join(
+            f", SUM({self.query_var(colx.name)} * {self.query_var(coly.name)}) AS s{ix}_{iy}"
+            for iy, coly in enumerate(columns)
+            for ix, colx in enumerate(columns[: iy + 1])
+        )
+        avgs = "".join(
+            f", AVG({self.query_var(col.name)}) AS m{i}"
+            for i, col in enumerate(columns)
+        )
+        return (
+            f"SELECT COUNT(*) AS count{multiples}{avgs}{constants}"
+            f" FROM {inner_query}{group_by_clause}"
         )
 
     def get_generators(
@@ -439,7 +477,7 @@ class MultivariateNormalGeneratorFactory(GeneratorFactory):
         with engine.connect() as connection:
             try:
                 covariates = connection.execute(text(query)).mappings().first()
-            except Exception as e:
+            except SQLAlchemyError as e:
                 logger.debug("SQL query %s failed with error %s", query, e)
                 return []
             if not covariates or covariates["c0_0"] is None:

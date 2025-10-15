@@ -13,13 +13,17 @@ from sqlalchemy.types import Integer, Numeric, String, TypeEngine
 from typing_extensions import Self
 
 from datafaker.base import DistributionGenerator
-from datafaker.utils import T, logger
+from datafaker.utils import logger
 
 NumericType = Union[int, float]
 
 
 dist_gen = DistributionGenerator()
 generic = mimesis.Generic(locale=mimesis.locales.Locale.EN_GB)
+
+
+class GeneratorError(Exception):
+    """Error thrown from Datafaker Generators."""
 
 
 class Generator(ABC):
@@ -264,6 +268,7 @@ class Buckets:
     the fit of generators against it.
     """
 
+    # pylint: disable=too-many-arguments too-many-positional-arguments
     def __init__(
         self,
         engine: Engine,

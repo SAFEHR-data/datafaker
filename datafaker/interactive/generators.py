@@ -1,4 +1,4 @@
-"""Generator configuration shell."""
+"""Generator configuration shell."""  # pylint: disable=too-many-lines
 import functools
 import re
 from collections.abc import Iterable, Mapping, MutableMapping, Sequence
@@ -11,7 +11,13 @@ from sqlalchemy import Column, MetaData
 from datafaker.generators import everything_factory
 from datafaker.generators.base import Generator, PredefinedGenerator
 from datafaker.interactive.base import DbCmd, TableEntry, fk_column_name, or_default
-from datafaker.utils import logger, primary_private_fks, table_is_private
+from datafaker.utils import (
+    get_columns_assigned,
+    get_row_generators,
+    logger,
+    primary_private_fks,
+    table_is_private,
+)
 
 
 @dataclass
@@ -35,6 +41,7 @@ class GeneratorCmdTableEntry(TableEntry):
     new_generators: list[GeneratorInfo]
 
 
+# pylint: disable=too-many-public-methods
 class GeneratorCmd(DbCmd):
     """Interactive command shell for setting generators."""
 
@@ -85,50 +92,41 @@ information about the columns in the current table. Use 'peek',
             return None
         if table_config.get("num_rows_per_pass", 1) == 0:
             return None
-        metadata_table = self.metadata.tables[table_name]
-        columns = [str(colname) for colname in metadata_table.columns.keys()]
+        columns = [
+            str(colname) for colname in self.metadata.tables[table_name].columns.keys()
+        ]
         column_set = frozenset(columns)
         columns_assigned_so_far: set[str] = set()
 
         new_generator_infos: list[GeneratorInfo] = []
-        old_generator_infos: list[GeneratorInfo] = []
-        for rg in table_config.get("row_generators", []):
-            gen_name = rg.get("name", None)
-            if gen_name:
-                ca = rg.get("columns_assigned", [])
-                collist: list[str] = (
-                    [ca] if isinstance(ca, str) else [str(c) for c in ca]
+        for gen_name, rg in get_row_generators(table_config):
+            colset: set[str] = set(get_columns_assigned(rg))
+            for unknown in colset - column_set:
+                logger.warning(
+                    "table '%s' has '%s' assigned to column '%s' which is not in this table",
+                    table_name,
+                    gen_name,
+                    unknown,
                 )
-                colset: set[str] = set(collist)
-                for unknown in colset - column_set:
-                    logger.warning(
-                        "table '%s' has '%s' assigned to column '%s' which is not in this table",
-                        table_name,
-                        gen_name,
-                        unknown,
+            for mult in columns_assigned_so_far & colset:
+                logger.warning(
+                    "table '%s' has column '%s' assigned to multiple times",
+                    table_name,
+                    mult,
+                )
+            actual_collist = [c for c in columns if c in colset]
+            if actual_collist:
+                new_generator_infos.append(
+                    GeneratorInfo(
+                        columns=actual_collist.copy(),
+                        gen=PredefinedGenerator(table_name, rg, self.config),
                     )
-                for mult in columns_assigned_so_far & colset:
-                    logger.warning(
-                        "table '%s' has column '%s' assigned to multiple times",
-                        table_name,
-                        mult,
-                    )
-                actual_collist = [c for c in collist if c in columns]
-                if actual_collist:
-                    gen = PredefinedGenerator(table_name, rg, self.config)
-                    new_generator_infos.append(
-                        GeneratorInfo(
-                            columns=actual_collist.copy(),
-                            gen=gen,
-                        )
-                    )
-                    old_generator_infos.append(
-                        GeneratorInfo(
-                            columns=actual_collist.copy(),
-                            gen=gen,
-                        )
-                    )
-                    columns_assigned_so_far |= colset
+                )
+                columns_assigned_so_far |= colset
+        old_generator_infos = [
+            GeneratorInfo(columns=gi.columns.copy(), gen=gi.gen)
+            for gi in new_generator_infos
+        ]
         for colname in columns:
             if colname not in columns_assigned_so_far:
                 new_generator_infos.append(
@@ -139,6 +137,7 @@ information about the columns in the current table. Use 'peek',
                 )
         if len(new_generator_infos) == 0:
             return None
+
         return GeneratorCmdTableEntry(
             name=table_name,
             old_generators=old_generator_infos,
@@ -853,7 +852,7 @@ information about the columns in the current table. Use 'peek',
         self.set_generator(None)
         self._go_next()
 
-    def merge_columns(self, arg: str) -> None:
+    def merge_columns(self, arg: str) -> bool:
         """
         Add this column(s) to the specified column(s).
 
@@ -877,8 +876,7 @@ information about the columns in the current table. Use 'peek',
                 self.print(self.ERROR_NO_SUCH_COLUMN, uc)
             return False
         gen_info = table_entry.new_generators[self.generator_index]
-        current_columns = frozenset(gen_info.columns)
-        stated_current_columns = cols_to_merge & current_columns
+        stated_current_columns = cols_to_merge & frozenset(gen_info.columns)
         if stated_current_columns:
             for c in stated_current_columns:
                 self.print(self.ERROR_COLUMN_ALREADY_MERGED, c)
@@ -911,7 +909,7 @@ information about the columns in the current table. Use 'peek',
         self.set_prompt()
         return True
 
-    def do_merge(self, arg: str):
+    def do_merge(self, arg: str) -> None:
         """Add this column(s) to the specified column(s), so one generator covers them all."""
         self.merge_columns(arg)
 
@@ -987,7 +985,9 @@ information about the columns in the current table. Use 'peek',
 
     def get_current_columns(self) -> set[str]:
         """Get the current colums."""
-        table_entry: GeneratorCmdTableEntry = self.get_table()
+        table_entry: GeneratorCmdTableEntry | None = self.get_table()
+        if table_entry is None:
+            return set()
         gen_info = table_entry.new_generators[self.generator_index]
         return set(gen_info.columns)
 

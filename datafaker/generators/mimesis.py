@@ -5,12 +5,14 @@ from typing import Any, Callable, Sequence, Union
 import mimesis
 import mimesis.locales
 from sqlalchemy import Column, Engine, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.types import Date, DateTime, Integer, Numeric, String, Time
 
-from datafaker.base import DistributionGenerator
 from datafaker.generators.base import (
     Buckets,
+    DistributionGenerator,
     Generator,
+    GeneratorError,
     GeneratorFactory,
     get_column_type,
 )
@@ -41,12 +43,12 @@ class MimesisGeneratorBase(Generator):
         f = generic
         for part in function_name.split("."):
             if not hasattr(f, part):
-                raise Exception(
+                raise GeneratorError(
                     f"Mimesis does not have a function {function_name}: {part} not found"
                 )
             f = getattr(f, part)
         if not callable(f):
-            raise Exception(
+            raise GeneratorError(
                 f"Mimesis object {function_name} is not a callable,"
                 " so cannot be used as a generator"
             )
@@ -152,6 +154,7 @@ class MimesisGeneratorTruncated(MimesisGenerator):
 class MimesisDateTimeGenerator(MimesisGeneratorBase):
     """DateTime generator using Mimesis."""
 
+    # pylint: disable=too-many-arguments too-many-positional-arguments
     def __init__(
         self,
         column: Column,
@@ -306,7 +309,7 @@ class MimesisStringGeneratorFactory(GeneratorFactory):
                 f"LENGTH({column.name})",
             )
             fitness_fn = len
-        except Exception:
+        except SQLAlchemyError:
             # Some column types that appear to be strings (such as enums)
             # cannot have their lengths measured. In this case we cannot
             # detect fitness using lengths.

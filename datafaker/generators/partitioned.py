@@ -80,6 +80,43 @@ class RowPartition:
         )
 
 
+@dataclass
+class NullableColumn:
+    """A reference to a nullable column whose nullability is part of a partitioning."""
+
+    column: Column
+    # The bit (power of two) of the number of the partition in the partition sizes list
+    bitmask: int
+
+
+class PartitionCountQuery:
+    """Query, result and comment for the row counts of the null pattern partitions."""
+
+    def __init__(
+        self,
+        connection: Connection,
+        query: str,
+        table_name: str,
+        nullable_columns: Iterable[NullableColumn],
+    ) -> None:
+        """
+        Initialise the partition count query.
+
+        :param connection: Database connection.
+        :param query: The query getting the row counts of the null pattern partitions.
+        :param table_name: The name of the table being queried.
+        :param nullable_columns: The columns that are being checked for nullness.
+        """
+        self.query = query
+        rows = connection.execute(text(query)).mappings().fetchall()
+        self.results = [dict(row) for row in rows]
+        self.comment = (
+            "Number of rows for each combination of the columns"
+            f" { {nc.column.name for nc in nullable_columns} }"
+            f" of the table {table_name} being null"
+        )
+
+
 class NullPartitionedNormalGenerator(Generator):
     """
     A generator of mixed numeric and non-numeric data.
@@ -97,23 +134,20 @@ class NullPartitionedNormalGenerator(Generator):
     rows are used because no covariate matrix is required for this).
     """
 
+    # pylint: disable=too-many-arguments too-many-positional-arguments
     def __init__(
         self,
         query_name: str,
         partitions: dict[int, RowPartition],
         function_name: str = "grouped_multivariate_lognormal",
         name_suffix: str | None = None,
-        partition_count_query: str | None = None,
-        partition_counts: Iterable[RowMapping] = [],
-        partition_count_comment: str | None = None,
+        partition_count_query: PartitionCountQuery | None = None,
     ):
         """Initialise a NullPartitionedNormalGenerator."""
         self._query_name = query_name
         self._partitions = partitions
         self._function_name = function_name
         self._partition_count_query = partition_count_query
-        self._partition_counts = [dict(pc) for pc in partition_counts]
-        self._partition_count_comment = partition_count_comment
         if name_suffix:
             self._name = f"null-partitioned {function_name} [{name_suffix}]"
         else:
@@ -186,8 +220,8 @@ class NullPartitionedNormalGenerator(Generator):
             return partitions
         return {
             self._count_query_name(): {
-                "comment": self._partition_count_comment,
-                "query": self._partition_count_query,
+                "comment": self._partition_count_query.comment,
+                "query": self._partition_count_query.query,
             },
             **partitions,
         }
@@ -223,12 +257,16 @@ class NullPartitionedNormalGenerator(Generator):
 
     def actual_kwargs(self) -> dict[str, Any]:
         """Get the kwargs (summary statistics) this generator was instantiated with."""
+        if self._partition_count_query is None:
+            counts = None
+        else:
+            counts = self._partition_count_query.results
         return {
             "alternative_configs": [
                 self._actual_kwargs_with_combinations(self._partitions[index])
                 for index in range(len(self._partitions))
             ],
-            "counts": self._partition_counts,
+            "counts": counts,
         }
 
     def generate_data(self, count: int) -> list[Any]:
@@ -252,15 +290,7 @@ def powerset(xs: list[T]) -> Iterable[Iterable[T]]:
     return chain.from_iterable(combinations(xs, n) for n in range(len(xs) + 1))
 
 
-@dataclass
-class NullableColumn:
-    """A reference to a nullable column whose nullability is part of a partitioning."""
-
-    column: Column
-    # The bit (power of two) of the number of the partition in the partition sizes list
-    bitmask: int
-
-
+# pylint: disable=too-many-instance-attributes
 class NullPatternPartition:
     """Get the definition of a partition (in other words, what makes it not another partition)."""
 
@@ -362,6 +392,70 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
             f' FROM {table} GROUP BY "index") AS _q {where}'
         )
 
+    def _get_row_partition(
+        self,
+        table: str,
+        partition: NullPatternPartition,
+        suppress_count: int = 1,
+        sample_count: int | None = None,
+    ) -> RowPartition:
+        """Get the RowPartition from a NullPatternPartition."""
+        query = self.query(
+            table=table,
+            columns=partition.included_numeric,
+            predicates=partition.predicates,
+            group_by_clause=partition.group_by_clause,
+            constants=partition.constants,
+            constant_clauses=partition.constant_clauses,
+            suppress_count=suppress_count,
+            sample_count=sample_count,
+        )
+        return RowPartition(
+            query,
+            partition.included_numeric,
+            partition.included_choice,
+            partition.excluded,
+            partition.nones,
+            [],
+        )
+
+    # pylint: disable=too-many-arguments too-many-positional-arguments
+    def _get_generator(
+        self,
+        connection: Connection,
+        table_name: str,
+        columns: list[Column],
+        nullable_columns: list[NullableColumn],
+        where: str | None = None,
+        name_suffix: str | None = None,
+        suppress_count: int = 1,
+        sample_count: int | None = None,
+    ) -> NullPartitionedNormalGenerator | None:
+        query = self.get_partition_count_query(nullable_columns, table_name, where)
+        partitions: dict[int, RowPartition] = {}
+        for partition_nonnulls in powerset(nullable_columns):
+            partition_def = NullPatternPartition(columns, partition_nonnulls)
+            partitions[partition_def.index] = self._get_row_partition(
+                table_name,
+                partition_def,
+                suppress_count=suppress_count,
+                sample_count=sample_count,
+            )
+        if not self._execute_partition_queries(connection, partitions):
+            return None
+        return NullPartitionedNormalGenerator(
+            f"{table_name}__{columns[0].name}",
+            partitions,
+            self.function_name(),
+            name_suffix=name_suffix,
+            partition_count_query=PartitionCountQuery(
+                connection,
+                query,
+                table_name,
+                nullable_columns,
+            ),
+        )
+
     def get_generators(
         self, columns: list[Column], engine: Engine
     ) -> Sequence[Generator]:
@@ -372,139 +466,54 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
         if not nullable_columns:
             return []
         table = columns[0].table.name
-        query_name = f"{table}__{columns[0].name}"
-        # Partitions for minimal suppression and no sampling
-        row_partitions_maximal: dict[int, RowPartition] = {}
-        # Partitions for minimal suppression but sampling
-        row_partitions_sampled: dict[int, RowPartition] = {}
-        # Partitions for normal suppression and severe sampling
-        row_partitions_ss: dict[int, RowPartition] = {}
-        for partition_nonnulls in powerset(nullable_columns):
-            partition_def = NullPatternPartition(columns, partition_nonnulls)
-            query_all = self.query(
-                table=table,
-                columns=partition_def.included_numeric,
-                predicates=partition_def.predicates,
-                group_by_clause=partition_def.group_by_clause,
-                constants=partition_def.constants,
-                constant_clauses=partition_def.constant_clauses,
-            )
-            row_partitions_maximal[partition_def.index] = RowPartition(
-                query_all,
-                partition_def.included_numeric,
-                partition_def.included_choice,
-                partition_def.excluded,
-                partition_def.nones,
-                [],
-            )
-            query_sampled = self.query(
-                table=table,
-                columns=partition_def.included_numeric,
-                predicates=partition_def.predicates,
-                group_by_clause=partition_def.group_by_clause,
-                constants=partition_def.constants,
-                constant_clauses=partition_def.constant_clauses,
-                sample_count=self.SAMPLE_COUNT,
-            )
-            row_partitions_sampled[partition_def.index] = RowPartition(
-                query_sampled,
-                partition_def.included_numeric,
-                partition_def.included_choice,
-                partition_def.excluded,
-                partition_def.nones,
-                {},
-            )
-            query_ss = self.query(
-                table=table,
-                columns=partition_def.included_numeric,
-                predicates=partition_def.predicates,
-                group_by_clause=partition_def.group_by_clause,
-                constants=partition_def.constants,
-                constant_clauses=partition_def.constant_clauses,
-                suppress_count=self.SUPPRESS_COUNT,
-                sample_count=self.SAMPLE_COUNT,
-            )
-            row_partitions_ss[partition_def.index] = RowPartition(
-                query_ss,
-                partition_def.included_numeric,
-                partition_def.included_choice,
-                partition_def.excluded,
-                partition_def.nones,
-                [],
-            )
-        gens: list[Generator] = []
+        gens: list[Generator | None] = []
         try:
             with engine.connect() as connection:
-                partition_query_max = self.get_partition_count_query(
-                    nullable_columns, table
-                )
-                partition_count_max_results = (
-                    connection.execute(text(partition_query_max)).mappings().fetchall()
-                )
-                count_comment = (
-                    "Number of rows for each combination of the columns"
-                    f" { {nc.column.name for nc in nullable_columns} }"
-                    f" of the table {table} being null"
-                )
-                if self._execute_partition_queries(connection, row_partitions_maximal):
-                    gens.append(
-                        NullPartitionedNormalGenerator(
-                            query_name,
-                            row_partitions_maximal,
-                            self.function_name(),
-                            partition_count_query=partition_query_max,
-                            partition_counts=partition_count_max_results,
-                            partition_count_comment=count_comment,
-                        )
+                gens.append(
+                    self._get_generator(
+                        connection,
+                        table,
+                        columns,
+                        nullable_columns,
                     )
-                if self._execute_partition_queries(connection, row_partitions_sampled):
-                    gens.append(
-                        NullPartitionedNormalGenerator(
-                            query_name,
-                            row_partitions_sampled,
-                            self.function_name(),
-                            name_suffix="sampled",
-                            partition_count_query=partition_query_max,
-                            partition_counts=partition_count_max_results,
-                            partition_count_comment=count_comment,
-                        )
-                    )
-                if self._execute_partition_queries(connection, row_partitions_sampled):
-                    gens.append(
-                        NullPartitionedNormalGenerator(
-                            query_name,
-                            row_partitions_sampled,
-                            self.function_name(),
-                            name_suffix="sampled",
-                            partition_count_query=partition_query_max,
-                            partition_counts=partition_count_max_results,
-                            partition_count_comment=count_comment,
-                        )
-                    )
-                partition_query_ss = self.get_partition_count_query(
-                    nullable_columns,
-                    table,
-                    where=f"WHERE {self.SUPPRESS_COUNT} < count",
                 )
-                partition_count_ss_results = (
-                    connection.execute(text(partition_query_ss)).mappings().fetchall()
-                )
-                if self._execute_partition_queries(connection, row_partitions_ss):
-                    gens.append(
-                        NullPartitionedNormalGenerator(
-                            query_name,
-                            row_partitions_ss,
-                            self.function_name(),
-                            name_suffix="sampled and suppressed",
-                            partition_count_query=partition_query_ss,
-                            partition_counts=partition_count_ss_results,
-                            partition_count_comment=count_comment,
-                        )
+                gens.append(
+                    self._get_generator(
+                        connection,
+                        table,
+                        columns,
+                        nullable_columns,
+                        name_suffix="sampled",
+                        sample_count=self.SAMPLE_COUNT,
                     )
+                )
+                gens.append(
+                    self._get_generator(
+                        connection,
+                        table,
+                        columns,
+                        nullable_columns,
+                        where=f"WHERE {self.SUPPRESS_COUNT} < count",
+                        name_suffix="sampled and suppressed",
+                        suppress_count=self.SUPPRESS_COUNT,
+                        sample_count=self.SAMPLE_COUNT,
+                    )
+                )
+                gens.append(
+                    self._get_generator(
+                        connection,
+                        table,
+                        columns,
+                        nullable_columns,
+                        where=f"WHERE {self.SUPPRESS_COUNT} < count",
+                        name_suffix="suppressed",
+                        suppress_count=self.SUPPRESS_COUNT,
+                    )
+                )
         except sqlalchemy.exc.DatabaseError as exc:
             logger.debug("SQL query failed with error %s [%s]", exc, exc.statement)
             return []
-        return gens
+        return [gen for gen in gens if gen]
 
     def _execute_partition_queries(
         self,

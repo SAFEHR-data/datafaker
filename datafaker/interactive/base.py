@@ -100,7 +100,10 @@ class DbCmd(ABC, cmd.Cmd):
     INFO_NO_MORE_TABLES = "There are no more tables"
     ERROR_ALREADY_AT_START = "Error: Already at the start"
     ERROR_NO_SUCH_TABLE = "Error: '{0}' is not the name of a table in this database"
-    ERROR_NO_SUCH_TABLE_OR_COLUMN = "Error: '{0}' is not the name of a table in this database or a column in this table"
+    ERROR_NO_SUCH_TABLE_OR_COLUMN = (
+        "Error: '{0}' is not the name of a table"
+        " in this database or a column in this table"
+    )
     ROW_COUNT_MSG = "Total row count: {}"
 
     @abstractmethod
@@ -185,7 +188,7 @@ class DbCmd(ABC, cmd.Cmd):
         :param columns: Dict of column names to the values in the column.
         """
         output = PrettyTable()
-        row_count = max([len(col) for col in columns.values()])
+        row_count = max(len(col) for col in columns.values())
         for field_name, data in columns.items():
             output.add_column(field_name, list(data) + [None] * (row_count - len(data)))
         print(output)
@@ -207,7 +210,6 @@ class DbCmd(ABC, cmd.Cmd):
     @abstractmethod
     def set_prompt(self) -> None:
         """Set the prompt according to the current state."""
-        ...
 
     def _set_table_index(self, index: int) -> bool:
         """
@@ -325,21 +327,25 @@ class DbCmd(ABC, cmd.Cmd):
         nonnull_columns = self.get_nonnull_columns(table_name)
         colcounts = [f", COUNT({nnc}) AS {nnc}" for nnc in nonnull_columns]
         with self.sync_engine.connect() as connection:
-            result = connection.execute(
-                sqlalchemy.text(
-                    f"SELECT COUNT(*) AS row_count{''.join(colcounts)} FROM {table_name}"
+            result = (
+                connection.execute(
+                    sqlalchemy.text(
+                        f"SELECT COUNT(*) AS row_count{''.join(colcounts)} FROM {table_name}"
+                    )
                 )
-            ).first()
+                .mappings()
+                .first()
+            )
             if result is None:
                 self.print("Could not count rows in table {0}", table_name)
                 return
-            row_count = result.row_count
+            row_count = result.get("row_count", 0)
             self.print(self.ROW_COUNT_MSG, row_count)
             self.print_table(
                 ["Column", "NULL count"],
                 [
                     [name, row_count - count]
-                    for name, count in result._mapping.items()
+                    for name, count in result.items()
                     if name != "row_count"
                 ],
             )
@@ -388,7 +394,7 @@ class DbCmd(ABC, cmd.Cmd):
             )
             try:
                 result = connection.execute(query)
-            except Exception as exc:
+            except sqlalchemy.exc.SQLAlchemyError as exc:
                 self.print(f'SQL query "{query}" caused exception {exc}')
                 return
             self.print_table(list(result.keys()), result.fetchmany(max_peek_rows))

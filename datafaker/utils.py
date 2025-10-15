@@ -9,7 +9,17 @@ import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Callable, Final, Generator, Iterable, Optional, TypeVar, Union
+from typing import (
+    Any,
+    Callable,
+    Final,
+    Generator,
+    Generic,
+    Iterable,
+    Optional,
+    TypeVar,
+    Union,
+)
 
 import psycopg2
 import sqlalchemy
@@ -41,6 +51,16 @@ CONFIG_SCHEMA_PATH: Final[Path] = (
 )
 
 T = TypeVar("T")
+
+
+class Empty(Generic[T]):
+    """Generic empty sequences for default arguments."""
+
+    @classmethod
+    def iterable(cls) -> Iterable[T]:
+        """Get an empty iterable."""
+        e: list[T] = []
+        return (x for x in e)
 
 
 def read_config_file(path: str) -> dict:
@@ -415,6 +435,44 @@ def get_vocabulary_table_names(config: Mapping) -> set[str]:
         for (table_name, table_config) in config.get("tables", {}).items()
         if get_flag(table_config, "vocabulary_table")
     }
+
+
+def get_columns_assigned(
+    row_generator_config: Mapping[str, Any]
+) -> Generator[str, None, None]:
+    """
+    Get the columns assigned in a ``row_generators[n]`` stanza.
+
+    :param generator_config: The ``row_generators[n]`` stanza itself.
+    """
+    ca = row_generator_config.get("columns_assigned", None)
+    if ca is None:
+        return
+    if isinstance(ca, str):
+        yield ca
+        return
+    if not hasattr(ca, "__iter__"):
+        return
+    for c in ca:
+        yield str(c)
+
+
+def get_row_generators(
+    table_config: Mapping[str, Any],
+) -> Generator[tuple[str, Mapping[str, Any]], None, None]:
+    """
+    Get the row generators from a table configuration.
+
+    :param table_config: The element from the ``tables:`` stanza of ``config.xml``.
+    :return: Pair of (name, row generator config).
+    """
+    rgs = table_config.get("row_generators", None)
+    if isinstance(rgs, str) or not hasattr(rgs, "__iter__"):
+        return
+    for rg in rgs:
+        name = rg.get("name", None)
+        if name:
+            yield (name, rg)
 
 
 def make_foreign_key_name(table_name: str, col_name: str) -> str:

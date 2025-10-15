@@ -49,6 +49,7 @@ class ChoiceGenerator(Generator):
 
     STORE_COUNTS = False
 
+    # pylint: disable=too-many-arguments too-many-positional-arguments
     def __init__(
         self,
         table_name: str,
