@@ -1,7 +1,9 @@
 """Tests for the utils module."""
+import importlib
 import os
 import sys
 from pathlib import Path
+import tempfile
 from unittest.mock import MagicMock, call, patch
 
 from sqlalchemy import Column, Integer, insert
@@ -14,6 +16,7 @@ from datafaker.utils import (
     read_config_file,
 )
 from tests.utils import DatafakerTestCase, RequiresDBTestCase
+from . import examples
 
 # pylint: disable=invalid-name
 Base = declarative_base()
@@ -60,7 +63,6 @@ class TestDownload(RequiresDBTestCase):
     dump_file_path = "providers.dump"
     mytable_file_path = Path("mytable.yaml")
 
-    test_dir = Path("tests/workspace")
     start_dir = os.getcwd()
 
     def setUp(self) -> None:
@@ -69,6 +71,7 @@ class TestDownload(RequiresDBTestCase):
 
         metadata.create_all(self.engine)
 
+        self.test_dir = Path(tempfile.mkdtemp(prefix="df-"))
         os.chdir(self.test_dir)
         self.mytable_file_path.unlink(missing_ok=True)
 
@@ -90,8 +93,11 @@ class TestDownload(RequiresDBTestCase):
         )
 
         # The .strip() gets rid of any possible empty lines at the end of the file.
-        with Path("../examples/expected.yaml").open(encoding="utf-8") as yamlfile:
-            expected = yamlfile.read().strip()
+        with importlib.resources.as_file(
+            importlib.resources.files(examples) / "expected.yaml"
+        ) as yamlpath:
+            with yamlpath.open() as yamlfile:
+                expected = yamlfile.read().strip()
 
         with self.mytable_file_path.open(encoding="utf-8") as yamlfile:
             actual = yamlfile.read().strip()

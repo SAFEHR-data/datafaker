@@ -2,6 +2,7 @@
 import os
 import shutil
 from pathlib import Path
+import tempfile
 from typing import Any, Mapping
 
 from sqlalchemy import create_engine, inspect
@@ -20,7 +21,6 @@ class DBFunctionalTestCase(RequiresDBTestCase):
     database_name = "src"
     schema_name = "public"
 
-    test_dir = Path("tests/workspace")
     examples_dir = Path("tests/examples")
 
     orm_file_path = Path("orm.yaml")
@@ -67,6 +67,7 @@ class DBFunctionalTestCase(RequiresDBTestCase):
         )
 
         # Copy some of the example files over to the workspace.
+        self.test_dir = Path(tempfile.mkdtemp(prefix="df-"))
         for file in self.generator_file_paths + (self.config_file_path,):
             src = self.examples_dir / file
             dst = self.test_dir / file
@@ -499,6 +500,12 @@ class DBFunctionalTestCase(RequiresDBTestCase):
         self.invoke(
             "make-tables",
             f"--orm-file={self.alt_orm_file_path}",
+            "--force",
+        )
+        self.invoke(
+            "make-vocab",
+            f"--orm-file={self.alt_orm_file_path}",
+            f"--config-file={self.config_file_path}",
             "--force",
         )
         self.invoke(
