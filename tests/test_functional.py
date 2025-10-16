@@ -1,8 +1,8 @@
 """Tests for the CLI."""
 import os
 import shutil
-from pathlib import Path
 import tempfile
+from pathlib import Path
 from typing import Any, Mapping
 
 from sqlalchemy import create_engine, inspect
