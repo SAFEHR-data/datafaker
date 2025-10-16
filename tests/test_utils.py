@@ -1,4 +1,5 @@
 """Tests for the utils module."""
+import importlib.util
 import os
 import sys
 import tempfile
@@ -16,8 +17,6 @@ from datafaker.utils import (
     read_config_file,
 )
 from tests.utils import DatafakerTestCase, RequiresDBTestCase
-
-from . import examples
 
 # pylint: disable=invalid-name
 Base = declarative_base()
@@ -94,7 +93,10 @@ class TestDownload(RequiresDBTestCase):
         )
 
         # The .strip() gets rid of any possible empty lines at the end of the file.
-        with resources.as_file(resources.files(examples) / "expected.yaml") as yamlpath:
+        tests_module = sys.modules["tests"]
+        with resources.as_file(
+            resources.files(tests_module) / "examples" / "expected.yaml"
+        ) as yamlpath:
             with yamlpath.open(encoding="utf-8") as yamlfile:
                 expected = yamlfile.read().strip()
 

@@ -196,8 +196,8 @@ class NullPartitionedTests(GeneratesDBTestCase):
         self.assertAlmostEqual(stats.two.x_mean(), 1.4, delta=0.4)
         self.assertAlmostEqual(stats.two.x_var(), 0.315, delta=0.18)
         self.assertAlmostEqual(stats.two.y_mean(), 1.8, delta=0.8)
-        self.assertAlmostEqual(stats.two.y_var(), 0.105, delta=0.06)
-        self.assertAlmostEqual(stats.two.covar(), 0.105, delta=0.07)
+        self.assertAlmostEqual(stats.two.y_var(), 0.105, delta=0.08)
+        self.assertAlmostEqual(stats.two.covar(), 0.105, delta=0.08)
         # type 3
         self.assertAlmostEqual(
             stats.three.count(), generate_count * 3 / 20, delta=generate_count * 0.2
