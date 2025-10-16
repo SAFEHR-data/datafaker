@@ -1,5 +1,4 @@
 """Tests for the utils module."""
-import importlib.util
 import os
 import sys
 import tempfile
