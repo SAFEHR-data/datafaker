@@ -124,7 +124,7 @@ Some of these functions take arguments, that we can assign like this:
 Anyway, we now need to remake the generators (``create-generators``) and re-run them (``create-data``):
 
 .. code-block:: console
-  
+
   $ datafaker create-generators --force
   $ datafaker create-data --num-passes 15
 

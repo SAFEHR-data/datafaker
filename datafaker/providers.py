@@ -5,8 +5,8 @@ from typing import Any, Optional, Union, cast
 
 from mimesis import Datetime, Text
 from mimesis.providers.base import BaseDataProvider, BaseProvider
-from sqlalchemy import Connection, Column
-from sqlalchemy.sql import functions, select, func
+from sqlalchemy import Column, Connection
+from sqlalchemy.sql import func, functions, select
 
 
 class ColumnValueProvider(BaseProvider):
@@ -29,15 +29,16 @@ class ColumnValueProvider(BaseProvider):
             return getattr(random_row, column_name)
         return None
 
-    def __init__(self, *, seed = None, **kwargs):
+    def __init__(self, *, seed: int | None = None, **kwargs: Any) -> None:
+        """Initialise the column value provider."""
         super().__init__(seed=seed, **kwargs)
         self.accumulators: dict[str, int] = {}
 
     def increment(self, db_connection: Connection, column: Column) -> int:
-        """ Return incrementing value for the column specified. """
+        """Return incrementing value for the column specified."""
         name = f"{column.table.name}.{column.name}"
         result = self.accumulators.get(name, None)
-        if result == None:
+        if result is None:
             row = db_connection.execute(select(func.max(column))).first()
             result = 0 if row is None or row[0] is None else row[0]
         value = result + 1

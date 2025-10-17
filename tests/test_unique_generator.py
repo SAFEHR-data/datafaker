@@ -1,16 +1,7 @@
 """Tests for the unique_generator module."""
-from pathlib import Path
 from unittest.mock import MagicMock
 
-from sqlalchemy import (
-    Boolean,
-    Column,
-    Integer,
-    Text,
-    UniqueConstraint,
-    create_engine,
-    insert,
-)
+from sqlalchemy import Boolean, Column, Integer, Text, UniqueConstraint, insert
 from sqlalchemy.ext.declarative import declarative_base
 
 from datafaker.unique_generator import UniqueGenerator
@@ -40,6 +31,7 @@ class UniqueGeneratorTestCase(RequiresDBTestCase):
     and b which are boolean, and c which is a text column. There is a joint unique
     constraint on a and b, and a separate unique constraint on c.
     """
+
     dump_file_path = "unique_generator.dump"
 
     def setUp(self) -> None:
@@ -54,7 +46,7 @@ class UniqueGeneratorTestCase(RequiresDBTestCase):
         uniq_ab = UniqueGenerator(["a", "b"], table_name)
         uniq_c = UniqueGenerator(["c"], table_name, max_tries=10)
 
-        with self.engine.connect() as conn:
+        with self.sync_engine.connect() as conn:
             # Find a couple of different values that could be inserted, then try to do
             # one duplicate.
             test_ab1 = [True, False]
@@ -82,7 +74,7 @@ class UniqueGeneratorTestCase(RequiresDBTestCase):
         uniq_ab = UniqueGenerator(["a", "b"], table_name)
         uniq_c = UniqueGenerator(["c"], table_name, max_tries=10)
 
-        with self.engine.connect() as conn:
+        with self.sync_engine.connect() as conn:
             test_ab1 = [True, False]
             test_ab2 = [False, False]
             string1 = "String 1"
@@ -108,7 +100,7 @@ class UniqueGeneratorTestCase(RequiresDBTestCase):
         uniq_ab = UniqueGenerator(["a", "b"], table_name)
         uniq_c = UniqueGenerator(["c"], table_name, max_tries=10)
 
-        with self.engine.connect() as conn:
+        with self.sync_engine.connect() as conn:
             test_val1 = (True, False, "String 1")
             test_val2 = (True, False, "String 2")  # Conflicts on (a, b)
             test_val3 = (False, False, "String 1")  # Conflicts on c
@@ -142,7 +134,7 @@ class UniqueGeneratorTestCase(RequiresDBTestCase):
         test_val = (True, False, "String 1")
         mock_generator.return_value = test_val
 
-        with self.engine.connect() as conn:
+        with self.sync_engine.connect() as conn:
             self.assertEqual(uniq_ab(conn, ["a", "b", "c"], mock_generator), test_val)
             self.assertRaises(
                 RuntimeError, uniq_ab, conn, ["a", "b", "c"], mock_generator

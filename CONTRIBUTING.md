@@ -47,16 +47,6 @@ Executing unit tests is straightforward:
 python -m unittest discover --verbose tests/
 ```
 
-for tests that are currently maintained.
-
-## Running functional tests
-
-These tests do not currently work, and will be replaced by unit tests.
-
-Functional tests require PostgreSQL to be installed.
-
-    *WARNING: Some MacOS systems [do not recognise the 'en_US.utf8' locale](https://apple.stackexchange.com/questions/206495/load-a-locale-from-usr-local-share-locale-in-os-x). As a workaround, replace `en_US.utf8` with `en_US.UTF-8` on every `*.dump` file.*
-
 ## Building documentation locally
 
 ```bash

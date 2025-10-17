@@ -9,42 +9,43 @@ from sqlalchemy import BigInteger, Column, String, select
 from sqlalchemy.dialects.mysql.types import INTEGER
 from sqlalchemy.dialects.postgresql import UUID
 
-from datafaker.make import (
-    _get_provider_for_column,
-    make_src_stats,
-)
-from tests.utils import RequiresDBTestCase, GeneratesDBTestCase
+from datafaker.make import _get_provider_for_column, make_src_stats
+from tests.utils import GeneratesDBTestCase, RequiresDBTestCase
 
 
 class TestMakeGenerators(GeneratesDBTestCase):
     """Test the make_table_generators function."""
+
     dump_file_path = "instrument.sql"
     database_name = "instrument"
     schema_name = "public"
 
     def test_make_table_generators(self) -> None:
-        """ Check that we can make a generators file. """
+        """Check that we can make a generators file."""
         config = {
             "tables": {
                 "player": {
-                    "row_generators": [{
-                        "name": "dist_gen.constant",
-                        "kwargs": {
-                            "value": '"Cave"',
+                    "row_generators": [
+                        {
+                            "name": "dist_gen.constant",
+                            "kwargs": {
+                                "value": '"Cave"',
+                            },
+                            "columns_assigned": "given_name",
                         },
-                        "columns_assigned": "given_name",
-                    }, {
-                        "name": "dist_gen.constant",
-                        "kwargs": {
-                            "value": '"Johnson"',
+                        {
+                            "name": "dist_gen.constant",
+                            "kwargs": {
+                                "value": '"Johnson"',
+                            },
+                            "columns_assigned": "family_name",
                         },
-                        "columns_assigned": "family_name",
-                    }],
+                    ],
                 },
             },
         }
         self.generate_data(config, num_passes=3)
-        with self.engine.connect() as conn:
+        with self.sync_engine.connect() as conn:
             stmt = select(self.metadata.tables["player"])
             rows = conn.execute(stmt).mappings().fetchall()
             for row in rows:
@@ -96,7 +97,7 @@ class TestMakeGenerators(GeneratesDBTestCase):
         )
         self.assertEqual(
             generator_arguments,
-            { "length": "100" },
+            {"length": "100"},
         )
 
         # UUID
@@ -149,12 +150,15 @@ class TestMakeStats(RequiresDBTestCase):
 
         count_names = src_stats["count_names"]["results"]
         count_names.sort(key=lambda c: c["name"])
-        self.assertListEqual(count_names, [
-            {"num": 1, "name": "Miranda Rando-Generata"},
-            {"num": 997, "name": "Randy Random"},
-            {"num": 1, "name": "Testfried Testermann"},
-            {"num": 1, "name": "Veronica Fyre"},
-        ])
+        self.assertListEqual(
+            count_names,
+            [
+                {"num": 1, "name": "Miranda Rando-Generata"},
+                {"num": 997, "name": "Randy Random"},
+                {"num": 1, "name": "Testfried Testermann"},
+                {"num": 1, "name": "Veronica Fyre"},
+            ],
+        )
 
         avg_person_id = src_stats["avg_person_id"]["results"]
         self.assertEqual(len(avg_person_id), 1)
@@ -166,14 +170,14 @@ class TestMakeStats(RequiresDBTestCase):
     def test_make_stats_no_asyncio_schema(self) -> None:
         """Test that make_src_stats works when explicitly naming a schema."""
         src_stats = asyncio.get_event_loop().run_until_complete(
-            make_src_stats(self.dsn, self.config, self.metadata, self.schema_name)
+            make_src_stats(self.dsn, self.config, self.schema_name)
         )
         self.check_make_stats_output(src_stats)
 
     def test_make_stats_no_asyncio(self) -> None:
         """Test that make_src_stats works using the example configuration."""
         src_stats = asyncio.get_event_loop().run_until_complete(
-            make_src_stats(self.dsn, self.config, self.metadata, self.schema_name)
+            make_src_stats(self.dsn, self.config, self.schema_name)
         )
         self.check_make_stats_output(src_stats)
 
@@ -185,7 +189,7 @@ class TestMakeStats(RequiresDBTestCase):
         asyncio.set_event_loop(loop)
         config_asyncio = {**self.config, "use-asyncio": True}
         src_stats = asyncio.get_event_loop().run_until_complete(
-            make_src_stats(self.dsn, config_asyncio, self.metadata, self.schema_name)
+            make_src_stats(self.dsn, config_asyncio, self.schema_name)
         )
         self.check_make_stats_output(src_stats)
 
@@ -216,7 +220,7 @@ class TestMakeStats(RequiresDBTestCase):
             ]
         }
         src_stats = asyncio.get_event_loop().run_until_complete(
-            make_src_stats(self.dsn, config, self.metadata, self.schema_name)
+            make_src_stats(self.dsn, config, self.schema_name)
         )
         self.assertEqual(src_stats[query_name1]["results"], [])
         self.assertEqual(src_stats[query_name2]["results"], [])

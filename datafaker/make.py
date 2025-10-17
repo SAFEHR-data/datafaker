@@ -5,30 +5,34 @@ import inspect
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import (
-    Any, Callable, Final, Mapping, Optional, Sequence, Tuple
-)
-import yaml
+from types import TracebackType
+from typing import Any, Callable, Final, Mapping, Optional, Sequence, Tuple, Type
 
 import pandas as pd
 import snsql
+import yaml
 from black import FileMode, format_str
 from jinja2 import Environment, FileSystemLoader, Template
 from mimesis.providers.base import BaseProvider
-from sqlalchemy import Engine, MetaData, UniqueConstraint, text
+from sqlalchemy import CursorResult, Engine, MetaData, UniqueConstraint, text
 from sqlalchemy.dialects import postgresql
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.engine import Connection
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from sqlalchemy.schema import Column, Table
-from sqlalchemy.sql import sqltypes, type_api
+from sqlalchemy.sql import Executable, sqltypes
+from typing_extensions import Self
 
 from datafaker import providers
 from datafaker.settings import get_settings
 from datafaker.utils import (
+    MaybeAsyncEngine,
     create_db_engine,
     download_table,
-    get_property,
+    get_columns_assigned,
     get_flag,
+    get_property,
     get_related_table_names,
+    get_row_generators,
     get_sync_engine,
     get_vocabulary_table_names,
     logger,
@@ -73,7 +77,8 @@ class RowGeneratorInfo:
 
 @dataclass
 class ColumnChoice:
-    """ Chooses columns based on a random number in [0,1) """
+    """Choose columns based on a random number in [0,1)."""
+
     function_name: str
     argument_values: list[str]
 
@@ -81,17 +86,34 @@ class ColumnChoice:
 def make_column_choices(
     table_config: Mapping[str, Any],
 ) -> list[ColumnChoice]:
+    """
+    Convert ``missingness_generators`` from ``config.yaml`` into functions to call.
+
+    :param table_config: The ``tables`` part of ``config.yaml``.
+    :return: A list of ``ColumnChoice`` objects; that is, descriptions of
+    functions and their arguments to call to reveal a list of columns that
+    should have values generated for them.
+    """
     return [
         ColumnChoice(
             function_name=mg["name"],
-            argument_values=[
-                f"{k}={v}"
-                for k, v in mg.get("kwargs", {}).items()
-            ]
+            argument_values=[f"{k}={v}" for k, v in mg.get("kwargs", {}).items()],
         )
         for mg in table_config.get("missingness_generators", [])
         if "name" in mg
     ]
+
+
+@dataclass
+class _PrimaryConstraint:
+    """
+    Describes a Uniqueness constraint for a multi-column primary key.
+
+    Not a real constraint, but enough to write df.py.
+    """
+
+    columns: list[Column]
+    name: str
 
 
 @dataclass
@@ -104,7 +126,9 @@ class TableGeneratorInfo:
     column_choices: list[ColumnChoice]
     rows_per_pass: int
     row_gens: list[RowGeneratorInfo] = field(default_factory=list)
-    unique_constraints: list[UniqueConstraint] = field(default_factory=list)
+    unique_constraints: Sequence[UniqueConstraint | _PrimaryConstraint] = field(
+        default_factory=list
+    )
 
 
 @dataclass
@@ -116,14 +140,16 @@ class StoryGeneratorInfo:
     num_stories_per_pass: int
 
 
-def _render_value(v) -> str:
-    if type(v) is list:
+def _render_value(v: Any) -> str:
+    if isinstance(v, list):
         return "[" + ", ".join(_render_value(x) for x in v) + "]"
-    if type(v) is set:
+    if isinstance(v, set):
         return "{" + ", ".join(_render_value(x) for x in v) + "}"
-    if type(v) is dict:
-        return "{" + ", ".join(f"{repr(k)}:{_render_value(x)}" for k, x in v.items()) + "}"
-    if type(v) is str:
+    if isinstance(v, dict):
+        return (
+            "{" + ", ".join(f"{repr(k)}:{_render_value(x)}" for k, x in v.items()) + "}"
+        )
+    if isinstance(v, str):
         return v
     return str(v)
 
@@ -152,27 +178,15 @@ def _get_row_generator(
 ) -> tuple[list[RowGeneratorInfo], list[str]]:
     """Get the row generators information, for the given table."""
     row_gen_info: list[RowGeneratorInfo] = []
-    config: list[dict[str, Any]] = get_property(table_config, "row_generators", [])
     columns_covered = []
-    for gen_conf in config:
-        name: str = gen_conf["name"]
-        columns_assigned = gen_conf["columns_assigned"]
+    for name, gen_conf in get_row_generators(table_config):
+        columns_assigned = list(get_columns_assigned(gen_conf))
         keyword_arguments: Mapping[str, Any] = gen_conf.get("kwargs", {})
         positional_arguments: Sequence[str] = gen_conf.get("args", [])
-
-        if isinstance(columns_assigned, str):
-            columns_assigned = [columns_assigned]
-
-        variable_names: list[str] = columns_assigned
-        try:
-            columns_covered += columns_assigned
-        except TypeError:
-            # Might be a single string, rather than a list of strings.
-            columns_covered.append(columns_assigned)
-
+        columns_covered += columns_assigned
         row_gen_info.append(
             RowGeneratorInfo(
-                variable_names=variable_names,
+                variable_names=columns_assigned,
                 function_call=_get_function_call(
                     name, positional_arguments, keyword_arguments
                 ),
@@ -181,9 +195,7 @@ def _get_row_generator(
     return row_gen_info, columns_covered
 
 
-def _get_default_generator(
-    column: Column
-) -> RowGeneratorInfo:
+def _get_default_generator(column: Column) -> RowGeneratorInfo:
     """Get default generator information, for the given column."""
     # If it's a primary key column, we presume that primary keys are populated
     # automatically.
@@ -215,7 +227,8 @@ def _get_default_generator(
             primary_key=column.primary_key,
             variable_names=variable_names,
             function_call=_get_function_call(
-                function_name=generator_function, positional_arguments=generator_arguments
+                function_name=generator_function,
+                positional_arguments=generator_arguments,
             ),
         )
 
@@ -223,52 +236,68 @@ def _get_default_generator(
     (
         variable_names,
         generator_function,
-        generator_arguments,
+        generator_kwargs,
     ) = _get_provider_for_column(column)
 
     return RowGeneratorInfo(
         primary_key=column.primary_key,
         variable_names=variable_names,
         function_call=_get_function_call(
-            function_name=generator_function, keyword_arguments=generator_arguments
+            function_name=generator_function, keyword_arguments=generator_kwargs
         ),
     )
 
 
 def _numeric_generator(column: Column) -> tuple[str, dict[str, str]]:
     """
-    Returns the name of a generator and maybe arguments
-    that limit its range to the permitted scale.
+    Get the default generator name and arguments.
+
+    :param column: The column to get the generator for.
+    :return: The name of a generator and its arguments.
     """
     column_type = column.type
-    if column_type.scale is None:
+    scale = getattr(column_type, "scale", None)
+    if scale is None:
         return ("generic.numeric.float_number", {})
-    return ("generic.numeric.float_number", {
-        "start": 0,
-        "end": 10 ** column_type.scale - 1,
-    })
+    return (
+        "generic.numeric.float_number",
+        {
+            "start": "0",
+            "end": str(10**scale - 1),
+        },
+    )
 
 
 def _string_generator(column: Column) -> tuple[str, dict[str, str]]:
     """
-    Returns the name of a string generator and maybe arguments
-    that limit its length.
+    Get the name of the default string generator for a column.
+
+    :param column: The column to get the generator for.
+    :return: The name of the generator and its arguments.
     """
     column_size: Optional[int] = getattr(column.type, "length", None)
     if column_size is None:
         return ("generic.text.color", {})
-    return ("generic.person.password", { "length": str(column_size) })
+    return ("generic.person.password", {"length": str(column_size)})
+
 
 def _integer_generator(column: Column) -> tuple[str, dict[str, str]]:
     """
-    Returns the name of an integer generator.
+    Get the name of the default integer generator.
+
+    :param column: The column to get the generator for.
+    :return: A pair consisting of the name of a generator and its
+    arguments.
     """
     if not column.primary_key:
         return ("generic.numeric.integer_number", {})
-    return ("generic.column_value_provider.increment", {
-        "db_connection": "dst_db_conn",
-        "column": f'metadata.tables["{column.table.name}"].columns["{column.name}"]',
-    })
+    return (
+        "generic.column_value_provider.increment",
+        {
+            "db_connection": "dst_db_conn",
+            "column": f'metadata.tables["{column.table.name}"].columns["{column.name}"]',
+        },
+    )
 
 
 _YEAR_SUMMARY_QUERY = (
@@ -279,8 +308,10 @@ _YEAR_SUMMARY_QUERY = (
 
 @dataclass
 class GeneratorInfo:
+    """Description of a generator."""
+
     # Name or function to generate random objects of this type (not using summary data)
-    generator: str | Callable[[Column], str]
+    generator: str | Callable[[Column], tuple[str, dict[str, str]]]
     # SQL query that gets the data to supply as arguments to the generator
     # ({column} and {table} will be interpolated)
     summary_query: str | None = None
@@ -294,13 +325,19 @@ class GeneratorInfo:
     choice: bool = False
 
 
-def get_result_mappings(info: GeneratorInfo, results) -> dict[str, Any]:
+def get_result_mappings(
+    info: GeneratorInfo, results: CursorResult
+) -> dict[str, Any] | None:
     """
-    Gets a mapping from the results of a database query as a Python
-    dictionary converted according to the GeneratorInfo provided.
+    Get a mapping from the results of a database query.
+
+    :return: A Python dictionary converted according to the GeneratorInfo provided.
     """
-    kw = {}
-    for k, v in results.mappings().first().items():
+    kw: dict[str, Any] = {}
+    mapping = results.mappings().first()
+    if mapping is None:
+        return kw
+    for k, v in mapping.items():
         if v is None:
             return None
         conv_fn = info.arg_types.get(k, float)
@@ -316,12 +353,12 @@ _COLUMN_TYPE_TO_GENERATOR_INFO = {
     sqltypes.Date: GeneratorInfo(
         generator="generic.datetime.date",
         summary_query=_YEAR_SUMMARY_QUERY,
-        arg_types={ "start": int, "end": int }
+        arg_types={"start": int, "end": int},
     ),
     sqltypes.DateTime: GeneratorInfo(
         generator="generic.datetime.datetime",
         summary_query=_YEAR_SUMMARY_QUERY,
-        arg_types={ "start": int, "end": int }
+        arg_types={"start": int, "end": int},
     ),
     sqltypes.Integer: GeneratorInfo(  # must be before Numeric
         generator=_integer_generator,
@@ -345,20 +382,20 @@ _COLUMN_TYPE_TO_GENERATOR_INFO = {
     sqltypes.String: GeneratorInfo(
         generator=_string_generator,
         choice=True,
-    )
+    ),
 }
 
 
 def _get_info_for_column_type(column_t: type) -> GeneratorInfo | None:
     """
-    Gets a generator from a column type.
+    Get a generator from a column type.
 
     Returns either a string representing the callable, or a callable that,
     given the column.type will return a tuple (string representing generator
     callable, dict of keyword arguments to pass to the callable).
     """
     if column_t in _COLUMN_TYPE_TO_GENERATOR_INFO:
-        return  _COLUMN_TYPE_TO_GENERATOR_INFO[column_t]
+        return _COLUMN_TYPE_TO_GENERATOR_INFO[column_t]
 
     # Search exhaustively for a superclass to the columns actual type
     for key, value in _COLUMN_TYPE_TO_GENERATOR_INFO.items():
@@ -368,10 +405,11 @@ def _get_info_for_column_type(column_t: type) -> GeneratorInfo | None:
     return None
 
 
-def _get_generator_for_column(column_t: type) -> str | Callable[
-    [type_api.TypeEngine], tuple[str, dict[str, str]]]:
+def _get_generator_for_column(
+    column_t: type,
+) -> str | Callable[[Column], tuple[str, dict[str, str]]] | None:
     """
-    Gets a generator from a column type.
+    Get a generator from a column type.
 
     Returns either a string representing the callable, or a callable that,
     given the column.type will return a tuple (string representing generator
@@ -381,10 +419,11 @@ def _get_generator_for_column(column_t: type) -> str | Callable[
     return None if info is None else info.generator
 
 
-def _get_generator_and_arguments(column: Column) -> tuple[str, dict[str, str]]:
+def _get_generator_and_arguments(column: Column) -> tuple[str | None, dict[str, str]]:
     """
-    Gets the generator and its arguments from the column type, returning
-    a tuple of a string representing the generator callable and a dict of
+    Get the generator and its arguments from the column type.
+
+    :return: A tuple of a string representing the generator callable and a dict of
     keyword arguments to supply to it.
     """
     generator_function = _get_generator_for_column(type(column.type))
@@ -392,7 +431,7 @@ def _get_generator_and_arguments(column: Column) -> tuple[str, dict[str, str]]:
     generator_arguments: dict[str, str] = {}
     if callable(generator_function):
         (generator_function, generator_arguments) = generator_function(column)
-    return generator_function,generator_arguments
+    return generator_function, generator_arguments
 
 
 def _get_provider_for_column(column: Column) -> Tuple[list[str], str, dict[str, str]]:
@@ -437,17 +476,6 @@ def _constraint_sort_key(constraint: UniqueConstraint) -> str:
     )
 
 
-class _PrimaryConstraint:
-    """
-    Describes a Uniqueness constraint for when multiple
-    columns in a table comprise the primary key. Not a
-    real constraint, but enough to write df.py.
-    """
-    def __init__(self, *columns: Column, name: str):
-        self.name = name
-        self.columns = columns
-
-
 def _get_generator_for_table(
     table_config: Mapping[str, Any],
     table: Table,
@@ -461,15 +489,13 @@ def _get_generator_for_table(
         ),
         key=_constraint_sort_key,
     )
-    primary_keys = [
-        c for c in table.columns
-        if c.primary_key
-    ]
+    primary_keys = [c for c in table.columns if c.primary_key]
+    constraints: Sequence[UniqueConstraint | _PrimaryConstraint] = unique_constraints
     if 1 < len(primary_keys):
-        unique_constraints.append(_PrimaryConstraint(
-            *primary_keys,
-            name=f"{table.name}_primary_key"
-        ))
+        primary_constraint = _PrimaryConstraint(
+            columns=primary_keys, name=f"{table.name}_primary_key"
+        )
+        constraints = unique_constraints + [primary_constraint]
     column_choices = make_column_choices(table_config)
     if column_choices:
         nonnull_columns = {
@@ -485,7 +511,7 @@ def _get_generator_for_table(
         nonnull_columns=nonnull_columns,
         column_choices=column_choices,
         rows_per_pass=get_property(table_config, "num_rows_per_pass", 1),
-        unique_constraints=unique_constraints,
+        unique_constraints=constraints,
     )
 
     row_gen_info_data, columns_covered = _get_row_generator(table_config)
@@ -522,12 +548,9 @@ def make_vocabulary_tables(
     config: Mapping,
     overwrite_files: bool,
     compress: bool,
-    table_names: set[str] | None=None,
-):
-    """
-    Extracts the data from the source database for each
-    vocabulary table.
-    """
+    table_names: set[str] | None = None,
+) -> None:
+    """Extract the data from the source database for each vocabulary table."""
     settings = get_settings()
     src_dsn: str = settings.src_dsn or ""
     assert src_dsn != "", "Missing SRC_DSN setting."
@@ -539,7 +562,10 @@ def make_vocabulary_tables(
     else:
         invalid_names = table_names - vocab_names
         if invalid_names:
-            logger.error("The following names are not the names of vocabulary tables: %s", invalid_names)
+            logger.error(
+                "The following names are not the names of vocabulary tables: %s",
+                invalid_names,
+            )
             logger.info("Valid names are: %s", vocab_names)
             return
     for table_name in table_names:
@@ -567,8 +593,10 @@ def make_table_generators(  # pylint: disable=too-many-locals
     Args:
       metadata: database ORM
       config: Configuration to control the generator creation.
-      orm_filename: "orm.yaml" file path so that the generator file can load the MetaData object
-      config_filename: "config.yaml" file path so that the generator file can load the MetaData object
+      orm_filename: "orm.yaml" file path so that the generator
+      file can load the MetaData object
+      config_filename: "config.yaml" file path so that the generator
+      file can load the MetaData object
       src_stats_filename: A filename for where to read src stats from.
         Optional, if `None` this feature will be skipped
       overwrite_files: Whether to overwrite pre-existing vocabulary files
@@ -584,7 +612,7 @@ def make_table_generators(  # pylint: disable=too-many-locals
     tables: list[TableGeneratorInfo] = []
     vocabulary_tables: list[VocabularyTableGeneratorInfo] = []
     vocab_names = get_vocabulary_table_names(config)
-    for (table_name, table) in metadata.tables.items():
+    for table_name, table in metadata.tables.items():
         if table_name in vocab_names:
             related = get_related_table_names(table)
             related_non_vocab = related.difference(vocab_names)
@@ -593,16 +621,18 @@ def make_table_generators(  # pylint: disable=too-many-locals
                     "Making table '%s' a vocabulary table requires that also the"
                     " related tables (%s) be also vocabulary tables.",
                     table.name,
-                    related_non_vocab
+                    related_non_vocab,
                 )
             vocabulary_tables.append(
                 _get_generator_for_existing_vocabulary_table(table)
             )
         else:
-            tables.append(_get_generator_for_table(
-                tables_config.get(table.name, {}),
-                table,
-            ))
+            tables.append(
+                _get_generator_for_table(
+                    tables_config.get(table.name, {}),
+                    table,
+                )
+            )
 
     story_generators = _get_story_generators(config)
 
@@ -639,9 +669,7 @@ def generate_df_content(template_context: Mapping[str, Any]) -> str:
 def _get_generator_for_existing_vocabulary_table(
     table: Table,
 ) -> VocabularyTableGeneratorInfo:
-    """
-    Turns an existing vocabulary YAML file into a VocabularyTableGeneratorInfo.
-    """
+    """Turn an existing vocabulary YAML file into a VocabularyTableGeneratorInfo."""
     return VocabularyTableGeneratorInfo(
         dictionary_entry=table.name,
         variable_name=f"{table.name.lower()}_vocab",
@@ -653,11 +681,9 @@ def _generate_vocabulary_table(
     table: Table,
     engine: Engine,
     overwrite_files: bool = False,
-    compress=False,
-):
-    """
-    Pulls data out of the source database to make a vocabulary YAML file
-    """
+    compress: bool = False,
+) -> None:
+    """Pull data out of the source database to make a vocabulary YAML file."""
     yaml_file_name: str = table.fullname + ".yaml"
     if compress:
         yaml_file_name += ".gz"
@@ -671,9 +697,7 @@ def _generate_vocabulary_table(
 def make_tables_file(
     db_dsn: str, schema_name: Optional[str], config: Mapping[str, Any]
 ) -> str:
-    """
-    Construct the YAML file representing the schema.
-    """
+    """Construct the YAML file representing the schema."""
     tables_config = config.get("tables", {})
     engine = get_sync_engine(create_db_engine(db_dsn, schema_name=schema_name))
 
@@ -705,33 +729,49 @@ def make_tables_file(
 
 
 class DbConnection:
-    def __init__(self, engine):
-        self._engine = engine
+    """A connection to a database."""
 
-    async def __aenter__(self):
+    def __init__(self, engine: MaybeAsyncEngine) -> None:
+        """
+        Initialise an unopened database connection.
+
+        Could be synchronous or asynchronous.
+        """
+        self._engine = engine
+        self._connection: Connection | AsyncConnection
+
+    async def __aenter__(self) -> Self:
+        """Enter the ``with`` section, opening a connection."""
         if isinstance(self._engine, AsyncEngine):
             self._connection = await self._engine.connect()
         else:
             self._connection = self._engine.connect()
         return self
 
-    async def __aexit__(self, _type, _value, _tb):
-        if isinstance(self._engine, AsyncEngine):
+    async def __aexit__(
+        self,
+        _type: Optional[Type[BaseException]],
+        _value: Optional[BaseException],
+        _tb: Optional[TracebackType],
+    ) -> None:
+        """Exit the ``with`` section, closing the connection."""
+        if isinstance(self._connection, AsyncConnection):
             await self._connection.close()
         else:
             self._connection.close()
 
-    async def execute_raw_query(self, query):
-        if isinstance(self._engine, AsyncEngine):
+    async def execute_raw_query(self, query: Executable) -> CursorResult:
+        """Execute the query on the owned connection."""
+        if isinstance(self._connection, AsyncConnection):
             return await self._connection.execute(query)
-        else:
-            return self._connection.execute(query)
+        return self._connection.execute(query)
 
-    async def table_row_count(self, table_name: str):
+    async def table_row_count(self, table_name: str) -> int:
+        """Count the number of rows in the named table."""
         with await self.execute_raw_query(
             text(f"SELECT COUNT(*) FROM {table_name}")
         ) as result:
-            return result.scalar_one()
+            return int(result.scalar_one())
 
     async def execute_query(self, query_block: Mapping[str, Any]) -> Any:
         """Execute query in query_block."""
@@ -759,41 +799,48 @@ class DbConnection:
         return final_result
 
 
-def fix_type(value):
-    if type(value) is decimal.Decimal:
+def fix_type(value: Any) -> Any:
+    """Make this value suitable for yaml output."""
+    if isinstance(value, decimal.Decimal):
         return float(value)
     return value
 
 
-def fix_types(dics):
-    return [{
-        k: fix_type(v) for k, v in dic.items()
-    } for dic in dics]
+def fix_types(dics: list[dict]) -> list[dict]:
+    """Make all the items in this list suitable for yaml output."""
+    return [{k: fix_type(v) for k, v in dic.items()} for dic in dics]
 
 
 async def make_src_stats(
-    dsn: str, config: Mapping, metadata: MetaData, schema_name: Optional[str] = None
-) -> dict[str, list[dict]]:
-    """Run the src-stats queries specified by the configuration.
+    dsn: str, config: Mapping, schema_name: Optional[str] = None
+) -> dict[str, dict[str, Any]]:
+    """
+    Run the src-stats queries specified by the configuration.
 
     Query the src database with the queries in the src-stats block of the `config`
     dictionary, using the differential privacy parameters set in the `smartnoise-sql`
     block of `config`. Record the results in a dictionary and return it.
-    Args:
-        dsn: database connection string
-        config: a dictionary with the necessary configuration
-        metadata: the database ORM
-        schema_name: name of the database schema
 
-    Returns:
-        The dictionary of src-stats.
+    :param dsn: database connection string
+    :param config: a dictionary with the necessary configuration
+    :param schema_name: name of the database schema
+    :return: The dictionary of src-stats.
     """
     use_asyncio = config.get("use-asyncio", False)
     engine = create_db_engine(dsn, schema_name=schema_name, use_asyncio=use_asyncio)
     async with DbConnection(engine) as db_conn:
-        return await make_src_stats_connection(config, db_conn, metadata)
+        return await make_src_stats_connection(config, db_conn)
 
-async def make_src_stats_connection(config: Mapping, db_conn: DbConnection, metadata: MetaData):
+
+async def make_src_stats_connection(
+    config: Mapping, db_conn: DbConnection
+) -> dict[str, dict[str, Any]]:
+    """
+    Make the ``src-stats.yaml`` file given the database connection to read from.
+
+    :param config: configuration from ``config.yaml``.
+    :param db_conn: Source database connection.
+    """
     date_string = datetime.today().strftime("%Y-%m-%d %H:%M:%S")
     query_blocks = config.get("src-stats", [])
     results = await asyncio.gather(

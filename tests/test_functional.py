@@ -1,24 +1,26 @@
 """Tests for the CLI."""
 import os
 import shutil
+import tempfile
 from pathlib import Path
+from typing import Any, Mapping
 
 from sqlalchemy import create_engine, inspect
-from typer.testing import CliRunner
-
-from tests.utils import RequiresDBTestCase
+from typer.testing import CliRunner, Result
 
 from datafaker.main import app
+from tests.utils import RequiresDBTestCase
 
 # pylint: disable=subprocess-run-check
 
+
 class DBFunctionalTestCase(RequiresDBTestCase):
     """End-to-end tests that require a database."""
+
     dump_file_path = "src.dump"
     database_name = "src"
     schema_name = "public"
 
-    test_dir = Path("tests/workspace")
     examples_dir = Path("tests/examples")
 
     orm_file_path = Path("orm.yaml")
@@ -27,13 +29,10 @@ class DBFunctionalTestCase(RequiresDBTestCase):
     alt_orm_file_path = Path("my_orm.yaml")
     alt_datafaker_file_path = Path("my_df.py")
 
-    vocabulary_file_paths = tuple(
-        map(Path, ("concept.yaml", "concept_type.yaml", "mitigation_type.yaml")),
-    )
     generator_file_paths = tuple(
         map(Path, ("story_generators.py", "row_generators.py")),
     )
-    #dump_file_path = Path("dst.dump")
+    # dump_file_path = Path("dst.dump")
     config_file_path = Path("example_config2.yaml")
     stats_file_path = Path("example_stats.yaml")
 
@@ -65,6 +64,7 @@ class DBFunctionalTestCase(RequiresDBTestCase):
         )
 
         # Copy some of the example files over to the workspace.
+        self.test_dir = Path(tempfile.mkdtemp(prefix="df-"))
         for file in self.generator_file_paths + (self.config_file_path,):
             src = self.examples_dir / file
             dst = self.test_dir / file
@@ -79,6 +79,13 @@ class DBFunctionalTestCase(RequiresDBTestCase):
         os.chdir(self.start_dir)
         super().tearDown()
 
+    def assert_silent_success(self, completed_process: Result) -> None:
+        """Assert that the process completed successfully without producing output."""
+        self.assertNoException(completed_process)
+        self.assertSuccess(completed_process)
+        self.assertEqual(completed_process.stderr, "")
+        self.assertEqual(completed_process.stdout, "")
+
     def test_workflow_minimal_args(self) -> None:
         """Test the recommended CLI workflow runs without errors."""
         shutil.copy(self.config_file_path, "config.yaml")
@@ -86,26 +93,19 @@ class DBFunctionalTestCase(RequiresDBTestCase):
             "make-tables",
             "--force",
         )
-        self.assertNoException(completed_process)
-        self.assertSuccess(completed_process)
-        self.assertEqual(completed_process.stderr, "")
-        self.assertEqual(completed_process.stdout, "")
+        self.assert_silent_success(completed_process)
 
         completed_process = self.invoke(
             "make-vocab",
             "--force",
         )
-        self.assertNoException(completed_process)
-        self.assertSuccess(completed_process)
-        self.assertEqual(completed_process.stdout, "")
+        self.assert_silent_success(completed_process)
 
         completed_process = self.invoke(
             "make-stats",
             "--force",
         )
-        self.assertNoException(completed_process)
-        self.assertSuccess(completed_process)
-        self.assertEqual(completed_process.stdout, "")
+        self.assert_silent_success(completed_process)
 
         completed_process = self.invoke(
             "create-generators",
@@ -115,8 +115,18 @@ class DBFunctionalTestCase(RequiresDBTestCase):
         self.assertNoException(completed_process)
         self.assertEqual(
             {
-                "Unsupported SQLAlchemy type CIDR for column column_with_unusual_type. Setting this column to NULL always, you may want to configure a row generator for it instead.",
-                "Unsupported SQLAlchemy type BIT for column column_with_unusual_type_and_length. Setting this column to NULL always, you may want to configure a row generator for it instead.",
+                (
+                    "Unsupported SQLAlchemy type CIDR for column "
+                    "column_with_unusual_type. Setting this column to NULL "
+                    "always, you may want to configure a row generator for "
+                    "it instead."
+                ),
+                (
+                    "Unsupported SQLAlchemy type BIT for column "
+                    "column_with_unusual_type_and_length. Setting this column "
+                    "to NULL always, you may want to configure a row generator "
+                    "for it instead."
+                ),
             },
             set(completed_process.stderr.split("\n")) - {""},
         )
@@ -126,27 +136,18 @@ class DBFunctionalTestCase(RequiresDBTestCase):
         completed_process = self.invoke(
             "create-tables",
         )
-        self.assertNoException(completed_process)
-        self.assertEqual("", completed_process.stderr)
-        self.assertSuccess(completed_process)
-        self.assertEqual("", completed_process.stdout)
+        self.assert_silent_success(completed_process)
 
         completed_process = self.invoke(
             "create-vocab",
         )
-        self.assertNoException(completed_process)
-        self.assertEqual("", completed_process.stderr)
-        self.assertSuccess(completed_process)
-        self.assertEqual("", completed_process.stdout)
+        self.assert_silent_success(completed_process)
 
         completed_process = self.invoke(
             "make-stats",
             "--force",
         )
-        self.assertNoException(completed_process)
-        self.assertEqual("", completed_process.stderr)
-        self.assertSuccess(completed_process)
-        self.assertEqual("", completed_process.stdout)
+        self.assert_silent_success(completed_process)
 
         completed_process = self.invoke("create-data")
         self.assertNoException(completed_process)
@@ -307,7 +308,10 @@ class DBFunctionalTestCase(RequiresDBTestCase):
         self.assertSetEqual(
             {
                 "Dropping constraint concept_concept_type_id_fkey from table concept",
-                "Dropping constraint ref_to_unignorable_table_ref_fkey from table ref_to_unignorable_table",
+                (
+                    "Dropping constraint ref_to_unignorable_table_ref_fkey from "
+                    "table ref_to_unignorable_table"
+                ),
                 "Dropping constraint concept_type_mitigation_type_id_fkey from table concept_type",
                 "Restoring foreign key constraint concept_concept_type_id_fkey",
                 "Restoring foreign key constraint ref_to_unignorable_table_ref_fkey",
@@ -334,33 +338,50 @@ class DBFunctionalTestCase(RequiresDBTestCase):
         )
         self.assertEqual("", completed_process.stderr)
         self.assertEqual(
-            {
-                "Creating data.",
-                "Generating data for story 'story_generators.short_story'",
-                "Generating data for story 'story_generators.short_story'",
-                "Generating data for story 'story_generators.short_story'",
-                "Generating data for story 'story_generators.full_row_story'",
-                "Generating data for story 'story_generators.long_story'",
-                "Generating data for story 'story_generators.long_story'",
-                "Generating data for table 'data_type_test'",
-                "Generating data for table 'no_pk_test'",
-                "Generating data for table 'person'",
-                "Generating data for table 'strange_type_table'",
-                "Generating data for table 'unique_constraint_test'",
-                "Generating data for table 'unique_constraint_test2'",
-                "Generating data for table 'test_entity'",
-                "Generating data for table 'hospital_visit'",
-                "Data created in 2 passes.",
-                f"person: {2*(3+1+2+2)} rows created.",
-                f"hospital_visit: {2*(2*2+3)} rows created.",
-                "data_type_test: 2 rows created.",
-                "no_pk_test: 2 rows created.",
-                "strange_type_table: 2 rows created.",
-                "unique_constraint_test: 2 rows created.",
-                "unique_constraint_test2: 2 rows created.",
-                "test_entity: 2 rows created.",
-            },
-            set(completed_process.stdout.split("\n")) - {""},
+            sorted(
+                [
+                    "Creating data.",
+                    "Generating data for story 'story_generators.short_story'",
+                    "Generating data for story 'story_generators.short_story'",
+                    "Generating data for story 'story_generators.short_story'",
+                    "Generating data for story 'story_generators.short_story'",
+                    "Generating data for story 'story_generators.short_story'",
+                    "Generating data for story 'story_generators.short_story'",
+                    "Generating data for story 'story_generators.full_row_story'",
+                    "Generating data for story 'story_generators.full_row_story'",
+                    "Generating data for story 'story_generators.long_story'",
+                    "Generating data for story 'story_generators.long_story'",
+                    "Generating data for story 'story_generators.long_story'",
+                    "Generating data for story 'story_generators.long_story'",
+                    "Generating data for table 'data_type_test'",
+                    "Generating data for table 'data_type_test'",
+                    "Generating data for table 'no_pk_test'",
+                    "Generating data for table 'no_pk_test'",
+                    "Generating data for table 'person'",
+                    "Generating data for table 'person'",
+                    "Generating data for table 'strange_type_table'",
+                    "Generating data for table 'strange_type_table'",
+                    "Generating data for table 'unique_constraint_test'",
+                    "Generating data for table 'unique_constraint_test'",
+                    "Generating data for table 'unique_constraint_test2'",
+                    "Generating data for table 'unique_constraint_test2'",
+                    "Generating data for table 'test_entity'",
+                    "Generating data for table 'test_entity'",
+                    "Generating data for table 'hospital_visit'",
+                    "Generating data for table 'hospital_visit'",
+                    "Data created in 2 passes.",
+                    f"person: {2*(3+1+2+2)} rows created.",
+                    f"hospital_visit: {2*(2*2+3)} rows created.",
+                    "data_type_test: 2 rows created.",
+                    "no_pk_test: 2 rows created.",
+                    "strange_type_table: 2 rows created.",
+                    "unique_constraint_test: 2 rows created.",
+                    "unique_constraint_test2: 2 rows created.",
+                    "test_entity: 2 rows created.",
+                    "",
+                ]
+            ),
+            sorted(completed_process.stdout.split("\n")),
         )
 
         completed_process = self.invoke(
@@ -406,8 +427,14 @@ class DBFunctionalTestCase(RequiresDBTestCase):
                 'Truncating vocabulary table "mitigation_type".',
                 'Truncating vocabulary table "empty_vocabulary".',
                 "Vocabulary tables truncated.",
-                "Dropping constraint concept_type_mitigation_type_id_fkey from table concept_type",
-                "Dropping constraint ref_to_unignorable_table_ref_fkey from table ref_to_unignorable_table",
+                (
+                    "Dropping constraint concept_type_mitigation_type_id_fkey "
+                    "from table concept_type"
+                ),
+                (
+                    "Dropping constraint ref_to_unignorable_table_ref_fkey from "
+                    "table ref_to_unignorable_table"
+                ),
                 "Dropping constraint concept_concept_type_id_fkey from table concept",
                 "Restoring foreign key constraint concept_type_mitigation_type_id_fkey",
                 "Restoring foreign key constraint ref_to_unignorable_table_ref_fkey",
@@ -430,7 +457,21 @@ class DBFunctionalTestCase(RequiresDBTestCase):
             completed_process.stdout,
         )
 
-    def invoke(self, *args, expected_error: str=None, env={}):
+    def invoke(
+        self,
+        *args: Any,
+        expected_error: str | None = None,
+        env: Mapping[str, str] | None = None,
+    ) -> Result:
+        """
+        Run datafaker with the given arguments and environment.
+
+        :param args: Arguments to provide to datafaker.
+        :param expected_error: If None, will assert that the invocation
+        passes successfully without throwing an exception. Otherwise,
+        the suggested error must be present in the standard error stream.
+        :param env: The environment variables to be set during invocation.
+        """
         res = self.runner.invoke(app, args, env=env)
         if expected_error is None:
             self.assertNoException(res)
@@ -459,10 +500,15 @@ class DBFunctionalTestCase(RequiresDBTestCase):
             "--force",
         )
         self.invoke(
+            "make-vocab",
+            f"--orm-file={self.alt_orm_file_path}",
+            f"--config-file={self.config_file_path}",
+            "--force",
+        )
+        self.invoke(
             "make-stats",
             f"--stats-file={self.stats_file_path}",
             f"--config-file={self.config_file_path}",
-            f"--orm-file={self.alt_orm_file_path}",
             "--force",
         )
         self.invoke(
@@ -513,12 +559,15 @@ class DBFunctionalTestCase(RequiresDBTestCase):
         )
         self.assertEqual("", completed_process.stderr)
         self.assertEqual(
-            ("Generating data for story 'story_generators.short_story'\n"
-            "Generating data for story 'story_generators.short_story'\n"
-            "Generating data for story 'story_generators.short_story'\n"
-            "Generating data for story 'story_generators.full_row_story'\n"
-            "Generating data for story 'story_generators.long_story'\n"
-            "Generating data for story 'story_generators.long_story'\n") * 3,
+            (
+                "Generating data for story 'story_generators.short_story'\n"
+                "Generating data for story 'story_generators.short_story'\n"
+                "Generating data for story 'story_generators.short_story'\n"
+                "Generating data for story 'story_generators.full_row_story'\n"
+                "Generating data for story 'story_generators.long_story'\n"
+                "Generating data for story 'story_generators.long_story'\n"
+            )
+            * 3,
             completed_process.stdout,
         )
 
@@ -529,7 +578,7 @@ class DBFunctionalTestCase(RequiresDBTestCase):
             f"--orm-file={self.alt_orm_file_path}",
             f"--df-file={self.alt_datafaker_file_path}",
             "--num-passes=1",
-            expected_error = (
+            expected_error=(
                 "Failed to satisfy unique constraints for table unique_constraint_test"
             ),
         )
@@ -538,7 +587,7 @@ class DBFunctionalTestCase(RequiresDBTestCase):
 
     def test_create_schema(self) -> None:
         """Check that we create a destination schema if it doesn't exist."""
-        env = { "dst_schema": "doesntexistyetschema" }
+        env = {"dst_schema": "doesntexistyetschema"}
 
         engine = create_engine(self.env["dst_dsn"])
         inspector = inspect(engine)

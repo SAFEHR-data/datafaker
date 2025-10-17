@@ -1,33 +1,36 @@
 """Tests for the create module."""
 import itertools as itt
-from collections import Counter
 import os
-from pathlib import Path
 import random
-from typing import Any, Generator, Tuple
+from collections import Counter
+from pathlib import Path
+from typing import Any, Generator, Mapping, Tuple
 from unittest.mock import MagicMock, call, patch
 
 from sqlalchemy import Connection, select
 from sqlalchemy.schema import Table
 
 from datafaker.base import TableGenerator
-from datafaker.create import (
-    create_db_vocab,
-    populate,
-)
+from datafaker.create import create_db_vocab, populate
 from datafaker.remove import remove_db_vocab
 from datafaker.serialize_metadata import metadata_to_dict
 from tests.utils import DatafakerTestCase, GeneratesDBTestCase
 
+
 class TestCreate(GeneratesDBTestCase):
     """Test the make_table_generators function."""
+
     dump_file_path = "instrument.sql"
     database_name = "instrument"
     schema_name = "public"
 
     def test_create_vocab(self) -> None:
         """Test the create_db_vocab function."""
-        with patch.dict(os.environ, {"DST_DSN": self.dsn, "DST_SCHEMA": self.schema_name}, clear=True):
+        with patch.dict(
+            os.environ,
+            {"DST_DSN": self.dsn, "DST_SCHEMA": self.schema_name},
+            clear=True,
+        ):
             config = {
                 "tables": {
                     "player": {
@@ -36,11 +39,13 @@ class TestCreate(GeneratesDBTestCase):
                 },
             }
             self.set_configuration(config)
-            meta_dict = metadata_to_dict(self.metadata, self.schema_name, self.engine)
+            meta_dict = metadata_to_dict(
+                self.metadata, self.schema_name, self.sync_engine
+            )
             self.remove_data(config)
             remove_db_vocab(self.metadata, meta_dict, config)
             create_db_vocab(self.metadata, meta_dict, config, Path("./tests/examples"))
-        with self.engine.connect() as conn:
+        with self.sync_engine.connect() as conn:
             stmt = select(self.metadata.tables["player"])
             rows = list(conn.execute(stmt).mappings().fetchall())
             self.assertEqual(len(rows), 3)
@@ -57,9 +62,9 @@ class TestCreate(GeneratesDBTestCase):
     def test_make_table_generators(self) -> None:
         """Test that we can handle column defaults in stories."""
         random.seed(56)
-        config = {}
+        config: Mapping[str, Any] = {}
         self.generate_data(config, num_passes=2)
-        with self.engine.connect() as conn:
+        with self.sync_engine.connect() as conn:
             stmt = select(self.metadata.tables["string"])
             rows = list(conn.execute(stmt).mappings().fetchall())
             a = rows[0]
@@ -83,7 +88,7 @@ class TestCreate(GeneratesDBTestCase):
 
 
 class TestPopulate(DatafakerTestCase):
-    """ Test create.populate. """
+    """Test create.populate."""
 
     def test_populate(self) -> None:
         """Test the populate function."""

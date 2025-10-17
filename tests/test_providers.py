@@ -1,13 +1,12 @@
 """Tests for the providers module."""
 import datetime as dt
-from pathlib import Path
 from typing import Any
 
-from sqlalchemy import Column, Integer, Text, create_engine, insert
+from sqlalchemy import Column, Integer, Text, insert
 from sqlalchemy.ext.declarative import declarative_base
 
 from datafaker import providers
-from tests.utils import RequiresDBTestCase, DatafakerTestCase
+from tests.utils import DatafakerTestCase, RequiresDBTestCase
 
 # pylint: disable=invalid-name
 Base = declarative_base()
@@ -37,6 +36,7 @@ class BinaryProviderTestCase(DatafakerTestCase):
 
 class ColumnValueProviderTestCase(RequiresDBTestCase):
     """Tests for the ColumnValueProvider class."""
+
     dump_file_path = "providers.dump"
 
     def setUp(self) -> None:
@@ -48,7 +48,7 @@ class ColumnValueProviderTestCase(RequiresDBTestCase):
         """Test the key method."""
         # pylint: disable=invalid-name
 
-        with self.engine.connect() as conn:
+        with self.sync_engine.connect() as conn:
             stmt = insert(Person).values(sex="M")
             conn.execute(stmt)
 
@@ -60,7 +60,7 @@ class ColumnValueProviderTestCase(RequiresDBTestCase):
     def test_column_value_missing(self) -> None:
         """Test the generator when there are no values in the source table."""
 
-        with self.engine.connect() as connection:
+        with self.sync_engine.connect() as connection:
             provider: providers.ColumnValueProvider = providers.ColumnValueProvider()
             generated_value: Any = provider.column_value(connection, Person, "sex")
 
