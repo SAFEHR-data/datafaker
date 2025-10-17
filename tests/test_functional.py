@@ -29,9 +29,6 @@ class DBFunctionalTestCase(RequiresDBTestCase):
     alt_orm_file_path = Path("my_orm.yaml")
     alt_datafaker_file_path = Path("my_df.py")
 
-    vocabulary_file_paths = tuple(
-        map(Path, ("concept.yaml", "concept_type.yaml", "mitigation_type.yaml")),
-    )
     generator_file_paths = tuple(
         map(Path, ("story_generators.py", "row_generators.py")),
     )
