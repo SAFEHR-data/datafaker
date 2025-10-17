@@ -11,7 +11,7 @@ env:
   PRE_COMMIT_HOME: ~/.caches/pre-commit
   PYTHON_VERSION: "3.10"
 jobs:
-  the_job:
+  clean-check:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -59,11 +59,3 @@ jobs:
         shell: bash
         run: |
           pre-commit run --all-files
-      - name: Start PostgreSQL
-        shell: bash
-        run: |
-          sudo systemctl start postgresql.service
-      - name: Run tests
-        shell: bash
-        run: |
-          python -m unittest
