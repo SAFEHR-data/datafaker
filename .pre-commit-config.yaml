@@ -3,7 +3,7 @@
 # See https://pre-commit.com/hooks.html for more hooks
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.2.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
         exclude: docs/(source|build/html)/_static/
@@ -13,12 +13,12 @@ repos:
       - id: check-added-large-files
   - repo: https://github.com/markdownlint/markdownlint
     # Note the "v"
-    rev: v0.11.0
+    rev: v0.12.0
     hooks:
       - id: markdownlint
         args: [--style=mdl_style.rb]
   - repo: https://github.com/shellcheck-py/shellcheck-py
-    rev: v0.8.0.4
+    rev: v0.11.0.1
     hooks:
       - id: shellcheck
   - repo: local
