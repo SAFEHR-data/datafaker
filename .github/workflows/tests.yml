@@ -17,21 +17,14 @@ jobs:
         shell: bash
         run: |
           sudo systemctl start postgresql.service
-      - name: Bootstrap poetry
+      - name: Install poetry
         shell: bash
         run: |
-          python -m ensurepip
-          python -m pip install --upgrade pip
-          python -m pip install poetry
+          sudo apt install python3-poetry
       - name: Configure poetry
         shell: bash
         run: |
           python -m poetry config virtualenvs.in-project true
-      # - name: Cache Poetry dependencies uses: actions/cache@v3
-      #   id: poetry-cache
-      #   with:
-      #     path: .venv
-      #     key: venv-${{ runner.os }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('poetry.lock') }}
       - name: Install dependencies
         shell: bash
         if: steps.poetry-cache.outputs.cache-hit != 'true'
@@ -40,4 +33,4 @@ jobs:
       - name: Run tests
         shell: bash
         run: |
-          python -m unittest
+          poetry run python -m unittest

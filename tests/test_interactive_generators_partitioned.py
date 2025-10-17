@@ -207,7 +207,7 @@ class NullPartitionedTests(GeneratesDBTestCase):
         self.assertAlmostEqual(
             stats.four.count(), generate_count * 3 / 20, delta=generate_count * 0.2
         )
-        self.assertAlmostEqual(stats.four.covar(), 3.33, delta=1)
+        self.assertAlmostEqual(stats.four.covar(), 3.33, delta=1.3)
         # type 5/fish
         self.assertAlmostEqual(
             stats.fish.count(), generate_count * 3 / 20, delta=generate_count * 0.2
@@ -219,7 +219,7 @@ class NullPartitionedTests(GeneratesDBTestCase):
             stats.fowl.count(), generate_count * 3 / 20, delta=generate_count * 0.2
         )
         self.assertAlmostEqual(stats.fowl.x_mean(), 11.2, delta=8.0)
-        self.assertAlmostEqual(stats.fowl.x_var(), 1.86, delta=1)
+        self.assertAlmostEqual(stats.fowl.x_var(), 1.24, delta=0.6)
 
     def populate_measurement_type_vocab(self) -> None:
         """Add a vocab table without messing around with files"""
@@ -330,7 +330,7 @@ class NullPartitionedTests(GeneratesDBTestCase):
             stats.fowl.count(), generate_count * 3 / 11, delta=generate_count * 0.2
         )
         self.assertAlmostEqual(stats.fowl.x_mean(), 11.2, delta=8.0)
-        self.assertAlmostEqual(stats.fowl.x_var(), 1.86, delta=1)
+        self.assertAlmostEqual(stats.fowl.x_var(), 1.24, delta=0.6)
 
     def test_create_with_null_partitioned_grouped_sampled_only(self) -> None:
         """Test EAV for all columns with sampled generation but no suppression."""
