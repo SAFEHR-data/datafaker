@@ -325,7 +325,31 @@ class ChoiceGeneratorFactory(GeneratorFactory):
                             table_name, column_name, vg.cvs, vg.counts
                         ),
                     ]
-            results = connection.execute(
+                if vg.counts_not_suppressed:
+                    generators += [
+                        ZipfChoiceGenerator(
+                            table_name,
+                            column_name,
+                            vg.values_not_suppressed,
+                            vg.counts_not_suppressed,
+                            suppress_count=self.SUPPRESS_COUNT,
+                        ),
+                        UniformChoiceGenerator(
+                            table_name,
+                            column_name,
+                            vg.values_not_suppressed,
+                            vg.counts_not_suppressed,
+                            suppress_count=self.SUPPRESS_COUNT,
+                        ),
+                        WeightedChoiceGenerator(
+                            table_name=table_name,
+                            column_name=column_name,
+                            values=vg.cvs_not_suppressed,
+                            counts=vg.counts_not_suppressed,
+                            suppress_count=self.SUPPRESS_COUNT,
+                        ),
+                    ]
+            sampled_results = connection.execute(
                 text(
                     f"SELECT v, COUNT(v) AS f FROM"
                     f" (SELECT {column_name} as v FROM {table_name}"
@@ -333,20 +357,9 @@ class ChoiceGeneratorFactory(GeneratorFactory):
                     f" AS _inner GROUP BY v ORDER BY f DESC"
                 )
             )
-            if results is not None:
+            if sampled_results is not None:
                 vg = ValueGatherer(results, self.SUPPRESS_COUNT)
                 if vg.counts:
-                    generators += [
-                        ZipfChoiceGenerator(
-                            table_name, column_name, vg.values, vg.counts
-                        ),
-                        UniformChoiceGenerator(
-                            table_name, column_name, vg.values, vg.counts
-                        ),
-                        WeightedChoiceGenerator(
-                            table_name, column_name, vg.cvs, vg.counts
-                        ),
-                    ]
                     generators += [
                         ZipfChoiceGenerator(
                             table_name,
