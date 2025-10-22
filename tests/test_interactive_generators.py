@@ -670,6 +670,7 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
                 {
                     "dist_gen.weighted_choice",
                     "dist_gen.weighted_choice [sampled]",
+                    "dist_gen.weighted_choice [suppressed]",
                     "dist_gen.weighted_choice [sampled and suppressed]",
                 },
                 set(proposals),
@@ -691,6 +692,7 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
                 {
                     "dist_gen.weighted_choice",
                     "dist_gen.weighted_choice [sampled]",
+                    "dist_gen.weighted_choice [suppressed]",
                     "dist_gen.weighted_choice [sampled and suppressed]",
                 },
                 set(proposals),

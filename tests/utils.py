@@ -272,6 +272,7 @@ class GeneratesDBTestCase(RequiresDBTestCase):
             num_passes,
             self.dsn,
             self.schema_name,
+            self.metadata,
         )
 
     def generate_data(

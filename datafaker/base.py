@@ -15,7 +15,7 @@ import numpy as np
 import yaml
 from sqlalchemy import Connection, insert
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.schema import Table
+from sqlalchemy.schema import MetaData, Table
 
 from datafaker.utils import (
     MAKE_VOCAB_PROGRESS_REPORT_EVERY,
@@ -389,7 +389,7 @@ class TableGenerator(ABC):
     num_rows_per_pass: int = 1
 
     @abstractmethod
-    def __call__(self, dst_db_conn: Connection) -> dict[str, Any]:
+    def __call__(self, dst_db_conn: Connection, metadata: MetaData) -> dict[str, Any]:
         """Return, as a dictionary, a new row for the table that we are generating.
 
         The only argument, `dst_db_conn`, should be a database connection to the

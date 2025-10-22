@@ -8,7 +8,7 @@ from typing import Any, Generator, Mapping, Tuple
 from unittest.mock import MagicMock, call, patch
 
 from sqlalchemy import Connection, select
-from sqlalchemy.schema import Table
+from sqlalchemy.schema import MetaData, Table
 
 from datafaker.base import TableGenerator
 from datafaker.create import create_db_vocab, populate
@@ -90,6 +90,7 @@ class TestCreate(GeneratesDBTestCase):
 class TestPopulate(DatafakerTestCase):
     """Test create.populate."""
 
+    # pylint: disable=too-many-locals
     def test_populate(self) -> None:
         """Test the populate function."""
         table_name = "table_name"
@@ -111,6 +112,7 @@ class TestPopulate(DatafakerTestCase):
                 mock_dst_conn.execute.return_value.returned_defaults = {}
                 mock_table = MagicMock(spec=Table)
                 mock_table.name = table_name
+                mock_metadata = MagicMock(spec=MetaData)
                 mock_gen = MagicMock(spec=TableGenerator)
                 mock_gen.num_rows_per_pass = num_rows_per_pass
                 mock_gen.return_value = {}
@@ -134,6 +136,7 @@ class TestPopulate(DatafakerTestCase):
                     [mock_table],
                     {table_name: mock_gen},
                     story_generators,
+                    mock_metadata,
                 )
 
                 expected_row_count = (
@@ -165,13 +168,14 @@ class TestPopulate(DatafakerTestCase):
         mock_table_two.name = "two"
         mock_table_three = MagicMock(spec=Table)
         mock_table_three.name = "three"
+        mock_metadata = MagicMock(spec=MetaData)
         tables: list[Table] = [mock_table_one, mock_table_two, mock_table_three]
         row_generators: dict[str, TableGenerator] = {
             "two": mock_gen_two,
             "three": mock_gen_three,
         }
 
-        row_counts = populate(mock_dst_conn, tables, row_generators, [])
+        row_counts = populate(mock_dst_conn, tables, row_generators, [], mock_metadata)
         self.assertEqual(row_counts, {"two": 1, "three": 1})
         self.assertListEqual(
             [call(mock_table_two), call(mock_table_three)], mock_insert.call_args_list

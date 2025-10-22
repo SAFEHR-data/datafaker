@@ -4,7 +4,6 @@ from mimesis.locales import Locale
 import sqlalchemy
 import sys
 from datafaker.base import FileUploader, TableGenerator, DistributionGenerator, ColumnPresence
-from datafaker.main import load_metadata
 
 generic = Generic(locale=Locale.EN_GB)
 numeric = Numeric()
@@ -22,8 +21,6 @@ from datafaker.providers import (
 {% for provider_import in provider_imports %}
 generic.add_provider({{ provider_import }})
 {% endfor %}
-
-metadata = load_metadata("{{ orm_file_name }}", "{{ config_file_name }}")
 
 {% if row_generator_module_name is not none %}
 import {{ row_generator_module_name }}
@@ -44,10 +41,6 @@ with open("{{ src_stats_filename }}", "r", encoding="utf-8") as f:
     SRC_STATS = yaml.unsafe_load(f)
 {% endif %}
 
-{% for table_data in vocabulary_tables %}
-{{ table_data.variable_name }} = FileUploader(metadata.tables["{{ table_data.table_name }}"])
-{% endfor %}
-
 {% for table_data in tables %}
 class {{ table_data.class_name }}(TableGenerator):
     num_rows_per_pass = {{ table_data.rows_per_pass }}
@@ -55,7 +48,7 @@ class {{ table_data.class_name }}(TableGenerator):
     def __init__(self):
         self.initialized = False
 
-    def __call__(self, dst_db_conn):
+    def __call__(self, dst_db_conn, metadata):
         if not self.initialized:
             {% for constraint in table_data.unique_constraints %}
             query_text = f"SELECT {%
@@ -120,13 +113,6 @@ class {{ table_data.class_name }}(TableGenerator):
 table_generator_dict = {
 {% for table_data in tables %}
     "{{ table_data.table_name }}": {{ table_data.class_name }}(),
-{% endfor %}
-}
-
-
-vocab_dict = {
-{% for table_data in vocabulary_tables %}
-    "{{ table_data.dictionary_entry }}": {{ table_data.variable_name }},
 {% endfor %}
 }
 

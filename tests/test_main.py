@@ -216,8 +216,11 @@ class TestCLI(DatafakerTestCase):
     @patch("datafaker.main.logger")
     @patch("datafaker.main.import_file")
     @patch("datafaker.main.create_db_data")
+    @patch("datafaker.main.load_metadata_for_output")
+    # pylint: disable=too-many-arguments too-many-positional-arguments
     def test_create_data(
         self,
+        mock_load_metadata: MagicMock,
         mock_create: MagicMock,
         mock_import: MagicMock,
         mock_logger: MagicMock,
@@ -241,6 +244,7 @@ class TestCLI(DatafakerTestCase):
             mock_tables.return_value,
             mock_import.return_value,
             1,
+            mock_load_metadata.return_value,
         )
         self.assertSuccess(result)
 

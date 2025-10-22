@@ -306,8 +306,8 @@ class ChoiceGeneratorFactory(GeneratorFactory):
         with engine.connect() as connection:
             results = connection.execute(
                 text(
-                    f"SELECT {column_name} AS v, COUNT({column_name})"
-                    f" AS f FROM {table_name} GROUP BY v"
+                    f'SELECT "{column_name}" AS v, COUNT("{column_name}")'
+                    f' AS f FROM "{table_name}" GROUP BY v'
                     f" ORDER BY f DESC LIMIT {MAXIMUM_CHOICES + 1}"
                 )
             )
@@ -352,13 +352,13 @@ class ChoiceGeneratorFactory(GeneratorFactory):
             sampled_results = connection.execute(
                 text(
                     f"SELECT v, COUNT(v) AS f FROM"
-                    f" (SELECT {column_name} as v FROM {table_name}"
+                    f' (SELECT "{column_name}" as v FROM "{table_name}"'
                     f" ORDER BY RANDOM() LIMIT {self.SAMPLE_COUNT})"
                     f" AS _inner GROUP BY v ORDER BY f DESC"
                 )
             )
             if sampled_results is not None:
-                vg = ValueGatherer(results, self.SUPPRESS_COUNT)
+                vg = ValueGatherer(sampled_results, self.SUPPRESS_COUNT)
                 if vg.counts:
                     generators += [
                         ZipfChoiceGenerator(

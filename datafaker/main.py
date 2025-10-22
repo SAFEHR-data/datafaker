@@ -158,6 +158,7 @@ def create_data(
             sorted_non_vocabulary_tables(orm_metadata, config),
             df_module,
             num_passes,
+            orm_metadata,
         )
         logger.debug(
             "Data created in %s %s.",
@@ -543,7 +544,12 @@ def remove_vocab(
 @app.command()
 def remove_tables(
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
-    config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
+    config_file: str = Option(CONFIG_FILENAME, help="The configuration file"),
+    # pylint: disable=redefined-builtin
+    all: bool = Option(
+        False,
+        help="Don't use the ORM file, delete all tables in the destination schema",
+    ),
     yes: bool = Option(
         False, "--yes", prompt="Are you sure?", help="Just remove, don't ask first"
     ),
@@ -554,9 +560,12 @@ def remove_tables(
     """
     if yes:
         logger.debug("Dropping tables.")
-        config = read_config_file(config_file) if config_file is not None else {}
-        metadata = load_metadata_for_output(orm_file, config)
-        remove_db_tables(metadata)
+        if all:
+            remove_db_tables(None)
+        else:
+            config = read_config_file(config_file)
+            metadata = load_metadata_for_output(orm_file, config)
+            remove_db_tables(metadata)
         logger.debug("Tables dropped.")
     else:
         logger.info("Would remove tables if called with --yes.")

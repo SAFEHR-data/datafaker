@@ -56,11 +56,14 @@ def remove_db_vocab(
         reinstate_vocab_foreign_key_constraints(metadata, meta_dict, config, dst_conn)
 
 
-def remove_db_tables(metadata: MetaData) -> None:
+def remove_db_tables(metadata: MetaData | None) -> None:
     """Drop the tables in the destination schema."""
     settings = get_settings()
     assert settings.dst_dsn, "Missing destination database settings"
     dst_engine = get_sync_engine(
         create_db_engine(settings.dst_dsn, schema_name=settings.dst_schema)
     )
+    if metadata is None:
+        metadata = MetaData()
+        metadata.reflect(dst_engine)
     metadata.drop_all(dst_engine)

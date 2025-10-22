@@ -100,6 +100,7 @@ def create_db_data(
     sorted_tables: Sequence[Table],
     df_module: ModuleType,
     num_passes: int,
+    metadata: MetaData,
 ) -> RowCounts:
     """Connect to a database and populate it with data."""
     settings = get_settings()
@@ -112,15 +113,18 @@ def create_db_data(
         num_passes,
         dst_dsn,
         settings.dst_schema,
+        metadata,
     )
 
 
+# pylint: disable=too-many-arguments too-many-positional-arguments
 def create_db_data_into(
     sorted_tables: Sequence[Table],
     df_module: ModuleType,
     num_passes: int,
     db_dsn: str,
     schema_name: str | None,
+    metadata: MetaData,
 ) -> RowCounts:
     """
     Populate the database.
@@ -145,6 +149,7 @@ def create_db_data_into(
                 sorted_tables,
                 df_module.table_generator_dict,
                 df_module.story_generator_list,
+                metadata,
             )
     return row_counts
 
@@ -195,7 +200,7 @@ class StoryIterator:
         """
         return self._table_name
 
-    def insert(self) -> None:
+    def insert(self, metadata: MetaData) -> None:
         """
         Put the row in the table.
 
@@ -207,7 +212,7 @@ class StoryIterator:
         table = self._table_dict[self._table_name]
         if table.name in self._table_generator_dict:
             table_generator = self._table_generator_dict[table.name]
-            default_values = table_generator(self._dst_conn)
+            default_values = table_generator(self._dst_conn, metadata)
         else:
             default_values = {}
         insert_values = {**default_values, **self._provided_values}
@@ -253,6 +258,7 @@ def populate(
     tables: Sequence[Table],
     table_generator_dict: Mapping[str, TableGenerator],
     story_generator_list: Sequence[Mapping[str, Any]],
+    metadata: MetaData,
 ) -> RowCounts:
     """Populate a database schema with synthetic data."""
     row_counts: Counter[str] = Counter()
@@ -277,7 +283,7 @@ def populate(
     for table in tables:
         # Do we have a story row to enter into this table?
         if story_iterator.has_table(table.name):
-            story_iterator.insert()
+            story_iterator.insert(metadata)
             row_counts[table.name] = row_counts.get(table.name, 0) + 1
             story_iterator.next()
         if table.name not in table_generator_dict:
@@ -291,7 +297,7 @@ def populate(
         try:
             with dst_conn.begin():
                 for _ in range(table_generator.num_rows_per_pass):
-                    stmt = insert(table).values(table_generator(dst_conn))
+                    stmt = insert(table).values(table_generator(dst_conn, metadata))
                     dst_conn.execute(stmt)
                     row_counts[table.name] = row_counts.get(table.name, 0) + 1
                 dst_conn.commit()
@@ -301,7 +307,7 @@ def populate(
 
     # Insert any remaining stories
     while not story_iterator.is_ended():
-        story_iterator.insert()
+        story_iterator.insert(metadata)
         t = story_iterator.table_name()
         if t is None:
             raise AssertionError(
