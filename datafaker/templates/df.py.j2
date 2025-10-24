@@ -3,12 +3,13 @@ from mimesis import Generic, Numeric, Person
 from mimesis.locales import Locale
 import sqlalchemy
 import sys
-from datafaker.base import FileUploader, TableGenerator, DistributionGenerator, ColumnPresence
+from datafaker.base import FileUploader, TableGenerator, ColumnPresence
+from datafaker.providers import DistributionProvider
 
 generic = Generic(locale=Locale.EN_GB)
 numeric = Numeric()
 person = Person()
-dist_gen = DistributionGenerator()
+dist_gen = DistributionProvider()
 column_presence = ColumnPresence()
 
 sys.path.append("")

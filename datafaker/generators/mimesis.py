@@ -10,12 +10,12 @@ from sqlalchemy.types import Date, DateTime, Integer, Numeric, String, Time
 
 from datafaker.generators.base import (
     Buckets,
-    DistributionGenerator,
     Generator,
     GeneratorError,
     GeneratorFactory,
     get_column_type,
 )
+from datafaker.providers import DistributionProvider
 
 NumericType = Union[int, float]
 
@@ -23,7 +23,7 @@ NumericType = Union[int, float]
 # choice distribution to be infeasible?
 MAXIMUM_CHOICES = 500
 
-dist_gen = DistributionGenerator()
+dist_gen = DistributionProvider()
 generic = mimesis.Generic(locale=mimesis.locales.Locale.EN_GB)
 
 

@@ -12,13 +12,13 @@ from sqlalchemy import Column, Engine, text
 from sqlalchemy.types import Integer, Numeric, String, TypeEngine
 from typing_extensions import Self
 
-from datafaker.base import DistributionGenerator
+from datafaker.providers import DistributionProvider
 from datafaker.utils import logger
 
 NumericType = Union[int, float]
 
 
-dist_gen = DistributionGenerator()
+dist_gen = DistributionProvider()
 generic = mimesis.Generic(locale=mimesis.locales.Locale.EN_GB)
 
 
