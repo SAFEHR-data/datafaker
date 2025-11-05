@@ -28,6 +28,8 @@ from datafaker.generators.partitioned import (
 )
 
 
+# Using a cache instead of just initializing an object to avoid
+# startup time being spent when it isn't needed.
 @lru_cache(1)
 def everything_factory() -> GeneratorFactory:
     """Get a factory that encapsulates all the other factories."""
