@@ -1,25 +1,33 @@
 """Utilities for testing."""
 import asyncio
-from functools import lru_cache
 import os
-from pathlib import Path
 import shutil
-from sqlalchemy.schema import MetaData
-from subprocess import run
-import testing.postgresql
 import traceback
-from typing import Any
-from unittest import TestCase, skipUnless
-import yaml
-
-from sqlalchemy import MetaData
+from collections.abc import MutableSequence, Sequence
+from functools import lru_cache
+from pathlib import Path
+from subprocess import run
 from tempfile import mkstemp
+from typing import Any, Mapping
+from unittest import TestCase, skipUnless
+
+import testing.postgresql
+import yaml
+from sqlalchemy.schema import MetaData
 
 from datafaker import settings
 from datafaker.create import create_db_data_into
-from datafaker.make import make_tables_file, make_src_stats, make_table_generators
+from datafaker.interactive.base import DbCmd
+from datafaker.make import make_src_stats, make_table_generators, make_tables_file
 from datafaker.remove import remove_db_data_from
-from datafaker.utils import import_file, sorted_non_vocabulary_tables, create_db_engine
+from datafaker.utils import (
+    T,
+    create_db_engine,
+    get_sync_engine,
+    import_file,
+    sorted_non_vocabulary_tables,
+)
+
 
 class SysExit(Exception):
     """To force the function to exit as sys.exit() would."""
@@ -46,7 +54,7 @@ class DatafakerTestCase(TestCase):
         self.maxDiff = None  # pylint: disable=invalid-name
         super().__init__(*args, **kwargs)
 
-    def setUp(self):
+    def setUp(self) -> None:
         settings.get_settings.cache_clear()
 
     def assertReturnCode(  # pylint: disable=invalid-name
@@ -68,38 +76,47 @@ class DatafakerTestCase(TestCase):
         self.assertReturnCode(result, 1)
 
     def assertNoException(self, result: Any) -> None:  # pylint: disable=invalid-name
-        """ Assert that the result has no exception. """
+        """Assert that the result has no exception."""
         if result.exception is None:
             return
-        self.fail(''.join(traceback.format_exception(result.exception)))
+        self.fail("".join(traceback.format_exception(result.exception)))
 
-    def assertSubset(self, set1, set2, msg=None):
+    def assert_greater_and_not_none(self, left: float | None, right: float) -> None:
+        """
+        Assert left is not None and greater than right
+        """
+        if left is None:
+            self.fail("first argument is None")
+        else:
+            self.assertGreater(left, right)
+
+    def assert_subset(self, set1: set[T], set2: set[T], msg: str | None = None) -> None:
         """Assert a set is a (non-strict) subset.
 
-        Args:
-            set1: The asserted subset.
-            set2: The asserted superset.
-            msg: Optional message to use on failure instead of a list of
-                    differences.
+        :param set1: The asserted subset.
+        :param set2: The asserted superset.
+        :param msg: Optional message to use on failure instead of a list of
+        differences.
         """
         try:
             difference = set1.difference(set2)
         except TypeError as e:
-            self.fail('invalid type when attempting set difference: %s' % e)
+            self.fail(f"invalid type when attempting set difference: {e}")
         except AttributeError as e:
-            self.fail('first argument does not support set difference: %s' % e)
+            self.fail(f"first argument does not support set difference: {e}")
 
         if not difference:
             return
 
         lines = []
         if difference:
-            lines.append('Items in the first set but not the second:')
+            lines.append("Items in the first set but not the second:")
             for item in difference:
                 lines.append(repr(item))
 
-        standardMsg = '\n'.join(lines)
-        self.fail(self._formatMessage(msg, standardMsg))
+        standard_msg = "\n".join(lines)
+        self.fail(self._formatMessage(msg, standard_msg))
+
 
 @skipUnless(shutil.which("psql"), "need to find 'psql': install PostgreSQL to enable")
 class RequiresDBTestCase(DatafakerTestCase):
@@ -112,24 +129,27 @@ class RequiresDBTestCase(DatafakerTestCase):
     to get an engine to access the database and self.metadata to get metadata
     reflected from that engine.
     """
-    schema_name = None
+
+    schema_name: str | None = None
     use_asyncio = False
-    examples_dir = "tests/examples"
-    dump_file_path = None
-    database_name = None
+    examples_dir = Path("tests/examples")
+    dump_file_path: str | None = None
+    database_name: str | None = None
     Postgresql = None
 
     @classmethod
-    def setUpClass(cls):
+    def setUpClass(cls) -> None:
         cls.Postgresql = testing.postgresql.PostgresqlFactory(cache_initialized_db=True)
 
     @classmethod
-    def tearDownClass(cls):
-        cls.Postgresql.clear_cache()
+    def tearDownClass(cls) -> None:
+        if cls.Postgresql is not None:
+            cls.Postgresql.clear_cache()
 
     def setUp(self) -> None:
         super().setUp()
-        self.postgresql = self.Postgresql()
+        assert self.Postgresql is not None
+        self.postgresql = self.Postgresql()  # pylint: disable=not-callable
         if self.dump_file_path is not None:
             self.run_psql(Path(self.examples_dir) / Path(self.dump_file_path))
         self.engine = create_db_engine(
@@ -137,18 +157,23 @@ class RequiresDBTestCase(DatafakerTestCase):
             schema_name=self.schema_name,
             use_asyncio=self.use_asyncio,
         )
+        self.sync_engine = get_sync_engine(self.engine)
         self.metadata = MetaData()
-        self.metadata.reflect(self.engine)
+        self.metadata.reflect(self.sync_engine)
 
     def tearDown(self) -> None:
         self.postgresql.stop()
         super().tearDown()
 
     @property
-    def dsn(self):
+    def dsn(self) -> str:
+        """Get the database connection string."""
         if self.database_name:
-            return self.postgresql.url(database=self.database_name)
-        return self.postgresql.url()
+            url = self.postgresql.url(database=self.database_name)
+        else:
+            url = self.postgresql.url()
+        assert isinstance(url, str)
+        return url
 
     def run_psql(self, dump_file: Path) -> None:
         """Run psql and pass dump_file_name as the --file option."""
@@ -176,38 +201,51 @@ class RequiresDBTestCase(DatafakerTestCase):
 
 
 class GeneratesDBTestCase(RequiresDBTestCase):
+    """A test case for which a database is generated."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Initialise a GeneratedDB test case."""
+        super().__init__(*args, **kwargs)
+        self.generators_file_path = ""
+        self.stats_fd = 0
+        self.stats_file_path = ""
+        self.config_file_path = ""
+        self.config_fd = 0
+
     def setUp(self) -> None:
+        """Set up the test case with an actual orm.yaml file."""
         super().setUp()
         # Generate the `orm.yaml` from the database
         (self.orm_fd, self.orm_file_path) = mkstemp(".yaml", "orm_", text=True)
         with os.fdopen(self.orm_fd, "w", encoding="utf-8") as orm_fh:
             orm_fh.write(make_tables_file(self.dsn, self.schema_name, {}))
 
-    def set_configuration(self, config) -> None:
-        """
-        Accepts a configuration file, writes it out.
-        """
+    def set_configuration(self, config: Mapping[str, Any]) -> None:
+        """Accepts a configuration file, writes it out."""
         (self.config_fd, self.config_file_path) = mkstemp(".yaml", "config_", text=True)
         with os.fdopen(self.config_fd, "w", encoding="utf-8") as config_fh:
             config_fh.write(yaml.dump(config))
 
-    def get_src_stats(self, config) -> dict[str, any]:
+    def get_src_stats(self, config: Mapping[str, Any]) -> dict[str, Any]:
         """
-        Runs `make-stats` producing `src-stats.yaml`
+        Runs `make-stats` producing `src-stats.yaml`.
+
         :return: Python dictionary representation of the contents of the src-stats file
         """
         loop = asyncio.new_event_loop()
         src_stats = loop.run_until_complete(
-            make_src_stats(self.dsn, config, self.metadata, self.schema_name)
+            make_src_stats(self.dsn, config, self.schema_name)
         )
         loop.close()
-        (self.stats_fd, self.stats_file_path) = mkstemp(".yaml", "src_stats_", text=True)
+        (self.stats_fd, self.stats_file_path) = mkstemp(
+            ".yaml", "src_stats_", text=True
+        )
         with os.fdopen(self.stats_fd, "w", encoding="utf-8") as stats_fh:
             stats_fh.write(yaml.dump(src_stats))
         return src_stats
 
-    def create_generators(self, config) -> None:
-        """ ``create-generators`` with ``src-stats.yaml`` and the rest, producing ``df.py`` """
+    def create_generators(self, config: Mapping[str, Any]) -> None:
+        """``create-generators`` with ``src-stats.yaml`` and the rest, producing ``df.py``"""
         datafaker_content = make_table_generators(
             self.metadata,
             config,
@@ -219,27 +257,27 @@ class GeneratesDBTestCase(RequiresDBTestCase):
         with os.fdopen(generators_fd, "w", encoding="utf-8") as datafaker_fh:
             datafaker_fh.write(datafaker_content)
 
-    def remove_data(self, config):
-        """ Remove source data from the DB. """
+    def remove_data(self, config: Mapping[str, Any]) -> None:
+        """Remove source data from the DB."""
         # `remove-data` so we don't have to use a separate database for the destination
         remove_db_data_from(self.metadata, config, self.dsn, self.schema_name)
 
-    def create_data(self, config, num_passes=1):
-        """ Create fake data in the DB. """
+    def create_data(self, config: Mapping[str, Any], num_passes: int = 1) -> None:
+        """Create fake data in the DB."""
         # `create-data` with all this stuff
         datafaker_module = import_file(self.generators_file_path)
-        table_generator_dict = datafaker_module.table_generator_dict
-        story_generator_list = datafaker_module.story_generator_list
         create_db_data_into(
             sorted_non_vocabulary_tables(self.metadata, config),
-            table_generator_dict,
-            story_generator_list,
+            datafaker_module,
             num_passes,
             self.dsn,
             self.schema_name,
+            self.metadata,
         )
 
-    def generate_data(self, config, num_passes=1):
+    def generate_data(
+        self, config: Mapping[str, Any], num_passes: int = 1
+    ) -> Mapping[str, Any]:
         """
         Replaces the DB's source data with generated data.
         :return: A Python dictionary representation of the src-stats.yaml file, for what it's worth.
@@ -250,3 +288,45 @@ class GeneratesDBTestCase(RequiresDBTestCase):
         self.remove_data(config)
         self.create_data(config, num_passes)
         return src_stats
+
+
+class TestDbCmdMixin(DbCmd):
+    """A mixin for capturing output from interactive commands."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Initialize a TestDbCmdMixin"""
+        super().__init__(*args, **kwargs)
+        self.reset()
+
+    def reset(self) -> None:
+        """Reset all the debug messages collected so far."""
+        self.messages: list[tuple[str, tuple[Any, ...], dict[str, Any]]] = []
+        self.headings: Sequence[str] = []
+        self.rows: Sequence[Sequence[str]] = []
+        self.column_items: MutableSequence[Sequence[str]] = []
+        self.columns: Mapping[str, Sequence[Any]] = {}
+
+    def print(self, text: str, *args: Any, **kwargs: Any) -> None:
+        """Capture the printed message."""
+        self.messages.append((text, args, kwargs))
+
+    def print_table(
+        self, headings: Sequence[str], rows: Sequence[Sequence[str]]
+    ) -> None:
+        """Capture the printed table."""
+        self.headings = headings
+        self.rows = rows
+
+    def print_table_by_columns(self, columns: Mapping[str, Sequence[str]]) -> None:
+        """Capture the printed table."""
+        self.columns = columns
+
+    # pylint: disable=arguments-renamed
+    def columnize(self, items: Sequence[str] | None, _displaywidth: int = 80) -> None:
+        """Capture the printed table."""
+        if items is not None:
+            self.column_items.append(items)
+
+    def ask_save(self) -> str:
+        """Quitting always works without needing to ask the user."""
+        return "yes"

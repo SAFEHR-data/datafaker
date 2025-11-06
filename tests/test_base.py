@@ -46,7 +46,7 @@ class VocabTests(RequiresDBTestCase):
         """Test the load method."""
         vocab_gen = FileUploader(BaseTable.__table__)
 
-        with self.engine.connect() as conn:
+        with self.sync_engine.connect() as conn:
             vocab_gen.load(conn)
             statement = select(BaseTable)
             rows = list(conn.execute(statement))

@@ -21,7 +21,13 @@ class TestCLI(DatafakerTestCase):
     @patch("datafaker.main.dict_to_metadata")
     @patch("datafaker.main.load_metadata_config")
     @patch("datafaker.main.create_db_vocab")
-    def test_create_vocab(self, mock_create: MagicMock, mock_mdict: MagicMock, mock_meta: MagicMock, mock_config: MagicMock) -> None:
+    def test_create_vocab(
+        self,
+        mock_create: MagicMock,
+        mock_mdict: MagicMock,
+        mock_meta: MagicMock,
+        mock_config: MagicMock,
+    ) -> None:
         """Test the create-vocab sub-command."""
         result = runner.invoke(
             app,
@@ -31,7 +37,9 @@ class TestCLI(DatafakerTestCase):
             catch_exceptions=False,
         )
 
-        mock_create.assert_called_once_with(mock_meta.return_value, mock_mdict.return_value, mock_config.return_value)
+        mock_create.assert_called_once_with(
+            mock_meta.return_value, mock_mdict.return_value, mock_config.return_value
+        )
         self.assertSuccess(result)
 
     @patch("datafaker.main.read_config_file")
@@ -40,6 +48,7 @@ class TestCLI(DatafakerTestCase):
     @patch("datafaker.main.Path")
     @patch("datafaker.main.make_table_generators")
     @patch("datafaker.main.generators_require_stats")
+    # pylint: disable=too-many-positional-arguments,too-many-arguments
     def test_create_generators(
         self,
         mock_require_stats: MagicMock,
@@ -81,6 +90,7 @@ class TestCLI(DatafakerTestCase):
     @patch("datafaker.main.Path")
     @patch("datafaker.main.make_table_generators")
     @patch("datafaker.main.generators_require_stats")
+    # pylint: disable=too-many-positional-arguments,too-many-arguments
     def test_create_generators_uses_default_stats_file_if_necessary(
         self,
         mock_require_stats: MagicMock,
@@ -143,6 +153,7 @@ class TestCLI(DatafakerTestCase):
     @patch("datafaker.main.get_settings")
     @patch("datafaker.main.Path")
     @patch("datafaker.main.make_table_generators")
+    # pylint: disable=too-many-positional-arguments,too-many-arguments
     def test_create_generators_with_force_enabled(
         self,
         mock_make: MagicMock,
@@ -159,10 +170,13 @@ class TestCLI(DatafakerTestCase):
 
         for force_option in ["--force", "-f"]:
             with self.subTest(f"Using option {force_option}"):
-                result: Result = runner.invoke(app, [
-                    "create-generators",
-                    force_option,
-                ])
+                result: Result = runner.invoke(
+                    app,
+                    [
+                        "create-generators",
+                        force_option,
+                    ],
+                )
 
                 mock_make.assert_called_once_with(
                     mock_load_meta.return_value,
@@ -183,7 +197,7 @@ class TestCLI(DatafakerTestCase):
     @patch("datafaker.main.read_config_file")
     @patch("datafaker.main.load_metadata_for_output")
     def test_create_tables(
-        self, mock_load_meta: MagicMock, mock_config: MagicMock, mock_create: MagicMock
+        self, mock_load_meta: MagicMock, _mock_config: MagicMock, mock_create: MagicMock
     ) -> None:
         """Test the create-tables sub-command."""
 
@@ -202,8 +216,11 @@ class TestCLI(DatafakerTestCase):
     @patch("datafaker.main.logger")
     @patch("datafaker.main.import_file")
     @patch("datafaker.main.create_db_data")
+    @patch("datafaker.main.load_metadata_for_output")
+    # pylint: disable=too-many-arguments too-many-positional-arguments
     def test_create_data(
         self,
+        mock_load_metadata: MagicMock,
         mock_create: MagicMock,
         mock_import: MagicMock,
         mock_logger: MagicMock,
@@ -225,9 +242,9 @@ class TestCLI(DatafakerTestCase):
 
         mock_create.assert_called_once_with(
             mock_tables.return_value,
-            mock_import.return_value.table_generator_dict,
-            mock_import.return_value.story_generator_list,
+            mock_import.return_value,
             1,
+            mock_load_metadata.return_value,
         )
         self.assertSuccess(result)
 
@@ -335,11 +352,14 @@ class TestCLI(DatafakerTestCase):
 
         for force_option in ["--force", "-f"]:
             with self.subTest(f"Using option {force_option}"):
-                result: Result = runner.invoke(app, [
-                    "make-tables",
-                    force_option,
-                    "--orm-file=tests/examples/example_orm.yaml",
-                ])
+                result: Result = runner.invoke(
+                    app,
+                    [
+                        "make-tables",
+                        force_option,
+                        "--orm-file=tests/examples/example_orm.yaml",
+                    ],
+                )
 
                 mock_make_tables.assert_called_once_with(
                     mock_get_settings.return_value.src_dsn,
@@ -357,9 +377,11 @@ class TestCLI(DatafakerTestCase):
     @patch("datafaker.main.Path")
     @patch("datafaker.main.make_src_stats")
     @patch("datafaker.main.get_settings")
-    @patch("datafaker.main.load_metadata", side_effect=["ms"])
     def test_make_stats(
-        self, _lm: MagicMock, mock_get_settings: MagicMock, mock_make: MagicMock, mock_path: MagicMock
+        self,
+        mock_get_settings: MagicMock,
+        mock_make: MagicMock,
+        mock_path: MagicMock,
     ) -> None:
         """Test the make-stats sub-command."""
         example_conf_path = "tests/examples/example_config.yaml"
@@ -379,7 +401,7 @@ class TestCLI(DatafakerTestCase):
         self.assertSuccess(result)
         with open(example_conf_path, "r", encoding="utf8") as f:
             config = yaml.safe_load(f)
-        mock_make.assert_called_once_with(get_test_settings().src_dsn, config, "ms", None)
+        mock_make.assert_called_once_with(get_test_settings().src_dsn, config, None)
         mock_path.return_value.write_text.assert_called_once_with(
             "a: 1\n", encoding="utf-8"
         )
@@ -432,9 +454,11 @@ class TestCLI(DatafakerTestCase):
     @patch("datafaker.main.Path")
     @patch("datafaker.main.make_src_stats")
     @patch("datafaker.main.get_settings")
-    @patch("datafaker.main.load_metadata")
     def test_make_stats_with_force_enabled(
-        self, mock_meta: MagicMock, mock_get_settings: MagicMock, mock_make: MagicMock, mock_path: MagicMock
+        self,
+        mock_get_settings: MagicMock,
+        mock_make_src_stats: MagicMock,
+        mock_path: MagicMock,
     ) -> None:
         """Tests that the make-stats command overwrite files when instructed."""
         test_config_file: str = "tests/examples/example_config.yaml"
@@ -445,7 +469,7 @@ class TestCLI(DatafakerTestCase):
         test_settings: Settings = get_test_settings()
         mock_get_settings.return_value = test_settings
         make_test_output: dict = {"some_stat": 0}
-        mock_make.return_value = make_test_output
+        mock_make_src_stats.return_value = make_test_output
 
         for force_option in ["--force", "-f"]:
             with self.subTest(f"Using option {force_option}"):
@@ -455,20 +479,21 @@ class TestCLI(DatafakerTestCase):
                         "make-stats",
                         "--stats-file=stats_file.yaml",
                         f"--config-file={test_config_file}",
-                        "--orm-file=tests/examples/example_config.yaml",
                         force_option,
                     ],
                 )
 
-                mock_make.assert_called_once_with(
-                    test_settings.src_dsn, config_file_content, mock_meta.return_value, None
+                mock_make_src_stats.assert_called_once_with(
+                    test_settings.src_dsn,
+                    config_file_content,
+                    test_settings.src_schema,
                 )
                 mock_path.return_value.write_text.assert_called_once_with(
                     "some_stat: 0\n", encoding="utf-8"
                 )
                 self.assertSuccess(result)
 
-                mock_make.reset_mock()
+                mock_make_src_stats.reset_mock()
                 mock_path.reset_mock()
 
     def test_validate_config(self) -> None:
@@ -507,7 +532,9 @@ class TestCLI(DatafakerTestCase):
             catch_exceptions=False,
         )
         self.assertEqual(0, result.exit_code)
-        mock_remove.assert_called_once_with(mock_meta.return_value, mock_config.return_value)
+        mock_remove.assert_called_once_with(
+            mock_meta.return_value, mock_config.return_value
+        )
 
     @patch("datafaker.main.read_config_file")
     @patch("datafaker.main.remove_db_vocab")
@@ -528,12 +555,18 @@ class TestCLI(DatafakerTestCase):
         )
         self.assertEqual(0, result.exit_code)
         mock_read_config.assert_called_once_with("config.yaml")
-        mock_remove.assert_called_once_with(mock_d2m.return_value, mock_load_metadata.return_value, mock_read_config.return_value)
+        mock_remove.assert_called_once_with(
+            mock_d2m.return_value,
+            mock_load_metadata.return_value,
+            mock_read_config.return_value,
+        )
 
     @patch("datafaker.main.remove_db_tables")
     @patch("datafaker.main.load_metadata_for_output")
     @patch("datafaker.main.read_config_file")
-    def test_remove_tables(self, _: MagicMock, mock_meta: MagicMock, mock_remove: MagicMock) -> None:
+    def test_remove_tables(
+        self, _: MagicMock, mock_meta: MagicMock, mock_remove: MagicMock
+    ) -> None:
         """Test the remove-tables command."""
         result = runner.invoke(
             app,

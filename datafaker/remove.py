@@ -1,7 +1,7 @@
 """Functions and classes to undo the operations in create.py."""
 from typing import Any, Mapping
 
-from sqlalchemy import delete, MetaData
+from sqlalchemy import MetaData, delete
 
 from datafaker.settings import get_settings
 from datafaker.utils import (
@@ -9,23 +9,18 @@ from datafaker.utils import (
     get_sync_engine,
     get_vocabulary_table_names,
     logger,
-    remove_vocab_foreign_key_constraints,
     reinstate_vocab_foreign_key_constraints,
+    remove_vocab_foreign_key_constraints,
     sorted_non_vocabulary_tables,
 )
 
 
-def remove_db_data(
-    metadata: MetaData, config: Mapping[str, Any]
-) -> None:
+def remove_db_data(metadata: MetaData, config: Mapping[str, Any]) -> None:
     """Truncate the synthetic data tables but not the vocabularies."""
     settings = get_settings()
     assert settings.dst_dsn, "Missing destination database settings"
     remove_db_data_from(
-        metadata,
-        config,
-        settings.dst_dsn,
-        schema_name=settings.dst_schema
+        metadata, config, settings.dst_dsn, schema_name=settings.dst_schema
     )
 
 
@@ -33,9 +28,7 @@ def remove_db_data_from(
     metadata: MetaData, config: Mapping[str, Any], db_dsn: str, schema_name: str | None
 ) -> None:
     """Truncate the synthetic data tables but not the vocabularies."""
-    dst_engine = get_sync_engine(
-        create_db_engine(db_dsn, schema_name=schema_name)
-    )
+    dst_engine = get_sync_engine(create_db_engine(db_dsn, schema_name=schema_name))
 
     with dst_engine.connect() as dst_conn:
         for table in reversed(sorted_non_vocabulary_tables(metadata, config)):
@@ -44,7 +37,9 @@ def remove_db_data_from(
             dst_conn.commit()
 
 
-def remove_db_vocab(metadata: MetaData, meta_dict: Mapping[str, Any], config: Mapping[str, Any]) -> None:
+def remove_db_vocab(
+    metadata: MetaData, meta_dict: Mapping[str, Any], config: Mapping[str, Any]
+) -> None:
     """Truncate the vocabulary tables."""
     settings = get_settings()
     assert settings.dst_dsn, "Missing destination database settings"
@@ -61,11 +56,14 @@ def remove_db_vocab(metadata: MetaData, meta_dict: Mapping[str, Any], config: Ma
         reinstate_vocab_foreign_key_constraints(metadata, meta_dict, config, dst_conn)
 
 
-def remove_db_tables(metadata: MetaData) -> None:
+def remove_db_tables(metadata: MetaData | None) -> None:
     """Drop the tables in the destination schema."""
     settings = get_settings()
     assert settings.dst_dsn, "Missing destination database settings"
     dst_engine = get_sync_engine(
         create_db_engine(settings.dst_dsn, schema_name=settings.dst_schema)
     )
+    if metadata is None:
+        metadata = MetaData()
+        metadata.reflect(dst_engine)
     metadata.drop_all(dst_engine)
