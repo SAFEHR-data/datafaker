@@ -79,9 +79,11 @@ to exit this program."""
         src_schema: str | None,
         metadata: MetaData,
         config: MutableMapping[str, Any],
+        *args: Any,
+        **kwargs: Any,
     ) -> None:
         """Initialise a TableCmd."""
-        super().__init__(src_dsn, src_schema, metadata, config)
+        super().__init__(src_dsn, src_schema, metadata, config, *args, **kwargs)
         self.set_prompt()
 
     @property

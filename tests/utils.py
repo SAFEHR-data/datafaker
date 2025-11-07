@@ -293,9 +293,10 @@ class GeneratesDBTestCase(RequiresDBTestCase):
 class TestDbCmdMixin(DbCmd):
     """A mixin for capturing output from interactive commands."""
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def __init__(self, *args: Any, print_tables: bool = False, **kwargs: Any) -> None:
         """Initialize a TestDbCmdMixin"""
         super().__init__(*args, **kwargs)
+        self._print_tables = print_tables
         self.reset()
 
     def reset(self) -> None:
@@ -316,6 +317,8 @@ class TestDbCmdMixin(DbCmd):
         """Capture the printed table."""
         self.headings = headings
         self.rows = rows
+        if self._print_tables:
+            super().print_table(headings, rows)
 
     def print_table_by_columns(self, columns: Mapping[str, Sequence[str]]) -> None:
         """Capture the printed table."""

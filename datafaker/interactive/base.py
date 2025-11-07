@@ -104,6 +104,8 @@ class DbCmd(ABC, cmd.Cmd):
         "Error: '{0}' is not the name of a table"
         " in this database or a column in this table"
     )
+    ERROR_FAILED_SQL = 'SQL query "{query}" caused exception {exc}'
+    ERROR_FAILED_DISPLAY = "Error: Failed to display: {}"
     ROW_COUNT_MSG = "Total row count: {}"
 
     @abstractmethod
@@ -325,7 +327,7 @@ class DbCmd(ABC, cmd.Cmd):
             return
         table_name = self.table_name()
         nonnull_columns = self.get_nonnull_columns(table_name)
-        colcounts = [f", COUNT({nnc}) AS {nnc}" for nnc in nonnull_columns]
+        colcounts = [f', COUNT("{nnc}") AS "{nnc}"' for nnc in nonnull_columns]
         with self.sync_engine.connect() as connection:
             result = (
                 connection.execute(
@@ -353,11 +355,12 @@ class DbCmd(ABC, cmd.Cmd):
     def do_select(self, arg: str) -> None:
         """Run a select query over the database and show the first 50 results."""
         max_select_rows = 50
+        query = "SELECT " + arg
         with self.sync_engine.connect() as connection:
             try:
-                result = connection.execute(sqlalchemy.text("SELECT " + arg))
+                result = connection.execute(sqlalchemy.text(query))
             except sqlalchemy.exc.DatabaseError as exc:
-                self.print("Failed to execute: {}", exc)
+                self.print(self.ERROR_FAILED_SQL, exc, query)
                 return
             row_count = result.rowcount
             self.print(self.ROW_COUNT_MSG, row_count)
@@ -365,7 +368,11 @@ class DbCmd(ABC, cmd.Cmd):
                 self.print("Showing the first {} rows", max_select_rows)
             fields = list(result.keys())
             rows = result.fetchmany(max_select_rows)
-            self.print_table(fields, rows)
+            try:
+                self.print_table(fields, rows)
+            except ValueError as exc:
+                self.print(self.ERROR_FAILED_DISPLAY, exc)
+                return
 
     def do_peek(self, arg: str) -> None:
         """
@@ -383,9 +390,9 @@ class DbCmd(ABC, cmd.Cmd):
         col_names = arg.split()
         if not col_names:
             col_names = self._get_column_names()
-        nonnulls = [cn + " IS NOT NULL" for cn in col_names]
+        nonnulls = [f'"{cn}" IS NOT NULL' for cn in col_names]
         with self.sync_engine.connect() as connection:
-            cols = ",".join(col_names)
+            cols = ", ".join(f'"{cn}"' for cn in col_names)
             where = "WHERE" if nonnulls else ""
             nonnull = " OR ".join(nonnulls)
             query = sqlalchemy.text(
@@ -395,7 +402,7 @@ class DbCmd(ABC, cmd.Cmd):
             try:
                 result = connection.execute(query)
             except sqlalchemy.exc.SQLAlchemyError as exc:
-                self.print(f'SQL query "{query}" caused exception {exc}')
+                self.print(self.ERROR_FAILED_SQL, exc, query)
                 return
             self.print_table(list(result.keys()), result.fetchmany(max_peek_rows))
 
