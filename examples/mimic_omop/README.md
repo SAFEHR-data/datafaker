@@ -8,10 +8,6 @@
 
 `poetry run datafaker create-tables --orm-file ./examples/mimic_omop/orm.yaml --config-file ./examples/mimic_omop/config.yaml`
 
-1. Create generator table
-
-`poetry run datafaker create-generators --orm-file ./examples/mimic_omop/orm.yaml --config-file ./examples/mimic_omop/config.yaml --df-file ./examples/mimic_omop/df.py`
-
 1. Create data
 
 `poetry run datafaker create-data --orm-file ./examples/mimic_omop/orm.yaml --config-file ./examples/mimic_omop/config.yaml --df-file .\examples\mimic_omop\df.py`

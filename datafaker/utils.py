@@ -67,7 +67,7 @@ def read_config_file(path: Path) -> dict:
     return config
 
 
-def import_file(file_path: str) -> ModuleType:
+def import_file(file_path: str | Path, module_name: str = "df") -> ModuleType:
     """Import a file.
 
     This utility function returns file_path imported as a module.
@@ -78,7 +78,7 @@ def import_file(file_path: str) -> ModuleType:
     Returns:
         ModuleType
     """
-    spec = importlib.util.spec_from_file_location("df", file_path)
+    spec = importlib.util.spec_from_file_location(module_name, file_path)
     if spec is None or spec.loader is None:
         raise SettingsError(f"No loadable module '{file_path}'")
     module = importlib.util.module_from_spec(spec)
