@@ -1,0 +1,3 @@
+tables:
+  string:
+    num_rows_per_pass: 0

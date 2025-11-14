@@ -111,7 +111,7 @@ class TestReadConfig(DatafakerTestCase):
     def test_warns_of_invalid_config(self) -> None:
         """Test that we get a warning if the config is invalid."""
         with patch("datafaker.utils.logger") as mock_logger:
-            read_config_file("tests/examples/invalid_config.yaml")
+            read_config_file(Path("tests/examples/invalid_config.yaml"))
             mock_logger.error.assert_called_with(
                 "The config file is invalid: %s", "'a' is not of type 'integer'"
             )

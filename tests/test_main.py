@@ -75,8 +75,8 @@ class TestCLI(DatafakerTestCase):
         mock_make.assert_called_once_with(
             mock_load_meta.return_value,
             mock_config.return_value,
-            "orm.yaml",
-            "config.yaml",
+            Path("orm.yaml"),
+            Path("config.yaml"),
             None,
         )
         mock_path.return_value.write_text.assert_called_once_with(
@@ -117,9 +117,9 @@ class TestCLI(DatafakerTestCase):
         mock_make.assert_called_once_with(
             mock_load_meta.return_value,
             mock_config.return_value,
-            "orm.yaml",
-            "config.yaml",
-            "src-stats.yaml",
+            Path("orm.yaml"),
+            Path("config.yaml"),
+            mock_path("src-stats.yaml"),
         )
         mock_path.return_value.write_text.assert_called_once_with(
             "some text", encoding="utf-8"
@@ -170,6 +170,7 @@ class TestCLI(DatafakerTestCase):
 
         for force_option in ["--force", "-f"]:
             with self.subTest(f"Using option {force_option}"):
+                mock_make.reset_mock()
                 result: Result = runner.invoke(
                     app,
                     [
@@ -181,8 +182,8 @@ class TestCLI(DatafakerTestCase):
                 mock_make.assert_called_once_with(
                     mock_load_meta.return_value,
                     mock_config.return_value,
-                    "orm.yaml",
-                    "config.yaml",
+                    Path("orm.yaml"),
+                    Path("config.yaml"),
                     None,
                 )
                 mock_path.return_value.write_text.assert_called_once_with(
@@ -554,7 +555,7 @@ class TestCLI(DatafakerTestCase):
             catch_exceptions=False,
         )
         self.assertEqual(0, result.exit_code)
-        mock_read_config.assert_called_once_with("config.yaml")
+        mock_read_config.assert_called_once_with(Path("config.yaml"))
         mock_remove.assert_called_once_with(
             mock_d2m.return_value,
             mock_load_metadata.return_value,
