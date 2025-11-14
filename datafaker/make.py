@@ -580,9 +580,9 @@ def make_vocabulary_tables(
 def make_table_generators(  # pylint: disable=too-many-locals
     metadata: MetaData,
     config: Mapping,
-    orm_filename: str,
-    config_filename: str,
-    src_stats_filename: Optional[str],
+    orm_filename: Path,
+    config_filename: Path,
+    src_stats_filename: Optional[Path],
 ) -> str:
     """
     Create datafaker generator classes.
