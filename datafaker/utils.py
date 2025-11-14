@@ -63,7 +63,7 @@ class Empty(Generic[T]):
         return (x for x in e)
 
 
-def read_config_file(path: str) -> dict:
+def read_config_file(path: Path) -> dict:
     """Read a config file, warning if it is invalid.
 
     Args:
@@ -72,7 +72,7 @@ def read_config_file(path: str) -> dict:
     Returns:
         The config file as a dictionary.
     """
-    with open(path, "r", encoding="utf8") as f:
+    with path.open(encoding="utf8") as f:
         config = yaml.safe_load(f)
 
     assert isinstance(config, dict)
@@ -86,7 +86,7 @@ def read_config_file(path: str) -> dict:
     return config
 
 
-def import_file(file_path: str) -> ModuleType:
+def import_file(file_path: str | Path, module_name: str = "df") -> ModuleType:
     """Import a file.
 
     This utility function returns file_path imported as a module.
@@ -97,7 +97,7 @@ def import_file(file_path: str) -> ModuleType:
     Returns:
         ModuleType
     """
-    spec = importlib.util.spec_from_file_location("df", file_path)
+    spec = importlib.util.spec_from_file_location(module_name, file_path)
     if spec is None or spec.loader is None:
         raise ImportError(f"No loadable module at {file_path}")
     module = importlib.util.module_from_spec(spec)

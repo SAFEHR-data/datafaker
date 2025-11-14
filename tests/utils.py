@@ -208,21 +208,23 @@ class GeneratesDBTestCase(RequiresDBTestCase):
         super().__init__(*args, **kwargs)
         self.generators_file_path = ""
         self.stats_fd = 0
-        self.stats_file_path = ""
-        self.config_file_path = ""
+        self.stats_file_path = Path("")
+        self.config_file_path = Path("")
         self.config_fd = 0
 
     def setUp(self) -> None:
         """Set up the test case with an actual orm.yaml file."""
         super().setUp()
         # Generate the `orm.yaml` from the database
-        (self.orm_fd, self.orm_file_path) = mkstemp(".yaml", "orm_", text=True)
+        (self.orm_fd, orm_file_path) = mkstemp(".yaml", "orm_", text=True)
+        self.orm_file_path = Path(orm_file_path)
         with os.fdopen(self.orm_fd, "w", encoding="utf-8") as orm_fh:
             orm_fh.write(make_tables_file(self.dsn, self.schema_name, {}))
 
     def set_configuration(self, config: Mapping[str, Any]) -> None:
         """Accepts a configuration file, writes it out."""
-        (self.config_fd, self.config_file_path) = mkstemp(".yaml", "config_", text=True)
+        (self.config_fd, config_file_path) = mkstemp(".yaml", "config_", text=True)
+        self.config_file_path = Path(config_file_path)
         with os.fdopen(self.config_fd, "w", encoding="utf-8") as config_fh:
             config_fh.write(yaml.dump(config))
 
@@ -237,9 +239,8 @@ class GeneratesDBTestCase(RequiresDBTestCase):
             make_src_stats(self.dsn, config, self.schema_name)
         )
         loop.close()
-        (self.stats_fd, self.stats_file_path) = mkstemp(
-            ".yaml", "src_stats_", text=True
-        )
+        (self.stats_fd, stats_file_path) = mkstemp(".yaml", "src_stats_", text=True)
+        self.stats_file_path = Path(stats_file_path)
         with os.fdopen(self.stats_fd, "w", encoding="utf-8") as stats_fh:
             stats_fh.write(yaml.dump(src_stats))
         return src_stats
