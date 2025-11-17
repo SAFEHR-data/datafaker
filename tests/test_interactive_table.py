@@ -5,6 +5,7 @@ from typing import Any
 from sqlalchemy import select
 
 from datafaker.interactive import TableCmd
+from datafaker.serialize_metadata import dict_to_metadata
 from tests.utils import RequiresDBTestCase, TestDbCmdMixin
 
 
@@ -396,3 +397,98 @@ class ConfigureTablesInstrumentsTests(ConfigureTablesTests):
                     {},
                 ),
             )
+
+
+class TrickyTests(ConfigureTablesTests):
+    """Testing configure-tables with the instrument.sql database."""
+
+    dump_file_path = "tricky.sql"
+    database_name = "tricky"
+    schema_name = "public"
+
+    def do_and_test_peek_tricky(self, tc: TestTableCmd) -> None:
+        """Peek the "names" table and check the output."""
+        tc.reset()
+        tc.do_peek("")
+        self.assertSetEqual(set(tc.headings), {"id", "offset", "count", "sensible"})
+        self.assertSetEqual(
+            set(tc.rows), {(1, 10, 5, "reasonable"), (2, None, 6, "clear-headed")}
+        )
+
+    def test_peek_with_tricky_names(self) -> None:
+        """
+        Peek with column names that are function names (#66).
+        """
+        with self._get_cmd({}) as tc:
+            tc.do_next("names")
+            self.do_and_test_peek_tricky(tc)
+
+    def test_count_with_tricky_names(self) -> None:
+        """
+        Count with column names that are function names (#66).
+        """
+        with self._get_cmd({}) as tc:
+            tc.do_next("names")
+            self.do_and_test_peek_tricky(tc)
+            tc.do_counts("")
+            self.assertSequenceEqual(tc.rows, [["offset", 1], ["sensible", 0]])
+
+    def test_incorrect_orm_yaml_columns(self) -> None:
+        """
+        Peek with incorrect columns in orm.yaml (#70).
+        """
+        self.metadata = dict_to_metadata(
+            {
+                "tables": {
+                    "names": {
+                        "columns": {
+                            "id": {
+                                "primary": True,
+                                "nullable": False,
+                                "type": "INTEGER",
+                            },
+                            "sensible": {
+                                "primary": False,
+                                "nullable": False,
+                                "type": "TEXT",
+                            },
+                            "nonexistent": {
+                                "primary": False,
+                                "nullable": False,
+                                "type": "TEXT",
+                            },
+                        }
+                    }
+                }
+            }
+        )
+        with self._get_cmd({}) as tc:
+            tc.reset()
+            tc.do_peek("")
+            self.assertIn("SQL query", "/".join(m for (m, _a, _kw) in tc.messages))
+
+    def test_repeated_field_does_not_throw_exception(self) -> None:
+        """
+        Select with repeated fields (#70).
+        """
+        with TestTableCmd(
+            src_dsn=self.dsn,
+            src_schema=self.schema_name,
+            metadata=self.metadata,
+            config={},
+            print_tables=True,
+        ) as tc:
+            tc.reset()
+            tc.do_select('sensible AS same, "offset" AS same FROM names')
+            self.assertIn(
+                "Failed to display", "/".join(m for (m, _a, _kw) in tc.messages)
+            )
+
+    def test_sql_error_does_not_throw_exception(self) -> None:
+        """
+        Select with a SQL error.
+        """
+        with self._get_cmd({}) as tc:
+            tc.reset()
+            tc.do_select("+++")
+            self.assertIn("SQL query", "/".join(m for (m, a, kw) in tc.messages))
