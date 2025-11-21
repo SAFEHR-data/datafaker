@@ -189,6 +189,10 @@
               "description": "The number of rows to generate per pass.",
               "type": "integer"
             },
+            "nominal_row_count": {
+              "description": "The number of rows in a full-sized fake database.",
+              "type": "integer"
+            },
             "row_generators": {
               "description": "An array of row generators to create column values.",
               "type": "array",

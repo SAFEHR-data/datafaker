@@ -1,10 +1,13 @@
 """Functions and classes to create and populate the target database."""
+import math
 import pathlib
+import random
 from collections import Counter
 from types import ModuleType
 from typing import Any, Generator, Iterable, Iterator, Mapping, Sequence, Tuple
 
-from sqlalchemy import Connection, insert, inspect
+import sqlalchemy
+from sqlalchemy import Connection, insert, inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema, MetaData, Table
@@ -253,6 +256,28 @@ class StoryIterator:
                     return
 
 
+def get_num_rows_per_pass(
+  table_row_count: int,
+  max_rows: int | None = None,
+  min_rows: int = 0,
+  proportion: float | None = None,
+  num_rows_per_pass: int | None = None,
+  nominal_row_count: int | None = None,
+) -> int:
+  if num_rows_per_pass is not None:
+    return num_rows_per_pass
+  if nominal_row_count is None:
+    return 1
+  if nominal_row_count == 0:
+    return 0
+  v = 1
+  if proportion is not None:
+    v = math.floor(nominal_row_count * proportion + random.random())
+  if max_rows is not None:
+    v = min(v, max_rows - table_row_count)
+  return max(0, min_rows - table_row_count, v)
+
+
 def populate(
     dst_conn: Connection,
     tables: Sequence[Table],
@@ -262,6 +287,13 @@ def populate(
 ) -> RowCounts:
     """Populate a database schema with synthetic data."""
     row_counts: Counter[str] = Counter()
+    initial_row_counts: dict[str, int] = {}
+    for table in tables:
+        count = dst_conn.execute(select(sqlalchemy.sql.functions.count()).select_from(table)).scalar_one_or_none()
+        if isinstance(count, int):
+            initial_row_counts[table.name] = count
+        else:
+            initial_row_counts[table.name] = 0
     table_dict = {table.name: table for table in tables}
     # Generate stories
     # Each story generator returns a python generator (an unfortunate naming clash with
@@ -290,13 +322,17 @@ def populate(
             # We don't have a generator for this table
             continue
         table_generator = table_generator_dict[table.name]
-        if table_generator.num_rows_per_pass == 0:
+        num_rows_per_pass = get_num_rows_per_pass(
+            table_row_count=initial_row_counts[table.name] + row_counts[table.name],
+            num_rows_per_pass=table_generator.num_rows_per_pass,
+        )
+        if num_rows_per_pass == 0:
             continue
         logger.debug("Generating data for table '%s'", table.name)
         # Run all the inserts for one table in a transaction
         try:
             with dst_conn.begin():
-                for _ in range(table_generator.num_rows_per_pass):
+                for _ in range(num_rows_per_pass):
                     stmt = insert(table).values(table_generator(dst_conn, metadata))
                     dst_conn.execute(stmt)
                     row_counts[table.name] = row_counts.get(table.name, 0) + 1
