@@ -9,7 +9,10 @@ from sqlalchemy import Column, Connection, Engine, RowMapping, text
 from sqlalchemy.types import Integer, Numeric
 
 from datafaker.generators.base import Generator, dist_gen, get_column_type
-from datafaker.generators.continuous import MultivariateNormalGeneratorFactory
+from datafaker.generators.continuous import (
+    CovariateQuery,
+    MultivariateNormalGeneratorFactory,
+)
 from datafaker.utils import T, logger
 
 NumericType = Union[int, float]
@@ -400,16 +403,25 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
         sample_count: int | None = None,
     ) -> RowPartition:
         """Get the RowPartition from a NullPatternPartition."""
-        query = self.query(
-            table=table,
-            columns=partition.included_numeric,
-            predicates=partition.predicates,
-            group_by_clause=partition.group_by_clause,
-            constants=partition.constants,
-            constant_clauses=partition.constant_clauses,
-            suppress_count=suppress_count,
-            sample_count=sample_count,
+        cq = CovariateQuery(table, partition.included_numeric)
+        cq.predicates(
+            partition.predicates,
+        ).group_by(
+            partition.group_by_clause,
+        ).constants(
+            partition.constants,
+        ).constant_clauses(
+            partition.constant_clauses,
+        ).suppress_count(
+            suppress_count,
+        ).query_var_fn(
+            self.query_var,
+        ).query_predicate_fn(
+            self.query_predicate,
         )
+        if sample_count:
+            cq.sample_count(sample_count)
+        query = cq.get()
         return RowPartition(
             query,
             partition.included_numeric,

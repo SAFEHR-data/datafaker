@@ -2,11 +2,12 @@
 
 import itertools
 from collections.abc import Iterable, Sequence
-from typing import Any
+from typing import Any, Callable
 
 from sqlalchemy import Column, Engine, RowMapping, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.types import Integer, Numeric
+from typing_extensions import Self
 
 from datafaker.generators.base import (
     Buckets,
@@ -16,7 +17,7 @@ from datafaker.generators.base import (
     dist_gen,
     get_column_type,
 )
-from datafaker.utils import Empty, logger
+from datafaker.utils import logger
 
 
 class ContinuousDistributionGenerator(Generator):
@@ -354,6 +355,174 @@ class MultivariateNormalGenerator(Generator):
         return default
 
 
+# pylint: disable=too-many-instance-attributes
+class CovariateQuery:
+    """Query-constructing object for making a covariate matrix."""
+
+    def __init__(self, table: str, columns: Sequence[Column]) -> None:
+        """
+        Initialize the query for the basics for multivariate normal/lognormal parameters.
+
+        :param table: The name of the table to be queried.
+        :param columns: The columns in the multivariate distribution.
+        """
+        self.table = table
+        self.columns = columns
+        self._predicates: Iterable[str] = []
+        self._group_by_clause = ""
+        self._constant_clauses = ""
+        self._constants = ""
+        self._suppress_count = 1
+        self._sample_count: int | None = None
+        self._var_fn = lambda x: x
+        self._predicate_fn = lambda x: x + " IS NOT NULL"
+
+    def suppress_count(self, count: int) -> Self:
+        """
+        Set the suppression count.
+
+        No set of categories will be included in the results that have
+        this many or fewer rows in the source.
+
+        :param suppress_count: a group smaller than this will be suppressed.
+        """
+        self._suppress_count = count
+        return self
+
+    def sample_count(self, count: int) -> Self:
+        """
+        Set the sample count.
+
+        This many rows will be sampled at random from this partition.
+
+        :param sample_count: this many samples will be taken from this partition.
+        """
+        self._sample_count = count
+        return self
+
+    def predicates(self, predicates: Iterable[str]) -> Self:
+        """
+        Set the predicates to filter the queried table by.
+
+        :param predicates: Additional where clauses.
+        """
+        self._predicates = predicates
+        return self
+
+    def group_by(self, clause: str) -> Self:
+        """
+        Set the `GROUP BY` clause to the query for this partition.
+
+        :param group_by_clause: Any GROUP BY clause to the query getting the partition.
+        """
+        self._group_by_clause = clause
+        return self
+
+    def constant_clauses(self, clause: str) -> Self:
+        """
+        Set constant clauses.
+
+        :param constant_clauses: Extra output columns in the outer SELECT clause, such
+        as ", _q.column_one AS k1, _q.column_two AS k2". Note the initial comma.
+        """
+        self._constant_clauses = clause
+        return self
+
+    def constants(self, constants: str) -> Self:
+        """
+        Set output constants to be selected alongside the actual results.
+
+        :param constants: Extra output columns in the inner SELECT clause. Used to
+        deliver columns to the outer select, such as ", column_one, column_two".
+        Note the initial comma.
+        """
+        self._constants = constants
+        return self
+
+    def query_var_fn(self, fn: Callable[[str], str]) -> Self:
+        """
+        Set a function to convert a column name into the value we want.
+
+        For example, adding ``LN()`` around the name if we want log-normal distributions.
+
+        :param fn: A function taking a column name and returning a SQL expression.
+        """
+        self._var_fn = fn
+        return self
+
+    def query_predicate_fn(self, fn: Callable[[Column], str]) -> Self:
+        """
+        Set a function to make a predicate for whether the value should be used.
+
+        For example, adding ``IS NOT NULL`` after the name if we want log-normal distributions.
+
+        :param fn: A function to convert a column into a boolean SQL
+        expression for whether the value should be used.
+        """
+        self._predicate_fn = fn
+        return self
+
+    def get(self) -> str:
+        """
+        Get the SQL query.
+
+        :return: The SQL query for this partition.
+        """
+        means = "".join(f", _q.m{i}" for i in range(len(self.columns)))
+        covs = "".join(
+            (
+                f", (_q.s{ix}_{iy} - _q.count * _q.m{ix} * _q.m{iy})"
+                f"/NULLIF(_q.count - 1, 0) AS c{ix}_{iy}"
+            )
+            for iy in range(len(self.columns))
+            for ix in range(iy + 1)
+        )
+        subquery = self._inner_query()
+        # if there are any numeric columns we need at least
+        # two rows to make any (co)variances at all
+        suppress_clause = (
+            f" WHERE {self._suppress_count} < _q.count" if self.columns else ""
+        )
+        rank = len(self.columns)
+        return (
+            f"SELECT {rank} AS rank{self._constant_clauses}, _q.count AS count{means}{covs}"
+            f" FROM ({self._middle_query(subquery)})"
+            f" AS _q{suppress_clause}"
+        )
+
+    def _inner_query(self) -> str:
+        """Get the rows from the table that we are interested in."""
+        preds = itertools.chain(
+            (self._predicate_fn(col) for col in self.columns),
+            self._predicates,
+        )
+        where = " AND ".join(preds) if preds else ""
+        if where:
+            where = " WHERE " + where
+        if self._sample_count is None:
+            return self.table + where
+        return (
+            f"(SELECT * FROM {self.table}{where} ORDER BY RANDOM()"
+            f" LIMIT {self._sample_count}) AS _sampled"
+        )
+
+    def _middle_query(self, inner_query: str) -> str:
+        """Get the basic statistics (and constants) from the inner query."""
+        multiples = "".join(
+            f", SUM({self._var_fn(colx.name)} * {self._var_fn(coly.name)}) AS s{ix}_{iy}"
+            for iy, coly in enumerate(self.columns)
+            for ix, colx in enumerate(self.columns[: iy + 1])
+        )
+        avgs = "".join(
+            f", AVG({self._var_fn(col.name)}) AS m{i}"
+            for i, col in enumerate(self.columns)
+        )
+        return (
+            f"SELECT COUNT(*) AS count{multiples}{avgs}{self._constants}"
+            f" FROM {inner_query}{self._group_by_clause}"
+        )
+
+
 class MultivariateNormalGeneratorFactory(GeneratorFactory):
     """Normal distribution generator factory."""
 
@@ -369,96 +538,6 @@ class MultivariateNormalGeneratorFactory(GeneratorFactory):
         """Get the SQL expression of the value to query for this column."""
         return column
 
-    # pylint: disable=too-many-arguments too-many-positional-arguments
-    def query(
-        self,
-        table: str,
-        columns: Sequence[Column],
-        predicates: Iterable[str] = Empty.iterable(),
-        group_by_clause: str = "",
-        constant_clauses: str = "",
-        constants: str = "",
-        suppress_count: int = 1,
-        sample_count: int | None = None,
-    ) -> str:
-        """
-        Get a query for the basics for multivariate normal/lognormal parameters.
-
-        :param table: The name of the table to be queried.
-        :param columns: The columns in the multivariate distribution.
-        :param and_where: Additional where clause. If not ``""`` should begin with ``" AND "``.
-        :param group_by_clause: Any GROUP BY clause (starting with " GROUP BY " if not "").
-        :param constant_clauses: Extra output columns in the outer SELECT clause, such
-        as ", _q.column_one AS k1, _q.column_two AS k2". Note the initial comma.
-        :param constants: Extra output columns in the inner SELECT clause. Used to
-        deliver columns to the outer select, such as ", column_one, column_two".
-        Note the initial comma.
-        :param suppress_count: a group smaller than this will be suppressed.
-        :param sample_count: this many samples will be taken from each partition.
-        """
-        means = "".join(f", _q.m{i}" for i in range(len(columns)))
-        covs = "".join(
-            (
-                f", (_q.s{ix}_{iy} - _q.count * _q.m{ix} * _q.m{iy})"
-                f"/NULLIF(_q.count - 1, 0) AS c{ix}_{iy}"
-            )
-            for iy in range(len(columns))
-            for ix in range(iy + 1)
-        )
-        subquery = self._inner_query(table, columns, predicates, sample_count)
-        # if there are any numeric columns we need at least
-        # two rows to make any (co)variances at all
-        suppress_clause = f" WHERE {suppress_count} < _q.count" if columns else ""
-        return (
-            f"SELECT {len(columns)} AS rank{constant_clauses}, _q.count AS count{means}{covs}"
-            f" FROM ({self._middle_query(columns, constants, subquery, group_by_clause)})"
-            f" AS _q{suppress_clause}"
-        )
-
-    def _inner_query(
-        self,
-        table: str,
-        columns: Sequence[Column],
-        predicates: Iterable[str],
-        sample_count: int | None,
-    ) -> str:
-        """Get the rows from the table that we are interested in."""
-        preds = itertools.chain(
-            (self.query_predicate(col) for col in columns),
-            predicates,
-        )
-        where = " AND ".join(preds) if preds else ""
-        if where:
-            where = " WHERE " + where
-        if sample_count is None:
-            return table + where
-        return (
-            f"(SELECT * FROM {table}{where} ORDER BY RANDOM()"
-            f" LIMIT {sample_count}) AS _sampled"
-        )
-
-    def _middle_query(
-        self,
-        columns: Sequence[Column],
-        constants: str,
-        inner_query: str,
-        group_by_clause: str,
-    ) -> str:
-        """Get the basic statistics (and constants) from the inner query."""
-        multiples = "".join(
-            f", SUM({self.query_var(colx.name)} * {self.query_var(coly.name)}) AS s{ix}_{iy}"
-            for iy, coly in enumerate(columns)
-            for ix, colx in enumerate(columns[: iy + 1])
-        )
-        avgs = "".join(
-            f", AVG({self.query_var(col.name)}) AS m{i}"
-            for i, col in enumerate(columns)
-        )
-        return (
-            f"SELECT COUNT(*) AS count{multiples}{avgs}{constants}"
-            f" FROM {inner_query}{group_by_clause}"
-        )
-
     def get_generators(
         self, columns: list[Column], engine: Engine
     ) -> Sequence[Generator]:
@@ -473,7 +552,16 @@ class MultivariateNormalGeneratorFactory(GeneratorFactory):
                 return []
         column_names = [c.name for c in columns]
         table = columns[0].table.name
-        query = self.query(table, columns)
+        query = (
+            CovariateQuery(table, columns)
+            .query_var_fn(
+                self.query_var,
+            )
+            .query_predicate_fn(
+                self.query_predicate,
+            )
+            .get()
+        )
         with engine.connect() as connection:
             try:
                 covariates = connection.execute(text(query)).mappings().first()

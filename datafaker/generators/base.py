@@ -248,7 +248,9 @@ class GeneratorFactory(ABC):
 
     @abstractmethod
     def get_generators(
-        self, columns: list[Column], engine: Engine
+        self,
+        columns: list[Column],
+        engine: Engine,
     ) -> Sequence[Generator]:
         """Get the generators appropriate to these columns."""
 

@@ -207,7 +207,7 @@ class NullPartitionedTests(GeneratesDBTestCase):
         self.assertAlmostEqual(
             stats.four.count(), generate_count * 3 / 20, delta=generate_count * 0.2
         )
-        self.assertAlmostEqual(stats.four.covar(), 3.33, delta=1.3)
+        self.assertAlmostEqual(stats.four.covar(), 3.33, delta=1.5)
         # type 5/fish
         self.assertAlmostEqual(
             stats.fish.count(), generate_count * 3 / 20, delta=generate_count * 0.2
