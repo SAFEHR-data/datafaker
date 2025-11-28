@@ -390,7 +390,7 @@ class CovariateQuery:
         self._group_by_clause = ""
         self._constant_clauses = ""
         self._constants = ""
-        self._suppress_count = 1
+        self.suppress_count = 1
         self._sample_count: int | None = None
         self._factory = factory
         self._predicate_fn = lambda x: x + " IS NOT NULL"
@@ -404,7 +404,7 @@ class CovariateQuery:
         self._columns = cols
         return self
 
-    def suppress_count(self, count: int) -> Self:
+    def set_suppress_count(self, count: int) -> Self:
         """
         Set the suppression count.
 
@@ -413,7 +413,7 @@ class CovariateQuery:
 
         :param count: a group smaller than this will be suppressed.
         """
-        self._suppress_count = count
+        self.suppress_count = count
         return self
 
     def sample_count(self, count: int) -> Self:
@@ -485,7 +485,7 @@ class CovariateQuery:
         # if there are any numeric columns we need at least
         # two rows to make any (co)variances at all
         suppress_clause = (
-            f" WHERE {self._suppress_count} < _q.count" if self._columns else ""
+            f" WHERE {self.suppress_count} < _q.count" if self._columns else ""
         )
         rank = len(self._columns)
         return (

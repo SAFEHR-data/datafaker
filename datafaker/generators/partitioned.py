@@ -399,21 +399,16 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
     def _get_generator(
         self,
         connection: Connection,
-        table_name: str,
+        cov_query: CovariateQuery,
         columns: list[Column],
         nullable_columns: list[NullableColumn],
         name_suffix: str | None = None,
-        suppress_count: int = 1,
-        sample_count: int | None = None,
     ) -> NullPartitionedNormalGenerator | None:
         where = ""
-        if 1 < suppress_count:
-            where = f' WHERE {suppress_count} < "count"'
-        query = self.get_partition_count_query(nullable_columns, table_name, where)
+        if 1 < cov_query.suppress_count:
+            where = f' WHERE {cov_query.suppress_count} < "count"'
+        query = self.get_partition_count_query(nullable_columns, cov_query.table, where)
         partitions: dict[int, RowPartition] = {}
-        cov_query = CovariateQuery(table_name, self).suppress_count(suppress_count)
-        if sample_count:
-            cov_query.sample_count(sample_count)
         for partition_nonnulls in powerset(nullable_columns):
             partition_def = NullPatternPartition(columns, partition_nonnulls)
             cov_query.columns(
@@ -438,14 +433,14 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
         if not self._execute_partition_queries(connection, partitions):
             return None
         return NullPartitionedNormalGenerator(
-            f"{table_name}__{columns[0].name}",
+            f"{cov_query.table}__{columns[0].name}",
             partitions,
             self.function_name(),
             name_suffix=name_suffix,
             partition_count_query=PartitionCountQuery(
                 connection,
                 query,
-                table_name,
+                cov_query.table,
                 nullable_columns,
             ),
         )
@@ -463,43 +458,45 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
         gens: list[Generator | None] = []
         try:
             with engine.connect() as connection:
+                cov_query = CovariateQuery(table, self)
                 gens.append(
                     self._get_generator(
                         connection,
-                        table,
+                        cov_query,
                         columns,
                         nullable_columns,
                     )
                 )
+                cov_query = cov_query.sample_count(self.SAMPLE_COUNT)
                 gens.append(
                     self._get_generator(
                         connection,
-                        table,
+                        cov_query,
                         columns,
                         nullable_columns,
                         name_suffix="sampled",
-                        sample_count=self.SAMPLE_COUNT,
                     )
+                )
+                cov_query = CovariateQuery(table, self).set_suppress_count(
+                    self.SUPPRESS_COUNT
                 )
                 gens.append(
                     self._get_generator(
                         connection,
-                        table,
-                        columns,
-                        nullable_columns,
-                        name_suffix="sampled and suppressed",
-                        suppress_count=self.SUPPRESS_COUNT,
-                        sample_count=self.SAMPLE_COUNT,
-                    )
-                )
-                gens.append(
-                    self._get_generator(
-                        connection,
-                        table,
+                        cov_query,
                         columns,
                         nullable_columns,
                         name_suffix="suppressed",
-                        suppress_count=self.SUPPRESS_COUNT,
+                    )
+                )
+                cov_query = cov_query.sample_count(self.SAMPLE_COUNT)
+                gens.append(
+                    self._get_generator(
+                        connection,
+                        cov_query,
+                        columns,
+                        nullable_columns,
+                        name_suffix="sampled and suppressed",
                     )
                 )
         except sqlalchemy.exc.DatabaseError as exc:
