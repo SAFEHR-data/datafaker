@@ -395,42 +395,6 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
             f' FROM {table} GROUP BY "index") AS _q {where}'
         )
 
-    def _get_row_partition(
-        self,
-        table: str,
-        partition: NullPatternPartition,
-        suppress_count: int = 1,
-        sample_count: int | None = None,
-    ) -> RowPartition:
-        """Get the RowPartition from a NullPatternPartition."""
-        cq = CovariateQuery(table, partition.included_numeric)
-        cq.predicates(
-            partition.predicates,
-        ).group_by(
-            partition.group_by_clause,
-        ).constants(
-            partition.constants,
-        ).constant_clauses(
-            partition.constant_clauses,
-        ).suppress_count(
-            suppress_count,
-        ).query_var_fn(
-            self.query_var,
-        ).query_predicate_fn(
-            self.query_predicate,
-        )
-        if sample_count:
-            cq.sample_count(sample_count)
-        query = cq.get()
-        return RowPartition(
-            query,
-            partition.included_numeric,
-            partition.included_choice,
-            partition.excluded,
-            partition.nones,
-            [],
-        )
-
     # pylint: disable=too-many-arguments too-many-positional-arguments
     def _get_generator(
         self,
@@ -438,20 +402,38 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
         table_name: str,
         columns: list[Column],
         nullable_columns: list[NullableColumn],
-        where: str | None = None,
         name_suffix: str | None = None,
         suppress_count: int = 1,
         sample_count: int | None = None,
     ) -> NullPartitionedNormalGenerator | None:
+        where = ""
+        if 1 < suppress_count:
+            where = f' WHERE {suppress_count} < "count"'
         query = self.get_partition_count_query(nullable_columns, table_name, where)
         partitions: dict[int, RowPartition] = {}
+        cov_query = CovariateQuery(table_name, self).suppress_count(suppress_count)
+        if sample_count:
+            cov_query.sample_count(sample_count)
         for partition_nonnulls in powerset(nullable_columns):
             partition_def = NullPatternPartition(columns, partition_nonnulls)
-            partitions[partition_def.index] = self._get_row_partition(
-                table_name,
-                partition_def,
-                suppress_count=suppress_count,
-                sample_count=sample_count,
+            cov_query.columns(
+                partition_def.included_numeric,
+            ).predicates(
+                partition_def.predicates,
+            ).group_by(
+                partition_def.group_by_clause,
+            ).constants(
+                partition_def.constants,
+            ).constant_clauses(
+                partition_def.constant_clauses,
+            )
+            partitions[partition_def.index] = RowPartition(
+                cov_query.get(),
+                partition_def.included_numeric,
+                partition_def.included_choice,
+                partition_def.excluded,
+                partition_def.nones,
+                [],
             )
         if not self._execute_partition_queries(connection, partitions):
             return None
@@ -505,7 +487,6 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
                         table,
                         columns,
                         nullable_columns,
-                        where=f"WHERE {self.SUPPRESS_COUNT} < count",
                         name_suffix="sampled and suppressed",
                         suppress_count=self.SUPPRESS_COUNT,
                         sample_count=self.SAMPLE_COUNT,
@@ -517,7 +498,6 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
                         table,
                         columns,
                         nullable_columns,
-                        where=f"WHERE {self.SUPPRESS_COUNT} < count",
                         name_suffix="suppressed",
                         suppress_count=self.SUPPRESS_COUNT,
                     )

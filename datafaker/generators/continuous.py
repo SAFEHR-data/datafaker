@@ -1,8 +1,9 @@
 """Generator factories for making generators of continuous distributions."""
 
 import itertools
+from abc import abstractmethod
 from collections.abc import Iterable, Sequence
-from typing import Any, Callable
+from typing import Any
 
 from sqlalchemy import Column, Engine, RowMapping, text
 from sqlalchemy.exc import SQLAlchemyError
@@ -355,27 +356,53 @@ class MultivariateNormalGenerator(Generator):
         return default
 
 
+class MultivariateNormalGeneratorFactoryBase(GeneratorFactory):
+    """Generator factory that makes distributions and maybe partitions."""
+
+    @abstractmethod
+    def query_predicate(self, column: Column) -> str:
+        """Get the SQL expression for whether this column should be queried."""
+
+    @abstractmethod
+    def query_var(self, column: str) -> str:
+        """Get the SQL expression of the value to query for this column."""
+
+
 # pylint: disable=too-many-instance-attributes
 class CovariateQuery:
     """Query-constructing object for making a covariate matrix."""
 
-    def __init__(self, table: str, columns: Sequence[Column]) -> None:
+    def __init__(
+        self,
+        table: str,
+        factory: MultivariateNormalGeneratorFactoryBase,
+    ) -> None:
         """
         Initialize the query for the basics for multivariate normal/lognormal parameters.
 
         :param table: The name of the table to be queried.
-        :param columns: The columns in the multivariate distribution.
+        :param factory: The generator factory, perhaps with overridden
+        ``query_var`` and ``query_predicate`` methods.
         """
         self.table = table
-        self.columns = columns
+        self._columns: Sequence[Column] = []
         self._predicates: Iterable[str] = []
         self._group_by_clause = ""
         self._constant_clauses = ""
         self._constants = ""
         self._suppress_count = 1
         self._sample_count: int | None = None
-        self._var_fn = lambda x: x
+        self._factory = factory
         self._predicate_fn = lambda x: x + " IS NOT NULL"
+
+    def columns(self, cols: Sequence[Column]) -> Self:
+        """
+        Set the included columns.
+
+        :param cols: The columns in the multivariate distribution.
+        """
+        self._columns = cols
+        return self
 
     def suppress_count(self, count: int) -> Self:
         """
@@ -384,7 +411,7 @@ class CovariateQuery:
         No set of categories will be included in the results that have
         this many or fewer rows in the source.
 
-        :param suppress_count: a group smaller than this will be suppressed.
+        :param count: a group smaller than this will be suppressed.
         """
         self._suppress_count = count
         return self
@@ -395,7 +422,7 @@ class CovariateQuery:
 
         This many rows will be sampled at random from this partition.
 
-        :param sample_count: this many samples will be taken from this partition.
+        :param count: this many samples will be taken from this partition.
         """
         self._sample_count = count
         return self
@@ -439,51 +466,28 @@ class CovariateQuery:
         self._constants = constants
         return self
 
-    def query_var_fn(self, fn: Callable[[str], str]) -> Self:
-        """
-        Set a function to convert a column name into the value we want.
-
-        For example, adding ``LN()`` around the name if we want log-normal distributions.
-
-        :param fn: A function taking a column name and returning a SQL expression.
-        """
-        self._var_fn = fn
-        return self
-
-    def query_predicate_fn(self, fn: Callable[[Column], str]) -> Self:
-        """
-        Set a function to make a predicate for whether the value should be used.
-
-        For example, adding ``IS NOT NULL`` after the name if we want log-normal distributions.
-
-        :param fn: A function to convert a column into a boolean SQL
-        expression for whether the value should be used.
-        """
-        self._predicate_fn = fn
-        return self
-
     def get(self) -> str:
         """
         Get the SQL query.
 
         :return: The SQL query for this partition.
         """
-        means = "".join(f", _q.m{i}" for i in range(len(self.columns)))
+        means = "".join(f", _q.m{i}" for i in range(len(self._columns)))
         covs = "".join(
             (
                 f", (_q.s{ix}_{iy} - _q.count * _q.m{ix} * _q.m{iy})"
                 f"/NULLIF(_q.count - 1, 0) AS c{ix}_{iy}"
             )
-            for iy in range(len(self.columns))
+            for iy in range(len(self._columns))
             for ix in range(iy + 1)
         )
         subquery = self._inner_query()
         # if there are any numeric columns we need at least
         # two rows to make any (co)variances at all
         suppress_clause = (
-            f" WHERE {self._suppress_count} < _q.count" if self.columns else ""
+            f" WHERE {self._suppress_count} < _q.count" if self._columns else ""
         )
-        rank = len(self.columns)
+        rank = len(self._columns)
         return (
             f"SELECT {rank} AS rank{self._constant_clauses}, _q.count AS count{means}{covs}"
             f" FROM ({self._middle_query(subquery)})"
@@ -493,7 +497,7 @@ class CovariateQuery:
     def _inner_query(self) -> str:
         """Get the rows from the table that we are interested in."""
         preds = itertools.chain(
-            (self._predicate_fn(col) for col in self.columns),
+            (self._factory.query_predicate(col) for col in self._columns),
             self._predicates,
         )
         where = " AND ".join(preds) if preds else ""
@@ -509,13 +513,16 @@ class CovariateQuery:
     def _middle_query(self, inner_query: str) -> str:
         """Get the basic statistics (and constants) from the inner query."""
         multiples = "".join(
-            f", SUM({self._var_fn(colx.name)} * {self._var_fn(coly.name)}) AS s{ix}_{iy}"
-            for iy, coly in enumerate(self.columns)
-            for ix, colx in enumerate(self.columns[: iy + 1])
+            (
+                f", SUM({self._factory.query_var(colx.name)}"
+                f" * {self._factory.query_var(coly.name)}) AS s{ix}_{iy}"
+            )
+            for iy, coly in enumerate(self._columns)
+            for ix, colx in enumerate(self._columns[: iy + 1])
         )
         avgs = "".join(
-            f", AVG({self._var_fn(col.name)}) AS m{i}"
-            for i, col in enumerate(self.columns)
+            f", AVG({self._factory.query_var(col.name)}) AS m{i}"
+            for i, col in enumerate(self._columns)
         )
         return (
             f"SELECT COUNT(*) AS count{multiples}{avgs}{self._constants}"
@@ -523,7 +530,7 @@ class CovariateQuery:
         )
 
 
-class MultivariateNormalGeneratorFactory(GeneratorFactory):
+class MultivariateNormalGeneratorFactory(MultivariateNormalGeneratorFactoryBase):
     """Normal distribution generator factory."""
 
     def function_name(self) -> str:
@@ -552,16 +559,8 @@ class MultivariateNormalGeneratorFactory(GeneratorFactory):
                 return []
         column_names = [c.name for c in columns]
         table = columns[0].table.name
-        query = (
-            CovariateQuery(table, columns)
-            .query_var_fn(
-                self.query_var,
-            )
-            .query_predicate_fn(
-                self.query_predicate,
-            )
-            .get()
-        )
+        cq = CovariateQuery(table, self).columns(columns)
+        query = cq.get()
         with engine.connect() as connection:
             try:
                 covariates = connection.execute(text(query)).mappings().first()
