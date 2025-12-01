@@ -325,6 +325,7 @@ class NullPatternPartition:
                         self.group_by_clause = " GROUP BY " + col_name
                     self.constant_clauses += f", _q.{col_name} AS k{index}"
                     self.constants += ", " + col_name
+                self.predicates.append(f"{col_name} IS NOT NULL")
             else:
                 self.excluded[col_name] = f"{col_name} IS NULL"
                 self.predicates.append(f"{col_name} IS NULL")

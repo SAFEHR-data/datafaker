@@ -332,6 +332,39 @@ class NullPartitionedTests(GeneratesDBTestCase):
         self.assertAlmostEqual(stats.fowl.x_mean(), 11.2, delta=8.0)
         self.assertAlmostEqual(stats.fowl.x_var(), 1.24, delta=0.6)
 
+    def test_null_partitioned_grouped_defines_all_its_constants(self) -> None:
+        """Test EAV for all columns with sampled and suppressed generation."""
+        with self._get_cmd({}) as gc:
+            self.merge_columns(
+                gc,
+                "measurement",
+                [
+                    "type",
+                    "first_value",
+                    "second_value",
+                    "third_value",
+                ],
+            )
+            proposals = self._propose(gc)
+            dist_to_choose = (
+                "null-partitioned grouped_multivariate_normal [sampled and suppressed]"
+            )
+            self.assertIn(dist_to_choose, proposals)
+            prop = proposals[dist_to_choose]
+            gc.do_compare(str(prop[0]))
+            gc.do_set(str(prop[0]))
+            gc.do_quit("")
+            self.set_configuration(gc.config)
+            src_stats = self.get_src_stats(gc.config)
+            results = [result for ss in src_stats.values() for result in ss["results"]]
+            constants = [
+                v
+                for result in results
+                for k, v in result.items()
+                if k[0] == "k" and k[1:].isdecimal()
+            ]
+            self.assertNotIn(None, constants)
+
     def test_create_with_null_partitioned_grouped_sampled_only(self) -> None:
         """Test EAV for all columns with sampled generation but no suppression."""
         table_name = "measurement"
