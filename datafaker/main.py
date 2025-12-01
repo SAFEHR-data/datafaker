@@ -334,13 +334,6 @@ def make_stats(
 
 @app.command()
 def make_tables(
-    config_file: Optional[str] = Option(
-        None,
-        help=(
-            "The configuration file, used if you want"
-            " an orm.yaml lacking data for the ignored tables"
-        ),
-    ),
     orm_file: str = Option(ORM_FILENAME, help="Path to write the ORM yaml file to"),
     force: bool = Option(
         False, "--force", "-f", help="Overwrite any existing orm yaml file."
@@ -357,11 +350,10 @@ def make_tables(
     if not force:
         _check_file_non_existence(orm_file_path)
 
-    config = read_config_file(config_file) if config_file is not None else {}
     settings = get_settings()
     src_dsn: str = _require_src_db_dsn(settings)
 
-    content = make_tables_file(src_dsn, settings.src_schema, config)
+    content = make_tables_file(src_dsn, settings.src_schema)
     orm_file_path.write_text(content, encoding="utf-8")
     logger.debug("%s created.", orm_file)
 
@@ -449,7 +441,7 @@ def configure_generators(
         config = yaml.load(
             config_file_path.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader
         )
-    metadata = load_metadata(orm_file, config)
+    metadata = load_metadata(orm_file)
     config_updated = update_config_generators(
         src_dsn, settings.src_schema, metadata, config, spec_path=spec
     )

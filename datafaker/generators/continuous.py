@@ -388,8 +388,7 @@ class CovariateQuery:
         self._columns: Sequence[Column] = []
         self._predicates: Iterable[str] = []
         self._group_by_clause = ""
-        self._constant_clauses = ""
-        self._constants = ""
+        self._constant_clauses: dict[int, Column] = {}
         self.suppress_count = 1
         self._sample_count: int | None = None
         self._factory = factory
@@ -445,26 +444,54 @@ class CovariateQuery:
         self._group_by_clause = clause
         return self
 
-    def constant_clauses(self, clause: str) -> Self:
+    def constant_clauses(self, clauses: dict[int, Column]) -> Self:
         """
         Set constant clauses.
 
-        :param constant_clauses: Extra output columns in the outer SELECT clause, such
-        as ", _q.column_one AS k1, _q.column_two AS k2". Note the initial comma.
+        :param constant_clauses: Extra output columns in the outer SELECT clause.
+        This is in the form of a dict from an integer index to the name of the
+        column being extracted. The index is the position of this constant in
+        the list of non-null outputs.
         """
-        self._constant_clauses = clause
+        self._constant_clauses = clauses
         return self
 
-    def constants(self, constants: str) -> Self:
+    def _get_constants_and_joins(self) -> tuple[str, str]:
         """
-        Set output constants to be selected alongside the actual results.
+        Extra JOINs to give names to foreign keys.
 
-        :param constants: Extra output columns in the inner SELECT clause. Used to
-        deliver columns to the outer select, such as ", column_one, column_two".
-        Note the initial comma.
+        This enables information governance people can understand the results better.
+        :return: A pair of strings; one is constants in the SELECT clause, the second is
+        JOIN clauses to join tables to the outer query in order to make names appear
+        in the output.
         """
-        self._constants = constants
-        return self
+        named_tables = {"concept": "concept_name"}
+        col_to_named_fks = {
+            col.name: [
+                fk.column
+                for fk in col.foreign_keys
+                if fk.column.table.name in named_tables
+            ]
+            for col in self._constant_clauses.values()
+        }
+        col_to_named_fk = {col: fks[0] for col, fks in col_to_named_fks.items() if fks}
+        name_joins = ""
+        constants = ""
+        for index, col in self._constant_clauses.items():
+            col_name = col.name
+            constants += f", _q.{col_name} AS k{index}"
+            if col_name in col_to_named_fk:
+                fk_target = col_to_named_fk[col_name]
+                fk_target_table = fk_target.table.name
+                name_joins += (
+                    f" JOIN {fk_target_table} AS _j{index}"
+                    f" ON _q.{col_name}=_j{index}.{fk_target.name}"
+                )
+                constants += (
+                    f", _j{index}.{named_tables[fk_target_table]}"
+                    f" AS k{index}_{col_name}__name"
+                )
+        return name_joins, constants
 
     def get(self) -> str:
         """
@@ -488,10 +515,11 @@ class CovariateQuery:
             f" WHERE {self.suppress_count} < _q.count" if self._columns else ""
         )
         rank = len(self._columns)
+        name_joins, constants = self._get_constants_and_joins()
         return (
-            f"SELECT {rank} AS rank{self._constant_clauses}, _q.count AS count{means}{covs}"
+            f"SELECT {rank} AS rank{constants}, _q.count AS count{means}{covs}"
             f" FROM ({self._middle_query(subquery)})"
-            f" AS _q{suppress_clause}"
+            f" AS _q{name_joins}{suppress_clause}"
         )
 
     def _inner_query(self) -> str:
@@ -524,8 +552,9 @@ class CovariateQuery:
             f", AVG({self._factory.query_var(col.name)}) AS m{i}"
             for i, col in enumerate(self._columns)
         )
+        constants = "".join(", " + col.name for col in self._constant_clauses.values())
         return (
-            f"SELECT COUNT(*) AS count{multiples}{avgs}{self._constants}"
+            f"SELECT COUNT(*) AS count{multiples}{avgs}{constants}"
             f" FROM {inner_query}{self._group_by_clause}"
         )
 

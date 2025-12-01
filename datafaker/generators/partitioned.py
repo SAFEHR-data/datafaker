@@ -306,8 +306,7 @@ class NullPatternPartition:
         self.included_numeric: list[Column] = []
         self.included_choice: dict[int, str] = {}
         self.group_by_clause = ""
-        self.constant_clauses = ""
-        self.constants = ""
+        self.constant_clauses: dict[int, Column] = {}
         self.excluded: dict[str, str] = {}
         self.predicates: list[str] = []
         self.nones: dict[int, None] = {}
@@ -323,8 +322,7 @@ class NullPatternPartition:
                         self.group_by_clause += ", " + col_name
                     else:
                         self.group_by_clause = " GROUP BY " + col_name
-                    self.constant_clauses += f", _q.{col_name} AS k{index}"
-                    self.constants += ", " + col_name
+                    self.constant_clauses[index] = column
                 self.predicates.append(f"{col_name} IS NOT NULL")
             else:
                 self.excluded[col_name] = f"{col_name} IS NULL"
@@ -418,8 +416,6 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
                 partition_def.predicates,
             ).group_by(
                 partition_def.group_by_clause,
-            ).constants(
-                partition_def.constants,
             ).constant_clauses(
                 partition_def.constant_clauses,
             )

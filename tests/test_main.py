@@ -259,33 +259,28 @@ class TestCLI(DatafakerTestCase):
     @patch("datafaker.main.Path")
     @patch("datafaker.main.make_tables_file")
     @patch("datafaker.main.get_settings")
-    @patch("datafaker.main.read_config_file")
     def test_make_tables(
         self,
-        mock_config_yaml_file: MagicMock,
         mock_get_settings: MagicMock,
         mock_make_tables_file: MagicMock,
         mock_path: MagicMock,
     ) -> None:
         """Test the make-tables sub-command."""
 
-        mock_config = MagicMock()
         mock_path.return_value.exists.return_value = False
         mock_get_settings.return_value = get_test_settings()
         mock_make_tables_file.return_value = "some text"
-        mock_config_yaml_file.return_value = mock_config
 
         result = runner.invoke(
             app,
             [
                 "make-tables",
-                "--config-file=config.yaml",
             ],
             catch_exceptions=False,
         )
 
         mock_make_tables_file.assert_called_once_with(
-            "postgresql://suser:spassword@shost:5432/sdbname", None, mock_config
+            "postgresql://suser:spassword@shost:5432/sdbname", None
         )
         mock_path.return_value.write_text.assert_called_once_with(
             "some text", encoding="utf-8"
@@ -364,7 +359,6 @@ class TestCLI(DatafakerTestCase):
                 mock_make_tables.assert_called_once_with(
                     mock_get_settings.return_value.src_dsn,
                     mock_get_settings.return_value.src_schema,
-                    {},
                 )
                 mock_path.return_value.write_text.assert_called_once_with(
                     mock_tables_output, encoding="utf-8"
