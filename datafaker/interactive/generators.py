@@ -283,9 +283,7 @@ information about the columns in the current table. Use 'peek',
                             {
                                 "name": cq_key,
                                 "query": cq["query"],
-                                "comments": [cq["comment"]]
-                                if "comment" in cq and cq["comment"]
-                                else [],
+                                "comments": cq.get("comments", []),
                             }
                         )
                     rg: dict[str, Any] = {

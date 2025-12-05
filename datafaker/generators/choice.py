@@ -151,14 +151,14 @@ class ChoiceGenerator(Generator):
             "a": self.values,
         }
 
-    def custom_queries(self) -> dict[str, dict[str, str]]:
+    def custom_queries(self) -> dict[str, dict[str, Any]]:
         """Get the queries the generators need to call."""
         qs = super().custom_queries()
         return {
             **qs,
             f"auto__{self.table_name}__{self.column_name}": {
                 "query": self._query,
-                "comment": self._comment,
+                "comments": [self._comment],
             },
         }
 

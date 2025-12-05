@@ -44,6 +44,7 @@ class RowPartition:
     """A partition where all the rows have the same pattern of NULLs."""
 
     query: str
+    query_comment: str
     # list of numeric columns
     included_numeric: list[Column]
     # map of indices to column names that are being grouped by.
@@ -56,30 +57,85 @@ class RowPartition:
     # map of constant outputs that need to be inserted into the
     # list of included column values (so once the generator has
     # been run and the included_choice values have been
-    # added): {index: value}
+    # added): {index: None}. This is adding excluded column
+    # values to the output.
     constant_outputs: dict[int, Any]
     # The actual covariates from the source database
     covariates: Sequence[RowMapping]
 
-    def comment(self) -> str:
-        """Make an appropriate comment for this partition."""
+    def overall_comment(self) -> str:
+        """Get a comment about the row generator that uses this query."""
+        columns = (
+            [c.name for c in self.included_numeric]
+            + list(self.included_choice.values())
+            + list(self.excluded_columns.keys())
+        )
+        return self.query_comment.format(columns=text_list(columns))
+
+    def constant_comments(self) -> list[str]:
+        """Get comments about the kN values in the results."""
+        return [
+            f"k{index} is the value in column {col}."
+            for index, col in self.included_choice.items()
+        ]
+
+    def comments(self) -> list[str]:
+        """Make a appropriate comments for this partition."""
         caveat = ""
         if self.included_choice:
-            caveat = f" (for each possible value of {text_list(self.included_choice.values())})"
+            icvs = self.included_choice.values()
+            if len(icvs) == 1:
+                caveat = f" for each value found in the column {list(icvs)[0]}"
+            else:
+                caveat = f" for each combination of values found in the columns {text_list(icvs)}"
         if not self.included_numeric:
-            return f"Number of rows for which {text_list(self.excluded_columns.values())}{caveat}"
+            return [
+                self.overall_comment(),
+                f"Number of rows for which {text_list(self.excluded_columns.values())}{caveat}",
+            ] + self.constant_comments()
         if not self.excluded_columns:
             where = ""
         else:
             where = f" where {text_list(self.excluded_columns.values())}"
         if len(self.included_numeric) == 1:
-            return (
-                f"Mean and variance for column {self.included_numeric[0].name}{where}."
+            return [
+                self.overall_comment(),
+                "These results are the mean (m0) and variance (c0_0) for the numbers"
+                f" in the column {self.included_numeric[0].name}{where}{caveat}.",
+            ] + self.constant_comments()
+        cov_explainers = [
+            [
+                f"m{index} refers to the mean"
+                f" of the values in the column {col_name.name}",
+                f"c{index}_{index} refers to the variance"
+                f" of the values in the column {col_name.name}",
+            ]
+            for index, col_name in enumerate(self.included_numeric)
+        ]
+        if len(self.included_numeric) == 2:
+            cov_explainers.append(
+                [
+                    "c0_1 refers to the covariance between columns"
+                    f" {self.included_numeric[0].name} and {self.included_numeric[1].name}"
+                ]
+            )
+        else:
+            cov_explainers.append(
+                [
+                    "The cN_M results refer to the covariances between these numeric columns"
+                ]
             )
         return (
-            "Means and covariate matrix for the columns "
-            f"{text_list(col.name for col in self.included_numeric)}{where}{caveat} so that we can"
-            " produce the relatedness between these in the fake data."
+            [
+                self.overall_comment(),
+                "These results are the means (mN) and covariate matrix (cN_M)"
+                " for the columns"
+                f" {text_list(col.name for col in self.included_numeric)}"
+                f"{where}{caveat} so that we can"
+                " produce the relatedness between these in the fake data.",
+            ]
+            + [exp for ce in cov_explainers for exp in ce]
+            + self.constant_comments()
         )
 
 
@@ -99,8 +155,8 @@ class PartitionCountQuery:
         self,
         connection: Connection,
         query: str,
-        table_name: str,
         nullable_columns: Iterable[NullableColumn],
+        overall_comment: str,
     ) -> None:
         """
         Initialise the partition count query.
@@ -113,11 +169,15 @@ class PartitionCountQuery:
         self.query = query
         rows = connection.execute(text(query)).mappings().fetchall()
         self.results = [dict(row) for row in rows]
-        self.comment = (
-            "Number of rows for each combination of the columns"
-            f" { {nc.column.name for nc in nullable_columns} }"
-            f" of the table {table_name} being null"
-        )
+        self.comments = [
+            overall_comment,
+            "These results list the number of rows in the source sample that have each"
+            ' combination of these columns being NULL. Each result has an "index", which'
+            ' refers to the combination of NULLs and a "count", which refers to the'
+            " number of rows in the source sample with this combination."
+            ' The "index" is 0 if all the columns are NULL, otherwise it is the'
+            " sum of the following values for those columns that are not NULL:",
+        ] + [f"{nc.column.name}: {nc.bitmask}" for nc in nullable_columns]
 
 
 class NullPartitionedNormalGenerator(Generator):
@@ -214,7 +274,7 @@ class NullPartitionedNormalGenerator(Generator):
         """Get the queries the generators need to call."""
         partitions = {
             f"auto__cov__{self._query_name}__alt_{index}": {
-                "comment": partition.comment(),
+                "comments": partition.comments(),
                 "query": partition.query,
             }
             for index, partition in self._partitions.items()
@@ -223,7 +283,7 @@ class NullPartitionedNormalGenerator(Generator):
             return partitions
         return {
             self._count_query_name(): {
-                "comment": self._partition_count_query.comment,
+                "comments": self._partition_count_query.comments,
                 "query": self._partition_count_query.query,
             },
             **partitions,
@@ -359,6 +419,18 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
         """Return the expression we are querying for in this column."""
         return column
 
+    def query_comment(self) -> str:
+        """
+        Return the human-readable comment for this generator.
+
+        Should have a ``{columns}`` reference to the list of columns,
+        which will be a string like ``apples, pears and bananas``.
+        """
+        return (
+            "This query contributes to the multivariate normal generator"
+            " that covers the columns {columns}."
+        )
+
     def get_nullable_columns(self, columns: list[Column]) -> list[NullableColumn]:
         """Get a list of nullable columns together with bitmasks."""
         out: list[NullableColumn] = []
@@ -406,7 +478,6 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
         where = ""
         if 1 < cov_query.suppress_count:
             where = f' WHERE {cov_query.suppress_count} < "count"'
-        query = self.get_partition_count_query(nullable_columns, cov_query.table, where)
         partitions: dict[int, RowPartition] = {}
         for partition_nonnulls in powerset(nullable_columns):
             partition_def = NullPatternPartition(columns, partition_nonnulls)
@@ -420,15 +491,17 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
                 partition_def.constant_clauses,
             )
             partitions[partition_def.index] = RowPartition(
-                cov_query.get(),
-                partition_def.included_numeric,
-                partition_def.included_choice,
-                partition_def.excluded,
-                partition_def.nones,
-                [],
+                query=cov_query.get(),
+                query_comment=cov_query.get_query_comment(),
+                included_numeric=partition_def.included_numeric,
+                included_choice=partition_def.included_choice,
+                excluded_columns=partition_def.excluded,
+                constant_outputs=partition_def.nones,
+                covariates=[],
             )
         if not self._execute_partition_queries(connection, partitions):
             return None
+        query = self.get_partition_count_query(nullable_columns, cov_query.table, where)
         return NullPartitionedNormalGenerator(
             f"{cov_query.table}__{columns[0].name}",
             partitions,
@@ -437,8 +510,10 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
             partition_count_query=PartitionCountQuery(
                 connection,
                 query,
-                cov_query.table,
                 nullable_columns,
+                cov_query.get_query_comment().format(
+                    columns=text_list(c.name for c in columns)
+                ),
             ),
         )
 
@@ -513,7 +588,8 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
         """
         found_nonzero = False
         for rp in partitions.values():
-            covs = connection.execute(text(rp.query)).mappings().fetchall()
+            query = rp.query
+            covs = connection.execute(text(query)).mappings().fetchall()
             if not covs or covs.count == 0 or covs[0]["count"] is None:
                 rp.covariates = self.EMPTY_RESULT
             else:
@@ -544,3 +620,10 @@ class NullPartitionedLogNormalGeneratorFactory(NullPartitionedNormalGeneratorFac
     def query_var(self, column: str) -> str:
         """Get the variable or expression we are querying for this column."""
         return f"LN({column})"
+
+    def query_comment(self) -> str:
+        """Return the human-readable comment for this generator."""
+        return (
+            "This query contributes to the multivariate lognormal generator"
+            " that covers the columns {columns}."
+        )

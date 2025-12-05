@@ -86,7 +86,7 @@ class Generator(ABC):
         """
         return {}
 
-    def custom_queries(self) -> dict[str, dict[str, str]]:
+    def custom_queries(self) -> dict[str, dict[str, Any]]:
         """
         Get the SQL queries to add to SRC_STATS.
 
@@ -95,7 +95,7 @@ class Generator(ABC):
 
         For example {"myquery": {
             "query": "SELECT one, too AS two FROM mytable WHERE too > 1",
-            "comment": "big enough one and two from table mytable"
+            "comments": ["big enough one and two from table mytable"]
         }}
         will populate SRC_STATS["myquery"]["results"][0]["one"]
         and SRC_STATS["myquery"]["results"][0]["two"]
@@ -209,7 +209,7 @@ class PredefinedGenerator(Generator):
                     logger.debug("Custom query %s is '%s'", name, query)
                     self._custom_queries[name] = {
                         "query": query,
-                        "comment": comments[0] if comments else None,
+                        "comments": comments,
                     }
 
     def function_name(self) -> str:
@@ -224,7 +224,7 @@ class PredefinedGenerator(Generator):
         """Get the query fragments the generators need to call."""
         return self._select_aggregate_clauses
 
-    def custom_queries(self) -> dict[str, dict[str, str]]:
+    def custom_queries(self) -> dict[str, dict[str, Any]]:
         """Get the queries the generators need to call."""
         return self._custom_queries
 

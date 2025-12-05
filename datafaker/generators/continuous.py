@@ -332,10 +332,10 @@ class MultivariateNormalGenerator(Generator):
         cols = ", ".join(self._columns)
         return {
             f"auto__cov__{self._table}": {
-                "comment": (
+                "comments": [
                     f"Means and covariate matrix for the columns {cols},"
                     " so that we can produce the relatedness between these in the fake data."
-                ),
+                ],
                 "query": self._query,
             }
         }
@@ -367,6 +367,15 @@ class MultivariateNormalGeneratorFactoryBase(GeneratorFactory):
     def query_var(self, column: str) -> str:
         """Get the SQL expression of the value to query for this column."""
 
+    @abstractmethod
+    def query_comment(self) -> str:
+        """
+        Return the human-readable comment for this generator.
+
+        Should have a ``{columns}`` reference to the list of columns,
+        which will be a string like ``apples, pears and bananas``.
+        """
+
 
 # pylint: disable=too-many-instance-attributes
 class CovariateQuery:
@@ -393,6 +402,15 @@ class CovariateQuery:
         self._sample_count: int | None = None
         self._factory = factory
         self._predicate_fn = lambda x: x + " IS NOT NULL"
+
+    def get_query_comment(self) -> str:
+        """
+        Return the human-readable comment for this generator.
+
+        Should have a ``{columns}`` reference to the list of columns,
+        which will be a string like ``apples, pears and bananas``.
+        """
+        return self._factory.query_comment()
 
     def columns(self, cols: Sequence[Column]) -> Self:
         """
@@ -465,6 +483,7 @@ class CovariateQuery:
         JOIN clauses to join tables to the outer query in order to make names appear
         in the output.
         """
+        # TODO get this from config.yaml
         named_tables = {"concept": "concept_name"}
         col_to_named_fks = {
             col.name: [
@@ -574,6 +593,13 @@ class MultivariateNormalGeneratorFactory(MultivariateNormalGeneratorFactoryBase)
         """Get the SQL expression of the value to query for this column."""
         return column
 
+    def query_comment(self) -> str:
+        """Return the human-readable comment for this generator."""
+        return (
+            "This query provides the covariate matrix for a multivariate"
+            " normal distribution over the columns {columns}."
+        )
+
     def get_generators(
         self, columns: list[Column], engine: Engine
     ) -> Sequence[Generator]:
@@ -623,3 +649,10 @@ class MultivariateLogNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
     def query_var(self, column: str) -> str:
         """Get the expression to query for, for this column."""
         return f"LN({column})"
+
+    def query_comment(self) -> str:
+        """Return the human-readable comment for this generator."""
+        return (
+            "This query provides the covariate matrix for a multivariate"
+            " lognormal distribution over the columns {columns}."
+        )
