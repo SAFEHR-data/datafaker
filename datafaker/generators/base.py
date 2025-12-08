@@ -352,7 +352,7 @@ class Buckets:
 class MultiGeneratorFactory(GeneratorFactory):
     """A composite factory."""
 
-    def __init__(self, factories: list[GeneratorFactory]):
+    def __init__(self, *factories: GeneratorFactory):
         """Initialise a MultiGeneratorFactory."""
         super().__init__()
         self.factories = factories

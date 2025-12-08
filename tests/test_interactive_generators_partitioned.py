@@ -450,3 +450,48 @@ class NullPartitionedTests(GeneratesDBTestCase):
             foods = {row.third_value for row in rows}
             self.assert_subset(foods, {"ham", "eggs", "cheese"})
             self.assertLess(len(foods), 3)
+
+    def test_named_foreign_keys(self) -> None:
+        """Test foreign keys gain names in source stats."""
+        with self._get_cmd(
+            {
+                "tables": {
+                    "measurement_type": {
+                        "name_column": "name",
+                    },
+                },
+            }
+        ) as gc:
+            self.merge_columns(
+                gc,
+                "measurement",
+                [
+                    "type",
+                    "first_value",
+                    "second_value",
+                    "third_value",
+                ],
+            )
+            proposals = self._propose(gc)
+            dist_to_choose = "null-partitioned grouped_multivariate_normal"
+            self.assertIn(dist_to_choose, proposals)
+            prop = proposals[dist_to_choose]
+            gc.do_compare(str(prop[0]))
+            gc.do_set(str(prop[0]))
+            gc.do_quit("")
+            self.set_configuration(gc.config)
+            src_stats = self.get_src_stats(gc.config)
+            with self.sync_engine.connect() as conn:
+                stmt = select(self.metadata.tables["measurement_type"])
+                rows = conn.execute(stmt).fetchall()
+                mt = {row.id: row.name for row in rows}
+                results = [
+                    result for ss in src_stats.values() for result in ss["results"]
+                ]
+                ids = set()
+                for result in results:
+                    if "k0" in result:
+                        k0 = result["k0"]
+                        ids.add(k0)
+                        self.assertEqual(result["k0_type__name"], mt[k0])
+                self.assertSetEqual(ids, set(mt.keys()))

@@ -509,7 +509,7 @@ def _get_generator_for_table(
         class_name=table.name.title() + "Generator",
         nonnull_columns=nonnull_columns,
         column_choices=column_choices,
-        rows_per_pass=get_property(table_config, "num_rows_per_pass", 1),
+        rows_per_pass=get_property(table_config, "num_rows_per_pass", int, 1),
         unique_constraints=constraints,
     )
 

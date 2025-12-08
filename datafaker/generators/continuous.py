@@ -2,7 +2,7 @@
 
 import itertools
 from abc import abstractmethod
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
 from sqlalchemy import Column, Engine, RowMapping, text
@@ -376,6 +376,17 @@ class MultivariateNormalGeneratorFactoryBase(GeneratorFactory):
         which will be a string like ``apples, pears and bananas``.
         """
 
+    def get_named_tables(self) -> Mapping[str, str]:
+        """
+        Get a mapping showing which tables have naming columns.
+
+        A naming column is a column that provides a nice name for the row.
+        We could call tables containing such a column as a "named table".
+        :return: A map mapping names of named tables to the names of their
+        naming columns.
+        """
+        return {}
+
 
 # pylint: disable=too-many-instance-attributes
 class CovariateQuery:
@@ -474,17 +485,19 @@ class CovariateQuery:
         self._constant_clauses = clauses
         return self
 
-    def _get_constants_and_joins(self) -> tuple[str, str]:
+    def _get_constants_and_joins(
+        self, named_tables: Mapping[str, str]
+    ) -> tuple[str, str]:
         """
         Extra JOINs to give names to foreign keys.
 
         This enables information governance people can understand the results better.
+        :param named_tables: A mapping of tables that have names to columns
+        that supply those names.
         :return: A pair of strings; one is constants in the SELECT clause, the second is
         JOIN clauses to join tables to the outer query in order to make names appear
         in the output.
         """
-        # TODO get this from config.yaml
-        named_tables = {"concept": "concept_name"}
         col_to_named_fks = {
             col.name: [
                 fk.column
@@ -534,7 +547,8 @@ class CovariateQuery:
             f" WHERE {self.suppress_count} < _q.count" if self._columns else ""
         )
         rank = len(self._columns)
-        name_joins, constants = self._get_constants_and_joins()
+        named_tables = self._factory.get_named_tables()
+        name_joins, constants = self._get_constants_and_joins(named_tables)
         return (
             f"SELECT {rank} AS rank{constants}, _q.count AS count{means}{covs}"
             f" FROM ({self._middle_query(subquery)})"

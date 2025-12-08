@@ -567,7 +567,9 @@ information about the columns in the current table. Use 'peek',
             self.generators = None
         if self.generators is None:
             columns = self._column_metadata()
-            gens = everything_factory().get_generators(columns, self.sync_engine)
+            gens = everything_factory(self.config).get_generators(
+                columns, self.sync_engine
+            )
             sorted_gens = sorted(gens, key=lambda g: g.fit(9999))
             self.generators = sorted_gens
             self.generators_valid_columns = (

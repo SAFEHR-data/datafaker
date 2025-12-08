@@ -1,8 +1,9 @@
 """Powerful generators for numbers, choices and related missingness."""
 
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from itertools import chain, combinations
-from typing import Any, Iterable, Sequence, Union
+from typing import Any, Union
 
 import sqlalchemy
 from sqlalchemy import Column, Connection, Engine, RowMapping, text
@@ -13,7 +14,7 @@ from datafaker.generators.continuous import (
     CovariateQuery,
     MultivariateNormalGeneratorFactory,
 )
-from datafaker.utils import T, logger
+from datafaker.utils import T, get_property, logger
 
 NumericType = Union[int, float]
 
@@ -430,6 +431,26 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
             "This query contributes to the multivariate normal generator"
             " that covers the columns {columns}."
         )
+
+    def get_named_tables(self) -> Mapping[str, str]:
+        """
+        Get a mapping showing which tables have naming columns.
+
+        Based on the configuration file.
+
+        :return: A map mapping names of named tables to the names of their
+        naming columns.
+        """
+        return self._named_tables
+
+    def __init__(self, config: Mapping[str, Any]) -> None:
+        """Initialize the null partitioned generator factory."""
+        tables = get_property(config, "tables", dict, {})
+        self._named_tables = {
+            table_name: table_conf["name_column"]
+            for table_name, table_conf in tables.items()
+            if isinstance(table_conf, Mapping) and "name_column" in table_conf
+        }
 
     def get_nullable_columns(self, columns: list[Column]) -> list[NullableColumn]:
         """Get a list of nullable columns together with bitmasks."""
