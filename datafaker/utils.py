@@ -442,6 +442,15 @@ def get_vocabulary_table_names(config: Mapping) -> set[str]:
     }
 
 
+def get_ignored_table_names(config: Mapping) -> set[str]:
+    """Extract the table names with a ignore: true property."""
+    return {
+        table_name
+        for (table_name, table_config) in config.get("tables", {}).items()
+        if get_flag(table_config, "ignore")
+    }
+
+
 def get_columns_assigned(
     row_generator_config: Mapping[str, Any]
 ) -> Generator[str, None, None]:

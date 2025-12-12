@@ -1,38 +1,159 @@
 """Data dumping functions."""
+from abc import ABC, abstractmethod
 import csv
 import io
-from typing import TYPE_CHECKING
 
+import pandas as pd
 import sqlalchemy
 from sqlalchemy.schema import MetaData
 
 from datafaker.utils import create_db_engine, get_sync_engine, logger
 
-if TYPE_CHECKING:
-    from _csv import Writer
+
+class TableWriter(ABC):
+    """
+    Writes a table out to a file.
+    """
+
+    EXTENSION = ".csv"
+
+    def __init__(self, metadata: MetaData, dsn: str, schema: str | None) -> None:
+        """
+        Initialize the TableWriter
+        
+        :param metadata: The metadata for our database.
+        :param dsn: The connection string for our database.
+        :param schema: The schema name for our database, or None for the default.
+        """
+        self._metadata = metadata
+        self._dsn = dsn
+        self._schema = schema
+
+    def connect(self) -> sqlalchemy.engine.Connection:
+        """Connect to the database."""
+        engine = get_sync_engine(
+            create_db_engine(self._dsn, schema_name=self._schema)
+        )
+        return engine.connect()
+
+    @abstractmethod
+    def write_file(self, table: sqlalchemy.Table, filename: str) -> bool:
+        """
+        Write the named table into the named file.
+
+        :param table: The table to output
+        :param filename: The filename of the file to write to.
+        :return: ``true`` on success, otherwise ``false``.
+        """
+
+    def write(self, table: sqlalchemy.Table) -> bool:
+        return self.write_file(table, f"{table.name}{self.EXTENSION}")
 
 
-def _make_csv_writer(file: io.TextIOBase) -> "Writer":
-    """Make the standard CSV file writer."""
-    return csv.writer(file, quoting=csv.QUOTE_MINIMAL)
+class ParquetTableWriter(TableWriter):
+    """Writes the table to a Parquet file."""
+
+    EXTENSION = ".parquet"
+
+    def write_file(self, table: sqlalchemy.Table, filename: str) -> bool:
+        """
+        Write the named table into the named file.
+        
+        :param table: The table to output
+        :param filename: The filename of the file to write to.
+        :return: ``true`` on success, otherwise ``false``.
+        """
+        with self.connect() as connection:
+            dates = [
+                str(name)
+                for name, col in table.columns.items()
+                if isinstance(
+                    col.type, sqlalchemy.types.DATE
+                ) or isinstance(col.type, sqlalchemy.types.DATETIME)
+            ]
+            df = pd.read_sql(
+                sql=f"SELECT * FROM {table.name}",
+                con=connection,
+                columns=[str(col.name) for col in table.columns.values()],
+                parse_dates=dates,
+            )
+            df.to_parquet(filename)
+        return True
 
 
-def dump_db_tables(
-    metadata: MetaData,
-    dsn: str,
-    schema: str | None,
-    table_name: str,
-    file: io.TextIOBase,
-) -> None:
-    """Output the table as CSV."""
-    if table_name not in metadata.tables:
-        logger.error("%s is not a table described in the ORM file", table_name)
-        return
-    table = metadata.tables[table_name]
-    csv_out = _make_csv_writer(file)
-    csv_out.writerow(table.columns.keys())
-    engine = get_sync_engine(create_db_engine(dsn, schema_name=schema))
-    with engine.connect() as connection:
-        result = connection.execute(sqlalchemy.select(table))
-        for row in result:
-            csv_out.writerow(row)
+class DuckDbParquetTableWriter(ParquetTableWriter):
+    """
+    Writes the table to a Parquet file using DuckDB SQL.
+
+    The Pandas method used by ParquetTableWriter currently
+    does not work with DuckDB.
+    """
+
+    def write_file(self, table: sqlalchemy.Table, filename: str) -> bool:
+        """
+        Write the named table into the named file.
+        
+        :param table: The table to output
+        :param filename: The filename of the file to write to.
+        :return: ``true`` on success, otherwise ``false``.
+        """
+        with self.connect() as connection:
+            result = connection.execute(sqlalchemy.text(
+                f"COPY {table.name} TO '{filename}' (FORMAT PARQUET)"
+            ))
+            return result is not None
+
+
+def get_parquet_table_writer(metadata: MetaData, dsn: str, schema: str | None) -> TableWriter:
+    if dsn.startswith("duckdb:"):
+        return DuckDbParquetTableWriter(metadata, dsn, schema)
+    return ParquetTableWriter(metadata, dsn, schema)
+
+
+class TableWriterIO(TableWriter):
+    """Writes the table to an output object."""
+
+    @abstractmethod
+    def write_io(self, table: sqlalchemy.Table, out: io.TextIOBase) -> bool:
+        """
+        Write the named table into the named file.
+        
+        :param table: The table to output
+        :param filename: The filename of the file to write to.
+        :return: ``true`` on success, otherwise ``false``.
+        """
+
+    def write_file(self, table: sqlalchemy.Table, filename: str) -> bool:
+        """
+        Write the named table into the named file.
+
+        :param table: The table to output
+        :param filename: The filename of the file to write to.
+        :return: ``true`` on success, otherwise ``false``.
+        """
+        with open(filename, "wt", newline="", encoding="utf-8") as out:
+            return self.write_io(table, out)
+
+
+class CsvTableWriter(TableWriterIO):
+    """Writes the table to a CSV file."""
+
+    def write_io(self, table: sqlalchemy.Table, out: io.TextIOBase) -> bool:
+        """
+        Write the named table into the named file.
+        
+        :param table: The table to output
+        :param filename: The filename of the file to write to.
+        :return: ``True`` on success, otherwise ``False``.
+        """
+        if table.name not in self._metadata.tables:
+            logger.error("%s is not a table described in the ORM file", table.name)
+            return False
+        table = self._metadata.tables[table.name]
+        csv_out = csv.writer(out, quoting=csv.QUOTE_MINIMAL)
+        csv_out.writerow(table.columns.keys())
+        with self.connect() as connection:
+            result = connection.execute(sqlalchemy.select(table))
+            for row in result:
+                csv_out.writerow(row)
+        return True

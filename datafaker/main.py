@@ -11,11 +11,11 @@ from typing import Any, Final, Optional
 import yaml
 from jsonschema.exceptions import ValidationError
 from jsonschema.validators import validate
-from sqlalchemy import MetaData
+from sqlalchemy import MetaData, Table
 from typer import Argument, Exit, Option, Typer
 
 from datafaker.create import create_db_data, create_db_tables, create_db_vocab
-from datafaker.dump import dump_db_tables
+from datafaker.dump import CsvTableWriter, ParquetTableWriter, get_parquet_table_writer
 from datafaker.interactive import (
     update_config_generators,
     update_config_tables,
@@ -34,6 +34,8 @@ from datafaker.utils import (
     conf_logger,
     generators_require_stats,
     get_flag,
+    get_ignored_table_names,
+    get_vocabulary_table_names,
     import_file,
     logger,
     read_config_file,
@@ -107,7 +109,7 @@ def load_metadata(orm_file_name: str, config: dict | None = None) -> MetaData:
     return dict_to_metadata(meta_dict, None)
 
 
-def load_metadata_for_output(orm_file_name: str, config: dict | None = None) -> Any:
+def load_metadata_for_output(orm_file_name: str, config: dict | None = None) -> MetaData:
     """Load metadata excluding any foreign keys pointing to ignored tables."""
     meta_dict = load_metadata_config(orm_file_name, config)
     return dict_to_metadata(meta_dict, config)
@@ -453,28 +455,87 @@ def configure_generators(
     logger.debug("Generators configured in %s.", config_file)
 
 
+def convert_table_names_to_tables(table_names: list[str], metadata: MetaData) -> list[Table]:
+    """
+    Convert a list of table names to SQLAlchemy Tables
+    
+    :param table_names: List of names of tables
+    :param metadata: Metadata of the database
+    :return: List of tables with names matching ``table_names``
+    """
+    failed_count = 0
+    results: list[Table] = []
+    for name in table_names:
+        table = metadata.tables.get(name, None)
+        if table is not None:
+            results.append(table)
+        else:
+            failed_count += 1
+            logger.error("%s is not the name of a table in the destination database")
+    if failed_count:
+        sys.exit(1)
+    return results
+
+
 @app.command()
 def dump_data(
     config_file: Optional[str] = Option(
-        CONFIG_FILENAME, help="Path of the configuration file to alter"
+        CONFIG_FILENAME, help="Path of the configuration file to use"
     ),
     orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
-    table: str = Argument(help="The table to dump"),
-    output: str | None = Option(None, help="output CSV file name"),
+    table: list[str] = Option(
+        default=[],
+        help="The tables to dump (default is all non-ignored, non-vocabulary tables)"
+    ),
+    output: str | None = Option(None, help="output CSV or Parquet file name or - to output to the console (only if exactly one table is given, default is to derive it from the table name)"),
+    parquet: bool = Option(False, help="Use Parquet format (default use CSV unless --output specifies a .parquet file)")
 ) -> None:
     """Dump a whole table as a CSV file (or to the console) from the destination database."""
+    if len(table) != 1 and output:
+        logger.error("Must specify exactly one table if the output name is specified")
+        sys.exit(1)
     settings = get_settings()
     dst_dsn: str = settings.dst_dsn or ""
     assert dst_dsn != "", "Missing DST_DSN setting."
     schema_name = settings.dst_schema
     config = read_config_file(config_file) if config_file is not None else {}
     metadata = load_metadata_for_output(orm_file, config)
-    if output is None:
+    mtables = convert_table_names_to_tables(table, metadata)
+    writer = CsvTableWriter(metadata, dst_dsn, schema_name)
+    if output == "-":
         if isinstance(sys.stdout, io.TextIOBase):
-            dump_db_tables(metadata, dst_dsn, schema_name, table, sys.stdout)
+            writer.write_io(mtables[0], sys.stdout)
         return
-    with open(output, "wt", newline="", encoding="utf-8") as out:
-        dump_db_tables(metadata, dst_dsn, schema_name, table, out)
+    if not mtables:
+        not_for_output = (
+            get_vocabulary_table_names(config)
+            | get_ignored_table_names(config)
+        )
+        mtables = [
+            table
+            for table in metadata.tables.values()
+            if table.name not in not_for_output
+        ]
+    if output:
+        if parquet or output.endswith(ParquetTableWriter.EXTENSION):
+            writer = get_parquet_table_writer(metadata, dst_dsn, schema_name)
+        if not writer.write_file(mtables[0], output):
+            logger.error("Could not write table %s to file %s", table, output)
+        return
+    if parquet:
+        writer = get_parquet_table_writer(metadata, dst_dsn, schema_name)
+    count_written = 0
+    failed: list[str] = []
+    for mtable in mtables:
+        if writer.write(mtable):
+            count_written += 1
+        else:
+            failed.append(mtable.name)
+    logger.info("%d files successfully written", count_written)
+    if failed:
+        logger.warning("%d files failed:", len(failed))
+        for f in failed:
+            logger.warning("Failed to write %s", f)
 
 
 @app.command()
