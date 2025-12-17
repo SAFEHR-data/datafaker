@@ -8,6 +8,7 @@ import logging
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+import re
 from types import ModuleType
 from typing import (
     Any,
@@ -489,9 +490,25 @@ def get_row_generators(
             yield (name, rg)
 
 
+_alphanumeric_re = re.compile(r"[^a-zA-Z0-9]")
+
+
+def normalize_table_name(table_name: str) -> str:
+    """Remove non alphanumeric characters from table name."""
+    name = _alphanumeric_re.sub("_", table_name)
+    if not name or not name[0].isalpha():
+        return "_" + name
+    return name
+
+
 def make_foreign_key_name(table_name: str, col_name: str) -> str:
     """Make a suitable foreign key name."""
-    return f"{table_name}_{col_name}_fkey"
+    return f"{normalize_table_name(table_name)}_{col_name}_fkey"
+
+
+def make_primary_key_name(table_name: str) -> str:
+    """Make a suitable primary key name."""
+    return f"{normalize_table_name(table_name)}_primary_key"
 
 
 def remove_vocab_foreign_key_constraints(
@@ -756,3 +773,17 @@ def generators_require_stats(config: Mapping) -> bool:
     for error in errors:
         logger.error(*error)
     return stats_required
+
+def split_foreign_key_target(fk_target: str) -> tuple[str, str]:
+    """
+    Split a foreign key target string into table and column.
+    
+    :param fk: The string, such as ``artist.artist_id`` or ``artist.parquet.artist_id``.
+    :return: A pair of strings; the table name and the column name. For example
+    ``("artist.parquet", "artist_id")``.
+    """
+    target_name_parts = fk_target.split(".")
+    return (
+        ".".join(target_name_parts[:-1]),
+        target_name_parts[-1],
+    )

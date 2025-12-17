@@ -291,7 +291,7 @@ class Buckets:
             )
             self.buckets: Sequence[int] = [0] * 10
             for rb in raw_buckets:
-                if rb.b is not None:
+                if isinstance(rb.b, Numeric) and rb.b.is_integer():
                     bucket = min(9, max(0, int(rb.b) + 1))
                     self.buckets[bucket] += rb.f / count
             self.mean = mean
@@ -406,7 +406,7 @@ class ConstantGeneratorFactory(GeneratorFactory):
     """Just the null generator."""
 
     def get_generators(
-        self, columns: list[Column], engine: Engine
+        self, columns: list[Column], _engine: Engine
     ) -> Sequence[Generator]:
         """Get the generators appropriate for these columns."""
         if len(columns) != 1:

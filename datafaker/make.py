@@ -35,6 +35,8 @@ from datafaker.utils import (
     get_sync_engine,
     get_vocabulary_table_names,
     logger,
+    make_primary_key_name,
+    split_foreign_key_target,
 )
 
 from .serialize_metadata import metadata_to_dict
@@ -211,9 +213,7 @@ def _get_default_generator(column: Column) -> RowGeneratorInfo:
                 "Can't handle multiple foreign keys for one column."
             )
         fkey = next(iter(column.foreign_keys))
-        target_name_parts = fkey.target_fullname.split(".")
-        target_table_name = ".".join(target_name_parts[:-1])
-        target_column_name = target_name_parts[-1]
+        (target_table_name, target_column_name) = split_foreign_key_target(fkey.target_fullname)
 
         variable_names = [column.name]
         generator_function = "generic.column_value_provider.column_value"
@@ -492,7 +492,7 @@ def _get_generator_for_table(
     constraints: Sequence[UniqueConstraint | _PrimaryConstraint] = unique_constraints
     if 1 < len(primary_keys):
         primary_constraint = _PrimaryConstraint(
-            columns=primary_keys, name=f"{table.name}_primary_key"
+            columns=primary_keys, name=make_primary_key_name(table.name)
         )
         constraints = unique_constraints + [primary_constraint]
     column_choices = make_column_choices(table_config)
@@ -506,7 +506,7 @@ def _get_generator_for_table(
         nonnull_columns = {str(col.name) for col in table.columns}
     table_data: TableGeneratorInfo = TableGeneratorInfo(
         table_name=table.name,
-        class_name=table.name.title() + "Generator",
+        class_name=table.name.title().replace(".", "") + "Generator",
         nonnull_columns=nonnull_columns,
         column_choices=column_choices,
         rows_per_pass=get_property(table_config, "num_rows_per_pass", int, 1),

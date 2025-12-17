@@ -487,13 +487,21 @@ def dump_data(
         default=[],
         help="The tables to dump (default is all non-ignored, non-vocabulary tables)"
     ),
-    output: str | None = Option(None, help="output CSV or Parquet file name or - to output to the console (only if exactly one table is given, default is to derive it from the table name)"),
+    output: str | None = Option(None, help="Output CSV or Parquet file name, directory to write into or - to output to the console"),
     parquet: bool = Option(False, help="Use Parquet format (default use CSV unless --output specifies a .parquet file)")
 ) -> None:
     """Dump a whole table as a CSV file (or to the console) from the destination database."""
-    if len(table) != 1 and output:
-        logger.error("Must specify exactly one table if the output name is specified")
-        sys.exit(1)
+    dir = Path(".")
+    if output:
+        if Path(output).is_dir():
+            dir = Path(output)
+            output = None
+        elif len(table) != 1:
+            logger.error(
+                "Must specify exactly one table if the output name is"
+                " specified, or specify an existing directory"
+            )
+            sys.exit(1)
     settings = get_settings()
     dst_dsn: str = settings.dst_dsn or ""
     assert dst_dsn != "", "Missing DST_DSN setting."
@@ -519,7 +527,7 @@ def dump_data(
     if output:
         if parquet or output.endswith(ParquetTableWriter.EXTENSION):
             writer = get_parquet_table_writer(metadata, dst_dsn, schema_name)
-        if not writer.write_file(mtables[0], output):
+        if not writer.write_file(mtables[0], dir / output):
             logger.error("Could not write table %s to file %s", table, output)
         return
     if parquet:
@@ -527,7 +535,7 @@ def dump_data(
     count_written = 0
     failed: list[str] = []
     for mtable in mtables:
-        if writer.write(mtable):
+        if writer.write(mtable, dir):
             count_written += 1
         else:
             failed.append(mtable.name)

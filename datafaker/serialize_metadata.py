@@ -7,8 +7,11 @@ from sqlalchemy import Column, Dialect, Engine, ForeignKey, MetaData, Table
 from sqlalchemy.dialects import oracle, postgresql
 from sqlalchemy.sql import schema, sqltypes
 
-from datafaker.utils import make_foreign_key_name
-
+from datafaker.utils import (
+    make_foreign_key_name,
+    split_foreign_key_target,
+    get_property,
+)
 TableT = dict[str, typing.Any]
 
 
@@ -307,12 +310,8 @@ def should_ignore_fk(tables_dict: dict[str, TableT], fk: str) -> bool:
     :param tables_dict: The ``tables`` value from ``config.yaml``.
     :param fk: The name of the foreign key.
     """
-    fk_bits = fk.split(".", 2)
-    if len(fk_bits) != 2:
-        return True
-    if fk_bits[0] not in tables_dict:
-        return False
-    return bool(tables_dict[fk_bits[0]].get("ignore", False))
+    (table, _column) = split_foreign_key_target(fk)
+    return get_property(tables_dict, table, bool, False)
 
 
 def _always_false(_: str) -> bool:

@@ -2,6 +2,7 @@
 from abc import ABC, abstractmethod
 import csv
 import io
+from pathlib import Path
 
 import pandas as pd
 import sqlalchemy
@@ -42,12 +43,17 @@ class TableWriter(ABC):
         Write the named table into the named file.
 
         :param table: The table to output
-        :param filename: The filename of the file to write to.
+        :param dir: The directory to write into.
         :return: ``true`` on success, otherwise ``false``.
         """
 
-    def write(self, table: sqlalchemy.Table) -> bool:
-        return self.write_file(table, f"{table.name}{self.EXTENSION}")
+    def write(self, table: sqlalchemy.Table, dir: Path) -> bool:
+        tn = table.name
+        # DuckDB tables derived from files have confusing suffixes
+        # that we should probably remove
+        tn = tn.removesuffix(".csv")
+        tn = tn.removesuffix(".parquet")
+        return self.write_file(table, dir / f"{tn}{self.EXTENSION}")
 
 
 class ParquetTableWriter(TableWriter):
@@ -99,7 +105,8 @@ class DuckDbParquetTableWriter(ParquetTableWriter):
         """
         with self.connect() as connection:
             result = connection.execute(sqlalchemy.text(
-                f"COPY {table.name} TO '{filename}' (FORMAT PARQUET)"
+                # We need the double quotes to get DuckDB to read the table not the file.
+                f"COPY \"{table.name}\" TO '{filename}' (FORMAT PARQUET)"
             ))
             return result is not None
 
