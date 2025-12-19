@@ -1,24 +1,51 @@
 """Tests for the base module."""
 import csv
-from pathlib import Path
 import tempfile
+from collections.abc import Iterable
+from pathlib import Path
+from typing import Any
+
+import pandas as pd
 
 from datafaker.dump import CsvTableWriter, get_parquet_table_writer
-import pandas as pd
-from tests.utils import RequiresDBTestCase
+from tests.utils import DuckDbTestCase, PostgresTestCase, RequiresDbTestMixin
 
 
-class DumpTests(RequiresDBTestCase):
+class DumpTests(RequiresDbTestMixin):
     """Testing configure-tables."""
 
     dump_file_path = "instrument.sql"
     database_name = "instrument"
     schema_name = "public"
 
+    def assert_equal(self, a: Any, b: Any) -> None:
+        self.assertEqual(a, b)  # pylint: disable=no-member
+
+    def assert_true(self, a: bool) -> None:
+        self.assertTrue(a)  # pylint: disable=no-member
+
+    def assert_list_equal(self, xs: Iterable, ys: Iterable) -> None:
+        self.assertListEqual(xs, ys)  # pylint: disable=no-member
+
+    def assert_timestamps_equal(self, ts1: pd.Timestamp, ts2: pd.Timestamp) -> None:
+        """
+        Assert that the timestamps are equal.
+
+        Timezone-naive timestamps are put into UTC.
+        """
+        if ts1.tz is None:
+            if ts2.tz is not None:
+                self.assert_equal(ts1.tz_localize("UTC"), ts2)
+                return
+        elif ts2.tz is None:
+            self.assert_equal(ts1, ts2.tz_localize("UTC"))
+            return
+        self.assert_equal(ts1, ts2)
+
     def test_dump_data_csv(self) -> None:
         """Test dump-data for CSV output."""
         outdir = Path(tempfile.mkdtemp("dump"))
-        writer = CsvTableWriter(self.metadata, self.dsn, None)
+        writer = CsvTableWriter(self.metadata, self.dsn, self.schema_name)
         table_name = "manufacturer"
         writer.write(self.metadata.tables[table_name], outdir)
         table_path = outdir / f"{table_name}.csv"
@@ -27,13 +54,17 @@ class DumpTests(RequiresDBTestCase):
             reader = csv.reader(table_fh)
             content = list(reader)
             self.assertListEqual(content[0], ["id", "name", "founded"])
-            self.assertListEqual(content[1], ["1", "Blender", "1951-01-08 12:05:06+00:00"])
-            self.assertListEqual(content[2], ["2", "Gibbs", "1959-03-04 15:08:09+00:00"])
+            self.assertListEqual(
+                content[1], ["1", "Blender", "1951-01-08 12:05:06+00:00"]
+            )
+            self.assertListEqual(
+                content[2], ["2", "Gibbs", "1959-03-04 15:08:09+00:00"]
+            )
 
     def test_dump_data_parquet(self) -> None:
         """Test dump-data for Parquet output."""
         outdir = Path(tempfile.mkdtemp("dump"))
-        writer = get_parquet_table_writer(self.metadata, self.dsn, None)
+        writer = get_parquet_table_writer(self.metadata, self.dsn, self.schema_name)
         table_name = "manufacturer"
         writer.write(self.metadata.tables[table_name], outdir)
         table_path = outdir / f"{table_name}.parquet"
@@ -42,8 +73,18 @@ class DumpTests(RequiresDBTestCase):
         self.assertListEqual(df.columns.to_list(), ["id", "name", "founded"])
         self.assertListEqual(df["id"].to_list(), [1, 2])
         self.assertListEqual(df["name"].to_list(), ["Blender", "Gibbs"])
-        founded = [
-            pd.Timestamp("1951-01-08 12:05:06+00:00"),
-            pd.Timestamp("1959-03-04 15:08:09+00:00"),
-        ]
-        self.assertListEqual(df["founded"].to_list(), founded)
+        self.assert_equal(len(df["founded"]), 2)
+        self.assert_timestamps_equal(
+            df["founded"][0], pd.Timestamp("1951-01-08 12:05:06+00:00")
+        )
+        self.assert_timestamps_equal(
+            df["founded"][1], pd.Timestamp("1959-03-04 15:08:09+00:00")
+        )
+
+
+class DumpTestsPostgres(DumpTests, PostgresTestCase):
+    """DumpTests against PostgreSQL."""
+
+
+class DumpTestsDuckDb(DumpTests, DuckDbTestCase):
+    """DumpTests against DuckDB."""

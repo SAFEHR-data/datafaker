@@ -1,16 +1,22 @@
 """Utilities for testing."""
 import asyncio
 import os
+import random
+import re
 import shutil
+import string
+import time
 import traceback
+from abc import ABC, abstractmethod
 from collections.abc import MutableSequence, Sequence
 from functools import lru_cache
 from pathlib import Path
 from subprocess import run
-from tempfile import mkstemp
+from tempfile import mkdtemp, mkstemp
 from typing import Any, Mapping
 from unittest import TestCase, skipUnless
 
+import duckdb
 import testing.postgresql
 import yaml
 from sqlalchemy.schema import MetaData
@@ -46,15 +52,16 @@ def get_test_settings() -> settings.Settings:
     )
 
 
-class DatafakerTestCase(TestCase):
+class DatafakerTestMixin:
     """Parent class for all TestCases in datafaker."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         """Initialize an instance of DatafakerTestCase."""
-        self.maxDiff = None  # pylint: disable=invalid-name
+        self.database = None
         super().__init__(*args, **kwargs)
 
-    def setUp(self) -> None:
+    def mixin_set_up(self) -> None:
+        """Set up but for mixins (unittest.TestCase.setUp does not super() call)."""
         settings.get_settings.cache_clear()
 
     def assertReturnCode(  # pylint: disable=invalid-name
@@ -118,8 +125,27 @@ class DatafakerTestCase(TestCase):
         self.fail(self._formatMessage(msg, standard_msg))
 
 
-@skipUnless(shutil.which("psql"), "need to find 'psql': install PostgreSQL to enable")
-class RequiresDBTestCase(DatafakerTestCase):
+class TestDatabaseBase(ABC):
+    """Abstract base class for test databases."""
+
+    @abstractmethod
+    def close(self) -> None:
+        """Tear down the test database."""
+
+    @abstractmethod
+    def open(self) -> None:
+        """Open a fresh test database (closing any previous)."""
+
+    @abstractmethod
+    def dsn(self) -> str:
+        """Get the DSN for the test database."""
+
+    @abstractmethod
+    def run_sql(self, sql_file: Path) -> None:
+        """Run the provided SQL file on the test database."""
+
+
+class RequiresDbTestMixin(DatafakerTestMixin):
     """
     A test case that only runs if PostgreSQL is installed.
     A test postgres is installed
@@ -135,25 +161,18 @@ class RequiresDBTestCase(DatafakerTestCase):
     examples_dir = Path("tests/examples")
     dump_file_path: str | None = None
     database_name: str | None = None
-    Postgresql = None
 
-    @classmethod
-    def setUpClass(cls) -> None:
-        cls.Postgresql = testing.postgresql.PostgresqlFactory(cache_initialized_db=True)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
-    @classmethod
-    def tearDownClass(cls) -> None:
-        if cls.Postgresql is not None:
-            cls.Postgresql.clear_cache()
-
-    def setUp(self) -> None:
-        super().setUp()
-        assert self.Postgresql is not None
-        self.postgresql = self.Postgresql()  # pylint: disable=not-callable
-        if self.dump_file_path is not None:
-            self.run_psql(Path(self.examples_dir) / Path(self.dump_file_path))
+    def mixin_set_up(self) -> None:
+        super().mixin_set_up()
+        assert self.database is not None, (
+            "PostgresTestCase or DuckDbTestCase should"
+            " be added (or moved left in the super class list)"
+        )
         self.engine = create_db_engine(
-            self.dsn,
+            self.database.dsn(self.database_name),
             schema_name=self.schema_name,
             use_asyncio=self.use_asyncio,
         )
@@ -161,22 +180,52 @@ class RequiresDBTestCase(DatafakerTestCase):
         self.metadata = MetaData()
         self.metadata.reflect(self.sync_engine)
 
-    def tearDown(self) -> None:
-        self.postgresql.stop()
-        super().tearDown()
-
     @property
     def dsn(self) -> str:
         """Get the database connection string."""
-        if self.database_name:
-            url = self.postgresql.url(database=self.database_name)
+        assert self.database is not None
+        return self.database.dsn(self.database_name)
+
+
+class TestPostgres(TestDatabaseBase):
+    """Postgres test database."""
+
+    Postgresql = None
+
+    @classmethod
+    def setup(cls) -> None:
+        cls.Postgresql = testing.postgresql.PostgresqlFactory(cache_initialized_db=True)
+
+    def __init__(self):
+        super().__init__()
+        self.open()
+
+    def open(self) -> None:
+        """Start the test database"""
+        self.postgresql = self.Postgresql()  # pylint: disable=not-callable
+
+    def close(self) -> None:
+        """Tear down the test database."""
+        if self.postgresql is not None:
+            self.postgresql.terminate()
+
+    @classmethod
+    def final(cls) -> None:
+        """Clean up after all testing"""
+        if cls.Postgresql is not None:
+            cls.Postgresql.clear_cache()
+
+    def dsn(self, database_name: str | None) -> str:
+        """Get the DSN for the test database."""
+        if database_name:
+            url = self.postgresql.url(database=database_name)
         else:
             url = self.postgresql.url()
         assert isinstance(url, str)
         return url
 
-    def run_psql(self, dump_file: Path) -> None:
-        """Run psql and pass dump_file_name as the --file option."""
+    def run_sql(self, sql_file: Path) -> None:
+        """Run psql and pass a sql file as the --file option."""
 
         # If you need to update a .dump file, use
         # PGPASSWORD=password pg_dump \
@@ -192,7 +241,7 @@ class RequiresDBTestCase(DatafakerTestCase):
 
         # Clear and re-create the test database
         completed_process = run(
-            ["psql", "-d", self.postgresql.url(), "-f", dump_file],
+            ["psql", "-d", self.postgresql.url(), "-f", sql_file],
             capture_output=True,
             check=True,
         )
@@ -200,7 +249,114 @@ class RequiresDBTestCase(DatafakerTestCase):
         assert completed_process.stderr == b"", completed_process.stderr
 
 
-class GeneratesDBTestCase(RequiresDBTestCase):
+@skipUnless(shutil.which("psql"), "need to find 'psql': install PostgreSQL to enable")
+class PostgresTestCase(TestCase):
+    """Postgres database test case."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        TestPostgres.setup()
+        super().setUpClass()
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        TestPostgres.final()
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.database = TestPostgres()
+        if self.dump_file_path is not None:
+            self.database.run_sql(Path(self.examples_dir) / Path(self.dump_file_path))
+        self.mixin_set_up()
+
+    def tearDown(self) -> None:
+        self.database.close()
+        super().tearDown()
+
+
+class TestDuckDb(TestDatabaseBase):
+    """Test DuckDB database."""
+
+    SQL_REMOVALS_RE = re.compile(
+        r"^(CREATE DATABASE .*;)|(\\.*)|(ALTER [^;]*;)", re.MULTILINE
+    )
+    # Postgres' default stupid time format, ingoring time zone for now
+    TIME_FORMAT_RE = re.compile(
+        r"'([A-Z][a-z]+ \d+ \d\d:\d\d:\d\d \d\d\d\d) ([A-Z+\-0-9:]+)'"
+    )
+
+    def __init__(self, *args, **kwargs):
+        """Initialize DuckDbTestCase"""
+        super().__init__(*args, **kwargs)
+        self._duckdb_con: Any = None
+        self._db_dir = Path(mkdtemp("duck"))
+        self._make_con_string()
+
+    def _make_con_string(self) -> None:
+        """Make a fresh connection string."""
+        self._db_path = self._db_dir / (
+            "".join(random.choice(string.ascii_letters) for _ in range(8)) + ".db"
+        )
+
+    def open(self) -> None:
+        """Start the test database"""
+        self.close()
+        self._make_con_string()
+        # create the database (must be non-read-only)
+        duckdb_con = duckdb.connect(self._db_path)
+        duckdb_con.close()
+
+    def close(self) -> None:
+        """Tear down the test database."""
+        if self._duckdb_con is not None:
+            self._duckdb_con.close()
+            self._duckdb_con = None
+
+    def dsn(self, _database_name: str | None) -> str:
+        """Get the DSN for the test database."""
+        return f"duckdb:///{self._db_path}"
+
+    def run_sql(self, sql_file: Path) -> None:
+        """Run all the SQL commands in ``sql_file`` on the database."""
+        with sql_file.open() as sql_fh:
+            sql = sql_fh.read()
+        # Remove Postgresisms that DuckDB doesn't understand
+        sanitized1 = re.sub(self.SQL_REMOVALS_RE, "", sql)
+        # Convert time formats
+        sanitized = re.sub(
+            self.TIME_FORMAT_RE,
+            lambda tf: time.strftime(
+                f"(TIMESTAMPTZ '%Y-%m-%d %H:%M:%S {tf.group(2)}')",
+                time.strptime(tf.group(1), "%B %d %H:%M:%S %Y"),
+            ),
+            sanitized1,
+        )
+        # Postgres has default schema "public", so we must have the same
+        duckdb_con = duckdb.connect(self._db_path)
+        duckdb_con.execute("CREATE SCHEMA public;")
+        duckdb_con.execute(sanitized)
+        duckdb_con.close()
+
+
+@skipUnless(shutil.which("duckdb"), "install DuckDB to enable")
+class DuckDbTestCase(TestCase):
+    """DuckDb database test case."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        if self.database is None:
+            self.database = TestDuckDb()
+        self.database.open()
+        if self.dump_file_path is not None:
+            self.database.run_sql(Path(self.examples_dir) / Path(self.dump_file_path))
+        self.mixin_set_up()
+
+    def tearDown(self) -> None:
+        self.database.close()
+        super().tearDown()
+
+
+class GeneratesDBTestMixin(RequiresDbTestMixin):
     """A test case for which a database is generated."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -333,3 +489,15 @@ class TestDbCmdMixin(DbCmd):
     def ask_save(self) -> str:
         """Quitting always works without needing to ask the user."""
         return "yes"
+
+
+class DatafakerTestCase(DatafakerTestMixin, TestCase):
+    """Basic test case."""
+
+
+class RequiresDBTestCase(RequiresDbTestMixin, PostgresTestCase):
+    """PostgreSQL database test case."""
+
+
+class GeneratesDBTestCase(GeneratesDBTestMixin, PostgresTestCase):
+    """PostgreSQL database generation test case."""
