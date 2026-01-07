@@ -94,6 +94,7 @@ def fk_column_name(fk: ForeignKey) -> str:
     return str(fk.target_fullname)
 
 
+# pylint: disable=too-many-public-methods
 class DbCmd(ABC, cmd.Cmd):
     """Base class for interactive configuration commands."""
 
@@ -406,12 +407,16 @@ class DbCmd(ABC, cmd.Cmd):
                 return
             self.print_table(list(result.keys()), result.fetchmany(max_peek_rows))
 
+    def get_column_completions(self, text: str) -> list[str]:
+        """Get completions for text to column names in the current table."""
+        return [
+            col for col in self.table_metadata().columns.keys() if col.startswith(text)
+        ]
+
     def complete_peek(
         self, text: str, _line: str, _begidx: int, _endidx: int
     ) -> list[str]:
         """Completions for the ``peek`` command."""
         if len(self._table_entries) <= self.table_index:
             return []
-        return [
-            col for col in self.table_metadata().columns.keys() if col.startswith(text)
-        ]
+        return self.get_column_completions(text)

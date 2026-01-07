@@ -17,6 +17,7 @@ from typing import (
     Generic,
     Iterable,
     Optional,
+    Type,
     TypeVar,
     Union,
 )
@@ -337,17 +338,21 @@ def get_flag(maybe_dict: Any, key: Any) -> bool:
     return isinstance(maybe_dict, Mapping) and maybe_dict.get(key, False)
 
 
-def get_property(maybe_dict: Any, key: Any, default: T) -> T:
+def get_property(maybe_dict: Any, key: Any, required_type: Type[T], default: T) -> T:
     """
     Get a specific property from a dict or a default if that does not exist.
 
     :param maybe_dict: A mapping, or possibly not.
     :param key: A key in ``maybe_dict``, or possibly not.
+    :param required_type: The type ``maybe_dict[key]`` needs to be an instance of.
     :param default: The return value if ``maybe_dict`` is not a mapping,
     or if ``key`` is not a key of ``maybe_dict``.
     :return: ``maybe_dict[key]`` if this makes sense, or ``default`` if not.
     """
-    return maybe_dict.get(key, default) if isinstance(maybe_dict, Mapping) else default
+    if not isinstance(maybe_dict, Mapping):
+        return default
+    v = maybe_dict.get(key, default)
+    return v if isinstance(v, required_type) else default
 
 
 def fk_refers_to_ignored_table(fk: ForeignKey) -> bool:

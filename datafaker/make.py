@@ -29,7 +29,6 @@ from datafaker.utils import (
     create_db_engine,
     download_table,
     get_columns_assigned,
-    get_flag,
     get_property,
     get_related_table_names,
     get_row_generators,
@@ -510,7 +509,7 @@ def _get_generator_for_table(
         class_name=table.name.title() + "Generator",
         nonnull_columns=nonnull_columns,
         column_choices=column_choices,
-        rows_per_pass=get_property(table_config, "num_rows_per_pass", 1),
+        rows_per_pass=get_property(table_config, "num_rows_per_pass", int, 1),
         unique_constraints=constraints,
     )
 
@@ -694,36 +693,13 @@ def _generate_vocabulary_table(
     download_table(table, engine, yaml_file_name, compress)
 
 
-def make_tables_file(
-    db_dsn: str, schema_name: Optional[str], config: Mapping[str, Any]
-) -> str:
+def make_tables_file(db_dsn: str, schema_name: Optional[str]) -> str:
     """Construct the YAML file representing the schema."""
-    tables_config = config.get("tables", {})
     engine = get_sync_engine(create_db_engine(db_dsn, schema_name=schema_name))
 
-    def reflect_if(table_name: str, _: Any) -> bool:
-        table_config = tables_config.get(table_name, {})
-        ignore = get_flag(table_config, "ignore")
-        return not ignore
-
     metadata = MetaData()
-    metadata.reflect(
-        engine,
-        only=reflect_if,
-    )
+    metadata.reflect(engine)
     meta_dict = metadata_to_dict(metadata, schema_name, engine)
-
-    for table_name in metadata.tables.keys():
-        table_config = tables_config.get(table_name, {})
-        ignore = get_flag(table_config, "ignore")
-        if ignore:
-            logger.warning(
-                "Table %s is supposed to be ignored but there is a foreign key "
-                "reference to it. "
-                "You may need to create this table manually at the dst schema before "
-                "running create-tables.",
-                table_name,
-            )
 
     return yaml.dump(meta_dict)
 

@@ -20,9 +20,12 @@ class TableCmdTableEntry(TableEntry):
     """Table entry for the table command shell."""
 
     old_type: TableType
+    old_name_column: str | None
     new_type: TableType
+    new_name_column: str | None
 
 
+# pylint: disable=too-many-public-methods
 class TableCmd(DbCmd):
     """Command shell allowing the user to set the type of each table."""
 
@@ -42,7 +45,9 @@ to exit this program."""
         "Vocabulary table {0} references non-vocabulary table {1}"
     )
     WARNING_TEXT_NON_EMPTY_TO_EMPTY = (
-        "Empty table {1} referenced from non-empty table {0}. {1} will need stories."
+        "Empty table {1} referenced from non-empty table {0}. Foreign keys"
+        " from {0} to {1} cannot be chosen by the default generator unless"
+        " {1} has stories."
     )
     WARNING_TEXT_PROBLEMS_EXIST = "WARNING: The following table types have problems:"
     WARNING_TEXT_POTENTIAL_PROBLEMS = (
@@ -50,6 +55,7 @@ to exit this program."""
     )
     NOTE_TEXT_NO_CHANGES = "You have made no changes."
     NOTE_TEXT_CHANGING = "Changing {0} from {1} to {2}"
+    NOTE_TEXT_TABLE_WITH_NAME = "{0} (name column: {1})"
 
     def make_table_entry(
         self, table_name: str, table_config: Mapping
@@ -61,17 +67,28 @@ to exit this program."""
         :param table: The part of ``config.yaml`` corresponding to this table.
         :return: The newly-constructed table entry.
         """
+        nc = table_config.get("name_column", None)
+        if not isinstance(nc, str):
+            nc = None
         if table_config.get("ignore", False):
-            return TableCmdTableEntry(table_name, TableType.IGNORE, TableType.IGNORE)
+            return TableCmdTableEntry(
+                table_name, TableType.IGNORE, nc, TableType.IGNORE, nc
+            )
         if table_config.get("vocabulary_table", False):
             return TableCmdTableEntry(
-                table_name, TableType.VOCABULARY, TableType.VOCABULARY
+                table_name, TableType.VOCABULARY, nc, TableType.VOCABULARY, nc
             )
         if table_config.get("primary_private", False):
-            return TableCmdTableEntry(table_name, TableType.PRIVATE, TableType.PRIVATE)
+            return TableCmdTableEntry(
+                table_name, TableType.PRIVATE, nc, TableType.PRIVATE, nc
+            )
         if table_config.get("num_rows_per_pass", 1) == 0:
-            return TableCmdTableEntry(table_name, TableType.EMPTY, TableType.EMPTY)
-        return TableCmdTableEntry(table_name, TableType.GENERATE, TableType.GENERATE)
+            return TableCmdTableEntry(
+                table_name, TableType.EMPTY, nc, TableType.EMPTY, nc
+            )
+        return TableCmdTableEntry(
+            table_name, TableType.GENERATE, nc, TableType.GENERATE, nc
+        )
 
     def __init__(
         self,
@@ -106,16 +123,13 @@ to exit this program."""
         else:
             self.prompt = "(table) "
 
-    def set_type(self, t_type: TableType) -> None:
-        """Set the type of the current table."""
-        if self.table_index < len(self.table_entries):
-            entry = self.table_entries[self.table_index]
-            entry.new_type = t_type
-
     def _copy_entries(self) -> None:
         """Alter the configuration to match the new table entries."""
         for entry in self.table_entries:
-            if entry.old_type != entry.new_type:
+            if (
+                entry.old_type != entry.new_type
+                or entry.old_name_column != entry.new_name_column
+            ):
                 table = self.get_table_config(entry.name)
                 if (
                     entry.old_type == TableType.EMPTY
@@ -143,6 +157,10 @@ to exit this program."""
                     table.pop("ignore", None)
                     table.pop("vocabulary_table", None)
                     table.pop("primary_private", None)
+                if entry.new_name_column:
+                    table["name_column"] = entry.new_name_column
+                else:
+                    table.pop("name_column", None)
                 self.set_table_config(entry.name, table)
 
     def _get_referenced_tables(self, from_table_name: str) -> set[str]:
@@ -196,18 +214,37 @@ to exit this program."""
                         )
         return warnings
 
+    def _print_change_note(self, entry: TableCmdTableEntry) -> int:
+        """
+        Print a note if the table entry has changed.
+
+        :return: The number of notes written
+        """
+        if (
+            entry.old_type == entry.new_type
+            and entry.old_name_column == entry.new_name_column
+        ):
+            return 0
+        if entry.old_name_column:
+            old = self.NOTE_TEXT_TABLE_WITH_NAME.format(
+                entry.old_type.value, entry.old_name_column
+            )
+        else:
+            old = entry.old_type.value
+        if entry.new_name_column:
+            new = self.NOTE_TEXT_TABLE_WITH_NAME.format(
+                entry.new_type.value, entry.new_name_column
+            )
+        else:
+            new = entry.new_type.value
+        self.print(self.NOTE_TEXT_CHANGING, entry.name, old, new)
+        return 1
+
     def do_quit(self, _arg: str) -> bool:
         """Check the updates, save them if desired and quit the configurer."""
         count = 0
         for entry in self.table_entries:
-            if entry.old_type != entry.new_type:
-                count += 1
-                self.print(
-                    self.NOTE_TEXT_CHANGING,
-                    entry.name,
-                    entry.old_type.value,
-                    entry.new_type.value,
-                )
+            count += self._print_change_note(entry)
         if count == 0:
             self.print(self.NOTE_TEXT_NO_CHANGES)
         failures = self._sanity_check_failures()
@@ -261,35 +298,124 @@ to exit this program."""
         if not self._set_table_index(self.table_index - 1):
             self.print(self.ERROR_ALREADY_AT_START)
 
-    def do_ignore(self, _arg: str) -> None:
-        """Set the current table as ignored, and go to the next table."""
-        self.set_type(TableType.IGNORE)
-        self.print("Table {} set as ignored", self.table_name())
+    def set_table_type(self, arg: str, new_type: TableType, type_name: str) -> None:
+        """
+        Set the current table type from a command argument list.
+
+        :param arg: The arg passed to the ``do_`` function.
+        :param new_type: The type to set.
+        :param type_name: The human-readable name of the type being set.
+        """
+        if len(self.table_entries) <= self.table_index:
+            return
+        entry = self.table_entries[self.table_index]
+        args = arg.split()
+        new_name_column: str | None = None
+        if len(args) == 2 and args[0] == "name":
+            new_name_column = args[1]
+            args = []
+        if args:
+            self.print(
+                f"""Did not understand these arguments.
+Correct formats are:
+{new_type.value}  -- just set the type to {type_name}
+{new_type.value} name ColumnName  -- set the type and the naming column of the table"""
+            )
+        entry.new_type = new_type
+        entry.new_name_column = new_name_column
+        self.print("Table {} set as {}", self.table_name(), type_name)
         self.next_table()
 
-    def do_vocabulary(self, _arg: str) -> None:
-        """Set the current table as a vocabulary table, and go to the next table."""
-        self.set_type(TableType.VOCABULARY)
-        self.print("Table {} set to be a vocabulary table", self.table_name())
-        self.next_table()
+    def do_ignore(self, arg: str) -> None:
+        """
+        Set the current table as ignored, and go to the next table.
 
-    def do_private(self, _arg: str) -> None:
-        """Set the current table as a primary private table (such as the table of patients)."""
-        self.set_type(TableType.PRIVATE)
-        self.print("Table {} set to be a primary private table", self.table_name())
-        self.next_table()
+        "ignore name <column_name>" sets the table to ignored but also sets
+        the column <column_name> to be the column from which we can get
+        human-readable names for the rows.
+        """
+        self.set_table_type(arg, TableType.IGNORE, "ignored")
 
-    def do_generate(self, _arg: str) -> None:
-        """Set the current table as to be generated, and go to the next table."""
-        self.set_type(TableType.GENERATE)
-        self.print("Table {} generate", self.table_name())
-        self.next_table()
+    def get_table_type_completions(
+        self, text: str, line: str, begidx: int
+    ) -> list[str]:
+        """Get the completions for ignore/vocabulary/generate etcetera."""
+        previous_parts = line[: begidx - 1].split()
+        if len(previous_parts) == 1:
+            return [x for x in ["name"] if x.startswith(text)]
+        if len(previous_parts) == 2 and previous_parts[1] == "name":
+            return self.get_column_completions(text)
+        return []
 
-    def do_empty(self, _arg: str) -> None:
-        """Set the current table as empty; no generators will be run for it."""
-        self.set_type(TableType.EMPTY)
-        self.print("Table {} empty", self.table_name())
-        self.next_table()
+    def complete_ignore(
+        self, text: str, line: str, begidx: int, _endidx: int
+    ) -> list[str]:
+        """Get the completions for ignore."""
+        return self.get_table_type_completions(text, line, begidx)
+
+    def do_vocabulary(self, arg: str) -> None:
+        """
+        Set the current table as a vocabulary table, and go to the next table.
+
+        "vocabulary name <column_name>" sets the table to vocabulary but also
+        sets the column <column_name> to be the column from which we can get
+        human-readable names for the rows.
+        """
+        self.set_table_type(arg, TableType.VOCABULARY, "vocabulary")
+
+    def complete_vocabulary(
+        self, text: str, line: str, begidx: int, _endidx: int
+    ) -> list[str]:
+        """Get the completions for vocabulary."""
+        return self.get_table_type_completions(text, line, begidx)
+
+    def do_private(self, arg: str) -> None:
+        """
+        Set the current table as a primary private table (such as the table of patients).
+
+        "vocabulary name <column_name>" sets the table to vocabulary but also
+        sets the column <column_name> to be the column from which we can get
+        human-readable names for the rows.
+        """
+        self.set_table_type(arg, TableType.PRIVATE, "primary private")
+
+    def complete_private(
+        self, text: str, line: str, begidx: int, _endidx: int
+    ) -> list[str]:
+        """Get the completions for private."""
+        return self.get_table_type_completions(text, line, begidx)
+
+    def do_generate(self, arg: str) -> None:
+        """
+        Set the current table as to be generated, and go to the next table.
+
+        "vocabulary name <column_name>" sets the table to vocabulary but also
+        sets the column <column_name> to be the column from which we can get
+        human-readable names for the rows.
+        """
+        self.set_table_type(arg, TableType.GENERATE, "generate")
+
+    def complete_generate(
+        self, text: str, line: str, begidx: int, _endidx: int
+    ) -> list[str]:
+        """Get the completions for generate."""
+        return self.get_table_type_completions(text, line, begidx)
+
+    def do_empty(self, arg: str) -> None:
+        """
+        Set the current table as empty; no generators will be run for it.
+
+        "empty name <column_name>" sets the table to empty but also sets
+        the column <column_name> to be the column from which we can get
+        human-readable names for the rows.
+        """
+        self.set_table_type(arg, TableType.EMPTY, "empty")
+
+    def complete_empty(
+        self, text: str, line: str, begidx: int, _endidx: int
+    ) -> list[str]:
+        """Get the completions for empty."""
+        return self.get_table_type_completions(text, line, begidx)
 
     def do_columns(self, _arg: str) -> None:
         """Report the column names and metadata."""

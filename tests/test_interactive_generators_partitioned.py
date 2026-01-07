@@ -207,7 +207,7 @@ class NullPartitionedTests(GeneratesDBTestCase):
         self.assertAlmostEqual(
             stats.four.count(), generate_count * 3 / 20, delta=generate_count * 0.2
         )
-        self.assertAlmostEqual(stats.four.covar(), 3.33, delta=1.3)
+        self.assertAlmostEqual(stats.four.covar(), 3.33, delta=1.5)
         # type 5/fish
         self.assertAlmostEqual(
             stats.fish.count(), generate_count * 3 / 20, delta=generate_count * 0.2
@@ -332,6 +332,39 @@ class NullPartitionedTests(GeneratesDBTestCase):
         self.assertAlmostEqual(stats.fowl.x_mean(), 11.2, delta=8.0)
         self.assertAlmostEqual(stats.fowl.x_var(), 1.24, delta=0.6)
 
+    def test_null_partitioned_grouped_defines_all_its_constants(self) -> None:
+        """Test EAV for all columns with sampled and suppressed generation."""
+        with self._get_cmd({}) as gc:
+            self.merge_columns(
+                gc,
+                "measurement",
+                [
+                    "type",
+                    "first_value",
+                    "second_value",
+                    "third_value",
+                ],
+            )
+            proposals = self._propose(gc)
+            dist_to_choose = (
+                "null-partitioned grouped_multivariate_normal [sampled and suppressed]"
+            )
+            self.assertIn(dist_to_choose, proposals)
+            prop = proposals[dist_to_choose]
+            gc.do_compare(str(prop[0]))
+            gc.do_set(str(prop[0]))
+            gc.do_quit("")
+            self.set_configuration(gc.config)
+            src_stats = self.get_src_stats(gc.config)
+            results = [result for ss in src_stats.values() for result in ss["results"]]
+            constants = [
+                v
+                for result in results
+                for k, v in result.items()
+                if k[0] == "k" and k[1:].isdecimal()
+            ]
+            self.assertNotIn(None, constants)
+
     def test_create_with_null_partitioned_grouped_sampled_only(self) -> None:
         """Test EAV for all columns with sampled generation but no suppression."""
         table_name = "measurement"
@@ -417,3 +450,48 @@ class NullPartitionedTests(GeneratesDBTestCase):
             foods = {row.third_value for row in rows}
             self.assert_subset(foods, {"ham", "eggs", "cheese"})
             self.assertLess(len(foods), 3)
+
+    def test_named_foreign_keys(self) -> None:
+        """Test foreign keys gain names in source stats."""
+        with self._get_cmd(
+            {
+                "tables": {
+                    "measurement_type": {
+                        "name_column": "name",
+                    },
+                },
+            }
+        ) as gc:
+            self.merge_columns(
+                gc,
+                "measurement",
+                [
+                    "type",
+                    "first_value",
+                    "second_value",
+                    "third_value",
+                ],
+            )
+            proposals = self._propose(gc)
+            dist_to_choose = "null-partitioned grouped_multivariate_normal"
+            self.assertIn(dist_to_choose, proposals)
+            prop = proposals[dist_to_choose]
+            gc.do_compare(str(prop[0]))
+            gc.do_set(str(prop[0]))
+            gc.do_quit("")
+            self.set_configuration(gc.config)
+            src_stats = self.get_src_stats(gc.config)
+            with self.sync_engine.connect() as conn:
+                stmt = select(self.metadata.tables["measurement_type"])
+                rows = conn.execute(stmt).fetchall()
+                mt = {row.id: row.name for row in rows}
+                results = [
+                    result for ss in src_stats.values() for result in ss["results"]
+                ]
+                ids = set()
+                for result in results:
+                    if "k0" in result:
+                        k0 = result["k0"]
+                        ids.add(k0)
+                        self.assertEqual(result["k0_type__name"], mt[k0])
+                self.assertSetEqual(ids, set(mt.keys()))

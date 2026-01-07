@@ -170,6 +170,58 @@ class ConfigureTablesSrcTests(ConfigureTablesTests):
             self.assertFalse(tables["empty_vocabulary"].get("primary_private", False))
             self.assertEqual(tables["empty_vocabulary"].get("num_rows_per_pass", 1), 0)
 
+    def test_configure_naming_columns(self) -> None:
+        """Test that we can change tables' naming columns."""
+        config = {
+            "tables": {
+                "unique_constraint_test": {
+                    "vocabulary_table": True,
+                    "name_column": None,
+                },
+                "no_pk_test": {
+                    "ignore": True,
+                    "name_column": "not_an_id",
+                },
+                "hospital_visit": {
+                    "num_rows_per_pass": 0,
+                },
+                "empty_vocabulary": {
+                    "num_rows_per_pass": 0,
+                    "name_column": "entry_id",
+                },
+            },
+        }
+        with self._get_cmd(config) as tc:
+            tc.do_next("unique_constraint_test")
+            tc.do_generate("name c")
+            tc.do_next("person")
+            tc.do_vocabulary("")
+            tc.do_next("mitigation_type")
+            tc.do_ignore("")
+            tc.do_next("hospital_visit")
+            tc.do_private("")
+            tc.do_quit("")
+            # changing name column but not type
+            tc.do_next("empty_vocabulary")
+            tc.do_empty("name entry_name")
+            tc.do_quit("")
+            tables = tc.config["tables"]
+            self.assertEqual(
+                tables["unique_constraint_test"].get("name_column", None),
+                "c",
+            )
+            self.assertEqual(
+                tables["no_pk_test"].get("name_column", None),
+                "not_an_id",
+            )
+            self.assertIsNone(tables["person"].get("name_column", None))
+            self.assertIsNone(tables["mitigation_type"].get("name_column", None))
+            self.assertIsNone(tables["hospital_visit"].get("name_column", None))
+            self.assertEqual(
+                tables["empty_vocabulary"].get("name_column", None),
+                "entry_name",
+            )
+
     def test_print_data(self) -> None:
         """Test that we can print random rows from the table and random data from columns."""
         person_table = self.metadata.tables["person"]

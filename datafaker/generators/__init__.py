@@ -1,5 +1,6 @@
 """Generators write generator function definitions and queries into config.yaml."""
 
+from collections.abc import Mapping
 from functools import lru_cache
 
 from datafaker.generators.base import (
@@ -28,26 +29,25 @@ from datafaker.generators.partitioned import (
 )
 
 
-# Using a cache instead of just initializing an object to avoid
-# startup time being spent when it isn't needed.
-@lru_cache(1)
-def everything_factory() -> GeneratorFactory:
-    """Get a factory that encapsulates all the other factories."""
+def everything_factory(config: Mapping) -> GeneratorFactory:
+    """
+    Get a factory that encapsulates all the other factories.
+
+    :param config: The ``config.yaml`` configuration.
+    """
     return MultiGeneratorFactory(
-        [
-            MimesisStringGeneratorFactory(),
-            MimesisIntegerGeneratorFactory(),
-            MimesisFloatGeneratorFactory(),
-            MimesisDateGeneratorFactory(),
-            MimesisDateTimeGeneratorFactory(),
-            MimesisTimeGeneratorFactory(),
-            ContinuousDistributionGeneratorFactory(),
-            ContinuousLogDistributionGeneratorFactory(),
-            ChoiceGeneratorFactory(),
-            ConstantGeneratorFactory(),
-            MultivariateNormalGeneratorFactory(),
-            MultivariateLogNormalGeneratorFactory(),
-            NullPartitionedNormalGeneratorFactory(),
-            NullPartitionedLogNormalGeneratorFactory(),
-        ]
+        MimesisStringGeneratorFactory(),
+        MimesisIntegerGeneratorFactory(),
+        MimesisFloatGeneratorFactory(),
+        MimesisDateGeneratorFactory(),
+        MimesisDateTimeGeneratorFactory(),
+        MimesisTimeGeneratorFactory(),
+        ContinuousDistributionGeneratorFactory(),
+        ContinuousLogDistributionGeneratorFactory(),
+        ChoiceGeneratorFactory(),
+        ConstantGeneratorFactory(),
+        MultivariateNormalGeneratorFactory(),
+        MultivariateLogNormalGeneratorFactory(),
+        NullPartitionedNormalGeneratorFactory(config),
+        NullPartitionedLogNormalGeneratorFactory(config),
     )

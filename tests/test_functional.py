@@ -207,7 +207,6 @@ class DBFunctionalTestCase(RequiresDBTestCase):
         completed_process = self.invoke(
             "--verbose",
             "make-tables",
-            f"--config-file={self.config_file_path}",
             f"--orm-file={self.alt_orm_file_path}",
             "--force",
         )
@@ -596,7 +595,6 @@ class DBFunctionalTestCase(RequiresDBTestCase):
         self.invoke(
             "make-tables",
             "--force",
-            f"--config-file={self.config_file_path}",
             env=env,
         )
 

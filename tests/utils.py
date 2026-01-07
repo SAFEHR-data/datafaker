@@ -218,7 +218,7 @@ class GeneratesDBTestCase(RequiresDBTestCase):
         # Generate the `orm.yaml` from the database
         (self.orm_fd, self.orm_file_path) = mkstemp(".yaml", "orm_", text=True)
         with os.fdopen(self.orm_fd, "w", encoding="utf-8") as orm_fh:
-            orm_fh.write(make_tables_file(self.dsn, self.schema_name, {}))
+            orm_fh.write(make_tables_file(self.dsn, self.schema_name))
 
     def set_configuration(self, config: Mapping[str, Any]) -> None:
         """Accepts a configuration file, writes it out."""
