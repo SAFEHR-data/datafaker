@@ -9,30 +9,22 @@ from sqlalchemy import create_engine, inspect
 from typer.testing import CliRunner, Result
 
 from datafaker.main import app
-from tests.utils import RequiresDBTestCase
+from tests.utils import RequiresDBTestCase, TestDuckDb
 
 # pylint: disable=subprocess-run-check
 
 
-class DBFunctionalTestCase(RequiresDBTestCase):
-    """End-to-end tests that require a database."""
-
-    dump_file_path = "src.dump"
-    database_name = "src"
-    schema_name = "public"
+class DBFunctionalTestCaseBase(RequiresDBTestCase):
+    """Base class for test that call the CLI and require a database."""
 
     examples_dir = Path("tests/examples")
 
     orm_file_path = Path("orm.yaml")
     datafaker_file_path = Path("df.py")
 
-    alt_orm_file_path = Path("my_orm.yaml")
-    alt_datafaker_file_path = Path("my_df.py")
-
     generator_file_paths = tuple(
         map(Path, ("story_generators.py", "row_generators.py")),
     )
-    # dump_file_path = Path("dst.dump")
     config_file_path = Path("example_config2.yaml")
     stats_file_path = Path("example_stats.yaml")
 
@@ -74,6 +66,17 @@ class DBFunctionalTestCase(RequiresDBTestCase):
         self.assertSuccess(completed_process)
         self.assertEqual(completed_process.stderr, "")
         self.assertEqual(completed_process.stdout, "")
+
+
+class DBFunctionalTestCase(DBFunctionalTestCaseBase):
+    """End-to-end tests that require a database."""
+
+    dump_file_path = "src.dump"
+    database_name = "src"
+    schema_name = "public"
+
+    alt_orm_file_path = Path("my_orm.yaml")
+    alt_datafaker_file_path = Path("my_df.py")
 
     def test_workflow_minimal_args(self) -> None:
         """Test the recommended CLI workflow runs without errors."""
@@ -597,3 +600,14 @@ class DBFunctionalTestCase(RequiresDBTestCase):
         engine = create_engine(self.env["dst_dsn"])
         inspector = inspect(engine)
         self.assertTrue(inspector.has_schema(env["dst_schema"]))
+
+
+class DuckDbFunctionalTestCase(DBFunctionalTestCaseBase):
+    """End-to-end tests for the DuckDB workflow."""
+
+    dump_file_path = "instrument.sql"
+    database_name = "instrument"
+    schema_name = "public"
+
+    database_type = TestDuckDb
+
