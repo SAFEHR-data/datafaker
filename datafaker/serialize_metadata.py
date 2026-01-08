@@ -8,10 +8,11 @@ from sqlalchemy.dialects import oracle, postgresql
 from sqlalchemy.sql import schema, sqltypes
 
 from datafaker.utils import (
+    get_property,
     make_foreign_key_name,
     split_foreign_key_target,
-    get_property,
 )
+
 TableT = dict[str, typing.Any]
 
 

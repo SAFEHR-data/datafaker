@@ -5,10 +5,10 @@ import importlib.util
 import io
 import json
 import logging
+import re
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-import re
 from types import ModuleType
 from typing import (
     Any,
@@ -688,6 +688,22 @@ def sorted_non_vocabulary_tables(metadata: MetaData, config: Mapping) -> list[Ta
     return [metadata.tables[tn] for tn in sorted_tables]
 
 
+def generated_tables(metadata: MetaData, config: Mapping) -> list[Table]:
+    """
+    Get all the non-ignored, non-vocabulary tables.
+
+    :param metadata: MetaData of the database.
+    :param config: Mapping from `config.yaml`.
+    :return: All the non-ignored, non-vocabulary tables.
+    """
+    not_for_output = get_vocabulary_table_names(config) | get_ignored_table_names(
+        config
+    )
+    return [
+        table for table in metadata.tables.values() if table.name not in not_for_output
+    ]
+
+
 def underline_error(e: SyntaxError) -> str:
     r"""
     Make an underline for this error.
@@ -774,10 +790,11 @@ def generators_require_stats(config: Mapping) -> bool:
         logger.error(*error)
     return stats_required
 
+
 def split_foreign_key_target(fk_target: str) -> tuple[str, str]:
     """
     Split a foreign key target string into table and column.
-    
+
     :param fk: The string, such as ``artist.artist_id`` or ``artist.parquet.artist_id``.
     :return: A pair of strings; the table name and the column name. For example
     ``("artist.parquet", "artist_id")``.

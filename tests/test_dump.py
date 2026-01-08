@@ -1,33 +1,24 @@
 """Tests for the base module."""
 import csv
 import tempfile
-from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
 
 import pandas as pd
 
 from datafaker.dump import CsvTableWriter, get_parquet_table_writer
-from tests.utils import DuckDbTestCase, PostgresTestCase, RequiresDbTestMixin
+from tests.utils import RequiresDBTestCase, TestDuckDb
 
 
-class DumpTests(RequiresDbTestMixin):
+class DumpTests(RequiresDBTestCase):
     """Testing configure-tables."""
 
     dump_file_path = "instrument.sql"
     database_name = "instrument"
     schema_name = "public"
 
-    def assert_equal(self, a: Any, b: Any) -> None:
-        self.assertEqual(a, b)  # pylint: disable=no-member
-
-    def assert_true(self, a: bool) -> None:
-        self.assertTrue(a)  # pylint: disable=no-member
-
-    def assert_list_equal(self, xs: Iterable, ys: Iterable) -> None:
-        self.assertListEqual(xs, ys)  # pylint: disable=no-member
-
-    def assert_timestamps_equal(self, ts1: pd.Timestamp, ts2: pd.Timestamp) -> None:
+    def assert_timestamps_equal(  # type: ignore[no-any-unimported]
+        self, ts1: pd.Timestamp, ts2: pd.Timestamp
+    ) -> None:
         """
         Assert that the timestamps are equal.
 
@@ -35,12 +26,12 @@ class DumpTests(RequiresDbTestMixin):
         """
         if ts1.tz is None:
             if ts2.tz is not None:
-                self.assert_equal(ts1.tz_localize("UTC"), ts2)
+                self.assertEqual(ts1.tz_localize("UTC"), ts2)
                 return
         elif ts2.tz is None:
-            self.assert_equal(ts1, ts2.tz_localize("UTC"))
+            self.assertEqual(ts1, ts2.tz_localize("UTC"))
             return
-        self.assert_equal(ts1, ts2)
+        self.assertEqual(ts1, ts2)
 
     def test_dump_data_csv(self) -> None:
         """Test dump-data for CSV output."""
@@ -73,7 +64,7 @@ class DumpTests(RequiresDbTestMixin):
         self.assertListEqual(df.columns.to_list(), ["id", "name", "founded"])
         self.assertListEqual(df["id"].to_list(), [1, 2])
         self.assertListEqual(df["name"].to_list(), ["Blender", "Gibbs"])
-        self.assert_equal(len(df["founded"]), 2)
+        self.assertEqual(len(df["founded"]), 2)
         self.assert_timestamps_equal(
             df["founded"][0], pd.Timestamp("1951-01-08 12:05:06+00:00")
         )
@@ -82,9 +73,7 @@ class DumpTests(RequiresDbTestMixin):
         )
 
 
-class DumpTestsPostgres(DumpTests, PostgresTestCase):
-    """DumpTests against PostgreSQL."""
-
-
-class DumpTestsDuckDb(DumpTests, DuckDbTestCase):
+class DumpTestsDuckDb(DumpTests):
     """DumpTests against DuckDB."""
+
+    database_type = TestDuckDb

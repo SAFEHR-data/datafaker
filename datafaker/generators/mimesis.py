@@ -292,12 +292,14 @@ class MimesisStringGeneratorFactory(GeneratorFactory):
         "text.word",
     ]
 
-    def _get_generators_with(self, gen_class: Callable, **kwargs) -> list[Generator]:
-        gens: Generator = []
+    def _get_generators_with(
+        self, gen_class: Callable, **kwargs: Any
+    ) -> list[Generator]:
+        gens: list[Generator] = []
         for name in self.GENERATOR_NAMES:
             try:
                 gens.append(gen_class(name, **kwargs))
-            except:
+            except:  # pylint: disable=bare-except
                 pass
         return gens
 

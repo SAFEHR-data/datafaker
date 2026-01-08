@@ -14,11 +14,12 @@ from pathlib import Path
 from subprocess import run
 from tempfile import mkdtemp, mkstemp
 from typing import Any, Mapping
-from unittest import TestCase, skipUnless
+from unittest import SkipTest, TestCase
 
 import duckdb
 import testing.postgresql
 import yaml
+from sqlalchemy import Engine
 from sqlalchemy.schema import MetaData
 
 from datafaker import settings
@@ -27,6 +28,7 @@ from datafaker.interactive.base import DbCmd
 from datafaker.make import make_src_stats, make_table_generators, make_tables_file
 from datafaker.remove import remove_db_data_from
 from datafaker.utils import (
+    MaybeAsyncEngine,
     T,
     create_db_engine,
     get_sync_engine,
@@ -52,17 +54,191 @@ def get_test_settings() -> settings.Settings:
     )
 
 
-class DatafakerTestMixin:
-    """Parent class for all TestCases in datafaker."""
+class TestDatabaseBase(ABC):
+    """Abstract base class for test databases."""
+
+    @classmethod
+    @abstractmethod
+    def skip(cls) -> str | None:
+        """Returns an error message if this database type is not availalble."""
+
+    @classmethod
+    def setup(cls) -> None:
+        """Set up the class."""
+
+    @classmethod
+    def final(cls) -> None:
+        """Clean up the class."""
+
+    @abstractmethod
+    def close(self) -> None:
+        """Tear down the test database."""
+
+    @abstractmethod
+    def open(self) -> None:
+        """Open a fresh test database (closing any previous)."""
+
+    @abstractmethod
+    def get_dsn(self, database_name: str | None) -> str:
+        """Get the DSN for the test database."""
+
+    @abstractmethod
+    def run_sql(self, sql_file: Path) -> None:
+        """Run the provided SQL file on the test database."""
+
+
+class TestPostgres(TestDatabaseBase):
+    """Postgres test database."""
+
+    Postgresql = None
+
+    @classmethod
+    def skip(cls) -> str | None:
+        if shutil.which("psql"):
+            return None
+        return "need to find 'psql': install PostgreSQL to enable"
+
+    @classmethod
+    def setup(cls) -> None:
+        """Set up the test database."""
+        cls.Postgresql = testing.postgresql.PostgresqlFactory(cache_initialized_db=True)
+
+    def __init__(self) -> None:
+        """Initialize the test database."""
+        if self.Postgresql is None:
+            self.setup()
+        super().__init__()
+        self.postgresql: Any = None
+        self.open()
+
+    def open(self) -> None:
+        """Start the test database"""
+        assert self.Postgresql is not None
+        self.postgresql = self.Postgresql()  # pylint: disable=not-callable
+
+    def close(self) -> None:
+        """Tear down the test database."""
+        if self.postgresql is not None:
+            self.postgresql.terminate()
+
+    @classmethod
+    def final(cls) -> None:
+        """Clean up after all testing"""
+        if cls.Postgresql is not None:
+            cls.Postgresql.clear_cache()
+
+    def get_dsn(self, database_name: str | None) -> str:
+        """Get the DSN for the test database."""
+        if database_name:
+            url = self.postgresql.url(database=database_name)
+        else:
+            url = self.postgresql.url()
+        assert isinstance(url, str)
+        return url
+
+    def run_sql(self, sql_file: Path) -> None:
+        """Run psql and pass a sql file as the --file option."""
+
+        # If you need to update a .dump file, use
+        # PGPASSWORD=password pg_dump \
+        # --host=localhost \
+        # --port=5432 \
+        # --dbname=src \
+        # --username=postgres \
+        # --no-password \
+        # --clean \
+        # --create \
+        # --insert \
+        # --if-exists > tests/examples/FILENAME.dump
+
+        # Clear and re-create the test database
+        completed_process = run(
+            ["psql", "-d", self.postgresql.url(), "-f", sql_file],
+            capture_output=True,
+            check=True,
+        )
+        # psql doesn't always return != 0 if it fails
+        assert completed_process.stderr == b"", completed_process.stderr
+
+
+class TestDuckDb(TestDatabaseBase):
+    """Test DuckDB database."""
+
+    SQL_REMOVALS_RE = re.compile(
+        r"^(CREATE DATABASE .*;)|(\\.*)|(ALTER [^;]*;)", re.MULTILINE
+    )
+    # Postgres' default stupid time format, ingoring time zone for now
+    TIME_FORMAT_RE = re.compile(
+        r"'([A-Z][a-z]+ \d+ \d\d:\d\d:\d\d \d\d\d\d) ([A-Z+\-0-9:]+)'"
+    )
+
+    @classmethod
+    def skip(cls) -> str | None:
+        if shutil.which("duckdb"):
+            return None
+        return "need to find 'duckdb': install DuckDB to enable"
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        """Initialize an instance of DatafakerTestCase."""
-        self.database = None
+        """Initialize TestDuckDb"""
         super().__init__(*args, **kwargs)
+        self._duckdb_con: Any = None
+        self._db_dir = Path(mkdtemp("duck"))
+        self._make_con_string()
 
-    def mixin_set_up(self) -> None:
-        """Set up but for mixins (unittest.TestCase.setUp does not super() call)."""
-        settings.get_settings.cache_clear()
+    def _make_con_string(self) -> None:
+        """Make a fresh connection string."""
+        self._db_path = self._db_dir / (
+            "".join(random.choice(string.ascii_letters) for _ in range(8)) + ".db"
+        )
+
+    def open(self) -> None:
+        """Start the test database"""
+        self.close()
+        self._make_con_string()
+        # create the database (must be non-read-only)
+        duckdb_con = duckdb.connect(self._db_path)
+        duckdb_con.close()
+
+    def close(self) -> None:
+        """Tear down the test database."""
+        if self._duckdb_con is not None:
+            self._duckdb_con.close()
+            self._duckdb_con = None
+
+    def get_dsn(self, _database_name: str | None) -> str:
+        """Get the DSN for the test database."""
+        return f"duckdb:///{self._db_path}"
+
+    def run_sql(self, sql_file: Path) -> None:
+        """Run all the SQL commands in ``sql_file`` on the database."""
+        with sql_file.open() as sql_fh:
+            sql = sql_fh.read()
+        # Remove Postgresisms that DuckDB doesn't understand
+        sanitized1 = re.sub(self.SQL_REMOVALS_RE, "", sql)
+        # Convert time formats
+        sanitized = re.sub(
+            self.TIME_FORMAT_RE,
+            lambda tf: time.strftime(
+                f"(TIMESTAMPTZ '%Y-%m-%d %H:%M:%S {tf.group(2)}')",
+                time.strptime(tf.group(1), "%B %d %H:%M:%S %Y"),
+            ),
+            sanitized1,
+        )
+        # Postgres has default schema "public", so we must have the same
+        duckdb_con = duckdb.connect(self._db_path)
+        duckdb_con.execute("CREATE SCHEMA public;")
+        duckdb_con.execute(sanitized)
+        duckdb_con.close()
+
+
+class DatafakerTestCase(TestCase):
+    """Parent class for all TestCases in datafaker."""
+
+    schema_name: str | None = None
+    use_asyncio = False
+    examples_dir = Path("tests/examples")
+    dump_file_path: str | None = None
+    database_name: str | None = None
 
     def assertReturnCode(  # pylint: disable=invalid-name
         self, result: Any, expected_code: int
@@ -82,8 +258,10 @@ class DatafakerTestMixin:
         """Give details for a subprocess result and raise if the result isn't bad."""
         self.assertReturnCode(result, 1)
 
-    def assertNoException(self, result: Any) -> None:  # pylint: disable=invalid-name
+    # pylint: disable=invalid-name
+    def assertNoException(self, result: Any) -> None:
         """Assert that the result has no exception."""
+        assert hasattr(result, "exception")
         if result.exception is None:
             return
         self.fail("".join(traceback.format_exception(result.exception)))
@@ -125,27 +303,7 @@ class DatafakerTestMixin:
         self.fail(self._formatMessage(msg, standard_msg))
 
 
-class TestDatabaseBase(ABC):
-    """Abstract base class for test databases."""
-
-    @abstractmethod
-    def close(self) -> None:
-        """Tear down the test database."""
-
-    @abstractmethod
-    def open(self) -> None:
-        """Open a fresh test database (closing any previous)."""
-
-    @abstractmethod
-    def dsn(self) -> str:
-        """Get the DSN for the test database."""
-
-    @abstractmethod
-    def run_sql(self, sql_file: Path) -> None:
-        """Run the provided SQL file on the test database."""
-
-
-class RequiresDbTestMixin(DatafakerTestMixin):
+class RequiresDBTestCase(DatafakerTestCase):
     """
     A test case that only runs if PostgreSQL is installed.
     A test postgres is installed
@@ -156,207 +314,59 @@ class RequiresDbTestMixin(DatafakerTestMixin):
     reflected from that engine.
     """
 
-    schema_name: str | None = None
-    use_asyncio = False
-    examples_dir = Path("tests/examples")
-    dump_file_path: str | None = None
-    database_name: str | None = None
+    database_type: type[TestDatabaseBase] = TestPostgres
 
-    def __init__(self, *args, **kwargs):
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        skip_msg = cls.database_type.skip()
+        if skip_msg:
+            raise SkipTest(skip_msg)
+        cls.database_type.setup()
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.database_type.final()
+        super().tearDownClass()
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Initialise RequiresDBTestCase."""
         super().__init__(*args, **kwargs)
+        self.database: TestDatabaseBase | None = None
+        self.metadata = MetaData()
+        self.engine: MaybeAsyncEngine
+        self.sync_engine: Engine
 
-    def mixin_set_up(self) -> None:
-        super().mixin_set_up()
-        assert self.database is not None, (
-            "PostgresTestCase or DuckDbTestCase should"
-            " be added (or moved left in the super class list)"
-        )
+    def setUp(self) -> None:
+        settings.get_settings.cache_clear()
+        super().setUp()
+        if self.database is None:
+            self.database = self.database_type()
+        else:
+            self.database.open()
+        if self.dump_file_path is not None:
+            self.database.run_sql(Path(self.examples_dir) / Path(self.dump_file_path))
         self.engine = create_db_engine(
-            self.database.dsn(self.database_name),
+            self.database.get_dsn(self.database_name),
             schema_name=self.schema_name,
             use_asyncio=self.use_asyncio,
         )
         self.sync_engine = get_sync_engine(self.engine)
-        self.metadata = MetaData()
         self.metadata.reflect(self.sync_engine)
+
+    def tearDown(self) -> None:
+        assert self.database is not None
+        self.database.close()
+        super().tearDown()
 
     @property
     def dsn(self) -> str:
         """Get the database connection string."""
         assert self.database is not None
-        return self.database.dsn(self.database_name)
+        return self.database.get_dsn(self.database_name)
 
 
-class TestPostgres(TestDatabaseBase):
-    """Postgres test database."""
-
-    Postgresql = None
-
-    @classmethod
-    def setup(cls) -> None:
-        cls.Postgresql = testing.postgresql.PostgresqlFactory(cache_initialized_db=True)
-
-    def __init__(self):
-        super().__init__()
-        self.open()
-
-    def open(self) -> None:
-        """Start the test database"""
-        self.postgresql = self.Postgresql()  # pylint: disable=not-callable
-
-    def close(self) -> None:
-        """Tear down the test database."""
-        if self.postgresql is not None:
-            self.postgresql.terminate()
-
-    @classmethod
-    def final(cls) -> None:
-        """Clean up after all testing"""
-        if cls.Postgresql is not None:
-            cls.Postgresql.clear_cache()
-
-    def dsn(self, database_name: str | None) -> str:
-        """Get the DSN for the test database."""
-        if database_name:
-            url = self.postgresql.url(database=database_name)
-        else:
-            url = self.postgresql.url()
-        assert isinstance(url, str)
-        return url
-
-    def run_sql(self, sql_file: Path) -> None:
-        """Run psql and pass a sql file as the --file option."""
-
-        # If you need to update a .dump file, use
-        # PGPASSWORD=password pg_dump \
-        # --host=localhost \
-        # --port=5432 \
-        # --dbname=src \
-        # --username=postgres \
-        # --no-password \
-        # --clean \
-        # --create \
-        # --insert \
-        # --if-exists > tests/examples/FILENAME.dump
-
-        # Clear and re-create the test database
-        completed_process = run(
-            ["psql", "-d", self.postgresql.url(), "-f", sql_file],
-            capture_output=True,
-            check=True,
-        )
-        # psql doesn't always return != 0 if it fails
-        assert completed_process.stderr == b"", completed_process.stderr
-
-
-@skipUnless(shutil.which("psql"), "need to find 'psql': install PostgreSQL to enable")
-class PostgresTestCase(TestCase):
-    """Postgres database test case."""
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        TestPostgres.setup()
-        super().setUpClass()
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        TestPostgres.final()
-
-    def setUp(self) -> None:
-        super().setUp()
-        self.database = TestPostgres()
-        if self.dump_file_path is not None:
-            self.database.run_sql(Path(self.examples_dir) / Path(self.dump_file_path))
-        self.mixin_set_up()
-
-    def tearDown(self) -> None:
-        self.database.close()
-        super().tearDown()
-
-
-class TestDuckDb(TestDatabaseBase):
-    """Test DuckDB database."""
-
-    SQL_REMOVALS_RE = re.compile(
-        r"^(CREATE DATABASE .*;)|(\\.*)|(ALTER [^;]*;)", re.MULTILINE
-    )
-    # Postgres' default stupid time format, ingoring time zone for now
-    TIME_FORMAT_RE = re.compile(
-        r"'([A-Z][a-z]+ \d+ \d\d:\d\d:\d\d \d\d\d\d) ([A-Z+\-0-9:]+)'"
-    )
-
-    def __init__(self, *args, **kwargs):
-        """Initialize DuckDbTestCase"""
-        super().__init__(*args, **kwargs)
-        self._duckdb_con: Any = None
-        self._db_dir = Path(mkdtemp("duck"))
-        self._make_con_string()
-
-    def _make_con_string(self) -> None:
-        """Make a fresh connection string."""
-        self._db_path = self._db_dir / (
-            "".join(random.choice(string.ascii_letters) for _ in range(8)) + ".db"
-        )
-
-    def open(self) -> None:
-        """Start the test database"""
-        self.close()
-        self._make_con_string()
-        # create the database (must be non-read-only)
-        duckdb_con = duckdb.connect(self._db_path)
-        duckdb_con.close()
-
-    def close(self) -> None:
-        """Tear down the test database."""
-        if self._duckdb_con is not None:
-            self._duckdb_con.close()
-            self._duckdb_con = None
-
-    def dsn(self, _database_name: str | None) -> str:
-        """Get the DSN for the test database."""
-        return f"duckdb:///{self._db_path}"
-
-    def run_sql(self, sql_file: Path) -> None:
-        """Run all the SQL commands in ``sql_file`` on the database."""
-        with sql_file.open() as sql_fh:
-            sql = sql_fh.read()
-        # Remove Postgresisms that DuckDB doesn't understand
-        sanitized1 = re.sub(self.SQL_REMOVALS_RE, "", sql)
-        # Convert time formats
-        sanitized = re.sub(
-            self.TIME_FORMAT_RE,
-            lambda tf: time.strftime(
-                f"(TIMESTAMPTZ '%Y-%m-%d %H:%M:%S {tf.group(2)}')",
-                time.strptime(tf.group(1), "%B %d %H:%M:%S %Y"),
-            ),
-            sanitized1,
-        )
-        # Postgres has default schema "public", so we must have the same
-        duckdb_con = duckdb.connect(self._db_path)
-        duckdb_con.execute("CREATE SCHEMA public;")
-        duckdb_con.execute(sanitized)
-        duckdb_con.close()
-
-
-@skipUnless(shutil.which("duckdb"), "install DuckDB to enable")
-class DuckDbTestCase(TestCase):
-    """DuckDb database test case."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        if self.database is None:
-            self.database = TestDuckDb()
-        self.database.open()
-        if self.dump_file_path is not None:
-            self.database.run_sql(Path(self.examples_dir) / Path(self.dump_file_path))
-        self.mixin_set_up()
-
-    def tearDown(self) -> None:
-        self.database.close()
-        super().tearDown()
-
-
-class GeneratesDBTestMixin(RequiresDbTestMixin):
+class GeneratesDBTestCase(RequiresDBTestCase):
     """A test case for which a database is generated."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -489,15 +499,3 @@ class TestDbCmdMixin(DbCmd):
     def ask_save(self) -> str:
         """Quitting always works without needing to ask the user."""
         return "yes"
-
-
-class DatafakerTestCase(DatafakerTestMixin, TestCase):
-    """Basic test case."""
-
-
-class RequiresDBTestCase(RequiresDbTestMixin, PostgresTestCase):
-    """PostgreSQL database test case."""
-
-
-class GeneratesDBTestCase(GeneratesDBTestMixin, PostgresTestCase):
-    """PostgreSQL database generation test case."""

@@ -1,7 +1,7 @@
 """Data dumping functions."""
-from abc import ABC, abstractmethod
 import csv
 import io
+from abc import ABC, abstractmethod
 from pathlib import Path
 
 import pandas as pd
@@ -12,16 +12,14 @@ from datafaker.utils import create_db_engine, get_sync_engine, logger
 
 
 class TableWriter(ABC):
-    """
-    Writes a table out to a file.
-    """
+    """Writes a table out to a file."""
 
     EXTENSION = ".csv"
 
     def __init__(self, metadata: MetaData, dsn: str, schema: str | None) -> None:
         """
-        Initialize the TableWriter
-        
+        Initialize the TableWriter.
+
         :param metadata: The metadata for our database.
         :param dsn: The connection string for our database.
         :param schema: The schema name for our database, or None for the default.
@@ -32,13 +30,11 @@ class TableWriter(ABC):
 
     def connect(self) -> sqlalchemy.engine.Connection:
         """Connect to the database."""
-        engine = get_sync_engine(
-            create_db_engine(self._dsn, schema_name=self._schema)
-        )
+        engine = get_sync_engine(create_db_engine(self._dsn, schema_name=self._schema))
         return engine.connect()
 
     @abstractmethod
-    def write_file(self, table: sqlalchemy.Table, filename: str) -> bool:
+    def write_file(self, table: sqlalchemy.Table, filepath: Path) -> bool:
         """
         Write the named table into the named file.
 
@@ -47,13 +43,20 @@ class TableWriter(ABC):
         :return: ``true`` on success, otherwise ``false``.
         """
 
-    def write(self, table: sqlalchemy.Table, dir: Path) -> bool:
+    def write(self, table: sqlalchemy.Table, directory: Path) -> bool:
+        """
+        Write the table into a directory with a filename based on the table's name.
+
+        :param table: The table to write out.
+        :param directory: The directory to write the table into.
+        :return: ``true`` on success, otherwise ``false``.
+        """
         tn = table.name
         # DuckDB tables derived from files have confusing suffixes
         # that we should probably remove
         tn = tn.removesuffix(".csv")
         tn = tn.removesuffix(".parquet")
-        return self.write_file(table, dir / f"{tn}{self.EXTENSION}")
+        return self.write_file(table, directory / f"{tn}{self.EXTENSION}")
 
 
 class ParquetTableWriter(TableWriter):
@@ -61,10 +64,10 @@ class ParquetTableWriter(TableWriter):
 
     EXTENSION = ".parquet"
 
-    def write_file(self, table: sqlalchemy.Table, filename: str) -> bool:
+    def write_file(self, table: sqlalchemy.Table, filepath: Path) -> bool:
         """
         Write the named table into the named file.
-        
+
         :param table: The table to output
         :param filename: The filename of the file to write to.
         :return: ``true`` on success, otherwise ``false``.
@@ -74,8 +77,8 @@ class ParquetTableWriter(TableWriter):
                 str(name)
                 for name, col in table.columns.items()
                 if isinstance(
-                    col.type, sqlalchemy.types.DATE
-                ) or isinstance(col.type, sqlalchemy.types.DATETIME)
+                    col.type, (sqlalchemy.types.DATE, sqlalchemy.types.DATETIME)
+                )
             ]
             df = pd.read_sql(
                 sql=f"SELECT * FROM {table.name}",
@@ -83,7 +86,7 @@ class ParquetTableWriter(TableWriter):
                 columns=[str(col.name) for col in table.columns.values()],
                 parse_dates=dates,
             )
-            df.to_parquet(filename)
+            df.to_parquet(filepath)
         return True
 
 
@@ -95,23 +98,35 @@ class DuckDbParquetTableWriter(ParquetTableWriter):
     does not work with DuckDB.
     """
 
-    def write_file(self, table: sqlalchemy.Table, filename: str) -> bool:
+    def write_file(self, table: sqlalchemy.Table, filepath: Path) -> bool:
         """
         Write the named table into the named file.
-        
+
         :param table: The table to output
         :param filename: The filename of the file to write to.
         :return: ``true`` on success, otherwise ``false``.
         """
         with self.connect() as connection:
-            result = connection.execute(sqlalchemy.text(
-                # We need the double quotes to get DuckDB to read the table not the file.
-                f"COPY \"{table.name}\" TO '{filename}' (FORMAT PARQUET)"
-            ))
+            result = connection.execute(
+                sqlalchemy.text(
+                    # We need the double quotes to get DuckDB to read the table not the file.
+                    f"COPY \"{table.name}\" TO '{filepath}' (FORMAT PARQUET)"
+                )
+            )
             return result is not None
 
 
-def get_parquet_table_writer(metadata: MetaData, dsn: str, schema: str | None) -> TableWriter:
+def get_parquet_table_writer(
+    metadata: MetaData, dsn: str, schema: str | None
+) -> TableWriter:
+    """
+    Get a ``TableWriter`` that writes parquet files.
+
+    :param metadata: The database metadata containing the tables to be dumped to files.
+    :param dsn: The database connection string.
+    :param schema: The schema name, if required.
+    :return: ``TableWriter`` to write a parquet file.
+    """
     if dsn.startswith("duckdb:"):
         return DuckDbParquetTableWriter(metadata, dsn, schema)
     return ParquetTableWriter(metadata, dsn, schema)
@@ -124,13 +139,13 @@ class TableWriterIO(TableWriter):
     def write_io(self, table: sqlalchemy.Table, out: io.TextIOBase) -> bool:
         """
         Write the named table into the named file.
-        
+
         :param table: The table to output
         :param filename: The filename of the file to write to.
         :return: ``true`` on success, otherwise ``false``.
         """
 
-    def write_file(self, table: sqlalchemy.Table, filename: str) -> bool:
+    def write_file(self, table: sqlalchemy.Table, filepath: Path) -> bool:
         """
         Write the named table into the named file.
 
@@ -138,7 +153,7 @@ class TableWriterIO(TableWriter):
         :param filename: The filename of the file to write to.
         :return: ``true`` on success, otherwise ``false``.
         """
-        with open(filename, "wt", newline="", encoding="utf-8") as out:
+        with open(filepath, "wt", newline="", encoding="utf-8") as out:
             return self.write_io(table, out)
 
 
@@ -148,7 +163,7 @@ class CsvTableWriter(TableWriterIO):
     def write_io(self, table: sqlalchemy.Table, out: io.TextIOBase) -> bool:
         """
         Write the named table into the named file.
-        
+
         :param table: The table to output
         :param filename: The filename of the file to write to.
         :return: ``True`` on success, otherwise ``False``.

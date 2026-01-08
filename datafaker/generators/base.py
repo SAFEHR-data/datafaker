@@ -291,9 +291,13 @@ class Buckets:
             )
             self.buckets: Sequence[int] = [0] * 10
             for rb in raw_buckets:
-                if isinstance(rb.b, Numeric) and rb.b.is_integer():
-                    bucket = min(9, max(0, int(rb.b) + 1))
-                    self.buckets[bucket] += rb.f / count
+                try:
+                    x = float(rb.b)
+                    if x.is_integer():
+                        bucket = min(9, max(0, int(x) + 1))
+                        self.buckets[bucket] += rb.f / count
+                except TypeError:
+                    pass
             self.mean = mean
             self.stddev = stddev
 

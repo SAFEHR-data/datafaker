@@ -26,9 +26,9 @@ RowCounts = Counter[str]
 
 
 @compiles(CreateColumn, "duckdb")
-def remove_serial(element: CreateColumn, compiler: Any, **kw: Any):
+def remove_serial(element: CreateColumn, compiler: Any, **kw: Any) -> str:
     """
-    Hook compilation for column creation, removing PostgreSQL's ``SERIAL``.
+    Intercede in compilation for column creation, removing PostgreSQL's ``SERIAL``.
 
     DuckDB does not understand ``SERIAL``, and we don't care about
     autoincrementing in datafaker. Ideally ``duckdb_engine`` would remove
@@ -36,23 +36,25 @@ def remove_serial(element: CreateColumn, compiler: Any, **kw: Any):
     :param element: The CreateColumn being executed.
     :param compiler: Actually a DDLCompiler, but that type is not exported.
     :param kw: Further arguments.
+    :return: Corrected SQL.
     """
-    text = compiler.visit_create_column(element, **kw)
+    text: str = compiler.visit_create_column(element, **kw)
     return text.replace(" SERIAL ", " INTEGER ")
 
 
 @compiles(CreateTable, "duckdb")
-def remove_on_delete_cascade(element: CreateTable, compiler: Any, **kw: Any):
+def remove_on_delete_cascade(element: CreateTable, compiler: Any, **kw: Any) -> str:
     """
-    Hook compilation for column creation, removing ``ON DELETE CASCADE``.
+    Intercede in compilation for column creation, removing ``ON DELETE CASCADE``.
 
     DuckDB does not understand cascades, and we don't care about
     that in datafaker. Ideally ``duckdb_engine`` would remove this for us.
     :param element: The CreateTable being executed.
     :param compiler: Actually a DDLCompiler, but that type is not exported.
     :param kw: Further arguments.
+    :return: Corrected SQL.
     """
-    text = compiler.visit_create_table(element, **kw)
+    text: str = compiler.visit_create_table(element, **kw)
     return text.replace(" ON DELETE CASCADE", "")
 
 

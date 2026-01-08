@@ -213,7 +213,9 @@ def _get_default_generator(column: Column) -> RowGeneratorInfo:
                 "Can't handle multiple foreign keys for one column."
             )
         fkey = next(iter(column.foreign_keys))
-        (target_table_name, target_column_name) = split_foreign_key_target(fkey.target_fullname)
+        (target_table_name, target_column_name) = split_foreign_key_target(
+            fkey.target_fullname
+        )
 
         variable_names = [column.name]
         generator_function = "generic.column_value_provider.column_value"
