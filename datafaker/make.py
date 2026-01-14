@@ -36,7 +36,7 @@ from datafaker.utils import (
     get_vocabulary_table_names,
     logger,
     make_primary_key_name,
-    split_foreign_key_target,
+    split_column_full_name,
 )
 
 from .serialize_metadata import metadata_to_dict
@@ -213,7 +213,7 @@ def _get_default_generator(column: Column) -> RowGeneratorInfo:
                 "Can't handle multiple foreign keys for one column."
             )
         fkey = next(iter(column.foreign_keys))
-        (target_table_name, target_column_name) = split_foreign_key_target(
+        (target_table_name, target_column_name) = split_column_full_name(
             fkey.target_fullname
         )
 

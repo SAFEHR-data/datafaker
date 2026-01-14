@@ -791,16 +791,16 @@ def generators_require_stats(config: Mapping) -> bool:
     return stats_required
 
 
-def split_foreign_key_target(fk_target: str) -> tuple[str, str]:
+def split_column_full_name(col_fullname: str) -> tuple[str, str]:
     """
-    Split a foreign key target string into table and column.
+    Split a column fullname into table and column.
 
-    :param fk: The string, such as ``artist.artist_id`` or ``artist.parquet.artist_id``.
+    :param col_fn: The string, such as ``artist.artist_id`` or ``artist.parquet.artist_id``.
     :return: A pair of strings; the table name and the column name. For example
     ``("artist.parquet", "artist_id")``.
     """
-    target_name_parts = fk_target.split(".")
+    name_parts = col_fullname.split(".")
     return (
-        ".".join(target_name_parts[:-1]),
-        target_name_parts[-1],
+        ".".join(name_parts[:-1]),
+        name_parts[-1],
     )

@@ -77,7 +77,12 @@ class ParquetTableWriter(TableWriter):
                 str(name)
                 for name, col in table.columns.items()
                 if isinstance(
-                    col.type, (sqlalchemy.types.DATE, sqlalchemy.types.DATETIME)
+                    col.type,
+                    (
+                        sqlalchemy.types.DATE,
+                        sqlalchemy.types.DATETIME,
+                        sqlalchemy.types.TIMESTAMP,
+                    ),
                 )
             ]
             df = pd.read_sql(

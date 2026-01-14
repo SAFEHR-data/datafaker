@@ -8,7 +8,12 @@ from sqlalchemy import Connection, MetaData, select
 
 from datafaker.generators.choice import ChoiceGeneratorFactory
 from datafaker.interactive.generators import GeneratorCmd
-from tests.utils import GeneratesDBTestCase, RequiresDBTestCase, TestDbCmdMixin, TestDuckDb
+from tests.utils import (
+    GeneratesDBTestCase,
+    RequiresDBTestCase,
+    TestDbCmdMixin,
+    TestDuckDb,
+)
 
 
 class TestGeneratorCmd(GeneratorCmd, TestDbCmdMixin):
@@ -739,6 +744,7 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
 
 class GeneratorsOutputTestsDuckDb(GeneratorsOutputTests):
     """As ``GeneratorsOutputTests`` but with DuckDB."""
+
     database_type = TestDuckDb
 
 
@@ -868,4 +874,5 @@ class GeneratorTests(GeneratesDBTestCase):
 
 class GeneratorTestsDuckDb(GeneratorTests):
     """As ``GeneratorTests`` but with DuckDB."""
+
     database_type = TestDuckDb

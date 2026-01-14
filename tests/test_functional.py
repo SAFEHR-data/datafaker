@@ -580,7 +580,10 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
         """Check that we create a destination schema if it doesn't exist."""
         env = {"dst_schema": "doesntexistyetschema"}
 
-        engine = create_engine(self.env["dst_dsn"])
+        dst_dsn = self.env["dst_dsn"]
+        assert dst_dsn is not None
+
+        engine = create_engine(dst_dsn)
         inspector = inspect(engine)
         self.assertFalse(inspector.has_schema(env["dst_schema"]))
 
@@ -597,7 +600,7 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
         )
         self.assertEqual("", completed_process.stderr)
 
-        engine = create_engine(self.env["dst_dsn"])
+        engine = create_engine(dst_dsn)
         inspector = inspect(engine)
         self.assertTrue(inspector.has_schema(env["dst_schema"]))
 
@@ -610,4 +613,3 @@ class DuckDbFunctionalTestCase(DBFunctionalTestCaseBase):
     schema_name = "public"
 
     database_type = TestDuckDb
-

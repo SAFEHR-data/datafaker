@@ -246,6 +246,7 @@ class DatafakerTestCase(TestCase):
         """Give details for a subprocess result and raise if it's not as expected."""
         code = result.exit_code if hasattr(result, "exit_code") else result.returncode
         if code != expected_code:
+            print(result.exception)
             print(result.stdout)
             print(result.stderr)
             self.assertEqual(expected_code, code)
@@ -253,6 +254,19 @@ class DatafakerTestCase(TestCase):
     def assertSuccess(self, result: Any) -> None:  # pylint: disable=invalid-name
         """Give details for a subprocess result and raise if the result isn't good."""
         self.assertReturnCode(result, 0)
+
+    def assert_successful_and_no_output(self, result: Any) -> None:
+        """Assert that a process was successful and no output was produced."""
+        code = result.exit_code if hasattr(result, "exit_code") else result.returncode
+        errors = []
+        if code != 0:
+            errors.append(f"Result code was {code} not 0.")
+        if result.stdout:
+            errors.append(f"Process unexpectedly produced output:\n{result.stdout}")
+        if result.stderr:
+            errors.append(f"Process unexpectedly produced error text:\n{result.stderr}")
+        if errors:
+            self.fail("\n".join(errors))
 
     def assertFailure(self, result: Any) -> None:  # pylint: disable=invalid-name
         """Give details for a subprocess result and raise if the result isn't bad."""

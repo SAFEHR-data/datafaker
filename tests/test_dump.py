@@ -1,12 +1,16 @@
 """Tests for the base module."""
 import csv
+import os
+import shutil
 import tempfile
 from pathlib import Path
 
 import pandas as pd
+from typer.testing import CliRunner
 
 from datafaker.dump import CsvTableWriter, get_parquet_table_writer
-from tests.utils import RequiresDBTestCase, TestDuckDb
+from datafaker.main import app
+from tests.utils import DatafakerTestCase, RequiresDBTestCase, TestDuckDb
 
 
 class DumpTests(RequiresDBTestCase):
@@ -77,3 +81,94 @@ class DumpTestsDuckDb(DumpTests):
     """DumpTests against DuckDB."""
 
     database_type = TestDuckDb
+
+
+class EndToEndParquetTestCase(DatafakerTestCase):
+    """Read in parquet, make some generators, output parquet."""
+
+    database_type = TestDuckDb
+    examples_dir = Path("tests/examples/duckdb")
+
+    def setUp(self) -> None:
+        """Set up the files in a temporary directory."""
+        super().setUp()
+        # Grab all the files
+        self.parquet_dir = Path(tempfile.mkdtemp("parq"))
+        for fname in os.listdir(self.examples_dir):
+            shutil.copy(self.examples_dir / fname, self.parquet_dir / fname)
+        self.start_dir = os.getcwd()
+        os.chdir(self.parquet_dir)
+
+    def tearDown(self) -> None:
+        """Return to the start directory."""
+        os.chdir(self.start_dir)
+        return super().tearDown()
+
+    def test_end_to_end_parquet(self) -> None:
+        """
+        Test that parquet with an orm.yaml works.
+
+        Read it in, set some generators, then ``dump-data``.
+        """
+        # Set up the runner
+        runner = CliRunner(
+            mix_stderr=False,
+            env={
+                # this file need not exist
+                "src_dsn": "duckdb:///:memory:",
+                # this file will be created by Datafaker
+                "dst_dsn": "duckdb:///./fake.db",
+                # "dst_schema": "fake.dstschema", if you must
+            },
+        )
+
+        # Configure with the spec file
+        result = runner.invoke(
+            app, ["configure-generators", "--spec", str(self.parquet_dir / "spec.csv")]
+        )
+        self.assertSuccess(result)
+        self.assertNotIn("no changes", result.stdout)
+
+        # Generate source stats
+        result = runner.invoke(app, ["make-stats"])
+        self.assertSuccess(result)
+        self.assertNotIn("no changes", result.stdout)
+
+        # Generate the fake data
+        result = runner.invoke(app, ["create-tables"])
+        self.assertSuccess(result)
+        result = runner.invoke(app, ["create-generators"])
+        self.assertSuccess(result)
+        num_passes = 70
+        result = runner.invoke(app, ["create-data", "--num-passes", str(num_passes)])
+        self.assertSuccess(result)
+
+        # Dump the fake tables
+        outdir = Path(tempfile.mkdtemp("dump"))
+        result = runner.invoke(app, ["dump-data", "--output", str(outdir), "--parquet"])
+        self.assertSuccess(result)
+
+        # Check the dumped files
+        # There should be three of them
+        expected_names = {
+            "model": "model.parquet",
+            "player": "player.parquet",
+            "signature-model": "signature_model.parquet",
+        }
+        names = os.listdir(outdir)
+        self.assertSetEqual(set(names), set(expected_names.values()))
+
+        # load the output files
+        dfs = {k: pd.read_parquet(outdir / v) for k, v in expected_names.items()}
+
+        # Each one should have the correct number of rows
+        for v in dfs.values():
+            self.assertEqual(v.shape[0], num_passes)
+
+        # Check the foreign keys
+        player_ids = set()
+        for i, v in enumerate(dfs["signature-model"]["player_id"]):
+            player_ids.add(v)
+            self.assertLessEqual(v, i + 1)
+        # Check that many of the possible keys have been used
+        self.assertLess(num_passes / 3, len(player_ids))
