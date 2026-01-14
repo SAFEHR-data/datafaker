@@ -144,11 +144,11 @@ docs/temp/*
 *.swp
 
 # tool outputs
-df.py
-ssg.py
-orm.yaml
-src-stats.yaml
-config.yaml
+/df.py
+/ssg.py
+/orm.yaml
+/src-stats.yaml
+/config.yaml
 *.yaml.gz
 
 *_stories.py

@@ -16,6 +16,7 @@ from datafaker.utils import (
     get_row_generators,
     logger,
     primary_private_fks,
+    split_column_full_name,
     table_is_private,
 )
 
@@ -448,27 +449,33 @@ information about the columns in the current table. Use 'peek',
 
         :return: True on success.
         """
-        parts = target.split(".", 1)
-        table_index = self._get_table_index(parts[0])
-        if table_index is None:
-            if len(parts) == 1:
-                gen_index = self._get_generator_index(self.table_index, parts[0])
-                if gen_index is not None:
-                    self.generator_index = gen_index
-                    self.set_prompt()
-                    return True
-            self.print(self.ERROR_NO_SUCH_TABLE_OR_COLUMN, parts[0])
-            return False
-        gen_index = None
-        if 1 < len(parts) and parts[1]:
-            gen_index = self._get_generator_index(table_index, parts[1])
-            if gen_index is None:
-                self.print("we cannot set the generator for column {0}", parts[1])
+        (first_part, last_part) = split_column_full_name(target)
+        gen_index: int | None = None
+        if first_part:
+            # table.column
+            table_index = self._get_table_index(first_part)
+            if table_index is None:
+                self.print(self.ERROR_NO_SUCH_TABLE, first_part)
                 return False
-        self._set_table_index(table_index)
-        if gen_index is not None:
-            self.generator_index = gen_index
-            self.set_prompt()
+            gen_index = self._get_generator_index(table_index, last_part)
+            if gen_index is None:
+                self.print(self.ERROR_NO_SUCH_COLUMN, last_part)
+                return False
+        else:
+            # just table or column
+            table_index = self._get_table_index(last_part)
+            gen_index = 0
+            if table_index is None:
+                # not table, perhaps it's column
+                gen_index = self._get_generator_index(self.table_index, last_part)
+                if gen_index is None:
+                    # it's neither
+                    self.print(self.ERROR_NO_SUCH_TABLE_OR_COLUMN, last_part)
+                    return False
+        if table_index is not None:
+            self._set_table_index(table_index)
+        self.generator_index = gen_index
+        self.set_prompt()
         return True
 
     def do_next(self, arg: str) -> None:
@@ -509,10 +516,8 @@ information about the columns in the current table. Use 'peek',
         self, text: str, _line: str, _begidx: int, _endidx: int
     ) -> list[str]:
         """Completions for the arguments of the ``next`` command."""
-        parts = text.split(".", 1)
-        first_part = parts[0]
-        if 1 < len(parts):
-            column_name = parts[1]
+        (first_part, last_part) = split_column_full_name(text)
+        if first_part:
             table_index = self._get_table_index(first_part)
             if table_index is None:
                 return []
@@ -521,22 +526,22 @@ information about the columns in the current table. Use 'peek',
                 f"{first_part}.{column}"
                 for gen in table_entry.new_generators
                 for column in gen.columns
-                if column.startswith(column_name)
+                if column.startswith(last_part)
             ]
         table_names = [
             entry.name
             for entry in self.table_entries
-            if entry.name.startswith(first_part)
+            if entry.name.startswith(last_part)
         ]
-        if first_part in table_names:
-            table_names.append(f"{first_part}.")
+        if last_part in table_names:
+            table_names.append(f"{last_part}.")
         current_table = self.get_table()
         if current_table:
             column_names = [
                 col
                 for gen in current_table.new_generators
                 for col in gen.columns
-                if col.startswith(first_part)
+                if col.startswith(last_part)
             ]
         else:
             column_names = []
