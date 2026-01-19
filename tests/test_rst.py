@@ -1,13 +1,13 @@
 """Run the .rst linter via a unit test.
 
 The CLI does not allow errors to be disabled, but we can ignore them here."""
-from docutils.parsers.rst import directives
 from pathlib import Path
-from sphinxcontrib.mermaid import Mermaid
 from typing import Any
 from unittest import TestCase
 
+from docutils.parsers.rst import directives
 from restructuredtext_lint import lint_file
+from sphinxcontrib.mermaid import Mermaid
 
 
 def _level_to_string(level: int) -> str:

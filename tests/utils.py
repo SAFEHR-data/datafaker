@@ -13,7 +13,7 @@ from unittest import TestCase, skipUnless
 
 import testing.postgresql
 import yaml
-from sqlalchemy.schema import MetaData
+from sqlalchemy import Engine, MetaData
 
 from datafaker import settings
 from datafaker.create import create_db_data_into
@@ -21,6 +21,7 @@ from datafaker.interactive.base import DbCmd
 from datafaker.make import make_src_stats, make_table_generators, make_tables_file
 from datafaker.remove import remove_db_data_from
 from datafaker.utils import (
+    MaybeAsyncEngine,
     T,
     create_db_engine,
     get_sync_engine,
@@ -136,6 +137,13 @@ class RequiresDBTestCase(DatafakerTestCase):
     dump_file_path: str | None = None
     database_name: str | None = None
     Postgresql = None
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Declare the types."""
+        super().__init__(*args, **kwargs)
+        self.engine: MaybeAsyncEngine
+        self.sync_engine: Engine
+        self.metadata: MetaData
 
     @classmethod
     def setUpClass(cls) -> None:
