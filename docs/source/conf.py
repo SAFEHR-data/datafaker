@@ -29,6 +29,7 @@ extensions: list[str] = [
     "sphinx.ext.autosummary",
     "sphinx_rtd_theme",
     "sphinx.ext.napoleon",
+    "sphinxcontrib.mermaid",
 ]
 
 autodoc_mock_imports: list[str] = ["typer", "pydantic", "sqlalchemy"]
@@ -41,3 +42,6 @@ exclude_patterns: list[str] = []
 
 html_theme = "sphinx_rtd_theme"  # pylint: disable=C0103
 html_static_path = ["_static"]
+
+def setup(app):
+    app.add_css_file("custom.css")

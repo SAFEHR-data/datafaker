@@ -21,6 +21,7 @@ Contents:
    :glob:
    :maxdepth: 2
 
+   overview
    installation
    docker
    quickstart
@@ -29,6 +30,7 @@ Contents:
    loan_data
    health_data
    configuration
+   custom_generators
    api
    faq
    glossary
