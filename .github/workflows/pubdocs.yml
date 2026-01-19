@@ -1,6 +1,6 @@
 ---
 name: Publish Documentation
-on: workflow_dispatch
+on: [workflow_dispatch, push]
 env:
   PYTHON_VERSION: "3.12"
 jobs:
