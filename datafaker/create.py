@@ -130,11 +130,11 @@ def create_db_data_into(
     Populate the database.
 
     :param sorted_tables: The table names to populate, sorted so that foreign
-    keys' targets are populated before the foreign keys themselves.
+        keys' targets are populated before the foreign keys themselves.
     :param table_generator_dict: A mapping  of table names to the generators
-    used to make data for them.
+        used to make data for them.
     :param story_generator_list: A list of story generators to be run after the
-    table generators on each pass.
+        table generators on each pass.
     :param num_passes: Number of passes to perform.
     :param db_dsn: Connection string for the destination database.
     :param schema_name: Destination schema name.
@@ -196,7 +196,7 @@ class StoryIterator:
         Get the name of the current table.
 
         :return: The table name, or None if there are  no more stories
-        to process.
+            to process.
         """
         return self._table_name
 

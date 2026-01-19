@@ -249,12 +249,12 @@ def merge_with_constants(
     Merge a list of items with other items that must be placed at certain indices.
 
     :param constants_at: A map of indices to objects that must be placed at
-    those indices.
+        those indices.
     :param xs: Items that fill in the gaps left by ``constants_at``.
     :return: ``xs`` with ``constants_at`` inserted at the appropriate
-    points. If there are not enough elements in ``xs`` to fill in the gaps
-    in ``constants_at``, the elements of ``constants_at`` after the gap
-    are dropped.
+        points. If there are not enough elements in ``xs`` to fill in the gaps
+        in ``constants_at``, the elements of ``constants_at`` after the gap
+        are dropped.
     """
     outi = 0
     xi = 0
@@ -344,7 +344,7 @@ class DistributionProvider(BaseProvider):
         Choose a value with equal probability.
 
         :param a: The list of values to output. Each element is a mapping with
-        a key ``value`` and the key is the value to return.
+            a key ``value`` and the key is the value to return.
         :return: The chosen value.
         """
         return self.choice_direct(a).get("value", None)
@@ -371,8 +371,8 @@ class DistributionProvider(BaseProvider):
         1/n times as frequently as the first value is chosen.
 
         :param a: The list of rows to choose between, most frequent first.
-        Each element is a mapping with a key ``value`` and the key is the
-        value to return.
+            Each element is a mapping with a key ``value`` and the key is the
+            value to return.
         :return: The chosen value.
         """
         c = self.zipf_choice_direct(a, n)
@@ -383,8 +383,8 @@ class DistributionProvider(BaseProvider):
         Choice weighted by the count in the original dataset.
 
         :param a: a list of dicts, each with a ``value`` key
-        holding the value to be returned and a ``count`` key holding the
-        number of that value found in the original dataset
+            holding the value to be returned and a ``count`` key holding the
+            number of that value found in the original dataset
         :return: The chosen ``value``.
         """
         vs = []
@@ -406,9 +406,9 @@ class DistributionProvider(BaseProvider):
         Return an array of values chosen from the given covariates.
 
         :param cov: Keys are ``rank``: The number of values to output;
-        ``mN``: The mean of variable ``N`` (where ``N`` is between 0 and
-        one less than ``rank``). ``cN_M`` (where 0 < ``N`` <= ``M`` < ``rank``):
-        the covariance between the ``N``th and the ``M``th variables.
+            ``mN``: The mean of variable ``N`` (where ``N`` is between 0 and
+            one less than ``rank``). ``cN_M`` (where 0 < ``N`` <= ``M`` < ``rank``):
+            the covariance between the ``N``\th and the ``M``\th variables.
         :return: A numpy array of results.
         """
         rank = int(cov["rank"])
@@ -473,10 +473,10 @@ class DistributionProvider(BaseProvider):
         Produce a list of values pulled from a multivariate distribution.
 
         :param cov: A dict with various keys: ``rank`` is the number of
-        output values, ``m0``, ``m1``, ... are the means of the
-        distributions (``rank`` of them). ``c0_0``, ``c0_1``, ``c1_1``, ...
-        are the covariates, ``cN_M`` is the covariate of the ``N``th and
-        ``M``th varaibles, with 0 <= ``N`` <= ``M`` < ``rank``.
+            output values, ``m0``, ``m1``, ... are the means of the
+            distributions (``rank`` of them). ``c0_0``, ``c0_1``, ``c1_1``, ...
+            are the covariates, ``cN_M`` is the covariate of the ``N``\th and
+            ``M``\th varaibles, with 0 <= ``N`` <= ``M`` < ``rank``.
         :return: list of ``rank`` floating point values
         """
         out: list[float] = self.multivariate_normal_np(cov).tolist()
@@ -487,11 +487,11 @@ class DistributionProvider(BaseProvider):
         Produce a list of values pulled from a multivariate distribution.
 
         :param cov: A dict with various keys: ``rank`` is the number of
-        output values, ``m0``, ``m1``, ... are the means of the
-        distributions (``rank`` of them). ``c0_0``, ``c0_1``, ``c1_1``, ...
-        are the covariates, ``cN_M`` is the covariate of the ``N``th and
-        ``M``th varaibles, with 0 <= ``N`` <= ``M`` < ``rank``. These
-        are all the means and covariants of the logs of the data.
+            output values, ``m0``, ``m1``, ... are the means of the
+            distributions (``rank`` of them). ``c0_0``, ``c0_1``, ``c1_1``, ...
+            are the covariates, ``cN_M`` is the covariate of the ``N``\th and
+            ``M``\th varaibles, with 0 <= ``N`` <= ``M`` < ``rank``. These
+            are all the means and covariants of the logs of the data.
         :return: list of ``rank`` floating point values
         """
         out: list[Any] = np.exp(self.multivariate_normal_np(cov)).tolist()
@@ -528,13 +528,13 @@ class DistributionProvider(BaseProvider):
         Pick between other generators.
 
         :param alternative_configs: List of alternative generators.
-        Each alternative has the following keys: "count" -- a weight for
-        how often to use this alternative; "name" -- which generator
-        for this partition, for example "composite"; "params" -- the
-        parameters for this alternative.
+            Each alternative has the following keys: "count" -- a weight for
+            how often to use this alternative; "name" -- which generator
+            for this partition, for example "composite"; "params" -- the
+            parameters for this alternative.
         :param counts: A list of weights for each alternative. If None, the
-        "count" value of each alternative is used. Each count is a dict
-        with a "count" key.
+            "count" value of each alternative is used. Each count is a dict
+            with a "count" key.
         :return: list of values
         """
         if counts is not None:
@@ -560,12 +560,12 @@ class DistributionProvider(BaseProvider):
         Insert constants into the results of a different generator.
 
         :param constants_at: A dictionary of positions and objects to insert
-        into the return list at those positions.
+            into the return list at those positions.
         :param subgen: The name of the function to call to get the results
-        that will have the constants inserted into.
+            that will have the constants inserted into.
         :param params: Keyword arguments to the ``subgen`` function.
         :return: A list of results from calling ``subgen(**params)``
-        with ``constants_at`` inserted in at the appropriate indices.
+            with ``constants_at`` inserted in at the appropriate indices.
         """
         if subgen not in self.PERMITTED_SUBGENS:
             logger.error(

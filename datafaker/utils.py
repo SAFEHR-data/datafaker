@@ -488,7 +488,7 @@ def make_foreign_key_name(table_name: str, col_name: str) -> str:
 def remove_vocab_foreign_key_constraints(
     metadata: MetaData,
     config: Mapping[str, Any],
-    dst_engine: Connection | Engine,
+    dst_engine: Union[Connection, Engine],
 ) -> None:
     """
     Remove the foreign key constraints from vocabulary tables.
@@ -532,7 +532,7 @@ def reinstate_vocab_foreign_key_constraints(
     metadata: MetaData,
     meta_dict: Mapping[str, Any],
     config: Mapping[str, Any],
-    dst_engine: Connection | Engine,
+    dst_engine: Union[Connection, Engine],
 ) -> None:
     """
     Put the removed foreign keys back into the destination database.

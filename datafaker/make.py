@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from types import TracebackType
-from typing import Any, Callable, Final, Mapping, Optional, Sequence, Tuple, Type
+from typing import Any, Callable, Final, Mapping, Optional, Sequence, Tuple, Type, Union
 
 import pandas as pd
 import snsql
@@ -90,8 +90,8 @@ def make_column_choices(
 
     :param table_config: The ``tables`` part of ``config.yaml``.
     :return: A list of ``ColumnChoice`` objects; that is, descriptions of
-    functions and their arguments to call to reveal a list of columns that
-    should have values generated for them.
+        functions and their arguments to call to reveal a list of columns that
+        should have values generated for them.
     """
     return [
         ColumnChoice(
@@ -125,7 +125,7 @@ class TableGeneratorInfo:
     column_choices: list[ColumnChoice]
     rows_per_pass: int
     row_gens: list[RowGeneratorInfo] = field(default_factory=list)
-    unique_constraints: Sequence[UniqueConstraint | _PrimaryConstraint] = field(
+    unique_constraints: Sequence[Union[UniqueConstraint, _PrimaryConstraint]] = field(
         default_factory=list
     )
 
@@ -286,7 +286,7 @@ def _integer_generator(column: Column) -> tuple[str, dict[str, str]]:
 
     :param column: The column to get the generator for.
     :return: A pair consisting of the name of a generator and its
-    arguments.
+        arguments.
     """
     if not column.primary_key:
         return ("generic.numeric.integer_number", {})
@@ -423,7 +423,7 @@ def _get_generator_and_arguments(column: Column) -> tuple[str | None, dict[str, 
     Get the generator and its arguments from the column type.
 
     :return: A tuple of a string representing the generator callable and a dict of
-    keyword arguments to supply to it.
+        keyword arguments to supply to it.
     """
     generator_function = _get_generator_for_column(type(column.type))
 
@@ -437,12 +437,10 @@ def _get_provider_for_column(column: Column) -> Tuple[list[str], str, dict[str, 
     """
     Get a default Mimesis provider and its arguments for a SQL column type.
 
-    Args:
-        column: SQLAlchemy column object
+    :param column: SQLAlchemy column object
 
-    Returns:
-        Tuple[str, str, list[str]]: Tuple containing the variable names to assign to,
-        generator function and any generator arguments.
+    :return: Tuple[str, str, list[str]]: Tuple containing the variable names
+        to assign to, generator function and any generator arguments.
     """
     variable_names: list[str] = [column.name]
 
@@ -589,19 +587,17 @@ def make_table_generators(  # pylint: disable=too-many-locals
     The orm and vocabulary YAML files must already have been
     generated (by make-tables and make-vocab).
 
-    Args:
-      metadata: database ORM
-      config: Configuration to control the generator creation.
-      orm_filename: "orm.yaml" file path so that the generator
-      file can load the MetaData object
-      config_filename: "config.yaml" file path so that the generator
-      file can load the MetaData object
-      src_stats_filename: A filename for where to read src stats from.
+    :param metadata: database ORM
+    :param config: Configuration to control the generator creation.
+    :param orm_filename: "orm.yaml" file path so that the generator
+        file can load the MetaData object
+    :param config_filename: "config.yaml" file path so that the generator
+        file can load the MetaData object
+    :param src_stats_filename: A filename for where to read src stats from.
         Optional, if `None` this feature will be skipped
-      overwrite_files: Whether to overwrite pre-existing vocabulary files
+    :param overwrite_files: Whether to overwrite pre-existing vocabulary files
 
-    Returns:
-      A string that is a valid Python module, once written to file.
+    :return: A string that is a valid Python module, once written to file.
     """
     row_generator_module_name: str = config.get("row_generators_module", None)
     story_generator_module_name = config.get("story_generators_module", None)

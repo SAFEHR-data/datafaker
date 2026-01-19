@@ -1,5 +1,5 @@
 """Functions and classes to undo the operations in create.py."""
-from typing import Any, Mapping
+from typing import Any, Mapping, Optional
 
 from sqlalchemy import MetaData, delete
 
@@ -56,7 +56,7 @@ def remove_db_vocab(
         reinstate_vocab_foreign_key_constraints(metadata, meta_dict, config, dst_conn)
 
 
-def remove_db_tables(metadata: MetaData | None) -> None:
+def remove_db_tables(metadata: Optional[MetaData]) -> None:
     """Drop the tables in the destination schema."""
     settings = get_settings()
     assert settings.dst_dsn, "Missing destination database settings"
