@@ -138,6 +138,7 @@ datafaker/config.ini
 
 # sphinx
 docs/build/*
+docs/esbonio-build/*
 docs/temp/*
 
 # vim swap files

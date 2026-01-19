@@ -210,18 +210,20 @@ So let us find these sections in ``config.yaml`` and change ``vocabulary_table: 
 (deleting the other properties if you like):
 
 .. code-block:: yaml
-    category:
-      vocabulary_table: true
-    city:
-      vocabulary_table: true
-    country:
-      vocabulary_table: true
+
+  category:
+    vocabulary_table: true
+  city:
+    vocabulary_table: true
+  country:
+    vocabulary_table: true
 
 and later (although it doesn't matter if you re-arrange the table blocks):
 
 .. code-block:: yaml
-    language:
-      vocabulary_table: true
+
+  language:
+    vocabulary_table: true
 
 and now we take this file into the private network (or pretend to) and run (in the private network with ``SRC_DSN`` and ``SRC_SCHEMA`` set as above):
 
