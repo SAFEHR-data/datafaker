@@ -1,5 +1,5 @@
 ---
-name: publish documentation
+name: Publish Documentation
 on: workflow_dispatch
 env:
   PYTHON_VERSION: "3.12"
