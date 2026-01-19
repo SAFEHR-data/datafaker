@@ -24,8 +24,9 @@ jobs:
           python -m poetry install --all-extras
       - name: Build documentation
         shell: bash
+        working-directory: ./docs
         run: |
-          python -m poetry run -C docs make html
+          python -m poetry run make html
       - name: Publish docs on github Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
