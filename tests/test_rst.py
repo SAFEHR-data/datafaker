@@ -1,7 +1,9 @@
 """Run the .rst linter via a unit test.
 
 The CLI does not allow errors to be disabled, but we can ignore them here."""
+from docutils.parsers.rst import directives
 from pathlib import Path
+from sphinxcontrib.mermaid import Mermaid
 from typing import Any
 from unittest import TestCase
 
@@ -29,6 +31,7 @@ class RstTests(TestCase):
         """Run the linter on the docs/ directory."""
         docs_path = Path("docs/")
         rst_files = docs_path.glob("**/*.rst")
+        directives.register_directive("mermaid", Mermaid)
 
         all_errors = []
         for rst_file in rst_files:
