@@ -402,7 +402,7 @@ class DistributionProvider(BaseProvider):
         return value
 
     def multivariate_normal_np(self, cov: dict[str, Any]) -> np.typing.NDArray:
-        """
+        r"""
         Return an array of values chosen from the given covariates.
 
         :param cov: Keys are ``rank``: The number of values to output;
@@ -469,7 +469,7 @@ class DistributionProvider(BaseProvider):
     }
 
     def multivariate_normal(self, cov: dict[str, Any]) -> list[float]:
-        """
+        r"""
         Produce a list of values pulled from a multivariate distribution.
 
         :param cov: A dict with various keys: ``rank`` is the number of
@@ -483,7 +483,7 @@ class DistributionProvider(BaseProvider):
         return out
 
     def multivariate_lognormal(self, cov: dict[str, Any]) -> list[float]:
-        """
+        r"""
         Produce a list of values pulled from a multivariate distribution.
 
         :param cov: A dict with various keys: ``rank`` is the number of
