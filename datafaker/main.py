@@ -343,9 +343,19 @@ def make_stats(
 
 @app.command()
 def make_tables(
-    orm_file: str = Option(ORM_FILENAME, help="Path to write the ORM yaml file to"),
+    orm_file: Path = Option(ORM_FILENAME, help="Path to write the ORM yaml file to"),
     force: bool = Option(
         False, "--force", "-f", help="Overwrite any existing orm yaml file."
+    ),
+    parquet_dir: Optional[Path] = Option(
+        None,
+        help=(
+            "Directory of Parquet files to consider part of the database."
+            " This can be useful when using DuckDB."
+            " Make sure you check the output!"
+        ),
+        file_okay=False,
+        dir_okay=True,
     ),
 ) -> None:
     """Make a YAML file representing the tables in the schema.
@@ -362,7 +372,7 @@ def make_tables(
     settings = get_settings()
     src_dsn: str = _require_src_db_dsn(settings)
 
-    content = make_tables_file(src_dsn, settings.src_schema)
+    content = make_tables_file(src_dsn, settings.src_schema, parquet_dir)
     orm_file_path.write_text(content, encoding="utf-8")
     logger.debug("%s created.", orm_file)
 

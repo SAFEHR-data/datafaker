@@ -280,7 +280,7 @@ class TestCLI(DatafakerTestCase):
         )
 
         mock_make_tables_file.assert_called_once_with(
-            "postgresql://suser:spassword@shost:5432/sdbname", None
+            "postgresql://suser:spassword@shost:5432/sdbname", None, None
         )
         mock_path.return_value.write_text.assert_called_once_with(
             "some text", encoding="utf-8"
@@ -359,6 +359,7 @@ class TestCLI(DatafakerTestCase):
                 mock_make_tables.assert_called_once_with(
                     mock_get_settings.return_value.src_dsn,
                     mock_get_settings.return_value.src_schema,
+                    None,
                 )
                 mock_path.return_value.write_text.assert_called_once_with(
                     mock_tables_output, encoding="utf-8"

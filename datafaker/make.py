@@ -23,6 +23,7 @@ from sqlalchemy.sql import Executable, sqltypes
 from typing_extensions import Self
 
 from datafaker import providers
+from datafaker.parquet2orm import get_parquet_orm
 from datafaker.settings import get_settings
 from datafaker.utils import (
     MaybeAsyncEngine,
@@ -695,13 +696,24 @@ def _generate_vocabulary_table(
     download_table(table, engine, yaml_file_name, compress)
 
 
-def make_tables_file(db_dsn: str, schema_name: Optional[str]) -> str:
+def make_tables_file(
+    db_dsn: str,
+    schema_name: Optional[str],
+    parquet_dir: Optional[Path] = None,
+) -> str:
     """Construct the YAML file representing the schema."""
     engine = get_sync_engine(create_db_engine(db_dsn, schema_name=schema_name))
 
     metadata = MetaData()
     metadata.reflect(engine)
     meta_dict = metadata_to_dict(metadata, schema_name, engine)
+
+    if parquet_dir is not None:
+        extra_meta = get_parquet_orm(parquet_dir)
+        if extra_meta:
+            md_tables = get_property(meta_dict, "tables", dict, {})
+            new_tables = {**extra_meta, **md_tables}
+            meta_dict["tables"] = new_tables
 
     return yaml.dump(meta_dict)
 
