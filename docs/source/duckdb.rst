@@ -36,7 +36,14 @@ Simply set your source connection string to an in-memory database:
 
    export SRC_DSN=duckdb:///:memory:
 
-If you do this, `datafaker make-tables` will not work as there is nothing in this database, so you will have to write your ``orm.yaml`` file by hand.
+If you do this, `datafaker make-tables` will not work as there is nothing in this database.
+You can write your ``orm.yaml`` file by hand, but you can try
+`datafaker make-tables --parquet-dir /path/to/directory/containing/parquet/files`
+to give you a head start; the ``orm.yaml`` file produced will be valid, but it
+might be wrong in many ways. Look out for the warnings given, and take
+special care checking that foreign keys are specified correctly.
+
+Let us look at an example of how to write an ``orm.yaml`` file.
 Assume you have two Parquet files, ``artist.parquet`` and ``artwork.parquet``.
 
 Our ``orm.yaml`` file must specify these files and the columns within them.
@@ -77,7 +84,7 @@ For example:
             name:
                type: TEXT
             date:
-               type: date
+               type: DATE
             medium:
                type: TEXT
 

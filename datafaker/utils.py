@@ -5,7 +5,9 @@ import importlib.util
 import io
 import json
 import logging
+import random
 import re
+import string
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -503,7 +505,13 @@ def normalize_table_name(table_name: str) -> str:
 
 def make_foreign_key_name(table_name: str, col_name: str) -> str:
     """Make a suitable foreign key name."""
-    return f"{normalize_table_name(table_name)}_{col_name}_fkey"
+    ntn = normalize_table_name(table_name)
+    name = f"{ntn}_{col_name}_fkey"
+    # really this should be max_identifier_length in the sqlalchemy dialect
+    if len(name) < 64:
+        return name
+    rand = "".join(random.choice(string.ascii_letters) for _ in range(6))
+    return f"{ntn[:24]}_{col_name[:24]}_{rand}_fkey"
 
 
 def make_primary_key_name(table_name: str) -> str:
