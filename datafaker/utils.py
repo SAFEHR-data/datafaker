@@ -5,6 +5,9 @@ import importlib.util
 import io
 import json
 import logging
+import random
+import re
+import string
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -442,6 +445,15 @@ def get_vocabulary_table_names(config: Mapping) -> set[str]:
     }
 
 
+def get_ignored_table_names(config: Mapping) -> set[str]:
+    """Extract the table names with a ignore: true property."""
+    return {
+        table_name
+        for (table_name, table_config) in config.get("tables", {}).items()
+        if get_flag(table_config, "ignore")
+    }
+
+
 def get_columns_assigned(
     row_generator_config: Mapping[str, Any]
 ) -> Generator[str, None, None]:
@@ -480,9 +492,31 @@ def get_row_generators(
             yield (name, rg)
 
 
+_alphanumeric_re = re.compile(r"[^a-zA-Z0-9]")
+
+
+def normalize_table_name(table_name: str) -> str:
+    """Remove non alphanumeric characters from table name."""
+    name = _alphanumeric_re.sub("_", table_name)
+    if not name or not name[0].isalpha():
+        return "_" + name
+    return name
+
+
 def make_foreign_key_name(table_name: str, col_name: str) -> str:
     """Make a suitable foreign key name."""
-    return f"{table_name}_{col_name}_fkey"
+    ntn = normalize_table_name(table_name)
+    name = f"{ntn}_{col_name}_fkey"
+    # really this should be max_identifier_length in the sqlalchemy dialect
+    if len(name) < 64:
+        return name
+    rand = "".join(random.choice(string.ascii_letters) for _ in range(6))
+    return f"{ntn[:24]}_{col_name[:24]}_{rand}_fkey"
+
+
+def make_primary_key_name(table_name: str) -> str:
+    """Make a suitable primary key name."""
+    return f"{normalize_table_name(table_name)}_primary_key"
 
 
 def remove_vocab_foreign_key_constraints(
@@ -662,6 +696,22 @@ def sorted_non_vocabulary_tables(metadata: MetaData, config: Mapping) -> list[Ta
     return [metadata.tables[tn] for tn in sorted_tables]
 
 
+def generated_tables(metadata: MetaData, config: Mapping) -> list[Table]:
+    """
+    Get all the non-ignored, non-vocabulary tables.
+
+    :param metadata: MetaData of the database.
+    :param config: Mapping from `config.yaml`.
+    :return: All the non-ignored, non-vocabulary tables.
+    """
+    not_for_output = get_vocabulary_table_names(config) | get_ignored_table_names(
+        config
+    )
+    return [
+        table for table in metadata.tables.values() if table.name not in not_for_output
+    ]
+
+
 def underline_error(e: SyntaxError) -> str:
     r"""
     Make an underline for this error.
@@ -747,3 +797,18 @@ def generators_require_stats(config: Mapping) -> bool:
     for error in errors:
         logger.error(*error)
     return stats_required
+
+
+def split_column_full_name(col_fullname: str) -> tuple[str, str]:
+    """
+    Split a column fullname into table and column.
+
+    :param col_fn: The string, such as ``artist.artist_id`` or ``artist.parquet.artist_id``.
+    :return: A pair of strings; the table name and the column name. For example
+    ``("artist.parquet", "artist_id")``.
+    """
+    name_parts = col_fullname.split(".")
+    return (
+        ".".join(name_parts[:-1]),
+        name_parts[-1],
+    )

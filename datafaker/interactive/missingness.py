@@ -106,7 +106,7 @@ data from the database. Use 'quit' to exit this tool."""
             return None
         mgs = table_config.get("missingness_generators", [])
         old = None
-        nonnull_columns = self.get_nonnull_columns(table_name)
+        nonnull_columns = self.get_nullable_columns(table_name)
         if not nonnull_columns:
             return None
         if not mgs:
@@ -298,7 +298,7 @@ data from the database. Use 'quit' to exit this tool."""
             name=name,
             query=query,
             comments=comments,
-            columns=self.get_nonnull_columns(entry.name),
+            columns=self.get_nullable_columns(entry.name),
         )
 
     def _set_none(self) -> None:
@@ -337,7 +337,7 @@ data from the database. Use 'quit' to exit this tool."""
             MissingnessType.sampled_query(
                 entry.name,
                 count,
-                self.get_nonnull_columns(entry.name),
+                self.get_nullable_columns(entry.name),
             ),
             [
                 "The missingness patterns and how often they appear in a"

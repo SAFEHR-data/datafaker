@@ -295,7 +295,7 @@ class DbCmd(ABC, cmd.Cmd):
         self.config["src-stats"] = new_src_stats
         return new_src_stats
 
-    def get_nonnull_columns(self, table_name: str) -> list[str]:
+    def get_nullable_columns(self, table_name: str) -> list[str]:
         """Get the names of the nullable columns in the named table."""
         metadata_table = self.metadata.tables[table_name]
         return [
@@ -327,7 +327,7 @@ class DbCmd(ABC, cmd.Cmd):
         if len(self._table_entries) <= self.table_index:
             return
         table_name = self.table_name()
-        nonnull_columns = self.get_nonnull_columns(table_name)
+        nonnull_columns = self.get_nullable_columns(table_name)
         colcounts = [f', COUNT("{nnc}") AS "{nnc}"' for nnc in nonnull_columns]
         with self.sync_engine.connect() as connection:
             result = (
