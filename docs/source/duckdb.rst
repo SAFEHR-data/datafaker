@@ -96,8 +96,8 @@ Using DuckDB to write fake Parquet or CSV files
 You cannot use an in-memory DuckDB for the destination database because it needs to survive multiple calls to ``datafaker``,
 but Datafaker will create the DuckDB file for you if you set the `DST_DSN` environment variable appropriately.
 
-After using ``datafaker create-tables``, ``datafaker create-generators``, and ``datafaker create-data``.
-You now have a database file containing the fake data. If you want CSV or parquet files you can use the following commands:
+After using ``datafaker create-tables``, ``datafaker create-generators``, and ``datafaker create-data``,
+you now have a database file containing the fake data. If you want CSV or parquet files you can use the following commands:
 
 .. code-block:: shell
 
@@ -140,7 +140,13 @@ for Mac or Linux, or on Windows use:
    set SRC_DSN=duckdb:///:memory:
    set DST_DSN=duckdb:///./fake.db
 
-Write the ``orm.yaml`` file as detailed above.
+Now generate the ``orm.yaml``:
+
+.. code-block:: shell
+
+   datafaker make-tables --parquet-dir .
+
+... and edit the ``orm.yaml`` file as detailed above.
 
 Now configure the tables and generators, and summary statistics:
 
@@ -152,11 +158,12 @@ Now configure the tables and generators, and summary statistics:
    datafaker make-stats
 
 Now you have your three files: ``orm.yaml``, ``config.yaml`` and ``src-stats.yaml``,
-and can create the fake data parquet files:
+and can create the fake data parquet files in a new directory called ``fake``:
 
 .. code-block:: shell
 
    datafaker create-tables
    datafaker create-generators
    datafaker create-data --num-passes 100
-   datafaker dump-data --parquet
+   mkdir fake
+   datafaker dump-data --parquet --output fake
