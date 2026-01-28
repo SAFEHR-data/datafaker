@@ -1,0 +1,1086 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Index &mdash; datafaker 0.0 documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/sphinx_highlight.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+        <script type="module">import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.12.1/dist/mermaid.esm.min.mjs";
+
+
+
+
+
+const initStyles = () => {
+    const defaultStyle = document.createElement('style');
+    defaultStyle.textContent = `pre.mermaid {
+    /* Same as .mermaid-container > pre */
+    display: block;
+    width: 100%;
+}
+
+pre.mermaid > svg {
+    /* Same as .mermaid-container > pre > svg */
+    height: 500px;
+    width: 100%;
+    max-width: 100% !important;
+}`;
+    document.head.appendChild(defaultStyle);
+
+    const fullscreenStyle = document.createElement('style');
+    fullscreenStyle.textContent = `.mermaid-container {
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+}
+
+.mermaid-container > pre {
+    display: block;
+    width: 100%;
+}
+
+.mermaid-container > pre > svg {
+    height: 500px;
+    width: 100%;
+    max-width: 100% !important;
+}
+
+.mermaid-fullscreen-btn {
+    width: 28px;
+    height: 28px;
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    font-size: 14px;
+    line-height: 1;
+    padding: 0;
+    color: #333;
+}
+
+.mermaid-fullscreen-btn:hover {
+    opacity: 100% !important;
+    background: rgba(255, 255, 255, 1);
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+    transform: scale(1.1);
+}
+
+.mermaid-fullscreen-btn.dark-theme {
+    background: rgba(50, 50, 50, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: #e0e0e0;
+}
+
+.mermaid-fullscreen-btn.dark-theme:hover {
+    background: rgba(60, 60, 60, 1);
+    box-shadow: 0 3px 10px rgba(255, 255, 255, 0.2);
+}
+
+.mermaid-fullscreen-modal {
+    display: none;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 95vw;
+    height: 100vh;
+    background: rgba(255, 255, 255, 0.98);
+    z-index: 9999;
+    padding: 20px;
+    overflow: auto;
+}
+
+.mermaid-fullscreen-modal.dark-theme {
+    background: rgba(0, 0, 0, 0.98);
+}
+
+.mermaid-fullscreen-modal.active {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mermaid-container-fullscreen {
+    position: relative;
+    width: 95vw;
+    height: 90vh;
+    max-width: 95vw;
+    max-height: 90vh;
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    overflow: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mermaid-container-fullscreen.dark-theme {
+    background: #1a1a1a;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+}
+
+.mermaid-container-fullscreen pre.mermaid {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mermaid-container-fullscreen .mermaid svg {
+    height: 100% !important;
+    width: 100% !important;
+    cursor: grab;
+}
+
+.mermaid-fullscreen-close {
+    position: fixed !important;
+    top: 20px !important;
+    right: 20px !important;
+    width: 40px;
+    height: 40px;
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    border-radius: 50%;
+    cursor: pointer;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    transition: all 0.2s;
+    font-size: 24px;
+    line-height: 1;
+    color: #333;
+}
+
+.mermaid-fullscreen-close:hover {
+    background: white;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+    transform: scale(1.1);
+}
+
+.mermaid-fullscreen-close.dark-theme {
+    background: rgba(50, 50, 50, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #e0e0e0;
+}
+
+.mermaid-fullscreen-close.dark-theme:hover {
+    background: rgba(60, 60, 60, 1);
+    box-shadow: 0 6px 16px rgba(255, 255, 255, 0.2);
+}
+
+.mermaid-fullscreen-modal .mermaid-fullscreen-btn {
+    display: none !important;
+}`;
+    document.head.appendChild(fullscreenStyle);
+}
+
+// Detect if page has dark background
+const isDarkTheme = () => {
+    // We use a set of heuristics:
+    // 1. Check for common dark mode classes or attributes
+    // 2. Check computed background color brightness
+    if (document.documentElement.classList.contains('dark') ||
+        document.documentElement.getAttribute('data-theme') === 'dark' ||
+        document.body.classList.contains('dark') ||
+        document.body.getAttribute('data-theme') === 'dark') {
+        // console.log("Dark theme detected via class/attribute");
+        return true;
+    }
+    if (document.documentElement.classList.contains('light') ||
+        document.documentElement.getAttribute('data-theme') === 'light' ||
+        document.body.classList.contains('light') ||
+        document.body.getAttribute('data-theme') === 'light') {
+        // console.log("Light theme detected via class/attribute");
+        return false;
+    }
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        // console.log("Dark theme detected via prefers-color-scheme");
+        return true;
+    }
+    const bgColor = window.getComputedStyle(document.body).backgroundColor;
+    const match = bgColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)/);
+    if (match) {
+        const r = parseInt(match[1]);
+        const g = parseInt(match[2]);
+        const b = parseInt(match[3]);
+        const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+        // console.log("Background color brightness:", brightness);
+        return brightness < 128;
+    }
+    // console.log("No dark or light theme detected, defaulting to light theme");
+    return false;
+};
+
+let darkTheme = isDarkTheme();
+let modal = null;
+let modalContent = null;
+let previousScrollOffset = [window.scrollX, window.scrollY];
+
+const runMermaid = async (rerun) => {
+    console.log("Running mermaid diagrams, rerun =", rerun);
+    // clear all existing mermaid charts
+    let all_mermaids = document.querySelectorAll(".mermaid");
+
+    if (rerun) {
+        all_mermaids.forEach((el) => {
+            if(!el.hasAttribute("data-original-code")) {
+                // store original code
+                // console.log(`Storing original code for first run: `, el.innerHTML);
+                el.setAttribute('data-original-code', el.innerHTML);
+            }
+            if(el.getAttribute("data-processed") === "true") {
+                // remove and restore original
+                el.removeAttribute("data-processed");
+                // console.log(`Restoring original code for re-run: `, el.getAttribute('data-original-code'));
+                el.innerHTML = el.getAttribute('data-original-code');
+            } else {
+                // store original code
+                // console.log(`Storing original code for re-run: `, el.innerHTML);
+                el.setAttribute('data-original-code', el.innerHTML);
+            }
+        });
+        await mermaid.run();
+    }
+
+    all_mermaids = document.querySelectorAll(".mermaid");
+    const mermaids_processed = document.querySelectorAll(".mermaid[data-processed='true']");
+
+    if ("False" === "True") {
+        const mermaids_to_add_zoom = -1 === -1 ? all_mermaids.length : -1;
+        if(mermaids_to_add_zoom > 0) {
+            var svgs = d3.selectAll("");
+            if(all_mermaids.length !== mermaids_processed.length) {
+                setTimeout(() => runMermaid(false), 200);
+                return;
+            } else if(svgs.size() !== mermaids_to_add_zoom) {
+                setTimeout(() => runMermaid(false), 200);
+                return;
+            } else {
+                svgs.each(function() {
+                    var svg = d3.select(this);
+                    svg.html("<g class='wrapper'>" + svg.html() + "</g>");
+                    var inner = svg.select("g");
+                    var zoom = d3.zoom().on("zoom", function(event) {
+                        inner.attr("transform", event.transform);
+                    });
+                    svg.call(zoom);
+                });
+            }
+        }
+    } else if(all_mermaids.length !== mermaids_processed.length) {
+        // Wait for mermaid to process all diagrams
+        setTimeout(() => runMermaid(false), 200);
+        return;
+    }
+
+    // Stop here if not adding fullscreen capability
+    if ("True" !== "True") return;
+
+    if (modal !== null ) {
+        // Destroy existing modal
+        modal.remove();
+        modal = null;
+        modalContent = null;
+    }
+
+    modal = document.createElement('div');
+    modal.className = 'mermaid-fullscreen-modal' + (darkTheme ? ' dark-theme' : '');
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-label', 'Fullscreen diagram viewer');
+    modal.innerHTML = `
+        <button class="mermaid-fullscreen-close${darkTheme ? ' dark-theme' : ''}" aria-label="Close fullscreen">✕</button>
+        <div class="mermaid-container-fullscreen${darkTheme ? ' dark-theme' : ''}"></div>
+    `;
+    document.body.appendChild(modal);
+
+    modalContent = modal.querySelector('.mermaid-container-fullscreen');
+    const closeBtn = modal.querySelector('.mermaid-fullscreen-close');
+
+    const closeModal = () => {
+        modal.classList.remove('active');
+        modalContent.innerHTML = '';
+        document.body.style.overflow = ''
+        window.scrollTo({left: previousScrollOffset[0], top: previousScrollOffset[1], behavior: 'instant'});
+    };
+
+    closeBtn.addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) closeModal();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && modal.classList.contains('active')) {
+            closeModal();
+        }
+    });
+
+    document.querySelectorAll('.mermaid').forEach((mermaidDiv) => {
+        if (mermaidDiv.parentNode.classList.contains('mermaid-container') ||
+            mermaidDiv.closest('.mermaid-fullscreen-modal')) {
+            // Already processed, adjust button class if needed
+            const existingBtn = mermaidDiv.parentNode.querySelector('.mermaid-fullscreen-btn');
+            if (existingBtn) {
+                existingBtn.className = 'mermaid-fullscreen-btn' + (darkTheme ? ' dark-theme' : '');
+            }
+            return;
+        }
+
+        const container = document.createElement('div');
+        container.className = 'mermaid-container';
+        mermaidDiv.parentNode.insertBefore(container, mermaidDiv);
+        container.appendChild(mermaidDiv);
+
+        const fullscreenBtn = document.createElement('button');
+        fullscreenBtn.className = 'mermaid-fullscreen-btn' + (darkTheme ? ' dark-theme' : '');
+        fullscreenBtn.setAttribute('aria-label', 'View diagram in fullscreen');
+        fullscreenBtn.textContent = '⛶';
+        fullscreenBtn.style.opacity = '50%';
+
+        // Calculate dynamic position based on diagram's margin and padding
+        const diagramStyle = window.getComputedStyle(mermaidDiv);
+        const marginTop = parseFloat(diagramStyle.marginTop) || 0;
+        const marginRight = parseFloat(diagramStyle.marginRight) || 0;
+        const paddingTop = parseFloat(diagramStyle.paddingTop) || 0;
+        const paddingRight = parseFloat(diagramStyle.paddingRight) || 0;
+        fullscreenBtn.style.top = `${marginTop + paddingTop + 4}px`;
+        fullscreenBtn.style.right = `${marginRight + paddingRight + 4}px`;
+
+        fullscreenBtn.addEventListener('click', () => {
+            previousScrollOffset = [window.scroll, window.scrollY];
+            const clone = mermaidDiv.cloneNode(true);
+            modalContent.innerHTML = '';
+            modalContent.appendChild(clone);
+
+            const svg = clone.querySelector('svg');
+            if (svg) {
+                svg.removeAttribute('width');
+                svg.removeAttribute('height');
+                svg.style.width = '100%';
+                svg.style.height = 'auto';
+                svg.style.maxWidth = '100%';
+                svg.style.sdisplay = 'block';
+
+                if ("False" === "True") {
+                    setTimeout(() => {
+                        const g = svg.querySelector('g');
+                        if (g) {
+                            var svgD3 = d3.select(svg);
+                            svgD3.html("<g class='wrapper'>" + svgD3.html() + "</g>");
+                            var inner = svgD3.select("g");
+                            var zoom = d3.zoom().on("zoom", function(event) {
+                                inner.attr("transform", event.transform);
+                            });
+                            svgD3.call(zoom);
+                        }
+                    }, 100);
+                }
+            }
+
+            modal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        });
+        container.appendChild(fullscreenBtn);
+    });
+};
+
+const load = async () => {
+    initStyles();
+
+    await runMermaid(true);
+
+    const reRunIfThemeChanges = async () => {
+        const newDarkTheme = isDarkTheme();
+        if (newDarkTheme !== darkTheme) {
+            darkTheme = newDarkTheme;
+            console.log("Theme change detected, re-running mermaid with", darkTheme ? "dark" : "default", "theme");
+            await mermaid.initialize(
+                {...JSON.parse(
+                    `{"startOnLoad": false}`
+                ),
+                ...{ darkMode: darkTheme, theme: darkTheme ? 'dark' : 'default' },
+                }
+            );
+            await runMermaid(true);
+        }
+    };
+
+    // Update theme classes when theme changes
+    const themeObserver = new MutationObserver(reRunIfThemeChanges);
+    themeObserver.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['class', 'style', 'data-theme']
+    });
+    themeObserver.observe(document.body, {
+        attributes: true,
+        attributeFilter: ['class', 'style', 'data-theme']
+    });
+};
+
+
+
+
+
+console.log("Initializing mermaid with", darkTheme ? "dark" : "default", "theme");
+mermaid.initialize(
+    {...JSON.parse(
+        `{"startOnLoad": false}`
+    ),
+    ...{ darkMode: darkTheme, theme: darkTheme ? 'dark' : 'default' },
+    }
+);
+
+window.addEventListener("load", load);</script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="#" />
+    <link rel="search" title="Search" href="search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            datafaker
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Datafaker Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="docker.html">Using Docker</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="introduction.html">Introductory Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="introduction.html#more-in-depth-tutorial">More In-Depth Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="orm.html">ORM Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="loan_data.html">Example: Loan Data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="health_data.html">Advanced Example: OMOP Health Data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="custom_generators.html">Including your own generators</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="faq.html">FAQ</a></li>
+<li class="toctree-l1"><a class="reference internal" href="glossary.html">Glossary</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">datafaker</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Index</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+
+<h1 id="index">Index</h1>
+
+<div class="genindex-jumpbox">
+ <a href="#A"><strong>A</strong></a>
+ | <a href="#B"><strong>B</strong></a>
+ | <a href="#C"><strong>C</strong></a>
+ | <a href="#D"><strong>D</strong></a>
+ | <a href="#E"><strong>E</strong></a>
+ | <a href="#F"><strong>F</strong></a>
+ | <a href="#G"><strong>G</strong></a>
+ | <a href="#H"><strong>H</strong></a>
+ | <a href="#I"><strong>I</strong></a>
+ | <a href="#L"><strong>L</strong></a>
+ | <a href="#M"><strong>M</strong></a>
+ | <a href="#N"><strong>N</strong></a>
+ | <a href="#P"><strong>P</strong></a>
+ | <a href="#R"><strong>R</strong></a>
+ | <a href="#S"><strong>S</strong></a>
+ | <a href="#T"><strong>T</strong></a>
+ | <a href="#U"><strong>U</strong></a>
+ | <a href="#V"><strong>V</strong></a>
+ | <a href="#W"><strong>W</strong></a>
+ | <a href="#Z"><strong>Z</strong></a>
+ 
+</div>
+<h2 id="A">A</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.main.TableType.ALL">ALL (datafaker.main.TableType attribute)</a>
+</li>
+      <li><a href="api.html#datafaker.providers.DistributionProvider.alternatives">alternatives() (datafaker.providers.DistributionProvider method)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.make.GeneratorInfo.arg_types">arg_types (datafaker.make.GeneratorInfo attribute)</a>
+</li>
+      <li><a href="api.html#datafaker.make.ColumnChoice.argument_values">argument_values (datafaker.make.ColumnChoice attribute)</a>
+
+      <ul>
+        <li><a href="api.html#datafaker.make.FunctionCall.argument_values">(datafaker.make.FunctionCall attribute)</a>
+</li>
+      </ul></li>
+  </ul></td>
+</tr></table>
+
+<h2 id="B">B</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.providers.WeightedBooleanProvider.bool">bool() (datafaker.providers.WeightedBooleanProvider method)</a>
+</li>
+      <li><a href="api.html#datafaker.providers.BytesProvider.bytes">bytes() (datafaker.providers.BytesProvider method)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.providers.BytesProvider">BytesProvider (class in datafaker.providers)</a>
+</li>
+      <li><a href="api.html#datafaker.providers.BytesProvider.Meta">BytesProvider.Meta (class in datafaker.providers)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="C">C</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.make.GeneratorInfo.choice">choice (datafaker.make.GeneratorInfo attribute)</a>
+</li>
+      <li><a href="api.html#datafaker.providers.DistributionProvider.choice">choice() (datafaker.providers.DistributionProvider method)</a>
+</li>
+      <li><a href="api.html#datafaker.providers.DistributionProvider.choice_direct">choice_direct() (datafaker.providers.DistributionProvider method)</a>
+</li>
+      <li><a href="api.html#datafaker.make.TableGeneratorInfo.class_name">class_name (datafaker.make.TableGeneratorInfo attribute)</a>
+</li>
+      <li><a href="api.html#datafaker.make.TableGeneratorInfo.column_choices">column_choices (datafaker.make.TableGeneratorInfo attribute)</a>
+</li>
+      <li><a href="api.html#datafaker.providers.ColumnValueProvider.column_value">column_value() (datafaker.providers.ColumnValueProvider static method)</a>
+</li>
+      <li><a href="api.html#datafaker.make.ColumnChoice">ColumnChoice (class in datafaker.make)</a>
+</li>
+      <li><a href="api.html#datafaker.providers.ColumnValueProvider">ColumnValueProvider (class in datafaker.providers)</a>
+</li>
+      <li><a href="api.html#datafaker.providers.ColumnValueProvider.Meta">ColumnValueProvider.Meta (class in datafaker.providers)</a>
+</li>
+      <li><a href="api.html#datafaker.main.configure_generators">configure_generators() (in module datafaker.main)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.main.configure_missing">configure_missing() (in module datafaker.main)</a>
+</li>
+      <li><a href="api.html#datafaker.main.configure_tables">configure_tables() (in module datafaker.main)</a>
+</li>
+      <li><a href="api.html#datafaker.providers.DistributionProvider.constant">constant() (datafaker.providers.DistributionProvider method)</a>
+</li>
+      <li><a href="api.html#datafaker.main.create_data">create_data() (in module datafaker.main)</a>
+</li>
+      <li><a href="api.html#datafaker.create.create_db_data">create_db_data() (in module datafaker.create)</a>
+</li>
+      <li><a href="api.html#datafaker.create.create_db_data_into">create_db_data_into() (in module datafaker.create)</a>
+</li>
+      <li><a href="api.html#datafaker.create.create_db_tables">create_db_tables() (in module datafaker.create)</a>
+</li>
+      <li><a href="api.html#datafaker.create.create_db_vocab">create_db_vocab() (in module datafaker.create)</a>
+</li>
+      <li><a href="api.html#datafaker.main.create_generators">create_generators() (in module datafaker.main)</a>
+</li>
+      <li><a href="api.html#datafaker.main.create_tables">create_tables() (in module datafaker.main)</a>
+</li>
+      <li><a href="api.html#datafaker.main.create_vocab">create_vocab() (in module datafaker.main)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="D">D</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li>
+    datafaker.create
+
+      <ul>
+        <li><a href="api.html#module-datafaker.create">module</a>
+</li>
+      </ul></li>
+      <li>
+    datafaker.main
+
+      <ul>
+        <li><a href="api.html#module-datafaker.main">module</a>
+</li>
+      </ul></li>
+      <li>
+    datafaker.make
+
+      <ul>
+        <li><a href="api.html#module-datafaker.make">module</a>
+</li>
+      </ul></li>
+      <li>
+    datafaker.providers
+
+      <ul>
+        <li><a href="api.html#module-datafaker.providers">module</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li>
+    datafaker.settings
+
+      <ul>
+        <li><a href="api.html#module-datafaker.settings">module</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#datafaker.make.DbConnection">DbConnection (class in datafaker.make)</a>
+</li>
+      <li><a href="api.html#datafaker.make.VocabularyTableGeneratorInfo.dictionary_entry">dictionary_entry (datafaker.make.VocabularyTableGeneratorInfo attribute)</a>
+</li>
+      <li><a href="api.html#datafaker.providers.DistributionProvider">DistributionProvider (class in datafaker.providers)</a>
+</li>
+      <li><a href="api.html#datafaker.providers.DistributionProvider.Meta">DistributionProvider.Meta (class in datafaker.providers)</a>
+</li>
+      <li><a href="api.html#datafaker.settings.Settings.dst_dsn">dst_dsn (datafaker.settings.Settings attribute)</a>
+</li>
+      <li><a href="api.html#datafaker.settings.Settings.dst_schema">dst_schema (datafaker.settings.Settings attribute)</a>
+</li>
+      <li><a href="api.html#datafaker.main.dump_data">dump_data() (in module datafaker.main)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="E">E</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.make.DbConnection.execute_query">execute_query() (datafaker.make.DbConnection method)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.make.DbConnection.execute_raw_query">execute_raw_query() (datafaker.make.DbConnection method)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="F">F</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.make.fix_type">fix_type() (in module datafaker.make)</a>
+</li>
+      <li><a href="api.html#datafaker.make.fix_types">fix_types() (in module datafaker.make)</a>
+</li>
+      <li><a href="api.html#datafaker.make.RowGeneratorInfo.function_call">function_call (datafaker.make.RowGeneratorInfo attribute)</a>
+
+      <ul>
+        <li><a href="api.html#datafaker.make.StoryGeneratorInfo.function_call">(datafaker.make.StoryGeneratorInfo attribute)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.make.ColumnChoice.function_name">function_name (datafaker.make.ColumnChoice attribute)</a>
+
+      <ul>
+        <li><a href="api.html#datafaker.make.FunctionCall.function_name">(datafaker.make.FunctionCall attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#datafaker.make.FunctionCall">FunctionCall (class in datafaker.make)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="G">G</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.make.generate_df_content">generate_df_content() (in module datafaker.make)</a>
+</li>
+      <li><a href="api.html#datafaker.main.TableType.GENERATED">GENERATED (datafaker.main.TableType attribute)</a>
+</li>
+      <li><a href="api.html#datafaker.make.GeneratorInfo.generator">generator (datafaker.make.GeneratorInfo attribute)</a>
+</li>
+      <li><a href="api.html#datafaker.make.GeneratorInfo">GeneratorInfo (class in datafaker.make)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.make.get_result_mappings">get_result_mappings() (in module datafaker.make)</a>
+</li>
+      <li><a href="api.html#datafaker.settings.get_settings">get_settings() (in module datafaker.settings)</a>
+</li>
+      <li><a href="api.html#datafaker.providers.DistributionProvider.grouped_multivariate_lognormal">grouped_multivariate_lognormal() (datafaker.providers.DistributionProvider method)</a>
+</li>
+      <li><a href="api.html#datafaker.providers.DistributionProvider.grouped_multivariate_normal">grouped_multivariate_normal() (datafaker.providers.DistributionProvider method)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="H">H</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.create.StoryIterator.has_table">has_table() (datafaker.create.StoryIterator method)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="I">I</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.providers.InappropriateGeneratorException">InappropriateGeneratorException</a>
+</li>
+      <li><a href="api.html#datafaker.providers.ColumnValueProvider.increment">increment() (datafaker.providers.ColumnValueProvider method)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.create.StoryIterator.insert">insert() (datafaker.create.StoryIterator method)</a>
+</li>
+      <li><a href="api.html#datafaker.create.StoryIterator.is_ended">is_ended() (datafaker.create.StoryIterator method)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="L">L</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.main.list_tables">list_tables() (in module datafaker.main)</a>
+</li>
+      <li><a href="api.html#datafaker.main.load_metadata">load_metadata() (in module datafaker.main)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.main.load_metadata_config">load_metadata_config() (in module datafaker.main)</a>
+</li>
+      <li><a href="api.html#datafaker.main.load_metadata_for_output">load_metadata_for_output() (in module datafaker.main)</a>
+</li>
+      <li><a href="api.html#datafaker.providers.DistributionProvider.lognormal">lognormal() (datafaker.providers.DistributionProvider method)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="M">M</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.main.main">main() (in module datafaker.main)</a>
+</li>
+      <li><a href="api.html#datafaker.make.make_column_choices">make_column_choices() (in module datafaker.make)</a>
+</li>
+      <li><a href="api.html#datafaker.make.make_src_stats">make_src_stats() (in module datafaker.make)</a>
+</li>
+      <li><a href="api.html#datafaker.make.make_src_stats_connection">make_src_stats_connection() (in module datafaker.make)</a>
+</li>
+      <li><a href="api.html#datafaker.main.make_stats">make_stats() (in module datafaker.main)</a>
+</li>
+      <li><a href="api.html#datafaker.make.make_table_generators">make_table_generators() (in module datafaker.make)</a>
+</li>
+      <li><a href="api.html#datafaker.main.make_tables">make_tables() (in module datafaker.main)</a>
+</li>
+      <li><a href="api.html#datafaker.make.make_tables_file">make_tables_file() (in module datafaker.make)</a>
+</li>
+      <li><a href="api.html#datafaker.main.make_vocab">make_vocab() (in module datafaker.main)</a>
+</li>
+      <li><a href="api.html#datafaker.make.make_vocabulary_tables">make_vocabulary_tables() (in module datafaker.make)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.providers.merge_with_constants">merge_with_constants() (in module datafaker.providers)</a>
+</li>
+      <li>
+    module
+
+      <ul>
+        <li><a href="api.html#module-datafaker.create">datafaker.create</a>
+</li>
+        <li><a href="api.html#module-datafaker.main">datafaker.main</a>
+</li>
+        <li><a href="api.html#module-datafaker.make">datafaker.make</a>
+</li>
+        <li><a href="api.html#module-datafaker.providers">datafaker.providers</a>
+</li>
+        <li><a href="api.html#module-datafaker.settings">datafaker.settings</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#datafaker.providers.DistributionProvider.multivariate_lognormal">multivariate_lognormal() (datafaker.providers.DistributionProvider method)</a>
+</li>
+      <li><a href="api.html#datafaker.providers.DistributionProvider.multivariate_normal">multivariate_normal() (datafaker.providers.DistributionProvider method)</a>
+</li>
+      <li><a href="api.html#datafaker.providers.DistributionProvider.multivariate_normal_np">multivariate_normal_np() (datafaker.providers.DistributionProvider method)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="N">N</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.providers.BytesProvider.Meta.name">name (datafaker.providers.BytesProvider.Meta attribute)</a>
+
+      <ul>
+        <li><a href="api.html#datafaker.providers.ColumnValueProvider.Meta.name">(datafaker.providers.ColumnValueProvider.Meta attribute)</a>
+</li>
+        <li><a href="api.html#datafaker.providers.DistributionProvider.Meta.name">(datafaker.providers.DistributionProvider.Meta attribute)</a>
+</li>
+        <li><a href="api.html#datafaker.providers.NullProvider.Meta.name">(datafaker.providers.NullProvider.Meta attribute)</a>
+</li>
+        <li><a href="api.html#datafaker.providers.SQLGroupByProvider.Meta.name">(datafaker.providers.SQLGroupByProvider.Meta attribute)</a>
+</li>
+        <li><a href="api.html#datafaker.providers.TimedeltaProvider.Meta.name">(datafaker.providers.TimedeltaProvider.Meta attribute)</a>
+</li>
+        <li><a href="api.html#datafaker.providers.TimespanProvider.Meta.name">(datafaker.providers.TimespanProvider.Meta attribute)</a>
+</li>
+        <li><a href="api.html#datafaker.providers.WeightedBooleanProvider.Meta.name">(datafaker.providers.WeightedBooleanProvider.Meta attribute)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.create.StoryIterator.next">next() (datafaker.create.StoryIterator method)</a>
+</li>
+      <li><a href="api.html#datafaker.make.TableGeneratorInfo.nonnull_columns">nonnull_columns (datafaker.make.TableGeneratorInfo attribute)</a>
+</li>
+      <li><a href="api.html#datafaker.providers.DistributionProvider.normal">normal() (datafaker.providers.DistributionProvider method)</a>
+</li>
+      <li><a href="api.html#datafaker.providers.NothingToGenerateException">NothingToGenerateException</a>
+</li>
+      <li><a href="api.html#datafaker.providers.NullProvider.null">null() (datafaker.providers.NullProvider static method)</a>
+</li>
+      <li><a href="api.html#datafaker.providers.NullProvider">NullProvider (class in datafaker.providers)</a>
+</li>
+      <li><a href="api.html#datafaker.providers.NullProvider.Meta">NullProvider.Meta (class in datafaker.providers)</a>
+</li>
+      <li><a href="api.html#datafaker.make.StoryGeneratorInfo.num_stories_per_pass">num_stories_per_pass (datafaker.make.StoryGeneratorInfo attribute)</a>
+</li>
+      <li><a href="api.html#datafaker.make.GeneratorInfo.numeric">numeric (datafaker.make.GeneratorInfo attribute)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="P">P</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.providers.DistributionProvider.PERMITTED_SUBGENS">PERMITTED_SUBGENS (datafaker.providers.DistributionProvider attribute)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.create.populate">populate() (in module datafaker.create)</a>
+</li>
+      <li><a href="api.html#datafaker.make.RowGeneratorInfo.primary_key">primary_key (datafaker.make.RowGeneratorInfo attribute)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="R">R</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.main.remove_data">remove_data() (in module datafaker.main)</a>
+</li>
+      <li><a href="api.html#datafaker.main.remove_tables">remove_tables() (in module datafaker.main)</a>
+</li>
+      <li><a href="api.html#datafaker.main.remove_vocab">remove_vocab() (in module datafaker.main)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.providers.DistributionProvider.root3">root3 (datafaker.providers.DistributionProvider attribute)</a>
+</li>
+      <li><a href="api.html#datafaker.make.TableGeneratorInfo.row_gens">row_gens (datafaker.make.TableGeneratorInfo attribute)</a>
+</li>
+      <li><a href="api.html#datafaker.make.RowGeneratorInfo">RowGeneratorInfo (class in datafaker.make)</a>
+</li>
+      <li><a href="api.html#datafaker.make.TableGeneratorInfo.rows_per_pass">rows_per_pass (datafaker.make.TableGeneratorInfo attribute)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="S">S</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.providers.SQLGroupByProvider.sample">sample() (datafaker.providers.SQLGroupByProvider method)</a>
+</li>
+      <li><a href="api.html#datafaker.settings.Settings">Settings (class in datafaker.settings)</a>
+</li>
+      <li><a href="api.html#datafaker.settings.Settings.Config">Settings.Config (class in datafaker.settings)</a>
+</li>
+      <li><a href="api.html#datafaker.providers.SQLGroupByProvider">SQLGroupByProvider (class in datafaker.providers)</a>
+</li>
+      <li><a href="api.html#datafaker.providers.SQLGroupByProvider.Meta">SQLGroupByProvider.Meta (class in datafaker.providers)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.settings.Settings.src_dsn">src_dsn (datafaker.settings.Settings attribute)</a>
+</li>
+      <li><a href="api.html#datafaker.settings.Settings.src_schema">src_schema (datafaker.settings.Settings attribute)</a>
+</li>
+      <li><a href="api.html#datafaker.make.StoryGeneratorInfo">StoryGeneratorInfo (class in datafaker.make)</a>
+</li>
+      <li><a href="api.html#datafaker.create.StoryIterator">StoryIterator (class in datafaker.create)</a>
+</li>
+      <li><a href="api.html#datafaker.make.GeneratorInfo.summary_query">summary_query (datafaker.make.GeneratorInfo attribute)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="T">T</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.make.TableGeneratorInfo.table_name">table_name (datafaker.make.TableGeneratorInfo attribute)</a>
+
+      <ul>
+        <li><a href="api.html#datafaker.make.VocabularyTableGeneratorInfo.table_name">(datafaker.make.VocabularyTableGeneratorInfo attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#datafaker.create.StoryIterator.table_name">table_name() (datafaker.create.StoryIterator method)</a>
+</li>
+      <li><a href="api.html#datafaker.make.DbConnection.table_row_count">table_row_count() (datafaker.make.DbConnection method)</a>
+</li>
+      <li><a href="api.html#datafaker.make.TableGeneratorInfo">TableGeneratorInfo (class in datafaker.make)</a>
+</li>
+      <li><a href="api.html#datafaker.main.TableType">TableType (class in datafaker.main)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.providers.TimedeltaProvider.timedelta">timedelta() (datafaker.providers.TimedeltaProvider static method)</a>
+</li>
+      <li><a href="api.html#datafaker.providers.TimedeltaProvider">TimedeltaProvider (class in datafaker.providers)</a>
+</li>
+      <li><a href="api.html#datafaker.providers.TimedeltaProvider.Meta">TimedeltaProvider.Meta (class in datafaker.providers)</a>
+</li>
+      <li><a href="api.html#datafaker.providers.TimespanProvider.timespan">timespan() (datafaker.providers.TimespanProvider static method)</a>
+</li>
+      <li><a href="api.html#datafaker.providers.TimespanProvider">TimespanProvider (class in datafaker.providers)</a>
+</li>
+      <li><a href="api.html#datafaker.providers.TimespanProvider.Meta">TimespanProvider.Meta (class in datafaker.providers)</a>
+</li>
+      <li><a href="api.html#datafaker.providers.DistributionProvider.truncated_string">truncated_string() (datafaker.providers.DistributionProvider method)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="U">U</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.providers.DistributionProvider.uniform">uniform() (datafaker.providers.DistributionProvider method)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.providers.DistributionProvider.uniform_ms">uniform_ms() (datafaker.providers.DistributionProvider method)</a>
+</li>
+      <li><a href="api.html#datafaker.make.TableGeneratorInfo.unique_constraints">unique_constraints (datafaker.make.TableGeneratorInfo attribute)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="V">V</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.main.validate_config">validate_config() (in module datafaker.main)</a>
+</li>
+      <li><a href="api.html#datafaker.settings.Settings.validate_dst_dsn">validate_dst_dsn() (datafaker.settings.Settings method)</a>
+</li>
+      <li><a href="api.html#datafaker.settings.Settings.validate_src_dsn">validate_src_dsn() (datafaker.settings.Settings method)</a>
+</li>
+      <li><a href="api.html#datafaker.make.VocabularyTableGeneratorInfo.variable_name">variable_name (datafaker.make.VocabularyTableGeneratorInfo attribute)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.make.RowGeneratorInfo.variable_names">variable_names (datafaker.make.RowGeneratorInfo attribute)</a>
+</li>
+      <li><a href="api.html#datafaker.main.version">version() (in module datafaker.main)</a>
+</li>
+      <li><a href="api.html#datafaker.main.TableType.VOCAB">VOCAB (datafaker.main.TableType attribute)</a>
+</li>
+      <li><a href="api.html#datafaker.make.VocabularyTableGeneratorInfo">VocabularyTableGeneratorInfo (class in datafaker.make)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="W">W</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.providers.DistributionProvider.weighted_choice">weighted_choice() (datafaker.providers.DistributionProvider method)</a>
+</li>
+      <li><a href="api.html#datafaker.providers.WeightedBooleanProvider">WeightedBooleanProvider (class in datafaker.providers)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.providers.WeightedBooleanProvider.Meta">WeightedBooleanProvider.Meta (class in datafaker.providers)</a>
+</li>
+      <li><a href="api.html#datafaker.providers.DistributionProvider.with_constants_at">with_constants_at() (datafaker.providers.DistributionProvider method)</a>
+</li>
+      <li><a href="api.html#datafaker.make.StoryGeneratorInfo.wrapper_name">wrapper_name (datafaker.make.StoryGeneratorInfo attribute)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="Z">Z</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.providers.DistributionProvider.zipf_choice">zipf_choice() (datafaker.providers.DistributionProvider method)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#datafaker.providers.DistributionProvider.zipf_choice_direct">zipf_choice_direct() (datafaker.providers.DistributionProvider method)</a>
+</li>
+      <li><a href="api.html#datafaker.providers.zipf_weights">zipf_weights() (in module datafaker.providers)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023, anon.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quick Start &mdash; datafaker 0.0 documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/sphinx_highlight.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Introductory Tutorial" href="introduction.html" />
+    <link rel="prev" title="Using Docker" href="docker.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            datafaker
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Datafaker Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="docker.html">Using Docker</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Quick Start</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#connecting-to-the-source-database">Connecting to the source database</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#initial-configuration">Initial configuration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#configuring-table-types">Configuring table types</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#tab-completion">Tab completion</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#navigating-the-database">Navigating the database</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#setting-the-type-of-the-table">Setting the type of the table</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#examining-the-data">Examining the data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#repeat-last-command">Repeat last command</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#when-you-are-finished">When you are finished</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#configuring-column-generators">Configuring column generators</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#propose">Propose</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#compare">Compare</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#set-and-unset">Set and unset</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#short-commands">Short commands</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#multivariate-generators">Multivariate generators</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#configuring-missingness">Configuring missingness</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#generating-the-data">Generating the data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#taking-files-out-of-the-private-network">Taking files out of the private network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#connecting-to-the-destination-database">Connecting to the destination database</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="introduction.html">Introductory Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="introduction.html#more-in-depth-tutorial">More In-Depth Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="orm.html">ORM Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="loan_data.html">Example: Loan Data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="health_data.html">Advanced Example: OMOP Health Data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="custom_generators.html">Including your own generators</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="faq.html">FAQ</a></li>
+<li class="toctree-l1"><a class="reference internal" href="glossary.html">Glossary</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">datafaker</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Quick Start</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/quickstart.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="quick-start">
+<span id="page-quickstart"></span><h1>Quick Start<a class="headerlink" href="#quick-start" title="Permalink to this heading"></a></h1>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Permalink to this heading"></a></h2>
+<p>After <a class="reference internal" href="installation.html#page-installation"><span class="std std-ref">Installation</span></a>, we can run <code class="docutils literal notranslate"><span class="pre">datafaker</span></code> to see the available commands:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>datafaker
+<span class="go">Usage: datafaker [OPTIONS] COMMAND [ARGS]...</span>
+
+<span class="go">Options:</span>
+<span class="go">  --help                          Show this message and exit.</span>
+
+<span class="go">Commands:</span>
+<span class="go">   configure-generators  Interactively set generators for column data.</span>
+<span class="go">   configure-missing     Interactively set the missingness of the...</span>
+<span class="go">   configure-tables      Interactively set tables to ignored, vocabulary...</span>
+<span class="go">   create-data           Populate the schema in the target directory with...</span>
+<span class="go">   create-generators     Make a datafaker file of generator classes.</span>
+<span class="go">   create-tables         Create schema from the ORM YAML file.</span>
+<span class="go">   create-vocab          Import vocabulary data into the target database.</span>
+<span class="go">   list-tables           List the names of tables</span>
+<span class="go">   make-stats            Compute summary statistics from the source database.</span>
+<span class="go">   make-tables           Make a YAML file representing the tables in the...</span>
+<span class="go">   make-vocab            Make files of vocabulary tables.</span>
+<span class="go">   remove-data           Truncate non-vocabulary tables in the destination...</span>
+<span class="go">   remove-tables         Drop all tables in the destination schema.</span>
+<span class="go">   remove-vocab          Truncate vocabulary tables in the destination...</span>
+<span class="go">   validate-config       Validate the format of a config file.</span>
+<span class="go">   version               Display version information.</span>
+</pre></div>
+</div>
+<p>datafaker is designed to be run connected to either the private source database or the more public destination database. It never needs to be connected to both.
+So you can install datafaker on a machine with access to the private source database that will do the reading, and again on another machine that will do the creation.</p>
+<p>In this guide we will walk through configuring column generators. We will not discuss stories here.</p>
+</section>
+<section id="connecting-to-the-source-database">
+<h2>Connecting to the source database<a class="headerlink" href="#connecting-to-the-source-database" title="Permalink to this heading"></a></h2>
+<p>To connect to the source database, set the <code class="docutils literal notranslate"><span class="pre">SRC_DSN</span></code> and <code class="docutils literal notranslate"><span class="pre">SRC_SCHEMA</span></code> environment variables.
+You can leave <code class="docutils literal notranslate"><span class="pre">SRC_SCHEMA</span></code> unset if you are using the default schema (or a database that does not use schema names such as MariaDB):</p>
+<p>MacOS or Linux:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span><span class="nb">export</span><span class="w"> </span><span class="nv">SRC_DSN</span><span class="o">=</span><span class="s2">&quot;postgresql://someuser:somepassword@myserver.mydomain.com:5432/db_name&quot;</span>
+<span class="gp">$ </span><span class="nb">export</span><span class="w"> </span><span class="nv">SRC_SCHEMA</span><span class="o">=</span><span class="s1">&#39;myschema&#39;</span>
+</pre></div>
+</div>
+<p>Windows Command Shell:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span><span class="nb">set</span><span class="w"> </span><span class="nv">SRC_DSN</span><span class="o">=</span>postgresql://someuser:somepassword@myserver.mydomain.com:5432/db_name
+<span class="gp">$ </span><span class="nb">set</span><span class="w"> </span><span class="nv">SRC_SCHEMA</span><span class="o">=</span>myschema
+</pre></div>
+</div>
+<p>Running from the ready-built Docker container, make an output directory then use that as the data volume like so (please use WSL for this on Windows):</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>mkdir<span class="w"> </span>output
+<span class="gp">$ </span>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>--user<span class="w"> </span><span class="k">$(</span>id<span class="w"> </span>-u<span class="k">)</span>:<span class="k">$(</span>id<span class="w"> </span>-g<span class="k">)</span><span class="w"> </span>--network<span class="w"> </span>host<span class="w"> </span>-e<span class="w"> </span><span class="nv">SRC_SCHEMA</span><span class="o">=</span>myschema<span class="w"> </span>-e<span class="w"> </span><span class="nv">DST_DSN</span><span class="o">=</span>postgresql://someuser:somepassword@myserver.mydomain.com:5432/db_name<span class="w"> </span>-itv<span class="w"> </span>./output:data<span class="w"> </span>--pull<span class="w"> </span>always<span class="w"> </span>timband/datafaker
+</pre></div>
+</div>
+<p>Now you can use the commands that use the source database (the ones beginning <code class="docutils literal notranslate"><span class="pre">configure-</span></code> and <code class="docutils literal notranslate"><span class="pre">make-</span></code> but not the ones beginning <code class="docutils literal notranslate"><span class="pre">create-</span></code> and <code class="docutils literal notranslate"><span class="pre">remove-</span></code>).</p>
+</section>
+<section id="initial-configuration">
+<h2>Initial configuration<a class="headerlink" href="#initial-configuration" title="Permalink to this heading"></a></h2>
+<p>The first job is to read the structure of the source database:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>datafaker<span class="w"> </span>make-tables
+</pre></div>
+</div>
+<p>This will create a file called <code class="docutils literal notranslate"><span class="pre">orm.yaml</span></code>. You should not need to edit this file.</p>
+</section>
+<section id="configuring-table-types">
+<h2>Configuring table types<a class="headerlink" href="#configuring-table-types" title="Permalink to this heading"></a></h2>
+<p>Next you can use the <code class="docutils literal notranslate"><span class="pre">configure-tables</span></code> command categorize each of your source tables into one of five types:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">private</span></code> for tables that are Primary Private, that is the tables containing the subjects of privacy (the table of hospital patients,  for example). Not every table containing sensitive data needs to be marked private, only the table directly referring to the individuals (or families) that need to be protected.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ignore</span></code> for tables that should not be present in the destination database</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">empty</span></code> for tables that should contain no data, but be present (also for tables that should be populated entirely from stories, see later)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">vocabulary</span></code> for tables that should be reproduced exactly in the destination database</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">generate</span></code> for everything else</p></li>
+</ul>
+<p>This command will start an interactive command shell. Don’t be intimidated, just type <code class="docutils literal notranslate"><span class="pre">?</span></code> (and press return) to get help:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>datafaker<span class="w"> </span>configure-tables
+<span class="go">Interactive table configuration (ignore, vocabulary, private, generate or empty). Type ? for help.</span>
+
+<span class="gp gp-VirtualEnv">(table: myfirsttable)</span> <span class="go">?</span>
+
+<span class="go">Use the commands &#39;ignore&#39;, &#39;vocabulary&#39;,</span>
+<span class="go">&#39;private&#39;, &#39;empty&#39; or &#39;generate&#39; to set the table&#39;s type. Use &#39;next&#39; or</span>
+<span class="go">&#39;previous&#39; to change table. Use &#39;tables&#39; and &#39;columns&#39; for</span>
+<span class="go">information about the database. Use &#39;data&#39;, &#39;peek&#39;, &#39;select&#39; or</span>
+<span class="go">&#39;count&#39; to see some data contained in the current table. Use &#39;quit&#39;</span>
+<span class="go">to exit this program.</span>
+<span class="go">Documented commands (type help &lt;topic&gt;):</span>
+<span class="go">========================================</span>
+<span class="go">columns  data   help    next    peek      private  select  vocabulary</span>
+<span class="go">counts   empty  ignore  generate  previous  quit     tables</span>
+
+<span class="gp gp-VirtualEnv">(table: myfirsttable)</span>
+</pre></div>
+</div>
+<p>You can also get help for any of the commands listed; for example to see help for the <code class="docutils literal notranslate"><span class="pre">vocabulary</span></code> command type <code class="docutils literal notranslate"><span class="pre">?</span> <span class="pre">vocabulary</span></code> or <code class="docutils literal notranslate"><span class="pre">help</span> <span class="pre">vocabulary</span></code>:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp gp-VirtualEnv">(table: myfirsttable)</span> <span class="go">help vocabulary</span>
+<span class="go">Set the current table as a vocabulary table, and go to the next table</span>
+<span class="gp gp-VirtualEnv">(table: myfirsttable)</span>
+</pre></div>
+</div>
+<p>Note that the prompt here is <code class="docutils literal notranslate"><span class="pre">(table:</span> <span class="pre">myfirsttable)</span></code>. This will be different on your database; it will show the name of the table that is currently under consideration.</p>
+<section id="tab-completion">
+<h3>Tab completion<a class="headerlink" href="#tab-completion" title="Permalink to this heading"></a></h3>
+<p>For the following examples we will be using the <a class="reference external" href="https://github.com/devrimgunduz/pagila">Pagila</a> database.</p>
+<p>You can use the Tab key on your keyboard to shorten these commands. Try typing h-tab-space-v-tab-return, and you will get <code class="docutils literal notranslate"><span class="pre">help</span> <span class="pre">vocabulary</span></code> again.
+Some commands require a little more. Try typing h-tab-p-tab and you will see that the <code class="docutils literal notranslate"><span class="pre">p</span></code> does not get expanded to <code class="docutils literal notranslate"><span class="pre">private</span></code> because there is more than one possibility (it could be <code class="docutils literal notranslate"><span class="pre">peek</span></code> or <code class="docutils literal notranslate"><span class="pre">previous</span></code>).
+Press the Tab key again to see these options:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp gp-VirtualEnv">(table: actor)</span> <span class="go">help p</span>
+<span class="go">peek      previous  private</span>
+<span class="gp gp-VirtualEnv">(table: actor)</span> <span class="go">help p</span>
+</pre></div>
+</div>
+<p>Now you can continue with r-i-tab to get <code class="docutils literal notranslate"><span class="pre">private</span></code>, r-e-tab to get <code class="docutils literal notranslate"><span class="pre">previous</span></code> or e-tab to get <code class="docutils literal notranslate"><span class="pre">peek</span></code>. This can be very useful; try pressing Tab twice on an empty line to see quickly all the possible commands, for example!</p>
+</section>
+<section id="navigating-the-database">
+<h3>Navigating the database<a class="headerlink" href="#navigating-the-database" title="Permalink to this heading"></a></h3>
+<p>Use <code class="docutils literal notranslate"><span class="pre">next</span></code> and <code class="docutils literal notranslate"><span class="pre">previous</span></code> to go forwards and backwards through the list of tables.
+You can use <code class="docutils literal notranslate"><span class="pre">next</span> <span class="pre">tablename</span></code> to go to the table <code class="docutils literal notranslate"><span class="pre">tablename</span></code> (tab completion works here too!)
+You can use <code class="docutils literal notranslate"><span class="pre">tables</span></code> to list all the tables and any configuration you have already done.</p>
+</section>
+<section id="setting-the-type-of-the-table">
+<h3>Setting the type of the table<a class="headerlink" href="#setting-the-type-of-the-table" title="Permalink to this heading"></a></h3>
+<p>Use <code class="docutils literal notranslate"><span class="pre">private</span></code>, <code class="docutils literal notranslate"><span class="pre">ignore</span></code>, <code class="docutils literal notranslate"><span class="pre">empty</span></code>, <code class="docutils literal notranslate"><span class="pre">vocabulary</span></code> or <code class="docutils literal notranslate"><span class="pre">generate</span></code> to set the type of the table. Any you don’t set will be <code class="docutils literal notranslate"><span class="pre">generate</span></code>.
+If you have previously run <code class="docutils literal notranslate"><span class="pre">configure-tables</span></code> (or edited the <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code> file yourself!) the previously set types will be preserved unless you change them.</p>
+</section>
+<section id="examining-the-data">
+<h3>Examining the data<a class="headerlink" href="#examining-the-data" title="Permalink to this heading"></a></h3>
+<p>But how do you know which type to choose? You can sample the data in the table to help here:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">data</span></code> is the easiest: it shows a sample of ten complete rows from the database.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">data</span> <span class="pre">20</span></code> if you want more (or fewer) than ten lines, add how many lines you want.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">data</span> <span class="pre">20</span> <span class="pre">columnname</span></code> if you want to see just one column, use this formulation with the name of the column you want to examine.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">data</span> <span class="pre">20</span> <span class="pre">columnname</span> <span class="pre">30</span></code> adding one extra number here restricts the sampling to only entries at least as long as this number of characters. You can use this to find odd descriptions that people have put into strange places in the database.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">columns</span></code> shows structural data about the table</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">counts</span></code> tells you how many NULLs are in each column (not so useful here, perhaps)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">peek</span> <span class="pre">column1</span> <span class="pre">column2</span></code> is like <code class="docutils literal notranslate"><span class="pre">data</span></code> but restricted to the columns you specified (and it will not show fully NULL rows, so use this to see data in sparse columns)</p></li>
+<li><p>and if none of that satisfies you, type any SQL query beginning with <code class="docutils literal notranslate"><span class="pre">select</span></code> to get the first 50 results from an arbitrary query.</p></li>
+</ul>
+</section>
+<section id="repeat-last-command">
+<h3>Repeat last command<a class="headerlink" href="#repeat-last-command" title="Permalink to this heading"></a></h3>
+<p>Entering an empty command will repeat the last command.
+So if you want more data than <code class="docutils literal notranslate"><span class="pre">data</span></code> gives you, you can type d-a-t-a-return-return-return,
+or if you want to step through tables without altering them, you can type n-e-x-t-return-return-return-…</p>
+</section>
+<section id="when-you-are-finished">
+<h3>When you are finished<a class="headerlink" href="#when-you-are-finished" title="Permalink to this heading"></a></h3>
+<p>Use the command <code class="docutils literal notranslate"><span class="pre">quit</span></code>. It will then ask you if you want to save the results.
+You must type <code class="docutils literal notranslate"><span class="pre">yes</span></code> to save, <code class="docutils literal notranslate"><span class="pre">no</span></code> to exit without saving or <code class="docutils literal notranslate"><span class="pre">cancel</span></code> to return to the <code class="docutils literal notranslate"><span class="pre">configure-tables</span></code> command prompt.
+You must type one of these three options in full but tab completion is available, so y-tab-return, n-tab-return or c-tab-return will do!</p>
+</section>
+</section>
+<section id="configuring-column-generators">
+<h2>Configuring column generators<a class="headerlink" href="#configuring-column-generators" title="Permalink to this heading"></a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">configure-generators</span></code> command is similar to <code class="docutils literal notranslate"><span class="pre">configure-tables</span></code>, but here you are configuring each column in <code class="docutils literal notranslate"><span class="pre">generate</span></code> and  <code class="docutils literal notranslate"><span class="pre">private</span></code> tables.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">next</span></code>, <code class="docutils literal notranslate"><span class="pre">previous</span></code>, <code class="docutils literal notranslate"><span class="pre">peek</span></code>, <code class="docutils literal notranslate"><span class="pre">columns</span></code>, <code class="docutils literal notranslate"><span class="pre">select</span></code>, <code class="docutils literal notranslate"><span class="pre">tables</span></code>, <code class="docutils literal notranslate"><span class="pre">counts</span></code>, <code class="docutils literal notranslate"><span class="pre">help</span></code> and <code class="docutils literal notranslate"><span class="pre">quit</span></code> work as before, but <code class="docutils literal notranslate"><span class="pre">next</span></code> allows you to visit not just a different table but also any column with the <code class="docutils literal notranslate"><span class="pre">next</span> <span class="pre">table.column</span></code> syntax.</p>
+<p><code class="docutils literal notranslate"><span class="pre">info</span></code> gives you simple information on the current column. Use this while you are getting used to configuring generators.</p>
+<p>Configuring a column generator has three steps:</p>
+<ol class="arabic simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">propose</span></code> shows you a list of built-in generators that would be appropriate for this column</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">compare</span></code> allows you to see the output from these generators together with the data each generator requires from the database.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">set</span></code> allows you to set the generator from the proposal list (or <code class="docutils literal notranslate"><span class="pre">unset</span></code> removes any previously set generator)</p></li>
+</ol>
+<section id="propose">
+<h3>Propose<a class="headerlink" href="#propose" title="Permalink to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">propose</span></code> will provide a list of suitable generators, attempting to list them by relevance (might not do a fantastic job):</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp gp-VirtualEnv">(film.length)</span> <span class="go">propose</span>
+<span class="go">Sample of actual source data: 173,73,172,81,86...</span>
+<span class="go">1. dist_gen.uniform_ms: (fit: 1.19e-05) 107.55835091131807, 108.68424131615669, 76.18479907993151, 124.02617636581346, 142.3863993456911 ...</span>
+<span class="go">2. dist_gen.normal: (fit: 0.000109) 94.49927930013584, 69.6024952777228, 101.74949693935817, 22.45166839395958, 76.40908811297868 ...</span>
+<span class="go">3. dist_gen.choice: (fit: 0.0346) 155, 86, 89, 178, 166 ...</span>
+<span class="go">4. dist_gen.zipf_choice: (fit: 2) 75, 53, 179, 179, 135 ...</span>
+<span class="go">5. generic.person.weight: (no fit) 85, 73, 69, 58, 81 ...</span>
+<span class="go">6. dist_gen.constant: (no fit) None, None, None, None, None ...</span>
+<span class="gp gp-VirtualEnv">(film.length)</span>
+</pre></div>
+</div>
+<p>Here we can see the first line is a small sample of data from the real column in the source database.
+The other lines have four elements:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">3.</span></code> is the number of the generator, we will need that later!</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dist_gen.choice</span></code> is the name of the generator</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">(fit:</span> <span class="pre">0.0346)</span></code> is a measure of how good datafaker thinks the generator is (not necessarily a very good measure)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">155,</span> <span class="pre">86,</span> <span class="pre">89,</span> <span class="pre">178,</span> <span class="pre">166</span> <span class="pre">...</span></code> is a sample of data from this generator</p></li>
+</ul>
+<p>For more information, we need the next command, <code class="docutils literal notranslate"><span class="pre">compare</span></code>.</p>
+</section>
+<section id="compare">
+<h3>Compare<a class="headerlink" href="#compare" title="Permalink to this heading"></a></h3>
+<p>In the previous example, we might consider that <code class="docutils literal notranslate"><span class="pre">1</span></code>, <code class="docutils literal notranslate"><span class="pre">2</span></code>, <code class="docutils literal notranslate"><span class="pre">3</span></code> and <code class="docutils literal notranslate"><span class="pre">4</span></code> are worth investigating further, so we try:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp gp-VirtualEnv">(film.length)</span> <span class="go">compare 1 2 3 4</span>
+<span class="go">Not private</span>
+<span class="go">1. dist_gen.uniform_ms requires the following data from the source database:</span>
+<span class="go">SELECT AVG(length) AS mean__length, STDDEV(length) AS stddev__length FROM film; providing the following values: [Decimal(&#39;115.2720000000000000&#39;), Decimal(&#39;40.4263318185598470&#39;)]</span>
+<span class="go">2. dist_gen.normal requires the following data from the source database:</span>
+<span class="go">SELECT AVG(length) AS mean__length, STDDEV(length) AS stddev__length FROM film; providing the following values: [Decimal(&#39;115.2720000000000000&#39;), Decimal(&#39;40.4263318185598470&#39;)]</span>
+<span class="go">3. dist_gen.choice requires the following data from the source database:</span>
+<span class="go">SELECT length AS value FROM film GROUP BY value ORDER BY COUNT(length) DESC; providing the following values: [[85, 179, 112, 84, 74, 100, 73, 102, 48, 122, 92, 139, 114, 61, 107, 75, 181, 176, 178, 80, 185, 135, 63, 50, 137, 136, 59, 53, 152, 110, 103, 161, 126, 64, 153, 147, 120, 172, 121, 144, 150, 67, 60, 184, 93, 132, 98, 99, 118, 171, 113, 58, 71, 51, 70, 52, 101, 180, 115, 65, 173, 82, 125, 57, 151, 163, 167, 109, 111, 123, 128, 142, 141, 154, 47, 76, 145, 148, 129, 143, 157, 79, 182, 54, 83, 91, 130, 69, 87, 169, 78, 159, 158, 155, 119, 160, 106, 62, 177, 104, 174, 105, 89, 149, 175, 138, 77, 134, 133, 162, 146, 117, 166, 68, 46, 127, 183, 108, 140, 49, 56, 165, 131, 90, 86, 97, 164, 170, 94, 116, 72, 156, 124, 88, 168, 81, 95, 96, 55, 66]]</span>
+<span class="go">4. dist_gen.zipf_choice requires the following data from the source database:</span>
+<span class="go">SELECT length AS value FROM film GROUP BY value ORDER BY COUNT(length) DESC; providing the following values: [[85, 179, 112, 84, 74, 100, 73, 102, 48, 122, 92, 139, 114, 61, 107, 75, 181, 176, 178, 80, 185, 135, 63, 50, 137, 136, 59, 53, 152, 110, 103, 161, 126, 64, 153, 147, 120, 172, 121, 144, 150, 67, 60, 184, 93, 132, 98, 99, 118, 171, 113, 58, 71, 51, 70, 52, 101, 180, 115, 65, 173, 82, 125, 57, 151, 163, 167, 109, 111, 123, 128, 142, 141, 154, 47, 76, 145, 148, 129, 143, 157, 79, 182, 54, 83, 91, 130, 69, 87, 169, 78, 159, 158, 155, 119, 160, 106, 62, 177, 104, 174, 105, 89, 149, 175, 138, 77, 134, 133, 162, 146, 117, 166, 68, 46, 127, 183, 108, 140, 49, 56, 165, 131, 90, 86, 97, 164, 170, 94, 116, 72, 156, 124, 88, 168, 81, 95, 96, 55, 66]]</span>
+<span class="go">+--------+------------------------+--------------------+--------------------+-------------------------+</span>
+<span class="go">| source | 1. dist_gen.uniform_ms | 2. dist_gen.normal | 3. dist_gen.choice | 4. dist_gen.zipf_choice |</span>
+<span class="go">+--------+------------------------+--------------------+--------------------+-------------------------+</span>
+<span class="go">|   60   |   46.632794372002664   | 87.89991176975211  |         96         |            59           |</span>
+<span class="go">|   56   |   96.17573671882317    | 143.27403823693294 |        145         |            67           |</span>
+<span class="go">|  167   |   158.2777826396661    | 69.60827255211873  |         99         |           107           |</span>
+<span class="go">|  160   |   48.91052171988566    | 101.08450212269153 |        108         |            85           |</span>
+<span class="go">|   64   |   151.7534973807259    | 46.65796712446469  |        106         |           136           |</span>
+<span class="go">|  138   |   92.64980389758904    | 129.6901021567232  |        109         |           122           |</span>
+<span class="go">|  109   |   62.851359423566414   | 96.26116817758401  |        158         |            85           |</span>
+<span class="go">|   74   |   68.29348043746441    | 33.58822018478509  |         85         |            84           |</span>
+<span class="go">|   75   |   123.84806734660017   |  91.6033632909829  |         53         |            61           |</span>
+<span class="go">|  143   |   59.016661941662406   | 175.02921918869674 |         62         |           181           |</span>
+<span class="go">|   62   |    77.0672702141529    | 153.55365499492189 |        185         |           147           |</span>
+<span class="go">|   75   |   126.53040995684793   | 137.32698597697157 |        102         |           179           |</span>
+<span class="go">|  162   |   125.58699420416819   | 113.8898812686725  |         94         |            85           |</span>
+<span class="go">|  157   |   96.93359267654796    | 61.654471841517044 |         97         |           180           |</span>
+<span class="go">|  117   |   181.0134365019266    | 91.93492164429024  |         57         |            85           |</span>
+<span class="go">|   61   |   75.68573964087891    | 115.79796856358605 |        141         |           102           |</span>
+<span class="go">|   73   |   85.37110501852806    | 141.1104329209363  |         51         |           137           |</span>
+<span class="go">|  110   |   136.56146532743944   | 112.04603094742818 |        127         |           139           |</span>
+<span class="go">|   67   |   152.49478264537873   | 146.82247056721147 |         51         |            74           |</span>
+<span class="go">|  109   |   129.69326718355967   | 111.24264422243346 |         61         |            85           |</span>
+<span class="go">+--------+------------------------+--------------------+--------------------+-------------------------+</span>
+<span class="gp gp-VirtualEnv">(film.length)</span>
+</pre></div>
+</div>
+<p>The first line is telling us whether the table is Primary Private (<code class="docutils literal notranslate"><span class="pre">private</span></code> in <code class="docutils literal notranslate"><span class="pre">configure-tables</span></code>), Secondary Private (refers to a Primary Private table) or Not Private.
+The next lines tell us, for each generator we chose, the query it needs running on the database and what data that results in.
+The table below that is a sample from the source database and each generator.</p>
+</section>
+<section id="set-and-unset">
+<h3>Set and unset<a class="headerlink" href="#set-and-unset" title="Permalink to this heading"></a></h3>
+<p>Say we decide on generator 2, we can set this with <code class="docutils literal notranslate"><span class="pre">set</span> <span class="pre">2</span></code>.
+<code class="docutils literal notranslate"><span class="pre">unset</span></code> removes any previously set generator.</p>
+</section>
+<section id="short-commands">
+<h3>Short commands<a class="headerlink" href="#short-commands" title="Permalink to this heading"></a></h3>
+<p>In case you couldn’t get tab completion working on your favourite terminal on your machine, there are single letter commands for the most common operations of <code class="docutils literal notranslate"><span class="pre">configure-generators</span></code>:
+<code class="docutils literal notranslate"><span class="pre">n</span></code> and <code class="docutils literal notranslate"><span class="pre">b</span></code> are synonymns for <code class="docutils literal notranslate"><span class="pre">next</span></code> and <code class="docutils literal notranslate"><span class="pre">previous</span></code> (“back”), and <code class="docutils literal notranslate"><span class="pre">p</span></code>, <code class="docutils literal notranslate"><span class="pre">c</span></code> and <code class="docutils literal notranslate"><span class="pre">s</span></code> are synonymns for <code class="docutils literal notranslate"><span class="pre">propose</span></code>, <code class="docutils literal notranslate"><span class="pre">compare</span></code> and <code class="docutils literal notranslate"><span class="pre">set</span></code> respectively.</p>
+</section>
+<section id="multivariate-generators">
+<h3>Multivariate generators<a class="headerlink" href="#multivariate-generators" title="Permalink to this heading"></a></h3>
+<p>So far we have been talking about generators that generate one column in isolation.
+If we want columns that are not independent we will need to merge generators.
+Let us merge the width and height of the artwork so that we can generate larger widths when we have larger heights.</p>
+<p>For this example we will use the <a class="reference external" href="https://github.com/MuseumofModernArt/collection">database of artworks from the Museam of Modern Art in New York</a>.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp gp-VirtualEnv">(artist.artist_bio)</span> <span class="go">next artwork.width_cm</span>
+<span class="gp gp-VirtualEnv">(artwork.width_cm)</span> <span class="go">merge height_cm</span>
+<span class="gp gp-VirtualEnv">(artwork.width_cm,height_cm)</span> <span class="go">propose</span>
+<span class="go">Sample of actual source data: Decimal(&#39;19.5&#39;),Decimal(&#39;24.2&#39;); Decimal(&#39;17.8&#39;),Decimal(&#39;22.3&#39;); Decimal(&#39;60.3251206502&#39;),Decimal(&#39;73.3426466853&#39;); Decimal(&#39;29.5&#39;),Decimal(&#39;18.8&#39;); Decimal(&#39;33.5&#39;),Decimal(&#39;24.4&#39;)...</span>
+<span class="go">1. dist_gen.multivariate_normal: (no fit) [156.09031589469922, 26.69778970196757]; [-4.090845423753819, -8.18194806335324]; [57.91680668094389, -3.1887356250744077]; [-26.06615585218517, 9.165796782425087]; [123.06615368995867, 73.76191916586535] ...</span>
+<span class="go">2. dist_gen.multivariate_lognormal: (no fit) [13.111796803254672, 36.29819014891643]; [8.243881226804909, 12.183080281415767]; [34.74746356276248, 40.259883403242]; [16.71081622360879, 13.136174935970404]; [28.625189220743074, 25.134767045686736] ...</span>
+<span class="go">3. null-partitioned grouped_multivariate_normal: (no fit) [18.832731713525874, -20.218237295889274]; [9.22970763980161, 69.63305466303493]; [159.45614650560498, 52.46062596299266]; [91.30038782576139, 64.3899269396307]; [230.3406736168121, 20.91434294652789] ...</span>
+<span class="go">4. null-partitioned grouped_multivariate_normal [sampled and suppressed]: (no fit) [-168.25567806040397, -12.805359915935114]; [104.58903478494895, 41.38105009883969]; [-108.643833670611, -25.594600883707706]; [None, None]; [-0.20287791770687846, 69.88744644001237] ...</span>
+<span class="go">5. null-partitioned grouped_multivariate_lognormal: (no fit) [17.96925731188804, 8.41346587248666]; [None, None]; [18.05960425078999, 18.472900483777277]; [25.244847272832885, 21.32227474728793]; [22.271880531808534, 27.509500509472115] ...</span>
+<span class="go">6. null-partitioned grouped_multivariate_lognormal [sampled and suppressed]: (no fit) [None, None]; [None, None]; [6.189055115396227, 6.661888913381631]; [29.99920965125257, 17.858917208234534]; [None, None] ...</span>
+<span class="gp gp-VirtualEnv">(artwork.width_cm,height_cm)</span> <span class="go">compare 1 2</span>
+<span class="go">Not private</span>
+<span class="go">1. dist_gen.multivariate_normal requires the following data from the source database:</span>
+<span class="go">SELECT q.m0, q.m1, (q.s0_0 - q.count * q.m0 * q.m0)/NULLIF(q.count - 1, 0) AS c0_0, (q.s0_1 - q.count * q.m0 * q.m1)/NULLIF(q.count - 1, 0) AS c0_1, (q.s1_1 - q.count * q.m1 * q.m1)/NULLIF(q.count - 1, 0) AS c1_1, q.count AS count, 2 AS rank FROM (SELECT COUNT(*) AS count, SUM(width_cm * width_cm) AS s0_0, SUM(width_cm * height_cm) AS s0_1, SUM(height_cm * height_cm) AS s1_1, AVG(width_cm) AS m0, AVG(height_cm) AS m1 FROM artwork WHERE width_cm IS NOT NULL AND height_cm IS NOT NULL) AS q WHERE 1 &lt; q.count; providing the following values: [{&#39;m0&#39;: Decimal(&#39;39.8408881695503020&#39;), &#39;m1&#39;: Decimal(&#39;37.8942602940080112&#39;), &#39;c0_0&#39;: Decimal(&#39;8566.13996292591607014145908725748824&#39;), &#39;c0_1&#39;: Decimal(&#39;1771.51432112064062574103021748260967&#39;), &#39;c1_1&#39;: Decimal(&#39;2434.30506961622772921636781436857116&#39;), &#39;count&#39;: 127808, &#39;rank&#39;: 2}]</span>
+<span class="go">2. dist_gen.multivariate_lognormal requires the following data from the source database:</span>
+<span class="go">SELECT q.m0, q.m1, (q.s0_0 - q.count * q.m0 * q.m0)/NULLIF(q.count - 1, 0) AS c0_0, (q.s0_1 - q.count * q.m0 * q.m1)/NULLIF(q.count - 1, 0) AS c0_1, (q.s1_1 - q.count * q.m1 * q.m1)/NULLIF(q.count - 1, 0) AS c1_1, q.count AS count, 2 AS rank FROM (SELECT COUNT(*) AS count, SUM(LN(width_cm) * LN(width_cm)) AS s0_0, SUM(LN(width_cm) * LN(height_cm)) AS s0_1, SUM(LN(height_cm) * LN(height_cm)) AS s1_1, AVG(LN(width_cm)) AS m0, AVG(LN(height_cm)) AS m1 FROM artwork WHERE width_cm IS NOT NULL AND 0 &lt; width_cm AND height_cm IS NOT NULL AND 0 &lt; height_cm) AS q WHERE 1 &lt; q.count; providing the following values: [{&#39;m0&#39;: Decimal(&#39;3.328012379626851426&#39;), &#39;m1&#39;: Decimal(&#39;3.353020870725566034&#39;), &#39;c0_0&#39;: Decimal(&#39;0.588886424217914574880579068386344791&#39;), &#39;c0_1&#39;: Decimal(&#39;0.482342791051859102539757116685206243&#39;), &#39;c1_1&#39;: Decimal(&#39;0.576396368516107766179437511660540672&#39;), &#39;count&#39;: 125300, &#39;rank&#39;: 2}]</span>
+<span class="go">+------------------------------+-------------------------------------------+------------------------------------------+</span>
+<span class="go">|            source            |      1. dist_gen.multivariate_normal      |    2. dist_gen.multivariate_lognormal    |</span>
+<span class="go">+------------------------------+-------------------------------------------+------------------------------------------+</span>
+<span class="go">|          22.4, 29.9          |  [-30.30197300226458, 125.32226985736872] | [59.152930502697714, 56.40653542376871]  |</span>
+<span class="go">|          51.9, 41.6          |  [-12.853806535442509, 49.52394347123934] | [62.80967227803588, 27.610574449276893]  |</span>
+<span class="go">|          23.6, 27.7          |  [-76.54701202747279, 95.28076769991027]  | [120.22207976396665, 67.99534689550484]  |</span>
+<span class="go">|          19.1, 25.3          |  [-94.73357751277317, -40.53065124214407] |  [10.256731266417718, 9.92401948516523]  |</span>
+<span class="go">|          56.4, 76.2          |   [5.783164682381688, 75.31682595299304]  |  [33.56480847165019, 32.31307126699535]  |</span>
+<span class="go">|          45.1, 52.8          |  [13.239585293742458, 14.95156014276887]  | [42.772989425028385, 43.146644322968754] |</span>
+<span class="go">| 14.2875285751, 20.9550419101 |   [67.13380379777615, 68.38226051217048]  | [19.072875407542448, 8.705480286190836]  |</span>
+<span class="go">|          22.5, 16.7          | [-11.246221416602566, -52.48693945380513] | [39.977277575041306, 24.472887821531405] |</span>
+<span class="go">| 79.3751587503, 59.6901193802 |  [-43.54109084064334, 23.635761625126122] | [17.591732388768918, 12.468330774072989] |</span>
+<span class="go">|          27.6, 28.1          |   [39.1207176171055, 50.930461148452565]  |  [24.24087885150377, 29.01327658224259]  |</span>
+<span class="go">|          50.2, 39.8          | [-147.21637042993717, 29.937545279847257] | [20.598207180125364, 18.586852513581082] |</span>
+<span class="go">|          23.2, 30.8          |   [54.8823235542188, 35.32302587446014]   | [15.312141023476611, 18.439038524603294] |</span>
+<span class="go">|       70.4851, 58.7376       |  [12.201614091657802, 23.37266118274506]  | [14.842880257906147, 28.060559922386517] |</span>
+<span class="go">|     32.5438150876, 42.7      |  [36.36776373020976, 3.9374033292046207]  |  [46.87929388618674, 27.50376839671559]  |</span>
+<span class="go">|          49.5, 35.0          |   [38.4553214014625, 44.05597131161997]   | [19.934782162790142, 29.393521224229563] |</span>
+<span class="go">|          16.4, 33.5          |  [-53.22130937119619, 13.891352066160252] |  [88.36839133560514, 69.24444774268322]  |</span>
+<span class="go">|          62.5, 76.2          |  [120.61263891147385, 81.78495411418078]  | [39.880687407969226, 30.60721063876066]  |</span>
+<span class="go">|          36.7, 24.4          |   [125.801983433586, 59.14111658833157]   |  [53.733946922347656, 33.0511244388031]  |</span>
+<span class="go">|  12.382524765, 7.937515875   |   [50.56656447948824, 80.36754342712976]  | [17.354428334282115, 27.234368131874156] |</span>
+<span class="go">|           0.0, 0.0           |  [120.63922185844007, 30.084733739945715] | [20.476178451775507, 18.79872306014655]  |</span>
+<span class="go">+------------------------------+-------------------------------------------+------------------------------------------+</span>
+<span class="gp gp-VirtualEnv">(artwork.width_cm,height_cm)</span>
+</pre></div>
+</div>
+<p>We can see six generators; normal and lognormal distributions, and some are “null-partitioned grouped” and some are “sampled and suppressed”.
+We can see in the <code class="docutils literal notranslate"><span class="pre">compare</span></code> table that the normal distribution produces negative heights and widths, whereas the lognormal distribution produces much saner results.</p>
+<p>To describe “null-partitioned grouped”, let us make the generator much more complicated by adding <code class="docutils literal notranslate"><span class="pre">depth_cm</span></code> and <code class="docutils literal notranslate"><span class="pre">medium</span></code> columns and peeking at the data there:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp gp-VirtualEnv">(artwork.width_cm,height_cm)</span> <span class="go">merge depth_cm medium</span>
+<span class="gp gp-VirtualEnv">(artwork.depth_cm,width_cm,height_cm,medium)</span> <span class="go">peek</span>
+<span class="go">+----------+---------------+---------------+------------------------------------------------------------------------------------------------+</span>
+<span class="go">| depth_cm |    width_cm   |   height_cm   |                                             medium                                             |</span>
+<span class="go">+----------+---------------+---------------+------------------------------------------------------------------------------------------------+</span>
+<span class="go">|   None   |      26.7     |      38.1     |                               One from a set of four lithographs                               |</span>
+<span class="go">|   None   |     24.13     |    30.4801    |                              Page with chromogenic print and text                              |</span>
+<span class="go">|   2.9    |     150.0     |      42.0     |     Pencil on paper, gelatin silver print, metallic paper, colored paper, and graph paper      |</span>
+<span class="go">|   0.0    |      40.0     |      40.3     |                                         Alkyd on board                                         |</span>
+<span class="go">|   None   |    22.3838    |    28.5751    |                                        Pencil on paper                                         |</span>
+<span class="go">|   None   | 70.8026416053 | 82.5501651003 |                                             Poster                                             |</span>
+<span class="go">|   None   |      19.8     |      26.0     |                             Lift ground aquatint, printed in color                             |</span>
+<span class="go">|   None   |      45.8     |      32.5     |                                           Lithograph                                           |</span>
+<span class="go">|   None   |      86.4     |      None     |                                           Polyester                                            |</span>
+<span class="go">|   None   |      None     |      None     |                                      Video (color, sound)                                      |</span>
+<span class="go">|   None   |      18.4     |      13.6     |                                      Gelatin silver print                                      |</span>
+<span class="go">|   None   |      None     |      None     |                                      Albumen silver print                                      |</span>
+<span class="go">|   None   |      13.0     |      18.0     |                                            Drypoint                                            |</span>
+<span class="go">|   None   | 17.7800355601 | 24.4475488951 |                                      Watercolor on paper                                       |</span>
+<span class="go">|   None   |      33.4     |      25.8     |                                      Gelatin silver print                                      |</span>
+<span class="go">|   None   |      24.0     |      18.0     |                                      Gelatin silver print                                      |</span>
+<span class="go">|   None   |      7.2      |      4.0      | Wood engraving from an illustrated book with 323 wood engravings and one etching and engraving |</span>
+<span class="go">|   None   |      91.1     |      71.8     |     Cut-and-pasted printed and painted papers, wood veneer, gouache, oil, and ink on board     |</span>
+<span class="go">|   None   |      33.3     |      24.3     |                              Illustrated book with one lithograph                              |</span>
+<span class="go">|   None   |      15.1     |      16.9     |                       One from an artist&#39;s book of twenty-four die-cuts                        |</span>
+<span class="go">|   None   |      23.2     |      30.8     |                                           Periodical                                           |</span>
+<span class="go">|   None   |      None     |      None     |                                   Matte albumen silver print                                   |</span>
+<span class="go">|   None   |      14.8     |      12.2     |                                     Drypoint and engraving                                     |</span>
+<span class="go">|   None   |      None     |      None     |                                    Pencil on tracing paper                                     |</span>
+<span class="go">|   None   |      18.5     |      24.3     |               Lithograph from an illustrated book of poems and four lithographs                |</span>
+<span class="go">+----------+---------------+---------------+------------------------------------------------------------------------------------------------+</span>
+<span class="gp gp-VirtualEnv">(artwork.depth_cm,width_cm,height_cm,medium)</span>
+</pre></div>
+</div>
+<p>Here we can see that Moma understandably does not record depths for 2D artworks so we have many NULLs in that column.
+If we try to apply the standard normal or lognormal to data with many NULLs, it will ignore those rows with any NULLs.
+So while we could use missingness generators (see later) to give us the sense of 2D as well as 3D artworks,
+if we did this the dimensions of the 2D artworks would be based entirely on the dimensions of the 3D artworks!
+The other obvious problem is that normal and lognormal distributions can’t help you with the <code class="docutils literal notranslate"><span class="pre">medium</span></code>  column!</p>
+<p>Both of these problems can be addressed with the null-partitioned grouped generators.</p>
+<p>Null-partitioned generators deal in three different types of value: NULL, numeric (while not a foreign key) and category.
+As long as the columns contain these three types of data the Null-partitioned grouped generators are appropriate.
+“Null-partitioned” essentially means that you will get a different generator for each pattern of NULLs in a row (not very different!).
+“Grouped” means that you will get a different set of covariates for the numeric columns for the different patterns of choice values within each partition.</p>
+<p>This is a little confusing, so let’s talk about how this works with the Moma example above:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp gp-VirtualEnv">(artwork.depth_cm,width_cm,height_cm,medium)</span> <span class="go">propose</span>
+<span class="go">Sample of actual source data: Decimal(&#39;0.0&#39;),Decimal(&#39;50.8001016002&#39;),Decimal(&#39;40.9575819152&#39;),&#39;Colored pencil and pencil on cut-and-pasted paper on oil on paper&#39;; Decimal(&#39;0.0&#39;),Decimal(&#39;21.9&#39;),Decimal(&#39;31.7500635001&#39;),&#39;Gelatin silver print&#39;; Decimal(&#39;0.0&#39;),Decimal(&#39;66.0401320803&#39;),Decimal(&#39;101.6002032004&#39;),&#39;Solvent transfer drawing with gouache, pencil, colored pencil, and lithograph on paper&#39;; Decimal(&#39;0.0&#39;),Decimal(&#39;0.0&#39;),Decimal(&#39;0.0&#39;),&#39;Offset&#39;; Decimal(&#39;9.5&#39;),Decimal(&#39;43.0&#39;),Decimal(&#39;32.0&#39;),&#39;Vinyl-covered attaché case with screenprint&#39;...</span>
+<span class="go">1. null-partitioned grouped_multivariate_normal: (no fit) [None, 39.973634541811435, 31.93624913182064, &#39;Gelatin silver print&#39;]; [None, 14.147337233160641, 34.97976525453238, &#39;Woodcut and wood engraving, printed in color&#39;]; [None, 10.092882610994772, 14.249800582490234, &#39;Gelatin silver print&#39;]; [None, -6.391051500993143, -2.403385248222161, &#39;Gelatin silver print&#39;]; [None, 29.390544388814472, 30.162571070278858, &#39;Gelatin silver print&#39;] ...</span>
+<span class="go">2. null-partitioned grouped_multivariate_normal [sampled and suppressed]: (no fit) [None, 36.06686932038727, 29.41013826875849, &#39;Gelatin silver print&#39;]; [None, 17.514537089293558, 17.891332542467747, None]; [None, 47.774761208268984, 45.61942518797726, &#39;Lithograph&#39;]; [None, 33.65613203530817, 61.84008585634961, &#39;Lithograph&#39;]; [None, -31.874726507172454, -22.155743053736508, &#39;Lithograph&#39;] ...</span>
+<span class="go">3. null-partitioned grouped_multivariate_lognormal: (no fit) [None, None, None, &#39;Pencil on tracing&#39;]; [None, None, None, &#39;Albumen silver print&#39;]; [None, None, None, &#39;Ink on note paper&#39;]; [None, 29.770314274108912, 36.92932081226337, &#39;Gelatin silver print&#39;]; [None, 28.09314226304076, 19.23404715223526, &#39;Lithograph&#39;] ...</span>
+<span class="go">4. null-partitioned grouped_multivariate_lognormal [sampled and suppressed]: (no fit) [None, None, None, &#39;Albumen silver print&#39;]; [None, None, None, &#39;Pencil on paper&#39;]; [None, None, None, &#39;Pencil on tracing paper&#39;]; [None, 19.117201243763237, 15.87224244805247, &#39;Chromogenic print&#39;]; [None, 73.59589035622726, 36.004739858192416, &#39;Lithograph&#39;] ...</span>
+<span class="gp gp-VirtualEnv">(artwork.depth_cm,width_cm,height_cm,medium)</span>
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">medium</span></code> column is preventing the <code class="docutils literal notranslate"><span class="pre">dist_gen.multivariate_normal</span></code>  and <code class="docutils literal notranslate"><span class="pre">dist_gen.multivariate_lognormal</span></code> from appearing,
+so we just have the null-partitioned generators.
+In the data above we can see three patterns of missingness: All four columns are non-null, only <code class="docutils literal notranslate"><span class="pre">depth_cm</span></code> is null, and only <code class="docutils literal notranslate"><span class="pre">medium</span></code> is non-null.
+The first thing these generators will do is partition the data into these three missingness patterns (and more if there are others present).
+The second thing it will do is get data for each medium listed in each partition;
+a query will be run for each partition finding the covariates between the width, height and depth (if present) for each medium
+(“grouped by medium” in the language of SQL, hence the name null-partitioned “grouped” generators).
+When it comes to generating the data, it will choose a partition (weighted by how popular these partitions are in the source data),
+then it will choose a medium (again weighted by the source data), then it will generate values for the numeric columns based on the covariates associated with that medium.
+In this way, the dimensions of the artwork will be dependent on the materials it is made out of!
+So these generators can cope with the missingness, category choices and numeric values, all related to one another:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp gp-VirtualEnv">(artwork.depth_cm,width_cm,height_cm,medium)</span> <span class="go">compare 3</span>
+<span class="go">...</span>
+<span class="go">16.8000000000000000&#39;), &#39;m2&#39;: Decimal(&#39;7.2500000000000000&#39;), &#39;c0_0&#39;: Decimal(&#39;0.00500000000000000000000000000000&#39;), &#39;c0_1&#39;: Decimal(&#39;0E-32&#39;), &#39;c1_1&#39;: Decimal(&#39;0E-32&#39;), &#39;c0_2&#39;: Decimal(&#39;-0.00500000000000000000000000000000&#39;),</span>
+<span class="go">&#39;c1_2&#39;: Decimal(&#39;0E-32&#39;), &#39;c2_2&#39;: Decimal(&#39;0.00500000000000000000000000000000&#39;), &#39;count&#39;: 2, &#39;rank&#39;: 3, &#39;k3&#39;: &#39;Wood chessboard with offset label, containing thirty-two grinder-attachment pieces&#39;},</span>
+<span class="go">{&#39;m0&#39;: Decimal(&#39;0.18142893428571428571&#39;), &#39;m1&#39;: Decimal(&#39;148.6275989694857143&#39;), &#39;m2&#39;: Decimal(&#39;86.7962190210142857&#39;), &#39;c0_0&#39;: Decimal(&#39;0.2304152073723502285732428607714285714286&#39;),</span>
+<span class="go">&#39;c0_1&#39;: Decimal(&#39;-26.486443141750314132709249005152571429&#39;), &#39;c1_1&#39;: Decimal(&#39;50474.07439826790816042306146292190476&#39;), &#39;c0_2&#39;: Decimal(&#39;-16.221361167705473902113631904894928572&#39;),</span>
+<span class="go">&#39;c1_2&#39;: Decimal(&#39;17016.51237059149724684191157056976191&#39;), &#39;c2_2&#39;: Decimal(&#39;6161.43161737166644044758872927190476&#39;), &#39;count&#39;: 7, &#39;rank&#39;: 3, &#39;k3&#39;: &#39;Woodcut&#39;},</span>
+<span class="go">{&#39;m0&#39;: Decimal(&#39;14.2875285750500000&#39;), &#39;m1&#39;: Decimal(&#39;45.4025908051500000&#39;), &#39;m2&#39;: Decimal(&#39;78.7401574803000000&#39;), &#39;c0_0&#39;: Decimal(&#39;193.75038750119350238700500000000000&#39;),</span>
+<span class="go">&#39;c0_1&#39;: Decimal(&#39;256.25051250126100252200500000000000&#39;), &#39;c1_1&#39;: Decimal(&#39;338.91196814640914765700500000000000&#39;), &#39;c0_2&#39;: Decimal(&#39;-350.00070000234650469301000000000000&#39;),</span>
+<span class="go">&#39;c1_2&#39;: Decimal(&#39;-462.90415161543311796301000000000000&#39;), &#39;c2_2&#39;: Decimal(&#39;632.25932903684104142402000000000000&#39;), &#39;count&#39;: 2, &#39;rank&#39;: 3, &#39;k3&#39;: &#39;Wood, metal, and plastic&#39;},</span>
+<span class="go">{&#39;m0&#39;: Decimal(&#39;34.9250698501000000&#39;), &#39;m1&#39;: Decimal(&#39;34.9250698501000000&#39;), &#39;m2&#39;: Decimal(&#39;132.8210989755166667&#39;), &#39;c0_0&#39;: Decimal(&#39;0E-32&#39;), &#39;c0_1&#39;: Decimal(&#39;0E-32&#39;), &#39;c1_1&#39;: Decimal(&#39;0E-32&#39;),</span>
+<span class="go">&#39;c0_2&#39;: Decimal(&#39;-1.39700279400400000E-15&#39;), &#39;c1_2&#39;: Decimal(&#39;-1.39700279400400000E-15&#39;), &#39;c2_2&#39;: Decimal(&#39;2346.52351025098558274334974862533333&#39;), &#39;count&#39;: 6, &#39;rank&#39;: 3, &#39;k3&#39;: &#39;Wood, plastic and acrylic paint&#39;},</span>
+<span class="go">{&#39;m0&#39;: Decimal(&#39;3.8000000000000000&#39;), &#39;m1&#39;: Decimal(&#39;21.3000000000000000&#39;), &#39;m2&#39;: Decimal(&#39;21.3000000000000000&#39;), &#39;c0_0&#39;: Decimal(&#39;0E-32&#39;), &#39;c0_1&#39;: Decimal(&#39;0E-32&#39;), &#39;c1_1&#39;: Decimal(&#39;0E-32&#39;),</span>
+<span class="go">&#39;c0_2&#39;: Decimal(&#39;0E-32&#39;), &#39;c1_2&#39;: Decimal(&#39;0E-32&#39;), &#39;c2_2&#39;: Decimal(&#39;0E-32&#39;), &#39;count&#39;: 5, &#39;rank&#39;: 3, &#39;k3&#39;: &#39;Wood, plastic, and graphite on paper on plywood&#39;}, {&#39;m0&#39;: Decimal(&#39;65.8588500000000000&#39;),</span>
+<span class="go">&#39;m1&#39;: Decimal(&#39;36.7606500000000000&#39;), &#39;m2&#39;: Decimal(&#39;63.4000000000000000&#39;), &#39;c0_0&#39;: Decimal(&#39;1091.27174664500000000000000000000000&#39;), &#39;c0_1&#39;: Decimal(&#39;292.48316850500000000000000000000000&#39;),</span>
+<span class="go">&#39;c1_1&#39;: Decimal(&#39;78.39147684500000000000000000000000&#39;), &#39;c0_2&#39;: Decimal(&#39;-953.04108000000000000000000000000000&#39;), &#39;c1_2&#39;: Decimal(&#39;-255.43452000000000000000000000000000&#39;),</span>
+<span class="go">&#39;c2_2&#39;: Decimal(&#39;832.32000000000000000000000000000000&#39;), &#39;count&#39;: 2, &#39;rank&#39;: 3, &#39;k3&#39;: &#39;Wood, plastic and metal&#39;}, {&#39;m0&#39;: Decimal(&#39;29.2100584201000000&#39;), &#39;m1&#39;: Decimal(&#39;127.0002540005000000&#39;),</span>
+<span class="go">&#39;m2&#39;: Decimal(&#39;167.6403352807000000&#39;), &#39;c0_0&#39;: Decimal(&#39;1706.45502581130981616802000000000000&#39;), &#39;c0_1&#39;: Decimal(&#39;-890.32436129565130098002000000000000&#39;),</span>
+<span class="go">&#39;c1_1&#39;: Decimal(&#39;464.51705806875407299202000000000000&#39;), &#39;c0_2&#39;: Decimal(&#39;4451.62180646657248153206000000000000&#39;), &#39;c1_2&#39;: Decimal(&#39;-2322.58529033767435276806000000000000&#39;)</span>
+<span class="go"> &#39;c2_2&#39;: Decimal(&#39;11612.92645165789170288018000000000000&#39;), &#39;count&#39;: 2, &#39;rank&#39;: 3, &#39;k3&#39;: &#39;Wood, plexiglass and painted metal&#39;},</span>
+<span class="go"> {&#39;m0&#39;: Decimal(&#39;45.7201000000000000&#39;), &#39;m1&#39;: Decimal(&#39;78.9765181818181818&#39;), &#39;m2&#39;: Decimal(&#39;49.6455545454545455&#39;), &#39;c0_0&#39;: Decimal(&#39;0E-32&#39;), &#39;c0_1&#39;: Decimal(&#39;9.1440200000000000E-16&#39;),</span>
+<span class="go"> &#39;c1_1&#39;: Decimal(&#39;2128.48295510363636679542436363636364&#39;), &#39;c0_2&#39;: Decimal(&#39;-2.28600500000000000E-15&#39;), &#39;c1_2&#39;: Decimal(&#39;-399.02437570909091204682390909090909&#39;),</span>
+<span class="go"> &#39;c2_2&#39;: Decimal(&#39;114.01736727272726776271727272727273&#39;), &#39;count&#39;: 11, &#39;rank&#39;: 3, &#39;k3&#39;: &#39;Wood with Honduras mahogany veneer&#39;}, {&#39;m0&#39;: Decimal(&#39;5.0006350012500000&#39;), &#39;m1&#39;: Decimal(&#39;48.4982219964000000&#39;),</span>
+<span class="go"> &#39;m2&#39;: Decimal(&#39;105.0133350266500000&#39;), &#39;c0_0&#39;: Decimal(&#39;50.01270083145317500312500000000000&#39;), &#39;c0_1&#39;: Decimal(&#39;115.10859715225737104700000000000000&#39;), &#39;c1_1&#39;: Decimal(&#39;264.93248551031473030688000000000000&#39;),</span>
+<span class="go"> &#39;c0_2&#39;: Decimal(&#39;450.11430748507882902862500000000000&#39;), &#39;c1_2&#39;: Decimal(&#39;1035.97737437492009863052000000000000&#39;), &#39;c2_2&#39;: Decimal(&#39;4051.02876738371174726220500000000000&#39;), &#39;count&#39;: 2, &#39;rank&#39;: 3, &#39;k3&#39;: &#39;Wool&#39;},</span>
+<span class="go"> {&#39;m0&#39;: Decimal(&#39;71.1201000000000000&#39;), &#39;m1&#39;: Decimal(&#39;140.0178000000000000&#39;), &#39;m2&#39;: Decimal(&#39;127.3178000000000000&#39;), &#39;c0_0&#39;: Decimal(&#39;0E-32&#39;), &#39;c0_1&#39;: Decimal(&#39;0E-32&#39;), &#39;c1_1&#39;: Decimal(&#39;0E-32&#39;), &#39;c0_2&#39;: Decimal(&#39;0E-32&#39;),</span>
+<span class="go"> &#39;c1_2&#39;: Decimal(&#39;0E-32&#39;), &#39;c2_2&#39;: Decimal(&#39;0E-32&#39;), &#39;count&#39;: 3, &#39;rank&#39;: 3, &#39;k3&#39;: &#39;Wool felt and polyester resin\r\n&#39;},</span>
+<span class="go"> {&#39;m0&#39;: Decimal(&#39;32.7900040640000000&#39;), &#39;m1&#39;: Decimal(&#39;95.6151614681200000&#39;), &#39;m2&#39;: Decimal(&#39;99.3051305461000000&#39;), &#39;c0_0&#39;: Decimal(&#39;491.80807007928258048000000000000000&#39;),</span>
+<span class="go"> &#39;c0_1&#39;: Decimal(&#39;138.88226464069653219840000000000000&#39;), &#39;c1_1&#39;: Decimal(&#39;4898.08109161279111888167200000000000&#39;), &#39;c0_2&#39;: Decimal(&#39;764.37647839261694675200000000000000&#39;),</span>
+<span class="go"> &#39;c1_2&#39;: Decimal(&#39;3490.06731087702316920166000000000000&#39;), &#39;c2_2&#39;: Decimal(&#39;3690.17446446333032112605000000000000&#39;), &#39;count&#39;: 5, &#39;rank&#39;: 3, &#39;k3&#39;: &#39;Wrought iron&#39;},</span>
+<span class="go"> {&#39;m0&#39;: Decimal(&#39;2.7883953175371784&#39;), &#39;m1&#39;: Decimal(&#39;14.7226723153384232&#39;), &#39;m2&#39;: Decimal(&#39;18.6838369725005809&#39;), &#39;c0_0&#39;: Decimal(&#39;227.28021114171587616480741876139618&#39;),</span>
+<span class="go"> &#39;c0_1&#39;: Decimal(&#39;121.47245807562292099861695800674074&#39;), &#39;c1_1&#39;: Decimal(&#39;528.93747093614426159615049398166995&#39;), &#39;c0_2&#39;: Decimal(&#39;44.67974187605438985600073640111816&#39;),</span>
+<span class="go"> &#39;c1_2&#39;: Decimal(&#39;472.61993813801730220734491759261259&#39;), &#39;c2_2&#39;: Decimal(&#39;1975.74652217638248323643763765853738&#39;), &#39;count&#39;: 1205, &#39;rank&#39;: 3, &#39;k3&#39;: None}]]</span>
+<span class="go">+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+</span>
+<span class="go">|                                           source                                           |                                                                             1. null-partitioned grouped_multivariate_normal                                                                             |</span>
+<span class="go">+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+</span>
+<span class="go">|               0.0, 35.6, 43.8, Spiral-bound sketchbook with pencil on paper                |                                                                                  [None, None, None, &#39;Pencil on paper&#39;]                                                                                  |</span>
+<span class="go">|               20.3200406401, 20.3200406401, 231.1404622809, Acrylic on wood                |                                     [None, 12.47756100823895, 8.392584765777505, &#39;Linoleum cut from an illustrated book with 51 linoleum cuts (including wrapper)&#39;]                                     |</span>
+<span class="go">|    24.13, 19.0, 21.59, Enameled aluminum, plastic, enameled steel, aluminum, and glass     |                                                                   [None, -25.017489688446325, -17.11990764028542, &#39;Chromogenic print&#39;]                                                                  |</span>
+<span class="go">|          0.0, 270.0, 147.6377952756, Textile, plastic, glass, ceramic, and metal           |                                                   [None, 25.123206640930412, 31.3603335841623, &#39;Drypoint, with selective wiping, and hand additions&#39;]                                                   |</span>
+<span class="go">|             0.0, 9.8, 14.9, Colored pencil, pencil, and ballpoint pen on board             |                                                                                [None, None, None, &#39;Gelatin silver print&#39;]                                                                               |</span>
+<span class="go">|                     0.0, 289.5605791212, 139.1922783846, Inkjet print                      |                                                                           [None, 5.396357927615062, 21.705187032410645, None]                                                                           |</span>
+<span class="go">|                                  0.0, 0.0, 0.0, (confirm)                                  |                                                                [None, 85.92337359469983, 56.44070634304563, &#39;Gouache on paper on board&#39;]                                                                |</span>
+<span class="go">|         0.0, 27.6, 34.0, Page from a spiral-bound sketchbook with pencil on paper          | [None, 26.733426637007618, 31.200065658361655, &#39;Engraving from an illustrated book with twenty engravings, ten aquatints (one with drypoint), one drypoint, and one etching (including wrapper front)&#39;] |</span>
+<span class="go">|        0.0, 33.3375666751, 38.4175768352, black, blue, red marker (faded) on paper         |                                   [None, 22.136869416798323, 25.274412343341794, &#39;Lithograph with watercolor and gouache additions and lithographed manuscript text&#39;]                                   |</span>
+<span class="go">| 4.127508255, 119.3802387605, 83.8201676403, Inkjet print with hand engraving on lava stone |                                                                   [None, 33.206742942716964, 47.71103655986387, &#39;Watercolor on paper&#39;]                                                                  |</span>
+<span class="go">|                    2.0, 12.0, 19.0, Artist&#39;s book with offset bookplate                    |                                   [None, 17.0, 27.0, &#39;Page from an illustrated book with forty-three in-text prints and one supplementary ink drawing (frontispiece)&#39;]                                  |</span>
+<span class="go">|          34.2900685801, 31.3, 31.5, 12-inch vinyl record with screenprinted cover          |                                                               [None, 82.0805969523993, 136.27700248250204, &#39;Etching, with hand additions&#39;]                                                              |</span>
+<span class="go">|                                 58.7, 109.5, 74.9, Bronze                                  |                                                                                         [None, None, None, None]                                                                                        |</span>
+<span class="go">|     0.0, 18.4, 27.6, Spiral-bound sketchbook with pencil, ink, and watercolor on paper     |                                                                  [None, 8.131937888918507, -5.780436152200849, &#39;Gelatin silver print&#39;]                                                                  |</span>
+<span class="go">|                       0.0, 70.8026416053, 106.6802133604, Lithograph                       |                                                                           [None, -18.456152268697725, 2.330663099603008, None]                                                                          |</span>
+<span class="go">|           81.2802, 543.5611, 424.1808, Painted cast iron, glazed lava, and glass           |                                                                                  [None, None, None, &#39;Pencil on vellum&#39;]                                                                                 |</span>
+<span class="go">|                          12.3825, 41.2751, 41.2751, Crumpled map                           |                                                                   [None, 24.543223703363182, 20.0212206104858, &#39;Gelatin silver print&#39;]                                                                  |</span>
+<span class="go">|                 1.1, 14.0, 18.0, Plastic box containing nine offset cards                  |                                                                      [None, None, None, &#39;Gelatin silver printing-out-paper print&#39;]                                                                      |</span>
+<span class="go">|                  0.0, 38.1000762002, 45.7200914402, Etching with aquatint                  |                                                                                [None, None, None, &#39;Gelatin silver print&#39;]                                                                               |</span>
+<span class="go">|          0.0, 25.6, 25.9, One from a set of six records with lithographic sleeves          |                                                                         [None, 95.70986740244891, 72.83297376657666, &#39;Etching&#39;]                                                                         |</span>
+<span class="go">+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+</span>
+<span class="gp gp-VirtualEnv">(artwork.depth_cm,width_cm,height_cm,medium)</span>
+</pre></div>
+</div>
+<p>In the listing above I have had to cut the amount of source statistics reported from the database because datafaker actually produces far more than this!
+As we have five columns, this implies up to 32 missingness patterns.
+Currently, none of our generators suppress the generation of data from patterns that are not represented in the source database at time of configuration;
+therefore data for all 32 possible are pulled into the source stats file.
+This works well if we want future missingness patters to be accounted for,
+but it does mean that manually checking the actual <code class="docutils literal notranslate"><span class="pre">src-stats.yaml</span></code> output
+(if that is what your Information Governance requires) means looking at a huge amount of summary statistics;
+even if most of those are just <code class="docutils literal notranslate"><span class="pre">count:</span> <span class="pre">0</span></code>, this is still a burden and certainly a scary-looking wall of text!.</p>
+<p>Still, we can see some nice, faithful data being reproduced.</p>
+<p>If we have too many rows in any one partition, this could result in too much data in the source stats file, so the generator will not be proposed.
+However, we have the “sampled and suppressed” generators that get around that problem.
+These generators pull a sample of rows for each partition and operate on those.
+They also suppress any groups with fewer than five members to improve anonymity.
+Currently there are no “sampled but not suppressed” or “suppressed but not sampled” generators, though both would be useful.</p>
+</section>
+</section>
+<section id="configuring-missingness">
+<h2>Configuring missingness<a class="headerlink" href="#configuring-missingness" title="Permalink to this heading"></a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">configure-missing</span></code> command is also similar to <code class="docutils literal notranslate"><span class="pre">configure-tables</span></code>, but here you are configuring the patterns of NULLs within tables.</p>
+<p>This configuration can only really cope with MCAR (Missing Completely at Random) data.
+This means we cannot specify that certain patterns of NULLs are more or less likely depending on the generated values for certain fields. Something for future development.</p>
+<p>At the moment there are only two missingness generators.
+Use command <code class="docutils literal notranslate"><span class="pre">none</span></code> to set that no NULLs will be generated (unless the generator itelf generates them).
+Use the command <code class="docutils literal notranslate"><span class="pre">sampled</span></code> to set that the NULLs are generated according to a sample of rows from the database.
+The  <code class="docutils literal notranslate"><span class="pre">sampled</span></code> missingness generator samples 1000 rows from the table, and generates missingness patterns present in these rows in proportion to how common they are in this sample.
+This gives a reasonable approximation to the missingness patterns in the original data.</p>
+<p>The other commands <code class="docutils literal notranslate"><span class="pre">counts</span></code>, <code class="docutils literal notranslate"><span class="pre">help</span></code>, <code class="docutils literal notranslate"><span class="pre">next</span></code>, <code class="docutils literal notranslate"><span class="pre">peek</span></code>, <code class="docutils literal notranslate"><span class="pre">previous</span></code>, <code class="docutils literal notranslate"><span class="pre">quit</span></code>, <code class="docutils literal notranslate"><span class="pre">select</span></code> and <code class="docutils literal notranslate"><span class="pre">tables</span></code> work the same as before.</p>
+</section>
+<section id="generating-the-data">
+<h2>Generating the data<a class="headerlink" href="#generating-the-data" title="Permalink to this heading"></a></h2>
+<p>Now you have files <code class="docutils literal notranslate"><span class="pre">orm.yaml</span></code> (generated with <code class="docutils literal notranslate"><span class="pre">make-tables</span></code>) and <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code> (generated from the <code class="docutils literal notranslate"><span class="pre">generate-</span></code> commands).
+You also need two more. Run the following commands:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>datafaker<span class="w"> </span>make-stats
+<span class="gp">$ </span>datafaker<span class="w"> </span>make-vocab<span class="w"> </span>--compress<span class="w"> </span>--no-force
+</pre></div>
+</div>
+<p>The first of these generates a files <code class="docutils literal notranslate"><span class="pre">src-stats.yaml</span></code> containing summary statistics from the database that the generators need.
+The second generates files <code class="docutils literal notranslate"><span class="pre">tablename.yaml.gz</span></code> containing data from the vocabulary tables. WARNING: this can take many hours depending on how big they are!
+<code class="docutils literal notranslate"><span class="pre">--compress</span></code> compresses the files with gzip, which might be necessary if the machine datafaker is running on risks running out of disk space.
+<code class="docutils literal notranslate"><span class="pre">-no-force</span></code> is necessary if you have had to interrupt the process previously and want to keep your existing files; it will generate only files that do not already exist.
+If you had to stop <code class="docutils literal notranslate"><span class="pre">make-vocab</span></code> (or it got stopped for some other reason) you will need to check which of your <code class="docutils literal notranslate"><span class="pre">.gz</span></code> files are complete. You can use <code class="docutils literal notranslate"><span class="pre">gzip</span> <span class="pre">-t</span> <span class="pre">filename.gz</span></code> for this.</p>
+</section>
+<section id="taking-files-out-of-the-private-network">
+<h2>Taking files out of the private network<a class="headerlink" href="#taking-files-out-of-the-private-network" title="Permalink to this heading"></a></h2>
+<p>You now have <code class="docutils literal notranslate"><span class="pre">orm.yaml</span></code>, <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code>, <code class="docutils literal notranslate"><span class="pre">src-stats.yaml</span></code> and all the <code class="docutils literal notranslate"><span class="pre">tablename.yaml.gz</span></code> files.
+These can all be checked for compliance with any privacy checks you are using then sent out of the private network.</p>
+</section>
+<section id="connecting-to-the-destination-database">
+<h2>Connecting to the destination database<a class="headerlink" href="#connecting-to-the-destination-database" title="Permalink to this heading"></a></h2>
+<p>Just like connecting to the source database, we will use environment variables, either in Bash, Windows Command Shell or docker:</p>
+<p>MacOS or Linux:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span><span class="nb">export</span><span class="w"> </span><span class="nv">DST_DSN</span><span class="o">=</span><span class="s2">&quot;postgresql://someuser:somepassword@myserver.mydomain.com/dst_db&quot;</span>
+<span class="gp">$ </span><span class="nb">export</span><span class="w"> </span><span class="nv">DST_SCHEMA</span><span class="o">=</span><span class="s1">&#39;myschema&#39;</span>
+</pre></div>
+</div>
+<p>Windows Command Shell:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span><span class="nb">set</span><span class="w"> </span><span class="nv">DST_DSN</span><span class="o">=</span>postgresql://someuser:somepassword@myserver.mydomain.com:5432/dst_db
+<span class="gp">$ </span><span class="nb">set</span><span class="w"> </span><span class="nv">DST_SCHEMA</span><span class="o">=</span>myschema
+</pre></div>
+</div>
+<p>Running from the ready-built Docker container, from within a directory holding only your <code class="docutils literal notranslate"><span class="pre">.yaml</span></code> and <code class="docutils literal notranslate"><span class="pre">.yaml.gz</span></code> files (please use WSL for this on Windows):</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>--user<span class="w"> </span><span class="k">$(</span>id<span class="w"> </span>-u<span class="k">)</span>:<span class="k">$(</span>id<span class="w"> </span>-g<span class="k">)</span><span class="w"> </span>--network<span class="w"> </span>host<span class="w"> </span>-e<span class="w"> </span><span class="nv">DST_SCHEMA</span><span class="o">=</span>myschema<span class="w"> </span>-e<span class="w"> </span><span class="nv">DST_DSN</span><span class="o">=</span>postgresql://someuser:somepassword@myserver.mydomain.com:5432/dst_db<span class="w"> </span>-itv<span class="w"> </span>.:data<span class="w"> </span>--pull<span class="w"> </span>always<span class="w"> </span>timband/datafaker
+</pre></div>
+</div>
+<p>(Windows users will need to modify this docker command, perhaps removing the <cite>–user</cite> option and its argument?)</p>
+<p>Whichever we chose, now we can create the generators Python file and generate the data:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>datafaker<span class="w"> </span>create-tables
+<span class="gp">$ </span>datafaker<span class="w"> </span>create-vocab
+<span class="gp">$ </span>datafaker<span class="w"> </span>create-generators
+<span class="gp">$ </span>datafaker<span class="w"> </span>create-data<span class="w"> </span>--num-passes<span class="w"> </span><span class="m">10</span>
+</pre></div>
+</div>
+<p>The first of these uses <code class="docutils literal notranslate"><span class="pre">orm.yaml</span></code> to create the destination database.
+The second uses all the <code class="docutils literal notranslate"><span class="pre">.yaml.gz</span></code> (or <code class="docutils literal notranslate"><span class="pre">.yaml</span></code>) files representing the vocabulary tables (this can take hours, too).
+The third uses <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code> to create a file <code class="docutils literal notranslate"><span class="pre">df.py</span></code> file containing code to call the generators as configured.
+The last one actually generates the data. <code class="docutils literal notranslate"><span class="pre">--num-passes</span></code> controls how many rows are generated.
+At present the only ways to generate different numbers of rows for different tables is to configure <code class="docutils literal notranslate"><span class="pre">num_rows_per_pass</span></code> in <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">observation</span><span class="p">:</span>
+<span class="w">   </span><span class="nt">num_rows_per_pass</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50</span>
+</pre></div>
+</div>
+<p>This makes every call to <code class="docutils literal notranslate"><span class="pre">create-data</span></code> produce 50 rows in the <code class="docutils literal notranslate"><span class="pre">observation</span></code> table (each time you change <code class="docutils literal notranslate"><span class="pre">config.yaml`</span> <span class="pre">you</span> <span class="pre">need</span> <span class="pre">to</span> <span class="pre">re-run</span> <span class="pre">``create-generators</span></code>).
+If you call <code class="docutils literal notranslate"><span class="pre">create-data</span></code> multiple times you get more data added to whatever already exists. Call <code class="docutils literal notranslate"><span class="pre">remove-data</span></code> to remove all rows from all non-vocabulary tables.</p>
+<p>You can call <code class="docutils literal notranslate"><span class="pre">remove-vocab</span></code> to remove all rows from all vocabulary tables, and you can call <code class="docutils literal notranslate"><span class="pre">remove-tables</span></code> to empty the database completely.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="docker.html" class="btn btn-neutral float-left" title="Using Docker" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="introduction.html" class="btn btn-neutral float-right" title="Introductory Tutorial" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023, anon.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

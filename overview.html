@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Datafaker Overview &mdash; datafaker 0.0 documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/sphinx_highlight.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+        <script type="module">import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.12.1/dist/mermaid.esm.min.mjs";
+
+
+
+
+
+const initStyles = () => {
+    const defaultStyle = document.createElement('style');
+    defaultStyle.textContent = `pre.mermaid {
+    /* Same as .mermaid-container > pre */
+    display: block;
+    width: 100%;
+}
+
+pre.mermaid > svg {
+    /* Same as .mermaid-container > pre > svg */
+    height: 500px;
+    width: 100%;
+    max-width: 100% !important;
+}`;
+    document.head.appendChild(defaultStyle);
+
+    const fullscreenStyle = document.createElement('style');
+    fullscreenStyle.textContent = `.mermaid-container {
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+}
+
+.mermaid-container > pre {
+    display: block;
+    width: 100%;
+}
+
+.mermaid-container > pre > svg {
+    height: 500px;
+    width: 100%;
+    max-width: 100% !important;
+}
+
+.mermaid-fullscreen-btn {
+    width: 28px;
+    height: 28px;
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    font-size: 14px;
+    line-height: 1;
+    padding: 0;
+    color: #333;
+}
+
+.mermaid-fullscreen-btn:hover {
+    opacity: 100% !important;
+    background: rgba(255, 255, 255, 1);
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+    transform: scale(1.1);
+}
+
+.mermaid-fullscreen-btn.dark-theme {
+    background: rgba(50, 50, 50, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: #e0e0e0;
+}
+
+.mermaid-fullscreen-btn.dark-theme:hover {
+    background: rgba(60, 60, 60, 1);
+    box-shadow: 0 3px 10px rgba(255, 255, 255, 0.2);
+}
+
+.mermaid-fullscreen-modal {
+    display: none;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 95vw;
+    height: 100vh;
+    background: rgba(255, 255, 255, 0.98);
+    z-index: 9999;
+    padding: 20px;
+    overflow: auto;
+}
+
+.mermaid-fullscreen-modal.dark-theme {
+    background: rgba(0, 0, 0, 0.98);
+}
+
+.mermaid-fullscreen-modal.active {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mermaid-container-fullscreen {
+    position: relative;
+    width: 95vw;
+    height: 90vh;
+    max-width: 95vw;
+    max-height: 90vh;
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    overflow: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mermaid-container-fullscreen.dark-theme {
+    background: #1a1a1a;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+}
+
+.mermaid-container-fullscreen pre.mermaid {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mermaid-container-fullscreen .mermaid svg {
+    height: 100% !important;
+    width: 100% !important;
+    cursor: grab;
+}
+
+.mermaid-fullscreen-close {
+    position: fixed !important;
+    top: 20px !important;
+    right: 20px !important;
+    width: 40px;
+    height: 40px;
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    border-radius: 50%;
+    cursor: pointer;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    transition: all 0.2s;
+    font-size: 24px;
+    line-height: 1;
+    color: #333;
+}
+
+.mermaid-fullscreen-close:hover {
+    background: white;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+    transform: scale(1.1);
+}
+
+.mermaid-fullscreen-close.dark-theme {
+    background: rgba(50, 50, 50, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #e0e0e0;
+}
+
+.mermaid-fullscreen-close.dark-theme:hover {
+    background: rgba(60, 60, 60, 1);
+    box-shadow: 0 6px 16px rgba(255, 255, 255, 0.2);
+}
+
+.mermaid-fullscreen-modal .mermaid-fullscreen-btn {
+    display: none !important;
+}`;
+    document.head.appendChild(fullscreenStyle);
+}
+
+// Detect if page has dark background
+const isDarkTheme = () => {
+    // We use a set of heuristics:
+    // 1. Check for common dark mode classes or attributes
+    // 2. Check computed background color brightness
+    if (document.documentElement.classList.contains('dark') ||
+        document.documentElement.getAttribute('data-theme') === 'dark' ||
+        document.body.classList.contains('dark') ||
+        document.body.getAttribute('data-theme') === 'dark') {
+        // console.log("Dark theme detected via class/attribute");
+        return true;
+    }
+    if (document.documentElement.classList.contains('light') ||
+        document.documentElement.getAttribute('data-theme') === 'light' ||
+        document.body.classList.contains('light') ||
+        document.body.getAttribute('data-theme') === 'light') {
+        // console.log("Light theme detected via class/attribute");
+        return false;
+    }
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        // console.log("Dark theme detected via prefers-color-scheme");
+        return true;
+    }
+    const bgColor = window.getComputedStyle(document.body).backgroundColor;
+    const match = bgColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)/);
+    if (match) {
+        const r = parseInt(match[1]);
+        const g = parseInt(match[2]);
+        const b = parseInt(match[3]);
+        const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+        // console.log("Background color brightness:", brightness);
+        return brightness < 128;
+    }
+    // console.log("No dark or light theme detected, defaulting to light theme");
+    return false;
+};
+
+let darkTheme = isDarkTheme();
+let modal = null;
+let modalContent = null;
+let previousScrollOffset = [window.scrollX, window.scrollY];
+
+const runMermaid = async (rerun) => {
+    console.log("Running mermaid diagrams, rerun =", rerun);
+    // clear all existing mermaid charts
+    let all_mermaids = document.querySelectorAll(".mermaid");
+
+    if (rerun) {
+        all_mermaids.forEach((el) => {
+            if(!el.hasAttribute("data-original-code")) {
+                // store original code
+                // console.log(`Storing original code for first run: `, el.innerHTML);
+                el.setAttribute('data-original-code', el.innerHTML);
+            }
+            if(el.getAttribute("data-processed") === "true") {
+                // remove and restore original
+                el.removeAttribute("data-processed");
+                // console.log(`Restoring original code for re-run: `, el.getAttribute('data-original-code'));
+                el.innerHTML = el.getAttribute('data-original-code');
+            } else {
+                // store original code
+                // console.log(`Storing original code for re-run: `, el.innerHTML);
+                el.setAttribute('data-original-code', el.innerHTML);
+            }
+        });
+        await mermaid.run();
+    }
+
+    all_mermaids = document.querySelectorAll(".mermaid");
+    const mermaids_processed = document.querySelectorAll(".mermaid[data-processed='true']");
+
+    if ("False" === "True") {
+        const mermaids_to_add_zoom = -1 === -1 ? all_mermaids.length : -1;
+        if(mermaids_to_add_zoom > 0) {
+            var svgs = d3.selectAll("");
+            if(all_mermaids.length !== mermaids_processed.length) {
+                setTimeout(() => runMermaid(false), 200);
+                return;
+            } else if(svgs.size() !== mermaids_to_add_zoom) {
+                setTimeout(() => runMermaid(false), 200);
+                return;
+            } else {
+                svgs.each(function() {
+                    var svg = d3.select(this);
+                    svg.html("<g class='wrapper'>" + svg.html() + "</g>");
+                    var inner = svg.select("g");
+                    var zoom = d3.zoom().on("zoom", function(event) {
+                        inner.attr("transform", event.transform);
+                    });
+                    svg.call(zoom);
+                });
+            }
+        }
+    } else if(all_mermaids.length !== mermaids_processed.length) {
+        // Wait for mermaid to process all diagrams
+        setTimeout(() => runMermaid(false), 200);
+        return;
+    }
+
+    // Stop here if not adding fullscreen capability
+    if ("True" !== "True") return;
+
+    if (modal !== null ) {
+        // Destroy existing modal
+        modal.remove();
+        modal = null;
+        modalContent = null;
+    }
+
+    modal = document.createElement('div');
+    modal.className = 'mermaid-fullscreen-modal' + (darkTheme ? ' dark-theme' : '');
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-label', 'Fullscreen diagram viewer');
+    modal.innerHTML = `
+        <button class="mermaid-fullscreen-close${darkTheme ? ' dark-theme' : ''}" aria-label="Close fullscreen">✕</button>
+        <div class="mermaid-container-fullscreen${darkTheme ? ' dark-theme' : ''}"></div>
+    `;
+    document.body.appendChild(modal);
+
+    modalContent = modal.querySelector('.mermaid-container-fullscreen');
+    const closeBtn = modal.querySelector('.mermaid-fullscreen-close');
+
+    const closeModal = () => {
+        modal.classList.remove('active');
+        modalContent.innerHTML = '';
+        document.body.style.overflow = ''
+        window.scrollTo({left: previousScrollOffset[0], top: previousScrollOffset[1], behavior: 'instant'});
+    };
+
+    closeBtn.addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) closeModal();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && modal.classList.contains('active')) {
+            closeModal();
+        }
+    });
+
+    document.querySelectorAll('.mermaid').forEach((mermaidDiv) => {
+        if (mermaidDiv.parentNode.classList.contains('mermaid-container') ||
+            mermaidDiv.closest('.mermaid-fullscreen-modal')) {
+            // Already processed, adjust button class if needed
+            const existingBtn = mermaidDiv.parentNode.querySelector('.mermaid-fullscreen-btn');
+            if (existingBtn) {
+                existingBtn.className = 'mermaid-fullscreen-btn' + (darkTheme ? ' dark-theme' : '');
+            }
+            return;
+        }
+
+        const container = document.createElement('div');
+        container.className = 'mermaid-container';
+        mermaidDiv.parentNode.insertBefore(container, mermaidDiv);
+        container.appendChild(mermaidDiv);
+
+        const fullscreenBtn = document.createElement('button');
+        fullscreenBtn.className = 'mermaid-fullscreen-btn' + (darkTheme ? ' dark-theme' : '');
+        fullscreenBtn.setAttribute('aria-label', 'View diagram in fullscreen');
+        fullscreenBtn.textContent = '⛶';
+        fullscreenBtn.style.opacity = '50%';
+
+        // Calculate dynamic position based on diagram's margin and padding
+        const diagramStyle = window.getComputedStyle(mermaidDiv);
+        const marginTop = parseFloat(diagramStyle.marginTop) || 0;
+        const marginRight = parseFloat(diagramStyle.marginRight) || 0;
+        const paddingTop = parseFloat(diagramStyle.paddingTop) || 0;
+        const paddingRight = parseFloat(diagramStyle.paddingRight) || 0;
+        fullscreenBtn.style.top = `${marginTop + paddingTop + 4}px`;
+        fullscreenBtn.style.right = `${marginRight + paddingRight + 4}px`;
+
+        fullscreenBtn.addEventListener('click', () => {
+            previousScrollOffset = [window.scroll, window.scrollY];
+            const clone = mermaidDiv.cloneNode(true);
+            modalContent.innerHTML = '';
+            modalContent.appendChild(clone);
+
+            const svg = clone.querySelector('svg');
+            if (svg) {
+                svg.removeAttribute('width');
+                svg.removeAttribute('height');
+                svg.style.width = '100%';
+                svg.style.height = 'auto';
+                svg.style.maxWidth = '100%';
+                svg.style.sdisplay = 'block';
+
+                if ("False" === "True") {
+                    setTimeout(() => {
+                        const g = svg.querySelector('g');
+                        if (g) {
+                            var svgD3 = d3.select(svg);
+                            svgD3.html("<g class='wrapper'>" + svgD3.html() + "</g>");
+                            var inner = svgD3.select("g");
+                            var zoom = d3.zoom().on("zoom", function(event) {
+                                inner.attr("transform", event.transform);
+                            });
+                            svgD3.call(zoom);
+                        }
+                    }, 100);
+                }
+            }
+
+            modal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        });
+        container.appendChild(fullscreenBtn);
+    });
+};
+
+const load = async () => {
+    initStyles();
+
+    await runMermaid(true);
+
+    const reRunIfThemeChanges = async () => {
+        const newDarkTheme = isDarkTheme();
+        if (newDarkTheme !== darkTheme) {
+            darkTheme = newDarkTheme;
+            console.log("Theme change detected, re-running mermaid with", darkTheme ? "dark" : "default", "theme");
+            await mermaid.initialize(
+                {...JSON.parse(
+                    `{"startOnLoad": false}`
+                ),
+                ...{ darkMode: darkTheme, theme: darkTheme ? 'dark' : 'default' },
+                }
+            );
+            await runMermaid(true);
+        }
+    };
+
+    // Update theme classes when theme changes
+    const themeObserver = new MutationObserver(reRunIfThemeChanges);
+    themeObserver.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['class', 'style', 'data-theme']
+    });
+    themeObserver.observe(document.body, {
+        attributes: true,
+        attributeFilter: ['class', 'style', 'data-theme']
+    });
+};
+
+
+
+
+
+console.log("Initializing mermaid with", darkTheme ? "dark" : "default", "theme");
+mermaid.initialize(
+    {...JSON.parse(
+        `{"startOnLoad": false}`
+    ),
+    ...{ darkMode: darkTheme, theme: darkTheme ? 'dark' : 'default' },
+    }
+);
+
+window.addEventListener("load", load);</script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Installation" href="installation.html" />
+    <link rel="prev" title="datafaker" href="index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            datafaker
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Datafaker Overview</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#background">Background</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#reduction-techniques">Reduction techniques</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#differential-privacy">Differential Privacy</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#datafaker-s-operation">Datafaker’s Operation</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#datafaker-make-tables-phase">Datafaker make-tables phase</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#datafaker-configuration-phase">Datafaker configuration phase</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#datafaker-summary-stats-phase">Datafaker summary stats phase</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#datafaker-make-vocab-phase">Datafaker make-vocab phase</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#releasing-the-intermediate-data">Releasing the intermediate data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#datafaker-repopulate-phase">Datafaker Repopulate phase</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="docker.html">Using Docker</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="introduction.html">Introductory Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="introduction.html#more-in-depth-tutorial">More In-Depth Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="orm.html">ORM Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="loan_data.html">Example: Loan Data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="health_data.html">Advanced Example: OMOP Health Data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="custom_generators.html">Including your own generators</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="faq.html">FAQ</a></li>
+<li class="toctree-l1"><a class="reference internal" href="glossary.html">Glossary</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">datafaker</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Datafaker Overview</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/overview.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="datafaker-overview">
+<h1>Datafaker Overview<a class="headerlink" href="#datafaker-overview" title="Permalink to this heading"></a></h1>
+<p>Datafaker provides a way to create a fake version of sensitive data.</p>
+<p>Datafaker’s workflow permits Information Governance oversight by design.</p>
+<section id="background">
+<h2>Background<a class="headerlink" href="#background" title="Permalink to this heading"></a></h2>
+<p>Conceptually, any faking of sensitive data achieves privacy through one or both of two mechanisms:
+Reducing the real data down to summaries, and obfuscating the data by adding noise.</p>
+<p>After these privacy-preserving steps, reproducing a fake version of the full steps
+involves adding noise to the summary data to turn it back into data with the
+required structure and volume. We can call these stages Reduce, Obfuscate,
+Repopulate.</p>
+<pre  class="mermaid">
+        block-beta
+columns 1
+Source[&quot;Sensitive Data&quot;]
+block:Arrow1
+    ArrowNote1([&quot;Remove Personally\nIdentifiable Data\n/ summarize / other removal&quot;])
+    Summary&lt;[&quot;Reduce&quot;]&gt;(down)
+end
+block:Intermediate1
+    ReducedNote([&quot;This data is less sensitive&quot;])
+    Reduced[&quot;Reduced data / summaries&quot;]
+end
+block:Arrow2
+    ArrowNote2([&quot;Adding noise&quot;])
+    Obfuscation&lt;[&quot;Obfuscate&quot;]&gt;(down)
+end
+block:Intermediate2
+    ObfuscatedNote([&quot;This data is even\nless sensitive&quot;])
+    Obfuscated(&quot;Obfuscated\nReduced data&quot;)
+end
+block:Arrow3
+    ArrowNote3([&quot;Replacing removed data\nbased on summaries&quot;])
+    Repopulation&lt;[&quot;Repopulate&quot;]&gt;(down)
+end
+Destination[&quot;Synthetic Data&quot;]
+classDef nobox fill:#fff,stroke-width:0px;
+class Intermediate1 nobox
+class Intermediate2 nobox
+class Arrow1 nobox
+class Arrow2 nobox
+class Arrow3 nobox
+classDef note fill:#18c;
+class ArrowNote1 note
+class ArrowNote2 note
+class ArrowNote3 note
+class ReducedNote note
+class ObfuscatedNote note
+    </pre><p>In this diagram, Reduce and Obfuscate take place in a private environment such as
+a Trusted Research Environment or some machine on a private network from which
+the sensitive data can be read. Information Governance oversight happens at the end
+of this process to decide if this obfucated summary can be released out of the private
+network.</p>
+<p>The Repopulate process happens outside of the private network and outside of the remit
+of Information Governance. This is important! The act of turning reduced
+obfucated data into a larger quantity of randomized data is <em>not</em> a privacy-sheilding
+process! By this time all the actual privacy-sheilding has already happened and
+the Information Governance has already been applied.</p>
+<section id="reduction-techniques">
+<h3>Reduction techniques<a class="headerlink" href="#reduction-techniques" title="Permalink to this heading"></a></h3>
+<p>Here are a few techniques that can be used to preserve privacy through data reduction.
+Most Reduction techniques have a corresponding Repopulation technique
+to add the missing data back into the synthetic data.</p>
+<table class="docutils align-default" id="id1" style="width: 100%">
+<caption><span class="caption-text">Reduction Techniques</span><a class="headerlink" href="#id1" title="Permalink to this table"></a></caption>
+<colgroup>
+<col style="width: 17%" />
+<col style="width: 50%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Reduction technique</p></th>
+<th class="head"><p>Description</p></th>
+<th class="head"><p>Repopulation technique</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Anonymization</p></td>
+<td><p>Removing Personally Identifiable Information (remembering what sort of information was removed and its format)</p></td>
+<td><p>Generation of Names/Addresses etcetera</p></td>
+</tr>
+<tr class="row-odd"><td><p>Removal of unnecessary data</p></td>
+<td><p>Some data does not need to be supplied and so can be removed completely.</p></td>
+<td><p>None.</p></td>
+</tr>
+<tr class="row-even"><td><p>Summarization</p></td>
+<td><p>Extract the means, standard deviations and size of numeric data, the frequencies of categorical data, or other summary measures.</p></td>
+<td><p>Pick the new data from a suitable random distribution.</p></td>
+</tr>
+<tr class="row-odd"><td><p>Low number suppression</p></td>
+<td><p>Removal of rare data, which could be used to infer the presence of certain individuals in the data set.</p></td>
+<td><p>None.</p></td>
+</tr>
+<tr class="row-even"><td><p>Grouping</p></td>
+<td><p>Gathering data into clusters and extracting summary data from each cluster.</p></td>
+<td><p>Picking new data by picking a cluster then picking from the appropriate random distribution.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Each of these extracts less than the full information from the source, then
+most of them replace the information left behind with generated information
+(perhaps after an Obfuscation step).</p>
+</section>
+<section id="differential-privacy">
+<h3>Differential Privacy<a class="headerlink" href="#differential-privacy" title="Permalink to this heading"></a></h3>
+<p>One actual concrete method of faking data is to apply a process such as Differential
+Privacy to the real data without summarizing. In such a case Information Governance
+cannot be expected to examine the data for privacy breaches as there is the same
+amount of data to examine as in the real database, and breaches are likely to be
+more subtle than real names being produced; in this case Information Governance
+would have to understand and trust the obfucation process.</p>
+<p>In the US, The National Institute for Science and Technology has some
+<a class="reference external" href="https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-226.pdf">guidelines</a>
+about the use of Differential Privacy but even that is at a loss to explain how to
+understand its main parameter:</p>
+<blockquote>
+<div><p>Selecting privacy loss parameters, such as ε, is challenging,
+and we offer no specific guidelines on their selection.</p>
+</div></blockquote>
+<p>So Differential Privacy can be useful, but it is very hard to quantify exactly
+how much good it is doing to preserve privacy.</p>
+<p>Differential Privacy is an Obfuscation technique rather than a Reduction technique
+because the same amount of data is output as was input.</p>
+</section>
+</section>
+<section id="datafaker-s-operation">
+<h2>Datafaker’s Operation<a class="headerlink" href="#datafaker-s-operation" title="Permalink to this heading"></a></h2>
+<p>Datafaker is based on the Alan Turing Institute’s SqlSynthGen tool.
+SqlSynthGen implements all three operations of Reduce, Obfuscate and Repopulate.</p>
+<p>Datafaker builds on SqlSynthGen by automating the specification of the Reduce
+operation and making the dataflow clearer for Information Governance purposes
+(amongst other improvements). Datafaker still retains SqlSynthGen’s Obfuscation
+by Differential Privacy functionality, but this has not yet been folded into the
+automation and will not be described further here: we are relying on the
+Reduce operation to provide privacy shielding.</p>
+<p>Datafaker has a number of phases of operation; below we describe how
+these map to the Reduce, Obfuscate and Repopulate stages described above.</p>
+<pre  class="mermaid">
+        block-beta
+columns 1
+Source[&quot;Sensitive Data&quot;]
+block:Processing
+    columns 4
+    Arrow1&lt;[&quot;Extract\nstructure&quot;]&gt;(down)
+    Arrow2&lt;[&quot;User guided\nconfiguration&quot;]&gt;(down)
+    Arrow3&lt;[&quot;Extract\nsummary&quot;]&gt;(down)
+    Arrow4&lt;[&quot;Extract\nvocabulary&quot;]&gt;(down)
+    Orm[&quot;orm.yaml\nstructure\ndefinition&quot;]
+    Config[&quot;config.yaml\nconfiguration\nof summarization&quot;]
+    SrcStats[&quot;src-stats.yaml\nSummary\nstatistics&quot;]
+    Vocab[&quot;Vocabulary\ntable data&quot;]
+end
+Arrow5&lt;[&quot;Information Governance\npermits release&quot;]&gt;(down)
+block:Release
+    columns 1
+    Arrow6&lt;[&quot;Repopulation&quot;]&gt;(down)
+    Destination[&quot;Synthetic Data&quot;]
+end
+classDef nobox fill:#fff,stroke-width:0px;
+class Processing nobox
+classDef publicnet fill:#18c;
+class Release publicnet
+    </pre><section id="datafaker-make-tables-phase">
+<h3>Datafaker make-tables phase<a class="headerlink" href="#datafaker-make-tables-phase" title="Permalink to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">datafaker</span> <span class="pre">make-tables</span></code> makes a file called <code class="docutils literal notranslate"><span class="pre">orm.yaml</span></code> that describes the structure of the source database.
+This is part of the Reduce phase, but this file is used in every other Datafaker phase.
+By describing the structure of the database, no private data is leaked.
+However it is not impossible that, in describing the structure of some commercial
+database, some commercially-sensitive information could be leaked.
+In such a case, the file is alterable by hand as long as the YAML structure is maintained.</p>
+</section>
+<section id="datafaker-configuration-phase">
+<h3>Datafaker configuration phase<a class="headerlink" href="#datafaker-configuration-phase" title="Permalink to this heading"></a></h3>
+<p>The following commands are not really part of the Reduce phase, but allow the user to configure
+what the Reduce phase will entail (and hence also what the Repopulate phase will entail).</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">datafaker</span> <span class="pre">configure-tables</span></code> makes a file called <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code> that describes what needs to happen to each table.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">datafaker</span> <span class="pre">configure-generators</span></code> amends <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code> with information on what happens to each column.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">datafaker</span> <span class="pre">configure-missingness</span></code> optionally amends <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code> with simple summary missingness information,</p></li>
+</ul>
+<p>Additional configuration can be applied by hand at this point to allow more sophisticated Repopulation to happen than the automated generation can manage.</p>
+<p><code class="docutils literal notranslate"><span class="pre">config.yaml</span></code> contains data that has been set by a user that has seen the contents of the database,
+but should not contain any sensitive data as Datafaker has not written any of the data (or summaries thereof)
+into the file.</p>
+<p><code class="docutils literal notranslate"><span class="pre">config.yaml</span></code> also contains human-readable descriptions of the summaries that will be produced,
+but these will be copied into the summary file produced in the following stage, next to the actual summary data.</p>
+</section>
+<section id="datafaker-summary-stats-phase">
+<h3>Datafaker summary stats phase<a class="headerlink" href="#datafaker-summary-stats-phase" title="Permalink to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">datafaker</span> <span class="pre">make-stats</span></code> makes a file called <code class="docutils literal notranslate"><span class="pre">src-stats.yaml</span></code>. This contains the summary data from the source database.</p>
+<p>Information Governance should be focused on ensuring that private data is not leaking out in this file.</p>
+<p>Obfuscation happens in this phase if it is configured; therefore this command represents
+most of the Reduce and all of the Obfuscate phase.</p>
+<p>Once these files, <code class="docutils literal notranslate"><span class="pre">orm.yaml</span></code>, <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code> and <code class="docutils literal notranslate"><span class="pre">make-stats.yaml</span></code> have been examined and approved for release,
+we can move to the next phase.</p>
+</section>
+<section id="datafaker-make-vocab-phase">
+<h3>Datafaker make-vocab phase<a class="headerlink" href="#datafaker-make-vocab-phase" title="Permalink to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">datafaker</span> <span class="pre">make-vocab</span></code> makes a whole set of <code class="docutils literal notranslate"><span class="pre">.yaml</span></code> or <code class="docutils literal notranslate"><span class="pre">.yaml.gz</span></code> files,
+each of which represents the entire contents of one table in the source database.</p>
+<p>The idea is that some tables will never contain sensitive data,
+they might describe, for example, all the care centres that
+are referenced in the database, or all the set of all possible
+deseases that might be diagnosed (not who has such a diagnosis
+or even if anybody has). Such tables are referred to as
+Vocabulary tables.</p>
+<p>Which tables are represented is configured by the <code class="docutils literal notranslate"><span class="pre">configure-tables</span></code> command,
+so the user must be careful not to configure any tables containing sensitive
+data as Vocabulary tables.</p>
+</section>
+<section id="releasing-the-intermediate-data">
+<h3>Releasing the intermediate data<a class="headerlink" href="#releasing-the-intermediate-data" title="Permalink to this heading"></a></h3>
+<p>These files – <code class="docutils literal notranslate"><span class="pre">orm.yaml</span></code>, <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code>, the vocabulary files and especially
+the <code class="docutils literal notranslate"><span class="pre">src-stats.yaml</span></code> file – now need to have Information Governance
+processes applied to them as it is these files that can be extracted from the
+private network or Trusted Research Environment to allow the construction of
+the synthetic data in a less sensitive computing environment, if required.</p>
+<table class="docutils align-default" id="id2" style="width: 100%">
+<caption><span class="caption-text">Information Governance Classification of Each Datafaker Output</span><a class="headerlink" href="#id2" title="Permalink to this table"></a></caption>
+<colgroup>
+<col style="width: 9%" />
+<col style="width: 18%" />
+<col style="width: 18%" />
+<col style="width: 18%" />
+<col style="width: 9%" />
+<col style="width: 9%" />
+<col style="width: 18%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p>Artefact</p></td>
+<td><p>Derived from real data?</p></td>
+<td><p>Contains patient-level data?</p></td>
+<td><p>Granularity</p></td>
+<td><p>Privacy risk</p></td>
+<td><p>IG approval required?</p></td>
+<td><p>Can leave TRE?</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">orm.yaml</span></code></p></td>
+<td><p>Yes</p></td>
+<td><p>No</p></td>
+<td><p>Structural only</p></td>
+<td><p>Low</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">config.yaml</span></code></p></td>
+<td><p>User-authored</p></td>
+<td><p>No</p></td>
+<td><p>None</p></td>
+<td><p>Low</p></td>
+<td><p>No</p></td>
+<td><p>Yes</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">src-stats.yaml</span></code></p></td>
+<td><p>Yes</p></td>
+<td><p>Occasion­ally</p></td>
+<td><p>Aggregate</p></td>
+<td><p>Medium</p></td>
+<td><p>Yes</p></td>
+<td><p>Condi­tion­al</p></td>
+</tr>
+<tr class="row-odd"><td><p>Vocabulary tables</p></td>
+<td><p>Yes</p></td>
+<td><p>No</p></td>
+<td><p>Full table</p></td>
+<td><p>None if correctly identified</p></td>
+<td><p>Yes</p></td>
+<td><p>Condi­tion­al</p></td>
+</tr>
+<tr class="row-even"><td><p>Synthetic output (described below)</p></td>
+<td><p>No</p></td>
+<td><p>No</p></td>
+<td><p>Patient-level synthetic data</p></td>
+<td><p>Low</p></td>
+<td><p>No</p></td>
+<td><p>Yes</p></td>
+</tr>
+</tbody>
+</table>
+<p>It is worh further elaborating on two of these boxes:
+Firstly, <code class="docutils literal notranslate"><span class="pre">src-stats.yaml</span></code> “occasionally” contains patient-level data;
+this is true if the table being summarized contains patient-level data
+<em>and</em> the summarizing function is reporting on every value in one or more columns
+<em>and</em> rare values are not being suppressed (leading to a value that applies
+to just one or two individuals being released).
+Search the <code class="docutils literal notranslate"><span class="pre">src-stats.yaml</span></code> file for comments such as:</p>
+<blockquote>
+<div><p>All the values that appear in column <em>column-name</em> of table <em>table-name</em></p>
+</div></blockquote>
+<p>or</p>
+<blockquote>
+<div><p>All the values that appear in column <em>column-name</em> of table <em>table-name</em>  more than 7 times</p>
+</div></blockquote>
+<p>Secondly, Vocabulary Tables’ privacy risk is “None if correctly identified”.
+A Vocabulary Table is supposed to be a table simply providing categories for other tables to reference.
+They are not changed during the operation of the database and so releasing them does not represent a privacy risk.
+However, there is some flexibility here; a list of care provider institutions is not technically a vocabulary table
+but it is probably safe to treat it as one.
+The important point is that Datafaker allows the user to specify any table as a vocabulary table;
+if the user incorrectly specifies sensitive data as Vocabulary, it must not be released!</p>
+</section>
+<section id="datafaker-repopulate-phase">
+<h3>Datafaker Repopulate phase<a class="headerlink" href="#datafaker-repopulate-phase" title="Permalink to this heading"></a></h3>
+<p>Once we have released the summary data as described above we can operate outside of the TRE
+as the sensitive data is no longer accessed by Datafaker.</p>
+<p>The remaining commands are:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">datafaker</span> <span class="pre">create-tables</span></code> creates the structure of the destination database to match (as much as is requested) the structure of the source database</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">datafaker</span> <span class="pre">create-generators</span></code> creates Python code files that will actually generate the data (this phase might be removed in a future version of Datafaker)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">datafaker</span> <span class="pre">create-data</span></code> writes fake data into the destination database.</p></li>
+</ul>
+<p>As these operations require no access to the sensitive data, this phase can be
+distributed to anybody that wants to make their own fake data in their own
+database should we want to allow that. This could allow them to make
+larger or smaller similar databases, or tweak the generated data with
+the results of their own simulations in order to test their own analyses.</p>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="index.html" class="btn btn-neutral float-left" title="datafaker" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="installation.html" class="btn btn-neutral float-right" title="Installation" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023, anon.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

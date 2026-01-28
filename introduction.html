@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Introductory Tutorial &mdash; datafaker 0.0 documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/sphinx_highlight.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="ORM Reference" href="orm.html" />
+    <link rel="prev" title="Quick Start" href="quickstart.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            datafaker
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Datafaker Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="docker.html">Using Docker</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Introductory Tutorial</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#minimal-example">Minimal example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#fixing-the-errors-with-the-minimal-example">Fixing the errors with the minimal example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#problems-with-the-minimal-example">Problems with the minimal example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#fixing-the-problems-with-the-minimal-example-1-ignoring-unwanted-tables">Fixing the problems with the minimal example #1: ignoring unwanted tables</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#fixing-the-problems-with-the-minimal-example-2-generate-vocabularies">Fixing the problems with the minimal example #2: generate vocabularies</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="#more-in-depth-tutorial">More In-Depth Tutorial</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#default-behavior">Default Behavior</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#vocabulary-tables">Vocabulary Tables</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#specifying-row-based-custom-generators">Specifying Row-based Custom Generators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#using-aggregate-statistics-from-the-source-data">Using Aggregate Statistics from the Source Data</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#differentially-private-source-statistics">Differentially Private Source Statistics</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#stories-within-the-data">Stories Within the Data</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="orm.html">ORM Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="loan_data.html">Example: Loan Data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="health_data.html">Advanced Example: OMOP Health Data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="custom_generators.html">Including your own generators</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="faq.html">FAQ</a></li>
+<li class="toctree-l1"><a class="reference internal" href="glossary.html">Glossary</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">datafaker</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Introductory Tutorial</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/introduction.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="introductory-tutorial">
+<span id="page-introduction"></span><h1>Introductory Tutorial<a class="headerlink" href="#introductory-tutorial" title="Permalink to this heading"></a></h1>
+<p>Let us begin with a simple movie rental database called <a class="reference external" href="https://github.com/devrimgunduz/pagila">Pagila</a>. Follow the instructions there to create a PostgreSQL database if you want to follow this tutorial along.
+Pagila is already fake data, but we shall pretend that it has sensitive data in it, and we are attempting to keep this data secure.
+We will imagine we have a strict protocol to follow to keep the data safe, and that the source database is only accessible from a private network.</p>
+<p>You can give access to this database to a different user (I’m using <code class="docutils literal notranslate"><span class="pre">tim</span></code>) like this:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>sudo<span class="w"> </span>-u<span class="w"> </span>postgres<span class="w"> </span>psql<span class="w"> </span>pagila
+<span class="go">pagila=# grand pg_read_all_data to tim;</span>
+<span class="go">pagila=# \q</span>
+</pre></div>
+</div>
+<section id="minimal-example">
+<h2>Minimal example<a class="headerlink" href="#minimal-example" title="Permalink to this heading"></a></h2>
+<p>Let us begin in the private network that this sensitive data resides in (well, let us pretend anyway).</p>
+<p>We being by setting the database connection information
+(you don’t need to set <code class="docutils literal notranslate"><span class="pre">SRC_SCHEMA</span></code> if the schema is the default, but for explicitness we do here),
+and creating the configuration, ORM and initial statistics files
+(here we are imagining the username is <code class="docutils literal notranslate"><span class="pre">postgres</span></code> and the password is <code class="docutils literal notranslate"><span class="pre">password</span></code> – change <code class="docutils literal notranslate"><span class="pre">postgres:password</span></code> to the username and password you used to set up the database):</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">SRC_DSN</span><span class="o">=</span><span class="s1">&#39;postgresql://postgres:password@localhost/pagila&#39;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">SRC_SCHEMA</span><span class="o">=</span><span class="s1">&#39;public&#39;</span>
+datafaker<span class="w"> </span>generate-config
+datafaker<span class="w"> </span>make-tables
+datafaker<span class="w"> </span>make-stats
+</pre></div>
+</div>
+<p>This generates the files <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code>, <code class="docutils literal notranslate"><span class="pre">orm.yaml</span></code> and <code class="docutils literal notranslate"><span class="pre">src-stats.yaml</span></code>.</p>
+<p>Now we examine these files for evidence of sensitive information.
+There should be none, but any lines that are considered sensitive can be removed
+(as long as the file remains a YAML file!) before taking these files out of the private network.</p>
+<p>Now outside of the private network we have these three files, and we can generate a new database.
+Let us first create a new database within PostgreSQL.
+Here we are using user <code class="docutils literal notranslate"><span class="pre">tim</span></code> and the default schema <code class="docutils literal notranslate"><span class="pre">public</span></code>:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>sudo<span class="w"> </span>-u<span class="w"> </span>postgres<span class="w"> </span>psql
+<span class="go">postgres=# create database fake_pagila;</span>
+<span class="go">CREATE DATABASE</span>
+<span class="go">postgres=# grant all privileges on database fake_pagila to tim;</span>
+<span class="go">GRANT</span>
+<span class="go">postgres=# exit</span>
+<span class="gp">$ </span>sudo<span class="w"> </span>-u<span class="w"> </span>postgres<span class="w"> </span>psql<span class="w"> </span>fake_pagila
+<span class="go">fake_pagila=# grant all privileges on schema public to tim;</span>
+<span class="go">GRANT</span>
+<span class="go">fake_pagila=# exit</span>
+</pre></div>
+</div>
+<p>And let’s populate it with the fake data:</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">DST_DSN</span><span class="o">=</span><span class="s1">&#39;postgresql://tim:password@localhost/fake_pagila&#39;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">DST_SCHEMA</span><span class="o">=</span><span class="s1">&#39;public&#39;</span>
+datafaker<span class="w"> </span>create-generators
+datafaker<span class="w"> </span>create-tables
+datafaker<span class="w"> </span>create-data
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">create-generators</span></code> creates a Python file called <code class="docutils literal notranslate"><span class="pre">df.py</span></code>.
+You can edit this file if you want, but it is much easier to edit <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code> and call <code class="docutils literal notranslate"><span class="pre">datafaker</span> <span class="pre">create-generators</span> <span class="pre">--force</span></code> to regenerate this file.</p>
+<p>You will notice that <code class="docutils literal notranslate"><span class="pre">create-tables</span></code> produces a couple of warnings, and PostgreSQL complains when <code class="docutils literal notranslate"><span class="pre">datafaker</span></code> tries to create the data.
+The warnings are that <code class="docutils literal notranslate"><span class="pre">datafaker</span></code> doesn’t understand the special PostgresSQL types <code class="docutils literal notranslate"><span class="pre">TSVECTOR</span></code> and <code class="docutils literal notranslate"><span class="pre">ARRAY</span></code>, so it doesn’t know how to generate data for those columns.
+Because it doesn’t know how to generate data for those columns it will just use NULLs, and the <code class="docutils literal notranslate"><span class="pre">film.fulltext</span></code> column cannot be NULL, so creating the data fails.</p>
+</section>
+<section id="fixing-the-errors-with-the-minimal-example">
+<h2>Fixing the errors with the minimal example<a class="headerlink" href="#fixing-the-errors-with-the-minimal-example" title="Permalink to this heading"></a></h2>
+<p>Now let us add text to the <code class="docutils literal notranslate"><span class="pre">film.fulltext</span></code> column. Find the <code class="docutils literal notranslate"><span class="pre">film</span></code> section and alter it like so:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">film</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">row_generators</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">generic.text.text</span>
+<span class="w">    </span><span class="nt">columns_assigned</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fulltext</span>
+</pre></div>
+</div>
+<p>Also, while we are at it let’s give the actors sensible names:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actor</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">row_generators</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">generic.person.first_name</span>
+<span class="w">    </span><span class="nt">columns_assigned</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">first_name</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">generic.person.last_name</span>
+<span class="w">    </span><span class="nt">columns_assigned</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">last_name</span>
+</pre></div>
+</div>
+<p>We can see that we are setting the column we want changed with the <code class="docutils literal notranslate"><span class="pre">columns_assigned</span></code> property, but what does this <code class="docutils literal notranslate"><span class="pre">name</span></code> property mean?
+This is a Python function that generates the random data for us.
+<code class="docutils literal notranslate"><span class="pre">generic.</span></code> refers to the <a class="reference external" href="https://mimesis.name/master/api.html#generic">Mimesis generic provider</a> that combines all the other Mimesis providers.
+These all use the <code class="docutils literal notranslate"><span class="pre">EN_GB</span></code> locale, which currently cannot be changed.
+Some examples of useful providers you can use are:
+- <a class="reference external" href="https://mimesis.name/master/api.html#text">generic.text.</a> generates words, sentences, colours and more.
+- <a class="reference external" href="https://mimesis.name/master/api.html#datetime">generic.datetime.</a> generates dates, day names, times and so on.
+- <a class="reference external" href="https://mimesis.name/master/api.html#person">generic.person.</a> generates first and last names, genders, heights, occupations and so on.</p>
+<p>Some of these functions take arguments, that we can assign like this:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">customer</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">row_generators</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">generic.person.email</span>
+<span class="w">    </span><span class="nt">kwargs</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">domains</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gmail.com</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ucl.ac.uk</span>
+<span class="w">      </span><span class="nt">unique</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">columns_assigned</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">email</span>
+</pre></div>
+</div>
+<p>(but only static booleans, strings or numbers)</p>
+<p>Anyway, we now need to remake the generators (<code class="docutils literal notranslate"><span class="pre">create-generators</span></code>) and re-run them (<code class="docutils literal notranslate"><span class="pre">create-data</span></code>):</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>datafaker<span class="w"> </span>create-generators<span class="w"> </span>--force
+<span class="gp">$ </span>datafaker<span class="w"> </span>create-data<span class="w"> </span>--num-passes<span class="w"> </span><span class="m">15</span>
+</pre></div>
+</div>
+<p>Now you can use <code class="docutils literal notranslate"><span class="pre">psql</span> <span class="pre">--username</span> <span class="pre">tim</span> <span class="pre">fake_pagila</span></code> to explore the data.</p>
+<p>You will see that almost all of the columns have correctly-typed data in it.
+All the foreign keys point to existing rows in the correct table without our having to do anything,
+but also our nice new generators are working:
+Our <code class="docutils literal notranslate"><span class="pre">actor</span></code> table has nice names in it, and our <code class="docutils literal notranslate"><span class="pre">film</span></code> table has text in the <code class="docutils literal notranslate"><span class="pre">fulltext</span></code> column
+(albeit text that does not seem to describe films).</p>
+</section>
+<section id="problems-with-the-minimal-example">
+<h2>Problems with the minimal example<a class="headerlink" href="#problems-with-the-minimal-example" title="Permalink to this heading"></a></h2>
+<p>But here is a non-exhaustive list of issues with the data produced:</p>
+<ul class="simple">
+<li><p>all text fields are just colours, for example:
+- staff names (we can deal with this the same way we dealt with actors names above).
+- address lines.
+- movie categories.
+- city, country and language names.</p></li>
+<li><p>there are a lot of payment tables that are partitions of the
+main payment table in the source database, but these are
+just different tables in the generated table.</p></li>
+</ul>
+</section>
+<section id="fixing-the-problems-with-the-minimal-example-1-ignoring-unwanted-tables">
+<h2>Fixing the problems with the minimal example #1: ignoring unwanted tables<a class="headerlink" href="#fixing-the-problems-with-the-minimal-example-1-ignoring-unwanted-tables" title="Permalink to this heading"></a></h2>
+<p>We fix these problems by adjusting the <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code> file.
+We do not need to go back to the private network.
+First, let us remove all the <code class="docutils literal notranslate"><span class="pre">payment_</span></code> tables.
+This lowers the fidelity of the generated database, but <code class="docutils literal notranslate"><span class="pre">datafaker</span></code> cannot cope with partitioned tables
+so the best that we can do is pretend that <code class="docutils literal notranslate"><span class="pre">payment</span></code> is not a partitioned table.
+If we think that our users will not be interested in this implementation detail then this will be acceptable.
+So we edit the appropriate parts of the <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code> file. You will see seven sections that look like this:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">payment_p2022_01</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">ignore</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">  </span><span class="nt">num_rows_per_pass</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="w">  </span><span class="nt">row_generators</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
+<span class="w">  </span><span class="nt">unions</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span>
+<span class="w">  </span><span class="nt">vocabulary_table</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+</pre></div>
+</div>
+<p>We need to change <code class="docutils literal notranslate"><span class="pre">ignore:</span> <span class="pre">false</span></code> to <code class="docutils literal notranslate"><span class="pre">ignore:</span> <span class="pre">true</span></code>, and we can delete the other lines in these blocks if we like:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">payment_p2022_01</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">ignore</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="nt">payment_p2022_02</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">ignore</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="nt">payment_p2022_03</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">ignore</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="nt">payment_p2022_04</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">ignore</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="nt">payment_p2022_05</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">ignore</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="nt">payment_p2022_06</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">ignore</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="nt">payment_p2022_07</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">ignore</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</pre></div>
+</div>
+<p>Now we can destroy the existing database and try again:</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>datafaker<span class="w"> </span>remove-tables<span class="w"> </span>--yes
+datafaker<span class="w"> </span>create-tables
+datafaker<span class="w"> </span>create-data
+</pre></div>
+</div>
+<p>We don’t need to regenerate the generators this time as we have not changed anything in the <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code> file that affects generators.</p>
+</section>
+<section id="fixing-the-problems-with-the-minimal-example-2-generate-vocabularies">
+<h2>Fixing the problems with the minimal example #2: generate vocabularies<a class="headerlink" href="#fixing-the-problems-with-the-minimal-example-2-generate-vocabularies" title="Permalink to this heading"></a></h2>
+<p>While we could try to generate random plausible language, country, city and film category names, there is a better way.
+As these tables hold no sensitive data, we can just copy them.
+To do this, we need to change the <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code> file and go back to the private network.</p>
+<p>So let us find these sections in <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code> and change <code class="docutils literal notranslate"><span class="pre">vocabulary_table:</span> <span class="pre">false</span></code> to <code class="docutils literal notranslate"><span class="pre">vocabulary_table:true</span></code>
+(deleting the other properties if you like):</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">category</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">vocabulary_table</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="nt">city</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">vocabulary_table</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="nt">country</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">vocabulary_table</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</pre></div>
+</div>
+<p>and later (although it doesn’t matter if you re-arrange the table blocks):</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">language</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">vocabulary_table</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</pre></div>
+</div>
+<p>and now we take this file into the private network (or pretend to) and run (in the private network with <code class="docutils literal notranslate"><span class="pre">SRC_DSN</span></code> and <code class="docutils literal notranslate"><span class="pre">SRC_SCHEMA</span></code> set as above):</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>datafaker<span class="w"> </span>make-vocab<span class="w"> </span>--compress
+</pre></div>
+</div>
+<p>This will produce four files: <code class="docutils literal notranslate"><span class="pre">category.yaml.gz</span></code>, <code class="docutils literal notranslate"><span class="pre">city.yaml.gz</span></code>, <code class="docutils literal notranslate"><span class="pre">country.yaml.gz</span></code> and <code class="docutils literal notranslate"><span class="pre">language.yaml.gz</span></code>.
+If the <code class="docutils literal notranslate"><span class="pre">--compress</span></code> option is not passed it will produce <code class="docutils literal notranslate"><span class="pre">.yaml</span></code> files instead of <code class="docutils literal notranslate"><span class="pre">.yaml.gz</span></code> and this would be fine in this case.
+Certain databases have very large vocabulary tables, for example the <code class="docutils literal notranslate"><span class="pre">concept</span></code> table in OMOP databases.
+Such huge YAML files can cause problems, but they compress very well, so the <code class="docutils literal notranslate"><span class="pre">--compress</span></code> option can be very useful for overcoming such limitations.
+Generating these huge vocabulary files can nevertheless take a very long time! Not in Pagila’s case, though.</p>
+<p>Now your data privacy protocols will either require you to unzip and examine these files before taking them out of the private network
+or it will trust <code class="docutils literal notranslate"><span class="pre">datafaker</span></code> to produce only non-private output given certain inputs.
+In either case we take these files out of the private network.</p>
+<p>Using the same <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code> file outside the private network (and with <code class="docutils literal notranslate"><span class="pre">DST_DSN</span></code> set as above) we delete the existing data in these vocabulary tables,
+and fill them with the new data from the <code class="docutils literal notranslate"><span class="pre">yaml.gz</span></code> (or unzipped <code class="docutils literal notranslate"><span class="pre">.yaml</span></code>) files:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>datafaker<span class="w"> </span>remove-vocab
+<span class="go">Are you sure? [y/N]: y</span>
+<span class="gp">$ </span>datafaker<span class="w"> </span>create-vocab
+</pre></div>
+</div>
+</section>
+</section>
+<section id="more-in-depth-tutorial">
+<h1>More In-Depth Tutorial<a class="headerlink" href="#more-in-depth-tutorial" title="Permalink to this heading"></a></h1>
+<p><a class="reference external" href="https://github.com/alan-turing-institute/datafaker/">datafaker</a>, or SSG for short, is a software package for synthetic data generation, focussed on relational data.
+When pointed to an existing relational database, SSG creates another database with the same database schema, and populates it with synthetic data.
+By default the synthetic data is crudely low fidelity, but the user is given various ways to configure the behavior of SSG to increase fidelity.
+This is done in a manner that maintains transparency and control over how the original data is used to inform the synthetic data, to control privacy risks.</p>
+<p>In this tutorial, we go through the different mechanisms SSG has for configuring the data generation, and the different levels of fidelity they can provide and different kinds of utility they can have.
+To showcase SSG, we will use the <a class="reference external" href="https://www.kaggle.com/competitions/airbnb-recruiting-new-user-bookings/data">AirBnb User Bookings dataset, available at Kaggle</a>.
+The original dataset is a collection CSV files that can be ported to a relational database using <a class="reference external" href="https://github.com/alan-turing-institute/datafaker/blob/main/examples/airbnb/csv_to_database.py">this Python script</a> (it requires having SSG <a class="reference external" href="https://datafaker.readthedocs.io/en/latest/installation.html#enduser">previously installed</a>).
+The script assumes you have a local PostgresSQL server running at port 5432, username <code class="docutils literal notranslate"><span class="pre">postgres</span></code> and password <code class="docutils literal notranslate"><span class="pre">password</span></code>, with a database called <code class="docutils literal notranslate"><span class="pre">airbnb</span></code> to upload the data to.
+These assumptions can be edited in the <code class="docutils literal notranslate"><span class="pre">main</span></code> function of the script.</p>
+<p>After migration, the database has the following structure:</p>
+<a class="reference internal image-reference" href="_images/airbnb_db_diagram.png"><img alt="The AirBnb database diagram." src="_images/airbnb_db_diagram.png" style="width: 400px;" /></a>
+<section id="default-behavior">
+<h2>Default Behavior<a class="headerlink" href="#default-behavior" title="Permalink to this heading"></a></h2>
+<p>SSG contains tools for replicating the schema of a source database.
+Let us assume that the AirBnb data is contained in the <code class="docutils literal notranslate"><span class="pre">airbnb</span></code> database in our local PostgreSQL instance.
+We would like to replicate its schema to the <code class="docutils literal notranslate"><span class="pre">dst</span></code> database, and generate synthetic data mimicking the records present on <code class="docutils literal notranslate"><span class="pre">airbnb</span></code>.
+First, we need to provide SSG with the connection parameters, using a <code class="docutils literal notranslate"><span class="pre">.env</span></code> file like the following:</p>
+<p><strong>.env</strong>:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">SRC_DSN=&#39;postgresql://postgres:password@localhost/airbnb&#39;</span>
+<span class="go">DST_DSN=&#39;postgresql://postgres:password@localhost/dst&#39;</span>
+</pre></div>
+</div>
+<p>We can start the schema migration process by running the following command:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ datafaker make-tables
+</pre></div>
+</div>
+<p>This command makes an <code class="docutils literal notranslate"><span class="pre">orm.py</span></code> file containing the schema of the airbnb database.
+To use this file to replicate the schema in <code class="docutils literal notranslate"><span class="pre">dst</span></code> we run the following command:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ datafaker create-tables
+</pre></div>
+</div>
+<p>If you haven’t created the destination database, you may first need to run a command like <code class="docutils literal notranslate"><span class="pre">createdb</span> <span class="pre">--host</span> <span class="pre">localhost</span> <span class="pre">--user</span> <span class="pre">postgres</span> <span class="pre">dst</span></code>.</p>
+<p>We can also use the <code class="docutils literal notranslate"><span class="pre">orm.py</span></code> file to make a Python module that generates synthetic data:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ datafaker create-generators
+</pre></div>
+</div>
+<p>This creates an <code class="docutils literal notranslate"><span class="pre">df.py</span></code> file that contains one generator class (not to be confused with Python generator functions) per source database table.
+By default, without any user configuration, the data produced by these generators fulfills the schema of the original data:
+the data types are correct and the foreign key and uniqueness constraints are respected.</p>
+<p>SSG presumes that any primary keys it encounters will be auto-populated when a row is inserted into the table.
+This is often true, for example, when a column is declared as the <code class="docutils literal notranslate"><span class="pre">SERIAL</span></code> pseudo-type.
+However, this is not the case for the AirBnB dataset.
+For example, the <code class="docutils literal notranslate"><span class="pre">users</span></code> table’s primary key <code class="docutils literal notranslate"><span class="pre">id</span></code> column is of type <code class="docutils literal notranslate"><span class="pre">VARCHAR</span></code>.
+Running the next command, <code class="docutils literal notranslate"><span class="pre">create-data</span></code>, will produce an error:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ datafaker create-data
+...
+psycopg2.errors.NotNullViolation:
+</pre></div>
+</div>
+<p>To work around this, we will manually specify how the primary keys should be generated for the <code class="docutils literal notranslate"><span class="pre">countries</span></code>, <code class="docutils literal notranslate"><span class="pre">users</span></code> and <code class="docutils literal notranslate"><span class="pre">age_gender_bkts</span></code> tables by editing the <code class="docutils literal notranslate"><span class="pre">ssg.py</span></code> file:
+On line 9 below we specify that the <code class="docutils literal notranslate"><span class="pre">id</span></code> column value should be created using a <code class="docutils literal notranslate"><span class="pre">password</span></code> <a class="reference external" href="https://mimesis.name/en/master/api.html">Mimesis provider</a>, which will give us a random string of characters.</p>
+<p><strong>ssg.py</strong>:</p>
+<div class="highlight-python3 notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span> <span class="k">class</span><span class="w"> </span><span class="nc">usersGenerator</span><span class="p">(</span><span class="n">TableGenerator</span><span class="p">):</span>
+<span class="linenos"> 2</span>     <span class="n">num_rows_per_pass</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="linenos"> 3</span>
+<span class="linenos"> 4</span>     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="linenos"> 5</span>         <span class="k">pass</span>
+<span class="linenos"> 6</span>
+<span class="linenos"> 7</span>     <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dst_db_conn</span><span class="p">):</span>
+<span class="linenos"> 8</span>         <span class="n">result</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="linenos"> 9</span>         <span class="n">result</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">generic</span><span class="o">.</span><span class="n">person</span><span class="o">.</span><span class="n">password</span><span class="p">()</span>
+<span class="linenos">10</span>         <span class="o">...</span>
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">generic</span></code> object on line 9 is an instance of the Mimesis type <a class="reference external" href="https://mimesis.name/en/master/providers.html#generic-provider">generic provider</a> , the fields of which give access to all the providers Mimesis implements, and that SSG makes available within every <code class="docutils literal notranslate"><span class="pre">ssg.py</span></code> module.
+Mimesis is a package for creating random data and has a wide array of providers (the Mimesis term for data generators) for different scenarios, which SSG makes extensive use of.</p>
+<p>Similar edits as above for the <code class="docutils literal notranslate"><span class="pre">users</span></code> table need to be made for the primary key columns of the other tables.
+See <a class="reference external" href="https://github.com/alan-turing-institute/datafaker/blob/main/examples/airbnb/ssg_manual_edit.py">this Python file</a> for the full changes to the <code class="docutils literal notranslate"><span class="pre">ssg.py</span></code> file.</p>
+<p>Now when we run <code class="docutils literal notranslate"><span class="pre">create-data</span></code> we get valid, if not very sensible, values in each of our tables. For example:</p>
+<table class="docutils align-default" id="id1">
+<caption><span class="caption-text">age_gender_bkts</span><a class="headerlink" href="#id1" title="Permalink to this table"></a></caption>
+<thead>
+<tr class="row-odd"><th class="head"><p>age_bucket</p></th>
+<th class="head"><p>country_destination</p></th>
+<th class="head"><p>gender</p></th>
+<th class="head"><p>population_in_thousands</p></th>
+<th class="head"><p>year</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>8k$X-en</p></td>
+<td><p>vQjTJ=p*</p></td>
+<td><p>1m&gt;?l]”}</p></td>
+<td><p>485</p></td>
+<td><p>534</p></td>
+</tr>
+</tbody>
+</table>
+<p>SSG’s default generators have minimal fidelity: All data is generated based purely on the datatype of the column, e.g. random strings in string columns.
+Foreign key relations are respected by picking random rows from the table referenced.
+Even this synthetic data, nearly the crudest imaginable, can be useful for instance for testing software pipelines.
+Note that this data has no privacy implications, since it is only based on the schema.</p>
+</section>
+<section id="vocabulary-tables">
+<h2>Vocabulary Tables<a class="headerlink" href="#vocabulary-tables" title="Permalink to this heading"></a></h2>
+<p>The simplest configuration option available to increase fidelity is to mark some of the tables in the schema to be “vocabulary” tables.
+This means that they will be copied verbatim from the original source data into the synthetic data database.
+This should of course only be done for tables that hold no privacy-sensitive data, but rather hold fixed non-sensitive lists of concepts or facts that the rest of the schema references.</p>
+<p>For instance, in the AirBnB dataset, the <code class="docutils literal notranslate"><span class="pre">users</span></code> table has a foreign key reference to a table of world countries: <code class="docutils literal notranslate"><span class="pre">users.country_destination</span></code> references the <code class="docutils literal notranslate"><span class="pre">countries.country_destination</span></code> primary key column.
+Since the <code class="docutils literal notranslate"><span class="pre">countries</span></code> table doesn’t contain personal data, we can make it a vocabulary table.</p>
+<p>Besides manually editing it, we can also customise the generation of <code class="docutils literal notranslate"><span class="pre">ssg.py</span></code> via a YAML file,
+typically named <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code>.
+We identify <code class="docutils literal notranslate"><span class="pre">countries</span></code> as a vocabulary table in our <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code> file:</p>
+<p><strong>config.yaml</strong>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span><span class="nt">tables</span><span class="p">:</span>
+<span class="linenos">2</span><span class="w">  </span><span class="nt">countries</span><span class="p">:</span>
+<span class="linenos">3</span><span class="w">    </span><span class="nt">vocabulary_table</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</pre></div>
+</div>
+<p>The vocabulary tables are exported from the source database when the generator module is made, so we overwrite <code class="docutils literal notranslate"><span class="pre">ssg.py</span></code> with one that includes the vocabulary import classes, using the <code class="docutils literal notranslate"><span class="pre">--force</span></code> option:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ datafaker create-generators --config-file config.yaml --force
+</pre></div>
+</div>
+<p>This will export the <code class="docutils literal notranslate"><span class="pre">countries</span></code> table rows to a file called <code class="docutils literal notranslate"><span class="pre">countries.yaml</span></code> in your current working directory:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">country_destination</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">AU</span>
+<span class="linenos"> 2</span><span class="w">  </span><span class="nt">destination_km2</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7741220</span>
+<span class="linenos"> 3</span><span class="w">  </span><span class="nt">destination_language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">eng</span>
+<span class="linenos"> 4</span><span class="w">  </span><span class="nt">distance_km</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">15297.744</span>
+<span class="linenos"> 5</span><span class="w">  </span><span class="nt">language_levenshtein_distance</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0</span>
+<span class="linenos"> 6</span><span class="w">  </span><span class="nt">lat_destination</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-26.853388</span>
+<span class="linenos"> 7</span><span class="w">  </span><span class="nt">lng_destination</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">133.27516</span>
+<span class="linenos"> 8</span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">country_destination</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">CA</span>
+<span class="linenos"> 9</span><span class="w">  </span><span class="nt">destination_km2</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">9984670</span>
+<span class="linenos">10</span><span class="w">  </span><span class="nt">destination_language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">eng</span>
+<span class="linenos">11</span><span class="w">  </span><span class="nt">distance_km</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2828.1333</span>
+<span class="linenos">12</span><span class="w">  </span><span class="nt">language_levenshtein_distance</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0</span>
+<span class="linenos">13</span><span class="w">  </span><span class="nt">lat_destination</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">62.393303</span>
+<span class="linenos">14</span><span class="w">  </span><span class="nt">lng_destination</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-96.818146</span>
+<span class="linenos">15</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">...</span>
+</pre></div>
+</div>
+<p>We need to truncate any tables in our destination database before importing the countries data with:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ datafaker remove-data --config-file config.yaml
+$ datafaker create-vocab --config-file config.yaml --orm-file orm.yaml
+</pre></div>
+</div>
+<p>Since <code class="docutils literal notranslate"><span class="pre">create-generators</span></code> rewrote <code class="docutils literal notranslate"><span class="pre">ssg.py</span></code>, we must now re-edit it to add the primary key <code class="docutils literal notranslate"><span class="pre">VARCHAR</span></code> workarounds for the <code class="docutils literal notranslate"><span class="pre">users</span></code> and <code class="docutils literal notranslate"><span class="pre">age_gender_bkts</span></code> tables, as we did in section above.
+Once this is done, we can generate random data for the other three tables with:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ datafaker create-data
+</pre></div>
+</div>
+<p>From now on, whenever we make a change to <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code>, we should re-run these steps to see the effects:</p>
+<ol class="arabic simple">
+<li><p>Run <code class="docutils literal notranslate"><span class="pre">datafaker</span> <span class="pre">create-generators</span> <span class="pre">--config-file</span> <span class="pre">config.yaml</span> <span class="pre">--force</span></code>.</p></li>
+<li><p>If necessary, perform any manual edits to <code class="docutils literal notranslate"><span class="pre">ssg.py</span></code>.</p></li>
+<li><p>Truncate the non-vocabulary database tables with <code class="docutils literal notranslate"><span class="pre">datafaker</span> <span class="pre">remove-data</span> <span class="pre">--config-file</span> <span class="pre">config.yaml</span></code>.</p></li>
+<li><p>Run <code class="docutils literal notranslate"><span class="pre">datafaker</span> <span class="pre">create-data</span></code>.</p></li>
+</ol>
+<p>Step 2. gets tedious to do every time, and in the next section we’ll show how to automate it.</p>
+<p>To recap, vocabularies are tables that don’t need synthesising.
+By itself this adds only limited utility, since the interesting parts of the data are typically in the non-vocabulary tables, but it saves great amounts of work by fixing some tables with no privacy concerns to have perfect fidelity from the get-go.
+Note that one has to be careful in making sure that the tables marked as vocabulary tables truly do not hold privacy sensitive data, otherwise catastrophic privacy leaks are possible, where the original data is exposed raw and in full.</p>
+</section>
+<section id="specifying-row-based-custom-generators">
+<h2>Specifying Row-based Custom Generators<a class="headerlink" href="#specifying-row-based-custom-generators" title="Permalink to this heading"></a></h2>
+<p>As we’ve seen above, <code class="docutils literal notranslate"><span class="pre">ssg.py</span></code> is overwritten whenever you re-run <code class="docutils literal notranslate"><span class="pre">create-generators</span></code>.
+To avoid having to manually edit <code class="docutils literal notranslate"><span class="pre">ssg.py</span></code> after each overwrite, we can specify “row generators” for various columns in the config file:</p>
+<p><strong>config.yaml</strong>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="nt">tables</span><span class="p">:</span>
+<span class="linenos"> 2</span><span class="w">  </span><span class="nt">age_gender_bkts</span><span class="p">:</span>
+<span class="linenos"> 3</span><span class="w">    </span><span class="nt">num_rows_per_pass</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="linenos"> 4</span><span class="w">    </span><span class="nt">row_generators</span><span class="p">:</span>
+<span class="linenos"> 5</span><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">generic.person.password</span>
+<span class="linenos"> 6</span><span class="w">        </span><span class="nt">columns_assigned</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gender</span>
+<span class="linenos"> 7</span><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">generic.person.password</span>
+<span class="linenos"> 8</span><span class="w">        </span><span class="nt">columns_assigned</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">age_bucket</span>
+<span class="linenos"> 9</span><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">generic.column_value_provider.column_value</span>
+<span class="linenos">10</span><span class="w">        </span><span class="nt">args</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">dst_db_conn</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">orm.Countries</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&#39;&quot;country_destination&quot;&#39;</span><span class="p p-Indicator">]</span>
+<span class="linenos">11</span><span class="w">        </span><span class="nt">columns_assigned</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">country_destination</span>
+<span class="linenos">12</span>
+<span class="linenos">13</span><span class="w">  </span><span class="nt">users</span><span class="p">:</span>
+<span class="linenos">14</span><span class="w">    </span><span class="nt">num_rows_per_pass</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="linenos">15</span><span class="w">    </span><span class="nt">row_generators</span><span class="p">:</span>
+<span class="linenos">16</span><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">generic.person.password</span>
+<span class="linenos">17</span><span class="w">        </span><span class="nt">columns_assigned</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">id</span>
+</pre></div>
+</div>
+<p>For instance, on lines 5-6 above we say that every time a row is generated for the <code class="docutils literal notranslate"><span class="pre">agen_gender_bkts</span></code> table, the <code class="docutils literal notranslate"><span class="pre">generic.person.password</span></code> function should be called (without arguments), and the output should be written to the <code class="docutils literal notranslate"><span class="pre">gender</span></code> column.
+We similarly use <code class="docutils literal notranslate"><span class="pre">generic.person.password</span></code> to populate <code class="docutils literal notranslate"><span class="pre">age_gender_bkts.age_bucket</span></code> and <code class="docutils literal notranslate"><span class="pre">users.id</span></code>, and <code class="docutils literal notranslate"><span class="pre">generic.column_value_provider.column_value</span></code> (more on that one later) to populate <code class="docutils literal notranslate"><span class="pre">country_destination</span></code>.
+The next time we run <code class="docutils literal notranslate"><span class="pre">create-generators</span></code>, these config-specified row generators will override the default ones and we will not need to edit the <code class="docutils literal notranslate"><span class="pre">ssg.py</span></code> manually any more.</p>
+<p>You may notice in the above code block a few magical-seeming keywords, namely <code class="docutils literal notranslate"><span class="pre">generic</span></code>, <code class="docutils literal notranslate"><span class="pre">dst_db_conn</span></code>, and <code class="docutils literal notranslate"><span class="pre">orm</span></code>, that deserve an explanation.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">generic</span></code> is the object that is used to reference Mimesis providers, which you already met earlier.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dst_db_conn</span></code> is a SQLAlchemy database connection object for the destination database. Generator functions can use it to for example fetch a random ID for a row in a different table, which is what the <code class="docutils literal notranslate"><span class="pre">generic.column_value_provide.column_value</span></code> generator above does.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">orm</span></code> is the module of the <code class="docutils literal notranslate"><span class="pre">orm.py</span></code> file.</p></li>
+</ul>
+<p>These three and their fields are available to you to use as generator functions (the <code class="docutils literal notranslate"><span class="pre">name</span></code> field) or their arguments when writing a config file.
+You can also use Python constants like constant numbers, strings, and <code class="docutils literal notranslate"><span class="pre">None</span></code>, although take care to wrap any constant strings in <code class="docutils literal notranslate"><span class="pre">'&quot;nested</span> <span class="pre">quotes&quot;'</span></code>.</p>
+<p>We can also use row generators to add more fidelity to the data.
+Examples include specifying that a column’s value should be an integer in a given range or should be chosen at random from a list of acceptable values.
+We see below that we have used these techniques to populate the <code class="docutils literal notranslate"><span class="pre">sessions.secs_elapsed</span></code> column with random integers in the range 0-3,600 and <code class="docutils literal notranslate"><span class="pre">sessions.action</span></code> with any one of the three most common action types from the source dataset:</p>
+<p><strong>config.yaml</strong>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="nt">tables</span><span class="p">:</span>
+<span class="linenos"> 2</span><span class="w">  </span><span class="nt">sessions</span><span class="p">:</span>
+<span class="linenos"> 3</span><span class="w">    </span><span class="nt">row_generators</span><span class="p">:</span>
+<span class="linenos"> 4</span><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">generic.numeric.integer_number</span>
+<span class="linenos"> 5</span><span class="w">        </span><span class="nt">kwargs</span><span class="p">:</span>
+<span class="linenos"> 6</span><span class="w">          </span><span class="nt">start</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
+<span class="linenos"> 7</span><span class="w">          </span><span class="nt">end</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3600</span>
+<span class="linenos"> 8</span><span class="w">        </span><span class="nt">columns_assigned</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">secs_elapsed</span>
+<span class="linenos"> 9</span><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">generic.choice</span>
+<span class="linenos">10</span><span class="w">        </span><span class="nt">kwargs</span><span class="p">:</span>
+<span class="linenos">11</span><span class="w">          </span><span class="nt">items</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;show&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;index&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;personalize&quot;</span><span class="p p-Indicator">]</span>
+<span class="linenos">12</span><span class="w">        </span><span class="nt">columns_assigned</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">action</span>
+</pre></div>
+</div>
+<p>Many simple needs are served by the plethora of Mimesis providers we can access through the <code class="docutils literal notranslate"><span class="pre">generic</span></code> object, but to go beyond what they offer, we can also write our own custom row generators.
+These are written in a separate Python module and referenced in the configuration file.
+For example, in the <code class="docutils literal notranslate"><span class="pre">users</span></code> table, we may want to ensure that the <code class="docutils literal notranslate"><span class="pre">date_first_booking</span></code> is optional and never comes before the <code class="docutils literal notranslate"><span class="pre">date_account_created</span></code>.
+To accomplish this, we define a custom generator, which is a function that returns a tuple with two dates.
+In this tuple, the second item may be <code class="docutils literal notranslate"><span class="pre">None</span></code> and always comes at least a calendar year after the first item:</p>
+<p><strong>airbnb_generators.py</strong>:</p>
+<div class="highlight-python3 notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="kn">import</span><span class="w"> </span><span class="nn">datetime</span>
+<span class="linenos"> 2</span><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span>
+<span class="linenos"> 3</span>
+<span class="linenos"> 4</span><span class="k">def</span><span class="w"> </span><span class="nf">user_dates_provider</span><span class="p">(</span><span class="n">generic</span><span class="p">):</span>
+<span class="linenos"> 5</span>    <span class="n">date_account_created</span><span class="p">:</span> <span class="n">datetime</span><span class="o">.</span><span class="n">date</span> <span class="o">=</span> <span class="n">generic</span><span class="o">.</span><span class="n">datetime</span><span class="o">.</span><span class="n">date</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="mi">2010</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="mi">2015</span><span class="p">)</span>
+<span class="linenos"> 6</span>
+<span class="linenos"> 7</span>    <span class="n">booking_date</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">datetime</span><span class="o">.</span><span class="n">date</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="linenos"> 8</span>    <span class="k">if</span> <span class="n">generic</span><span class="o">.</span><span class="n">choice</span><span class="p">([</span><span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">]):</span>
+<span class="linenos"> 9</span>        <span class="n">booking_date</span> <span class="o">=</span> <span class="n">generic</span><span class="o">.</span><span class="n">datetime</span><span class="o">.</span><span class="n">date</span><span class="p">(</span>
+<span class="linenos">10</span>            <span class="n">start</span><span class="o">=</span><span class="n">date_account_created</span><span class="o">.</span><span class="n">year</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="mi">2016</span>
+<span class="linenos">11</span>        <span class="p">)</span>
+<span class="linenos">12</span>
+<span class="linenos">13</span>    <span class="k">return</span> <span class="n">date_account_created</span><span class="p">,</span> <span class="n">booking_date</span>
+</pre></div>
+</div>
+<p>Then, we tell SSG to import our custom <code class="docutils literal notranslate"><span class="pre">airbnb_generators.py</span></code> and assign the return values of our generator function to the two columns in our <code class="docutils literal notranslate"><span class="pre">users</span></code> table:</p>
+<p><strong>config.yaml</strong>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="nt">row_generators_module</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">airbnb_generators</span>
+<span class="linenos"> 2</span>
+<span class="linenos"> 3</span><span class="nt">tables</span><span class="p">:</span>
+<span class="linenos"> 4</span><span class="w">  </span><span class="nt">users</span><span class="p">:</span>
+<span class="linenos"> 5</span><span class="w">    </span><span class="nt">num_rows_per_pass</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="linenos"> 6</span><span class="w">    </span><span class="nt">row_generators</span><span class="p">:</span>
+<span class="linenos"> 7</span><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">generic.person.password</span>
+<span class="linenos"> 8</span><span class="w">        </span><span class="nt">columns_assigned</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">id</span>
+<span class="linenos"> 9</span><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">airbnb_generators.user_dates_provider</span>
+<span class="linenos">10</span><span class="w">        </span><span class="nt">kwargs</span><span class="p">:</span>
+<span class="linenos">11</span><span class="w">           </span><span class="nt">generic</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">generic</span>
+<span class="linenos">12</span><span class="w">        </span><span class="nt">columns_assigned</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;date_account_created&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;date_first_booking&quot;</span><span class="p p-Indicator">]</span>
+</pre></div>
+</div>
+<p>Note how we pass the <code class="docutils literal notranslate"><span class="pre">generic</span></code> object as a keyword argument to <code class="docutils literal notranslate"><span class="pre">user_dates_provider</span></code>.
+Row generators can have positional arguments specified as a list under the <code class="docutils literal notranslate"><span class="pre">args</span></code> entry and keyword arguments as a dictionary under the <code class="docutils literal notranslate"><span class="pre">kwargs</span></code> entry.</p>
+<p>Limitations to this approach to increasing fidelity are that rows can not be correlated with other rows in the same table, nor with any rows in other tables, except for trivially fulfilling foreign key constraints as in the default configuration.
+We will see how to address this later when we talk about <a class="reference internal" href="#story-generators"><span class="std std-ref">story generators</span></a>.</p>
+<p>This level of configuration allows us to make the data look much more plausible, especially when looked at locally on the level of individual rows.
+The <code class="docutils literal notranslate"><span class="pre">sessions.action</span></code> column can have plausible actions rather than random strings, a session’s duration can be in a plausible range of numbers and users don’t make bookings before creating an account:</p>
+<table class="docutils align-default" id="id2">
+<caption><span class="caption-text">users</span><a class="headerlink" href="#id2" title="Permalink to this table"></a></caption>
+<thead>
+<tr class="row-odd"><th class="head"><p>id</p></th>
+<th class="head"><p>date_account_created</p></th>
+<th class="head"><p>date_first_booking</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>TK53EDBJ</p></td>
+<td><p>2011-10-21</p></td>
+<td></td>
+</tr>
+<tr class="row-odd"><td><p>BY13UILQ</p></td>
+<td><p>2015-04-12</p></td>
+<td><p>2016-12-29</p></td>
+</tr>
+<tr class="row-even"><td><p>WA25VOAU</p></td>
+<td><p>2011-02-08</p></td>
+<td><p>2013-07-03</p></td>
+</tr>
+<tr class="row-odd"><td><p>YT49ANJT</p></td>
+<td><p>2015-11-16</p></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>Still there are no privacy implications, but data can be generated that e.g. passes various filters and <code class="docutils literal notranslate"><span class="pre">WHERE</span></code> clauses that one might realistically run on the data, opening new utility, especially in testing.</p>
+</section>
+<section id="using-aggregate-statistics-from-the-source-data">
+<span id="source-statistics"></span><h2>Using Aggregate Statistics from the Source Data<a class="headerlink" href="#using-aggregate-statistics-from-the-source-data" title="Permalink to this heading"></a></h2>
+<p>Beyond copying vocabulary tables, SSG allows for the original data to affect the synthetic data generation process only through a particular mechanism we call source statistics.
+To use it, the user writes in the configuration file SQL queries that are executed on the source data, and their output is written into a file, typically called <code class="docutils literal notranslate"><span class="pre">src-stats.yaml</span></code>.
+The file is both machine and human-readable, and its contents are available to be used as inputs into the custom generators we discussed above.</p>
+<p>In principle this allows moving over arbitrary information about the source data, but using the source statistics feature with row-by-row queries is considered an anti-pattern.
+Rather, the queries should compute some aggregate properties of the source data: the mean and standard deviation of the values in some column, the average age of a person, a histogram of relative frequencies of pairs of values in two different columns, etc.
+By using the outputs of these queries as arguments in the custom generators one can, for instance, match uni- or multi-variate distributions between the source data and the synthetic data, such as setting the average age of the synthetic people to be the same as that in the real data.</p>
+<p>In the AirBnB dataset, if we want to generate normally-distributed values with the right mean and standard deviation for the <code class="docutils literal notranslate"><span class="pre">users.age</span></code> column, we would define a <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code> with the following content (on top of the configurations we wrote in the previous sections):</p>
+<blockquote>
+<div><p><strong>config.yaml</strong>:</p>
+</div></blockquote>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="nt">src-stats</span><span class="p">:</span>
+<span class="linenos"> 2</span><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">age_stats</span>
+<span class="linenos"> 3</span><span class="w">    </span><span class="nt">query</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;</span>
+<span class="linenos"> 4</span><span class="w">      </span><span class="no">SELECT AVG(age)::float AS mean, STDDEV(age)::float AS std_dev</span>
+<span class="linenos"> 5</span><span class="w">      </span><span class="no">FROM users</span>
+<span class="linenos"> 6</span><span class="w">      </span><span class="no">WHERE age &lt;= 100</span>
+<span class="linenos"> 7</span>
+<span class="linenos"> 8</span><span class="nt">tables</span><span class="p">:</span>
+<span class="linenos"> 9</span><span class="w">  </span><span class="nt">users</span><span class="p">:</span>
+<span class="linenos">10</span><span class="w">    </span><span class="nt">row_generators</span><span class="p">:</span>
+<span class="linenos">11</span><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">airbnb_generators.user_age_provider</span>
+<span class="linenos">12</span><span class="w">        </span><span class="nt">kwargs</span><span class="p">:</span>
+<span class="linenos">13</span><span class="w">          </span><span class="nt">query_results</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">SRC_STATS[&quot;age_stats&quot;]</span>
+<span class="linenos">14</span><span class="w">        </span><span class="nt">columns_assigned</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">age</span>
+</pre></div>
+</div>
+<p>Let’s first focus on the <code class="docutils literal notranslate"><span class="pre">src-stats</span></code> block where we define what queries to run on the source data.
+In this case we run only one, called <code class="docutils literal notranslate"><span class="pre">age_stats</span></code>, which you can see on lines 4 - 6.
+With this added to your <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code> you need run</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ datafaker make-stats --config-file config.yaml
+</pre></div>
+</div>
+<p>which executes the query and writes the results to a <code class="docutils literal notranslate"><span class="pre">src-stats.yaml</span></code> file, which looks as follows:</p>
+<p><strong>src-stats.yaml</strong>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span><span class="nt">age_stats</span><span class="p">:</span>
+<span class="linenos">2</span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">mean</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">36.54434029695572</span>
+<span class="linenos">3</span><span class="w">  </span><span class="nt">std_dev</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">11.708339792587486</span>
+</pre></div>
+</div>
+<p>This is the output of the SQL query in YAML format.
+To be able to use these numbers in our generators we need to regenerate <code class="docutils literal notranslate"><span class="pre">ssg.py</span></code> with</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ datafaker create-generators --config-file config.yaml --stats-file src-stats.yaml --force
+</pre></div>
+</div>
+<p>The new option <code class="docutils literal notranslate"><span class="pre">--stats-file</span> <span class="pre">src-stats.yaml</span></code> makes it such that the <code class="docutils literal notranslate"><span class="pre">SRC_STATS</span></code> variable in <code class="docutils literal notranslate"><span class="pre">ssg.py</span></code> is populated with the concents of <code class="docutils literal notranslate"><span class="pre">src-stats.yaml</span></code>, allowing you to pass them to your generators as arguments, as we do above in the <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code> snippet on line 13.
+Note how the query name <code class="docutils literal notranslate"><span class="pre">name:</span> <span class="pre">age_stats</span></code> (line 2) is used in <code class="docutils literal notranslate"><span class="pre">SRC_STATS[&quot;age_stats&quot;]</span></code> (line 13) to access the results of this particular query.</p>
+<p>Finally, we need the custom generator function <code class="docutils literal notranslate"><span class="pre">airbnb_generators.user_age_provider</span></code> (line 11), whose content is the following:</p>
+<p><strong>airbnb_generators.py</strong>:</p>
+<div class="highlight-python3 notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span><span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+<span class="linenos">2</span>
+<span class="linenos">3</span><span class="k">def</span><span class="w"> </span><span class="nf">user_age_provider</span><span class="p">(</span><span class="n">query_results</span><span class="p">):</span>
+<span class="linenos">4</span>    <span class="c1"># The [0] picks up the first row of the query results. This is needed because all</span>
+<span class="linenos">5</span>    <span class="c1"># query results are always tables, and could in principle have many rows.</span>
+<span class="linenos">6</span>    <span class="n">mean</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">query_results</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;mean&quot;</span><span class="p">]</span>
+<span class="linenos">7</span>    <span class="n">std_dev</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">query_results</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;std_dev&quot;</span><span class="p">]</span>
+<span class="linenos">8</span>    <span class="k">return</span> <span class="n">random</span><span class="o">.</span><span class="n">gauss</span><span class="p">(</span><span class="n">mean</span><span class="p">,</span> <span class="n">std_dev</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>With that in place you can run</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ datafaker create-data
+</pre></div>
+</div>
+<p>as usual, and your newly created rows fill have the correct distribution of ages.</p>
+<p>Note the difference between this approach and some other approaches to synthetic data, such as those that use neural networks trained on the original data.
+Here, the user has to manually specify exactly which statistical properties of the original data are extracted, and exactly how they are used to inform the synthetic data.
+This means more manual work for the user, especially if many aspects of the synthetic data want to be matched with the original.
+However, it provides complete transparency and control over how the original data is used, and thus over possible privacy implications.
+One can look at the queries run to produce source statistics, and their outputs in the <code class="docutils literal notranslate"><span class="pre">src-stats.yaml</span></code> file, and if one is satisfied that publishing these results poses an acceptable privacy risk, then publishing any amount of synthetic data generated based on them can only pose less of a risk.</p>
+<section id="differentially-private-source-statistics">
+<h3>Differentially Private Source Statistics<a class="headerlink" href="#differentially-private-source-statistics" title="Permalink to this heading"></a></h3>
+<p>Even if only aggregate statistics about the source data are used, they can still leak private information.
+If for instance we would do a <code class="docutils literal notranslate"><span class="pre">SELECT</span> <span class="pre">COUNT(*),</span> <span class="pre">gender</span> <span class="pre">FROM</span> <span class="pre">people</span> <span class="pre">GROUP</span> <span class="pre">BY</span> <span class="pre">gender</span></code> query to find out the gender distribution of the people in our data, and if there were only a few people with “other” as their gender, their presence or absense in the dataset could be leaked by the aggregate query.
+To protect against such privacy leaks, we can add differential privacy to our source statistics queries, which adds noise to the results to hide the effects of individuals.</p>
+<p>For differential privacy, SSG uses a package called <a class="reference external" href="https://github.com/opendp/smartnoise-sdk">SmartNoiseSQL</a>, that runs SQL queries and adds appropriate amounts of noise to the results to make them <a class="reference external" href="https://en.wikipedia.org/wiki/Differential_privacy">differentially private</a>.
+Here’s how you could add differential privacy to the above <code class="docutils literal notranslate"><span class="pre">age-stats</span></code> query:</p>
+<blockquote>
+<div><p><strong>config.yaml</strong>:</p>
+</div></blockquote>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="nt">src-stats</span><span class="p">:</span>
+<span class="linenos"> 2</span><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">age_stats</span>
+<span class="linenos"> 3</span><span class="w">    </span><span class="nt">query</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;</span>
+<span class="linenos"> 4</span><span class="w">      </span><span class="no">SELECT age, id</span>
+<span class="linenos"> 5</span><span class="w">      </span><span class="no">FROM users</span>
+<span class="linenos"> 6</span><span class="w">      </span><span class="no">WHERE age &lt;= 100</span>
+<span class="linenos"> 7</span><span class="w">    </span><span class="nt">dp-query</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;</span>
+<span class="linenos"> 8</span><span class="w">      </span><span class="no">SELECT AVG(age) AS mean, STDDEV(age) AS std_dev</span>
+<span class="linenos"> 9</span><span class="w">      </span><span class="no">FROM query_result</span>
+<span class="linenos">10</span><span class="w">    </span><span class="nt">epsilon</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.5</span>
+<span class="linenos">11</span><span class="w">    </span><span class="nt">delta</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.000001</span>
+<span class="linenos">12</span><span class="w">    </span><span class="nt">snsql-metadata</span><span class="p">:</span>
+<span class="linenos">13</span><span class="w">      </span><span class="nt">max_ids</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="linenos">14</span><span class="w">      </span><span class="nt">id</span><span class="p">:</span>
+<span class="linenos">15</span><span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">string</span>
+<span class="linenos">16</span><span class="w">        </span><span class="nt">private_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="linenos">17</span><span class="w">      </span><span class="nt">age</span><span class="p">:</span>
+<span class="linenos">18</span><span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">float</span>
+<span class="linenos">19</span><span class="w">        </span><span class="nt">lower</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
+<span class="linenos">20</span><span class="w">        </span><span class="nt">upper</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
+</pre></div>
+</div>
+<p>The query is now done in two stages.
+First, a regular SQL query, the one called <code class="docutils literal notranslate"><span class="pre">query</span></code>, is executed on the database, and the results are fetched to the memory of the machine that SSG is being run on, in a table called <code class="docutils literal notranslate"><span class="pre">query_result</span></code>.
+Then a second query called <code class="docutils literal notranslate"><span class="pre">dp-query</span></code> is run on the table <code class="docutils literal notranslate"><span class="pre">query_result</span></code>, using SmartNoiseSQL (SNSQL), to compute aggregates in a differentially private way.
+To be able to do this, we need to provide SmartNoiseSQL some extra information:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">epsilon</span></code> and <code class="docutils literal notranslate"><span class="pre">delta</span></code> are the parameters that control the strength of the <a class="reference external" href="https://en.wikipedia.org/wiki/Differential_privacy#ε-differentially_private_mechanisms">differential privacy guarantee</a>.</p></li>
+<li><p>The <code class="docutils literal notranslate"><span class="pre">snsql-metadata</span></code> block holds information about the columns in <code class="docutils literal notranslate"><span class="pre">query_result</span></code>.
+There must always be one column marked with <code class="docutils literal notranslate"><span class="pre">private_id:</span> <span class="pre">true</span></code> to be the one that identifies the “unit of privacy”, e.g. individual people.
+Data types must also be provided for all columns, and for numerical columns a minimum and maximum values that they can take are needed.
+Please refer to the <a class="reference external" href="https://docs.smartnoise.org/sql/metadata.html">SmartNoiseSQL documentation</a> for a detailed explanation of all the parameters available and their meaning.</p></li>
+</ul>
+<p>Through the robustness to post-processing property of differential privacy, if the values in <code class="docutils literal notranslate"><span class="pre">src-stats.yaml</span></code> are generated in a differentially private way, the synthetic data generated based on those values can not break that guarantee.
+To learn more about differential privacy and the meaning of its parameters, please read <a class="reference external" href="https://azure.microsoft.com/mediahandler/files/resourcefiles/microsoft-smartnoisedifferential-privacy-machine-learning-case-studies/SmartNoise%20Whitepaper%20Final%203.8.21.pdf">this white paper from Microsoft</a>.</p>
+<p>At the time of writing, SmartNoiseSQL is somewhat limited in the kinds of queries it can run.
+For instance, joins and subqueries are not possible.
+This is why it is typically necessary to do some preprocessing of the data in the <code class="docutils literal notranslate"><span class="pre">query</span></code> before the differentially private aggregation, usually an <code class="docutils literal notranslate"><span class="pre">AVG</span></code>, a <code class="docutils literal notranslate"><span class="pre">SUM</span></code> or a <code class="docutils literal notranslate"><span class="pre">COUNT</span></code>, is done in <code class="docutils literal notranslate"><span class="pre">dp-query</span></code>.
+Apart from splitting the <code class="docutils literal notranslate"><span class="pre">src-stats</span></code> query into the <code class="docutils literal notranslate"><span class="pre">query</span></code> and <code class="docutils literal notranslate"><span class="pre">dp-query</span></code> parts and adding the SNSQL metadata, nothing else has to change:
+You still run <code class="docutils literal notranslate"><span class="pre">make-stats</span></code> as usual to generate a <code class="docutils literal notranslate"><span class="pre">src-stats.yaml</span></code>.</p>
+<p>Below is an example of the kind of fidelity one can obtain by combining custom row generators with source statistics queries.</p>
+<p><strong>raw vs synthetic ages histogram</strong>:</p>
+<p><a class="reference internal" href="_images/real_data_histogram.png"><img alt="pic1" src="_images/real_data_histogram.png" style="width: 45%;" /></a> <a class="reference internal" href="_images/synthetic_data_histogram.png"><img alt="pic2" src="_images/synthetic_data_histogram.png" style="width: 45%;" /></a></p>
+<p>One final aspect of source statistics bears mentioning:
+At the top level of <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code> one can also set <code class="docutils literal notranslate"><span class="pre">use-asyncio:</span> <span class="pre">true</span></code>.
+With this, if there are multiple source stats queries to be run, they will be run in parallel, which may speed up <code class="docutils literal notranslate"><span class="pre">make-stats</span></code> significantly if some of the queries are slow.</p>
+</section>
+</section>
+<section id="stories-within-the-data">
+<span id="story-generators"></span><h2>Stories Within the Data<a class="headerlink" href="#stories-within-the-data" title="Permalink to this heading"></a></h2>
+<p>The final configuration option available to users of SSG is what we call story generators.
+These address generating synthetic data with correlations that bridge different tables and multiple rows.</p>
+<p>A story generator is a Python generator (an unfortunate clash of terminology: Python uses the term “generator” to refer to objects that yield multiple values in a sequence), written by the user, that yields rows to be written into the synthetic database.
+For instance, it may first yield a row specifying a person in the <code class="docutils literal notranslate"><span class="pre">users</span></code> table, and then multiple rows for the <code class="docutils literal notranslate"><span class="pre">sessions</span></code> table that specify various browsing sessions this user has had:</p>
+<p><strong>airbnb_generators.py</strong>:</p>
+<div class="highlight-python3 notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+<span class="linenos"> 2</span>
+<span class="linenos"> 3</span><span class="k">def</span><span class="w"> </span><span class="nf">sessions_story</span><span class="p">():</span>
+<span class="linenos"> 4</span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Generate users and their sessions.&quot;&quot;&quot;</span>
+<span class="linenos"> 5</span>    <span class="n">device_types</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;Mac Desktop&quot;</span><span class="p">,</span> <span class="s2">&quot;Windows Desktop&quot;</span><span class="p">,</span> <span class="s2">&quot;iPhone&quot;</span><span class="p">]</span>
+<span class="linenos"> 6</span>
+<span class="linenos"> 7</span>    <span class="c1"># a new user will be sent back to us with our randomly chosen device type</span>
+<span class="linenos"> 8</span>    <span class="n">user</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="k">yield</span> <span class="p">(</span>
+<span class="linenos"> 9</span>        <span class="s2">&quot;users&quot;</span><span class="p">,</span>  <span class="c1"># table name</span>
+<span class="linenos">10</span>        <span class="p">{</span>
+<span class="linenos">11</span>            <span class="s2">&quot;first_device_type&quot;</span><span class="p">:</span> <span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="n">device_types</span><span class="p">)</span>
+<span class="linenos">12</span>        <span class="p">}</span>  <span class="c1"># see 1. below</span>
+<span class="linenos">13</span>    <span class="p">)</span>
+<span class="linenos">14</span>
+<span class="linenos">15</span>    <span class="c1"># create between 10 and 19 sessions per user</span>
+<span class="linenos">16</span>    <span class="n">sessions_per_user</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">20</span><span class="p">)</span>
+<span class="linenos">17</span>
+<span class="linenos">18</span>    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">sessions_per_user</span><span class="p">):</span>
+<span class="linenos">19</span>        <span class="k">if</span> <span class="n">random</span><span class="o">.</span><span class="n">random</span><span class="p">()</span> <span class="o">&lt;</span> <span class="mf">0.8</span><span class="p">:</span>
+<span class="linenos">20</span>            <span class="c1"># most often, the session is from the user&#39;s sign-up device...</span>
+<span class="linenos">21</span>            <span class="k">yield</span> <span class="p">(</span>
+<span class="linenos">22</span>                <span class="s2">&quot;sessions&quot;</span><span class="p">,</span>
+<span class="linenos">23</span>                <span class="p">{</span>
+<span class="linenos">24</span>                    <span class="s2">&quot;user_id&quot;</span><span class="p">:</span> <span class="n">user</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">],</span>  <span class="c1"># see 2. below</span>
+<span class="linenos">25</span>                    <span class="s2">&quot;device_type&quot;</span><span class="p">:</span> <span class="n">user</span><span class="p">[</span><span class="s2">&quot;first_device_type&quot;</span><span class="p">],</span>
+<span class="linenos">26</span>                <span class="p">}</span>
+<span class="linenos">27</span>            <span class="p">)</span>
+<span class="linenos">28</span>        <span class="k">else</span><span class="p">:</span>
+<span class="linenos">29</span>            <span class="c1"># ...but sometimes it is from any device type</span>
+<span class="linenos">30</span>            <span class="k">yield</span> <span class="p">(</span>
+<span class="linenos">31</span>                <span class="s2">&quot;sessions&quot;</span><span class="p">,</span>
+<span class="linenos">32</span>                <span class="p">{</span>
+<span class="linenos">33</span>                    <span class="s2">&quot;user_id&quot;</span><span class="p">:</span> <span class="n">user</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">],</span>
+<span class="linenos">34</span>                    <span class="s2">&quot;device_type&quot;</span><span class="p">:</span> <span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="n">device_types</span><span class="p">)},</span>
+<span class="linenos">35</span>            <span class="p">)</span>
+</pre></div>
+</div>
+<p>Three features make story generators more practical than simply manually writing code that creates the synthetic data bit-by-bit:</p>
+<ol class="arabic simple">
+<li><p>When a story generator yields a row, it can choose to only specify values for some of the columns. The values for the other columns will be filled by custom row generators (as explained in a previous section) or, if none are specified, by SSG’s default generators. Above, we have chosen to specify the value for <code class="docutils literal notranslate"><span class="pre">first_device_type</span></code> but the date columns will still be handled by our <code class="docutils literal notranslate"><span class="pre">user_dates_provider</span></code> and the age column will still be populated by the <code class="docutils literal notranslate"><span class="pre">user_age_provider</span></code>.</p></li>
+<li><p>Any default values that are set when the rows yielded by the story generator are written into the database are available to the story generator when it resumes. In our example, the user’s <code class="docutils literal notranslate"><span class="pre">id</span></code> is available so that we can respect the foreign key relationship between <code class="docutils literal notranslate"><span class="pre">users</span></code> and <code class="docutils literal notranslate"><span class="pre">sessions</span></code>, even though we did not explicitly set the user’s <code class="docutils literal notranslate"><span class="pre">id</span></code> when creating the user on line 8.</p></li>
+</ol>
+<p>To use and get the most from story generators, we will need to make some changes to our configuration:</p>
+<p><strong>config.yaml</strong>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="nt">tables</span><span class="p">:</span>
+<span class="linenos"> 2</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">...</span>
+<span class="linenos"> 3</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">users</span><span class="p p-Indicator">:</span>
+<span class="linenos"> 4</span><span class="w">     </span><span class="nt">num_rows_per_pass</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span><span class="w">  </span><span class="c1"># see 1 below</span>
+<span class="linenos"> 5</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">...</span>
+<span class="linenos"> 6</span>
+<span class="linenos"> 7</span><span class="w">  </span><span class="nt">sessions</span><span class="p">:</span>
+<span class="linenos"> 8</span><span class="w">     </span><span class="nt">num_rows_per_pass</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span><span class="w">  </span><span class="c1"># see 1 below</span>
+<span class="linenos"> 9</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">...</span>
+<span class="linenos">10</span>
+<span class="linenos">11</span><span class="nt">story_generators_module</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">airbnb_generators</span><span class="w">  </span><span class="c1"># see 2 below</span>
+<span class="linenos">12</span>
+<span class="linenos">13</span><span class="nt">story_generators</span><span class="p">:</span>
+<span class="linenos">14</span><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">airbnb_generators.sessions_story</span>
+<span class="linenos">15</span><span class="w">    </span><span class="nt">num_stories_per_pass</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span><span class="w">  </span><span class="c1"># see 3 below</span>
+</pre></div>
+</div>
+<ol class="arabic simple">
+<li><p>By default, story generators will run in addition to the usual process that generates data row-by-row independently for each table, the process that we’ve been using so far when running <code class="docutils literal notranslate"><span class="pre">create-data</span></code>. Often we don’t want this for the tables that the story generators generate data for, so in our case we set <code class="docutils literal notranslate"><span class="pre">num_rows_per_pass:</span> <span class="pre">0</span></code> for <code class="docutils literal notranslate"><span class="pre">users</span></code> and <code class="docutils literal notranslate"><span class="pre">sessions</span></code>. We could keep these &gt;0 if we wanted a mix of row-by-row and story-generated users and sessions.</p></li>
+<li><p>We specify the module that contains our story generators. In this case, it is the same Python file as the row generators.</p></li>
+<li><p>We specify that we have one story generator and that it will be called 30 times. Note that, unlike row generators, the story generator is not linked to any particular table as it specifies the table name whenever it <code class="docutils literal notranslate"><span class="pre">yield</span></code> s.</p></li>
+</ol>
+<p>After editing the <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code> and <code class="docutils literal notranslate"><span class="pre">airbnb_generators.py</span></code> as above, you can run:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ datafaker create-generators --config-file=config.yaml --stats-file=src-stats.yaml --force
+</pre></div>
+</div>
+<p>This will regenerate the <code class="docutils literal notranslate"><span class="pre">ssg.py</span></code> file to incorporate your story generator, and running <code class="docutils literal notranslate"><span class="pre">create-data</span></code> as usual will then create some storied users and sessions.</p>
+<p>Story generators allow for nearly unlimited fidelity if enough work is put in to write them.
+Above, we have created a correlation between only two tables but one can create arbitrary correlations between many tables and variables, including complex time series such as a patient’s test results or a customer’s orders.
+An example of this can be seen in <a class="reference internal" href="health_data.html#page-example-health-data"><span class="std std-ref">our health data example use case</span></a>.
+This opens utility far beyond simple pipeline testing or showcasing, including fitting statistical models to the synthetic data that could perform non-trivially well on the real data.
+The output of the source statistics queries are available as arguments for the story generators, just like they are for the custom row generators.
+Thus the synthetic data generated can be made to match the original data in whatever ways are desired.
+The only significant limitation is that referencing or updating rows created before the current story was run is not easy (although not impossible either, by using the <code class="docutils literal notranslate"><span class="pre">dst_db_conn</span></code> object).</p>
+<p>Note that we make here the same trade off as we did before: generating very high fidelity data requires significant effort on the user’s part, in writing the Python code for any story generators that are needed, and any source statistics SQL queries needed to inform those generators of properties of the original data. This is in contrast with other more automated synthetic data generators, such as GANs, which automatically learn various features of the source data and try to replicate them. However, what we gain are:</p>
+<ul class="simple">
+<li><p>Full transparency and control over the ways in which the source data is utilised, and thus the ways in which privacy could in principle be at risk, including easy implementation of differential privacy guarantees.</p></li>
+<li><p>The possibility of starting from very low fidelity data, and incrementally adding fidelity to particular aspects of the data, as is needed to serve the utility of whatever use case the synthetic data is created for.</p></li>
+</ul>
+<p>Examples of the complete files generated by the tutorial can be found at: <code class="docutils literal notranslate"><span class="pre">/datafaker/examples/airbnb</span></code>.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="quickstart.html" class="btn btn-neutral float-left" title="Quick Start" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="orm.html" class="btn btn-neutral float-right" title="ORM Reference" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023, anon.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
