@@ -185,7 +185,7 @@ In such a case, the file is alterable by hand as long as the YAML structure is m
 Datafaker configuration phase
 -----------------------------
 
-These commands are not really part of the Reduce phase, but allow the user to configure
+The following commands are not really part of the Reduce phase, but allow the user to configure
 what the Reduce phase will entail (and hence also what the Repopulate phase will entail).
 
 - ``datafaker configure-tables`` makes a file called ``config.yaml`` that describes what needs to happen to each table.
@@ -240,10 +240,81 @@ processes applied to them as it is these files that can be extracted from the
 private network or Trusted Research Environment to allow the construction of
 the synthetic data in a less sensitive computing environment, if required.
 
-The sensitive database is no longer required in Datafaker's operation.
+.. list-table:: Information Governance Classification of Each Datafaker Output
+    :widths: 10 20 20 20 10 10 20
+
+    * - Artefact
+      - Derived from real data?
+      - Contains patient-level data?
+      - Granularity
+      - Privacy risk
+      - IG approval required?
+      - Can leave TRE?
+    * - ``orm.yaml``
+      - Yes
+      - No
+      - Structural only
+      - Low
+      - Yes
+      - Yes
+    * - ``config.yaml``
+      - User-authored
+      - No
+      - None
+      - Low
+      - No
+      - Yes
+    * - ``src-stats.yaml``
+      - Yes
+      - Occasionally
+      - Aggregate
+      - Medium
+      - Yes
+      - Conditional
+    * - Vocabulary tables
+      - Yes
+      - No
+      - Full table
+      - None if correctly identified
+      - Yes
+      - Conditional
+    * - Synthetic output (described below)
+      - No
+      - No
+      - Patient-level synthetic data
+      - Low
+      - No
+      - Yes
+
+It is worh further elaborating on two of these boxes:
+Firstly, ``src-stats.yaml`` "occasionally" contains patient-level data;
+this is true if the table being summarized contains patient-level data
+*and* the summarizing function is reporting on every value in one or more columns
+*and* rare values are not being suppressed (leading to a value that applies
+to just one or two individuals being released).
+Search the ``src-stats.yaml`` file for comments such as:
+
+    All the values that appear in column *column-name* of table *table-name*
+
+or
+
+    All the values that appear in column *column-name* of table *table-name*  more than 7 times
+
+Secondly, Vocabulary Tables' privacy risk is "None if correctly identified".
+A Vocabulary Table is supposed to be a table simply providing categories for other tables to reference.
+They are not changed during the operation of the database and so releasing them does not represent a privacy risk.
+However, there is some flexibility here; a list of care provider institutions is not technically a vocabulary table
+but it is probably safe to treat it as one.
+The important point is that Datafaker allows the user to specify any table as a vocabulary table;
+if the user incorrectly specifies sensitive data as Vocabulary, it must not be released!
 
 Datafaker Repopulate phase
 --------------------------
+
+Once we have released the summary data as described above we can operate outside of the TRE
+as the sensitive data is no longer accessed by Datafaker.
+
+The remaining commands are:
 
 - ``datafaker create-tables`` creates the structure of the destination database to match (as much as is requested) the structure of the source database
 - ``datafaker create-generators`` creates Python code files that will actually generate the data (this phase might be removed in a future version of Datafaker)
