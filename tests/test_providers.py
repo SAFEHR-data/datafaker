@@ -2,7 +2,7 @@
 import datetime as dt
 from typing import Any
 
-from sqlalchemy import Column, Integer, Text, insert
+from sqlalchemy import Column, Integer, MetaData, Text, insert
 from sqlalchemy.ext.declarative import declarative_base
 
 from datafaker import providers
@@ -11,7 +11,7 @@ from tests.utils import DatafakerTestCase, RequiresDBTestCase
 # pylint: disable=invalid-name
 Base = declarative_base()
 # pylint: enable=invalid-name
-metadata = Base.metadata
+metadata: MetaData = Base.metadata
 
 
 class Person(Base):  # type: ignore
@@ -42,7 +42,7 @@ class ColumnValueProviderTestCase(RequiresDBTestCase):
     def setUp(self) -> None:
         """Pre-test setup."""
         super().setUp()
-        metadata.create_all(self.engine)
+        metadata.create_all(self.sync_engine)
 
     def test_column_value_present(self) -> None:
         """Test the key method."""

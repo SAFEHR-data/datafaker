@@ -11,6 +11,8 @@ import os
 import pathlib
 import sys
 
+from sphinx.application import Sphinx
+
 sys.path.insert(0, pathlib.Path(__file__).parents[2].resolve().as_posix())
 sys.path.insert(0, os.path.abspath("../.."))
 
@@ -29,6 +31,7 @@ extensions: list[str] = [
     "sphinx.ext.autosummary",
     "sphinx_rtd_theme",
     "sphinx.ext.napoleon",
+    "sphinxcontrib.mermaid",
 ]
 
 autodoc_mock_imports: list[str] = ["typer", "pydantic", "sqlalchemy"]
@@ -41,3 +44,8 @@ exclude_patterns: list[str] = []
 
 html_theme = "sphinx_rtd_theme"  # pylint: disable=C0103
 html_static_path = ["_static"]
+
+
+def setup(app: Sphinx) -> None:
+    """Include our own CSS in rendered pages."""
+    app.add_css_file("custom.css")

@@ -78,9 +78,9 @@ def load_metadata_config(
 
     :param orm_file_name: The name of the file to load.
     :param config: The ``config.yaml`` file object. Ignored tables will be
-    excluded from the output.
+        excluded from the output.
     :return: A dict representing the ``orm.yaml`` file, with the tables
-    the ``config`` says to ignore removed.
+        the ``config`` says to ignore removed.
     """
     with open(orm_file_name, encoding="utf-8") as orm_fh:
         meta_dict = yaml.load(orm_fh, yaml.Loader)
