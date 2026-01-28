@@ -241,6 +241,7 @@ private network or Trusted Research Environment to allow the construction of
 the synthetic data in a less sensitive computing environment, if required.
 
 .. list-table:: Information Governance Classification of Each Datafaker Output
+    :width: 100%
     :widths: 10 20 20 20 10 10 20
 
     * - Artefact
