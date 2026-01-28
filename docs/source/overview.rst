@@ -267,18 +267,18 @@ the synthetic data in a less sensitive computing environment, if required.
       - Yes
     * - ``src-stats.yaml``
       - Yes
-      - Occasionally
+      - Occasion­ally
       - Aggregate
       - Medium
       - Yes
-      - Conditional
+      - Condi­tion­al
     * - Vocabulary tables
       - Yes
       - No
       - Full table
       - None if correctly identified
       - Yes
-      - Conditional
+      - Condi­tion­al
     * - Synthetic output (described below)
       - No
       - No
