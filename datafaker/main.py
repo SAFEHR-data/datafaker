@@ -490,7 +490,7 @@ def convert_table_names_to_tables(
             results.append(table)
         else:
             failed_count += 1
-            logger.error("%s is not the name of a table in the destination database")
+            logger.error("%s is not the name of a table in the destination database", name)
     if failed_count:
         sys.exit(1)
     return results

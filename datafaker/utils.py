@@ -805,7 +805,8 @@ def split_column_full_name(col_fullname: str) -> tuple[str, str]:
 
     :param col_fn: The string, such as ``artist.artist_id`` or ``artist.parquet.artist_id``.
     :return: A pair of strings; the table name and the column name. For example
-    ``("artist.parquet", "artist_id")``.
+    ``("artist.parquet", "artist_id")``. If there is no ``.`` in ``col_fullname``
+    ``(None, col_fullname)`` will be returned.
     """
     name_parts = col_fullname.split(".")
     return (

@@ -106,8 +106,8 @@ data from the database. Use 'quit' to exit this tool."""
             return None
         mgs = table_config.get("missingness_generators", [])
         old = None
-        nonnull_columns = self.get_nullable_columns(table_name)
-        if not nonnull_columns:
+        nullable_columns = self.get_nullable_columns(table_name)
+        if not nullable_columns:
             return None
         if not mgs:
             old = MissingnessType(

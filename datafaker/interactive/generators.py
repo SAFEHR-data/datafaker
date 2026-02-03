@@ -452,7 +452,7 @@ information about the columns in the current table. Use 'peek',
         (first_part, last_part) = split_column_full_name(target)
         gen_index: int | None = None
         if first_part:
-            # table.column
+            # target == table.column
             table_index = self._get_table_index(first_part)
             if table_index is None:
                 self.print(self.ERROR_NO_SUCH_TABLE, first_part)
@@ -462,7 +462,7 @@ information about the columns in the current table. Use 'peek',
                 self.print(self.ERROR_NO_SUCH_COLUMN, last_part)
                 return False
         else:
-            # just table or column
+            # target == table or target == column
             table_index = self._get_table_index(last_part)
             gen_index = 0
             if table_index is None:
@@ -518,6 +518,7 @@ information about the columns in the current table. Use 'peek',
         """Completions for the arguments of the ``next`` command."""
         (first_part, last_part) = split_column_full_name(text)
         if first_part:
+            # first_part is table, last_part is column
             table_index = self._get_table_index(first_part)
             if table_index is None:
                 return []
@@ -528,12 +529,14 @@ information about the columns in the current table. Use 'peek',
                 for column in gen.columns
                 if column.startswith(last_part)
             ]
+        # first_part is None, last_part might be table or column.
         table_names = [
             entry.name
             for entry in self.table_entries
             if entry.name.startswith(last_part)
         ]
         if last_part in table_names:
+            # we have a complete table name, so allow the completion with a dot to show this
             table_names.append(f"{last_part}.")
         current_table = self.get_table()
         if current_table:

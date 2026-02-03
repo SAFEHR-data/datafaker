@@ -297,6 +297,11 @@ class Buckets:
                         bucket = min(9, max(0, int(x) + 1))
                         self.buckets[bucket] += rb.f / count
                 except TypeError:
+                    # We get a type error if there are no rows returned at all
+                    # because rb.b is None in this case.
+                    # We could just test for None explicitly, but this way
+                    # catches errors if SQLAlchemy returns something that
+                    # isn't a number for some other unknown reason.
                     pass
             self.mean = mean
             self.stddev = stddev

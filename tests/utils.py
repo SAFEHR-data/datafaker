@@ -60,7 +60,7 @@ class TestDatabaseBase(ABC):
     @classmethod
     @abstractmethod
     def skip(cls) -> str | None:
-        """Returns an error message if this database type is not availalble."""
+        """Returns an error message if this database type is not available."""
 
     @classmethod
     def setup(cls) -> None:
