@@ -103,6 +103,8 @@ def _get_table_orm(  # type: ignore[no-any-unimported]
     column_types = {
         column: _dtype_to_sql(dtype) for column, dtype in table.dtypes.items()
     }
+    # Get everything before the last dot
+    # (or the whole thing if there is no dot)
     name_pref = name[: name.rfind(".")]
     name_words = _get_words(name_pref)
     cols_orm = {}
