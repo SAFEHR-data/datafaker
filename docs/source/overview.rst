@@ -63,11 +63,11 @@ the sensitive data can be read. Information Governance oversight happens at the 
 of this process to decide if this obfucated summary can be released out of the private
 network.
 
-The Repopulate process happens outside of the private network and outside of the remit
+The Repopulate process can happen outside of the private network and outside of the remit
 of Information Governance. This is important! The act of turning reduced
 obfucated data into a larger quantity of randomized data is *not* a privacy-sheilding
 process! By this time all the actual privacy-sheilding has already happened and
-the Information Governance has already been applied.
+the Information Governance restrictions have already been applied.
 
 Reduction techniques
 --------------------
@@ -131,7 +131,8 @@ because the same amount of data is output as was input.
 Datafaker's Operation
 =====================
 
-Datafaker is based on the Alan Turing Institute's SqlSynthGen tool.
+Datafaker is based on the Alan Turing Institute's
+`SqlSynthGen tool <https://github.com/alan-turing-institute/sqlsynthgen>`_.
 SqlSynthGen implements all three operations of Reduce, Obfuscate and Repopulate.
 
 Datafaker builds on SqlSynthGen by automating the specification of the Reduce
@@ -178,9 +179,9 @@ Datafaker make-tables phase
 ``datafaker make-tables`` makes a file called ``orm.yaml`` that describes the structure of the source database.
 This is part of the Reduce phase, but this file is used in every other Datafaker phase.
 By describing the structure of the database, no private data is leaked.
-However it is not impossible that, in describing the structure of some commercial
-database, some commercially-sensitive information could be leaked.
-In such a case, the file is alterable by hand as long as the YAML structure is maintained.
+However, if part of a commercial database's schema is considered commercially sensitive,
+this information would be leaked in the ``orm.yaml`` file.
+It may be possible to alter this file by hand to remove the sensitive information as long as the YAML structure is maintained.
 
 Datafaker configuration phase
 -----------------------------
