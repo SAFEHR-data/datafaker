@@ -327,8 +327,8 @@ class DbCmd(ABC, cmd.Cmd):
         if len(self._table_entries) <= self.table_index:
             return
         table_name = self.table_name()
-        nonnull_columns = self.get_nullable_columns(table_name)
-        colcounts = [f', COUNT("{nnc}") AS "{nnc}"' for nnc in nonnull_columns]
+        nullable_columns = self.get_nullable_columns(table_name)
+        colcounts = [f', COUNT("{nnc}") AS "{nnc}"' for nnc in nullable_columns]
         with self.sync_engine.connect() as connection:
             result = (
                 connection.execute(

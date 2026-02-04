@@ -120,15 +120,6 @@ def _get_table_orm(  # type: ignore[no-any-unimported]
                 col_orm["nullable"] = False
             else:
                 col_orm["nullable"] = True
-            if ctype is not None:
-                logger.debug(
-                    "Column %s.%s type guessed as %s", name_pref, column, ctype
-                )
-                col_orm["type"] = ctype
-            else:
-                logger.warning(
-                    "Could not determine type of column %s.%s", name_pref, column
-                )
             fk_pair = column_guesser.get_likely_foreign_key_target(column)
             if fk_pair is not None:
                 (fk_table, fk_column) = fk_pair
@@ -141,6 +132,13 @@ def _get_table_orm(  # type: ignore[no-any-unimported]
                         fk_column,
                     )
                     col_orm["foreign_keys"] = [f"{fk_table}.{fk_column}"]
+        if ctype is not None:
+            logger.debug("Column %s.%s type guessed as %s", name_pref, column, ctype)
+            col_orm["type"] = ctype
+        else:
+            logger.warning(
+                "Could not determine type of column %s.%s", name_pref, column
+            )
         cols_orm[column] = col_orm
     if len(likely_primaries) == 0:
         logger.warning("No likely primary keys found for table %s", name)
@@ -164,6 +162,8 @@ _numpy_dtype_to_sql: dict[str, str | None] = {
     "u": "INTEGER",
     "f": "DOUBLE",
     "M": "DATETIME",
+    # O can be anything, but Pandas before version 3 makes text O
+    "O": "TEXT",
     "U": "TEXT",
     "V": "BLOB",
 }
