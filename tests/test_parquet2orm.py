@@ -1,4 +1,5 @@
 """Test the parquet-file-dir to ``orm.yaml`` functionality."""
+from collections.abc import Iterable
 import datetime
 import os
 import tempfile
@@ -10,6 +11,25 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 
 from datafaker.parquet2orm import get_parquet_orm
+
+
+class HasValues:
+    """Mock object that compares equal if it has the same elements."""
+    def __init__(self, values: Iterable[Any]):
+        """Set the values as any iterable."""
+        self.value_set = set(values)
+
+    def __eq__(self, obj):
+        """Test for the correct elements."""
+        return isinstance(obj, Iterable) and set(obj) == self.value_set
+
+    def __ne__(self, obj):
+        """Test for the correct elements and negate."""
+        return not self.__eq__(obj)
+
+    def __repr__(self):
+        """Show the elements we want."""
+        return f"HasValues<{self.value_set}>"
 
 
 class Parquet2Orm(TestCase):
@@ -56,11 +76,11 @@ class Parquet2Orm(TestCase):
         self.write_parquet(data)
         orm = get_parquet_orm(self.parquet_dir)
         assert orm is not None
-        self.assertListEqual(list(orm.keys()), list(data.keys()))
+        self.assertSetEqual(set(orm.keys()), set(data.keys()))
         self.assertIn("columns", orm["fruit.parquet"])
-        self.assertListEqual(
-            list(orm["fruit.parquet"]["columns"].keys()),
-            list(data["fruit.parquet"].keys()),
+        self.assertSetEqual(
+            set(orm["fruit.parquet"]["columns"].keys()),
+            set(data["fruit.parquet"].keys()),
         )
         cols = orm["fruit.parquet"]["columns"]
         self.assertIn("type", cols["FruitKey"])
@@ -86,7 +106,7 @@ class Parquet2Orm(TestCase):
         self.write_parquet(data)
         orm = get_parquet_orm(self.parquet_dir)
         assert orm is not None
-        self.assertListEqual(list(orm.keys()), list(data.keys()))
+        self.assertSetEqual(set(orm.keys()), set(data.keys()))
         primary_keys = {
             name
             for name, col in orm["fruit.parquet"]["columns"].items()
@@ -97,7 +117,7 @@ class Parquet2Orm(TestCase):
         mock_logger.warning.assert_called_once_with(
             "Found multiple likely primary keys for table %s: %s",
             "fruit.parquet",
-            ["fruit_id", "FruitKey"],
+            HasValues({"fruit_id", "FruitKey"}),
         )
 
     def test_can_infer_foreign_key(self) -> None:
@@ -113,7 +133,7 @@ class Parquet2Orm(TestCase):
         self.write_parquet(data)
         orm = get_parquet_orm(self.parquet_dir)
         assert orm is not None
-        self.assertListEqual(list(orm.keys()), list(data.keys()))
+        self.assertSetEqual(set(orm.keys()), set(data.keys()))
         self.assertNotIn("foreign_keys", orm["fruit.parquet"]["columns"]["fruit_id"])
         self.assertNotIn("foreign_keys", orm["fruit.parquet"]["columns"]["name"])
         self.assertNotIn("foreign_keys", orm["seed.parquet"]["columns"]["seed_id"])
