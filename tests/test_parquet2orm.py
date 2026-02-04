@@ -1,8 +1,8 @@
 """Test the parquet-file-dir to ``orm.yaml`` functionality."""
-from collections.abc import Iterable
 import datetime
 import os
 import tempfile
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 from unittest import TestCase
@@ -15,19 +15,20 @@ from datafaker.parquet2orm import get_parquet_orm
 
 class HasValues:
     """Mock object that compares equal if it has the same elements."""
-    def __init__(self, values: Iterable[Any]):
+
+    def __init__(self, values: Iterable[Any]) -> None:
         """Set the values as any iterable."""
         self.value_set = set(values)
 
-    def __eq__(self, obj):
+    def __eq__(self, obj: Any) -> bool:
         """Test for the correct elements."""
         return isinstance(obj, Iterable) and set(obj) == self.value_set
 
-    def __ne__(self, obj):
+    def __ne__(self, obj: Any) -> bool:
         """Test for the correct elements and negate."""
         return not self.__eq__(obj)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Show the elements we want."""
         return f"HasValues<{self.value_set}>"
 
