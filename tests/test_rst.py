@@ -5,7 +5,9 @@ from pathlib import Path
 from typing import Any
 from unittest import TestCase
 
+from docutils.parsers.rst import directives
 from restructuredtext_lint import lint_file
+from sphinxcontrib.mermaid import Mermaid
 
 
 def _level_to_string(level: int) -> str:
@@ -29,6 +31,7 @@ class RstTests(TestCase):
         """Run the linter on the docs/ directory."""
         docs_path = Path("docs/")
         rst_files = docs_path.glob("**/*.rst")
+        directives.register_directive("mermaid", Mermaid)
 
         all_errors = []
         for rst_file in rst_files:

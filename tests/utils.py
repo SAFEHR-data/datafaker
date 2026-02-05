@@ -19,8 +19,7 @@ from unittest import SkipTest, TestCase
 import duckdb
 import testing.postgresql
 import yaml
-from sqlalchemy import Engine
-from sqlalchemy.schema import MetaData
+from sqlalchemy import Engine, MetaData
 
 from datafaker import settings
 from datafaker.create import create_db_data_into
@@ -319,12 +318,12 @@ class DatafakerTestCase(TestCase):
 
 class RequiresDBTestCase(DatafakerTestCase):
     """
-    A test case that only runs if PostgreSQL is installed.
-    A test postgres is installed
-    dump_file_path can be set to run in this postgres database.
-    database_name is the name of the database referred to in dump_file_path.
+    A test case that only runs if a database (PostgreSQL or DuckDB) is installed.
+
+    ``dump_file_path`` can be set to run in this postgres database.
+    ``database_name`` is the name of the database referred to in dump_file_path.
     You can use ``self.dsn`` to retrieve the DSN of this database, ``self.engine``
-    to get an engine to access the database and self.metadata to get metadata
+    to get an engine to access the database and ``self.metadata`` to get metadata
     reflected from that engine.
     """
 
