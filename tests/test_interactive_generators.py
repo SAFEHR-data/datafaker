@@ -8,7 +8,12 @@ from sqlalchemy import Connection, MetaData, select
 
 from datafaker.generators.choice import ChoiceGeneratorFactory
 from datafaker.interactive.generators import GeneratorCmd
-from tests.utils import GeneratesDBTestCase, RequiresDBTestCase, TestDbCmdMixin
+from tests.utils import (
+    GeneratesDBTestCase,
+    RequiresDBTestCase,
+    TestDbCmdMixin,
+    TestDuckDb,
+)
 
 
 class TestGeneratorCmd(GeneratorCmd, TestDbCmdMixin):
@@ -737,6 +742,12 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
                 self.assertSetEqual(stats.threes, {1, 2, 3, 4, 5})
 
 
+class GeneratorsOutputTestsDuckDb(GeneratorsOutputTests):
+    """As ``GeneratorsOutputTests`` but with DuckDB."""
+
+    database_type = TestDuckDb
+
+
 class GeneratorTests(GeneratesDBTestCase):
     """Testing configure-generators with generation."""
 
@@ -753,19 +764,14 @@ class GeneratorTests(GeneratesDBTestCase):
         with self._get_cmd({}) as gc:
             gc.do_next("string.position")
             gc.do_set("dist_gen.constant")
-            self.assertListEqual(gc.messages, [])
-            gc.reset()
             gc.do_next("string.frequency")
             gc.do_set("dist_gen.constant")
-            self.assertListEqual(gc.messages, [])
-            gc.reset()
             gc.do_next("signature_model.name")
             gc.do_set("dist_gen.constant")
-            self.assertListEqual(gc.messages, [])
-            gc.reset()
             gc.do_next("signature_model.based_on")
             gc.do_set("dist_gen.constant")
-            # we have got to the end of the columns, but shouldn't have any errors
+            # We should have got no errors, but one of these will have been
+            # the last table and so would have produced the "no more tables" error
             self.assertListEqual(
                 gc.messages, [(GeneratorCmd.INFO_NO_MORE_TABLES, (), {})]
             )
@@ -836,6 +842,9 @@ class GeneratorTests(GeneratesDBTestCase):
 
     def test_varchar_ns_are_truncated(self) -> None:
         """Tests that mimesis generators for VARCHAR(N) truncate to N characters"""
+        if self.database_type is TestDuckDb:
+            # DuckDB does not support limited width VARCHARs
+            return
         generator = "generic.text.quote"
         table = "signature_model"
         column = "name"
@@ -861,3 +870,9 @@ class GeneratorTests(GeneratesDBTestCase):
             stmt = select(self.metadata.tables[table].c[column])
             rows = conn.execute(stmt).scalars().fetchall()
             self.assert_are_truncated_to(rows, 20)
+
+
+class GeneratorTestsDuckDb(GeneratorTests):
+    """As ``GeneratorTests`` but with DuckDB."""
+
+    database_type = TestDuckDb

@@ -292,6 +292,17 @@ class MimesisStringGeneratorFactory(GeneratorFactory):
         "text.word",
     ]
 
+    def _get_generators_with(
+        self, gen_class: Callable, **kwargs: Any
+    ) -> list[Generator]:
+        gens: list[Generator] = []
+        for name in self.GENERATOR_NAMES:
+            try:
+                gens.append(gen_class(name, **kwargs))
+            except:  # pylint: disable=bare-except
+                pass
+        return gens
+
     def get_generators(
         self, columns: list[Column], engine: Engine
     ) -> Sequence[Generator]:
@@ -317,19 +328,16 @@ class MimesisStringGeneratorFactory(GeneratorFactory):
             fitness_fn = None
         length = column_type.length
         if length:
-            return list(
-                map(
-                    lambda gen: MimesisGeneratorTruncated(
-                        gen, length, fitness_fn, buckets
-                    ),
-                    self.GENERATOR_NAMES,
-                )
+            return self._get_generators_with(
+                MimesisGeneratorTruncated,
+                length=length,
+                value_fn=fitness_fn,
+                buckets=buckets,
             )
-        return list(
-            map(
-                lambda gen: MimesisGenerator(gen, fitness_fn, buckets),
-                self.GENERATOR_NAMES,
-            )
+        return self._get_generators_with(
+            MimesisGenerator,
+            value_fn=fitness_fn,
+            buckets=buckets,
         )
 
 

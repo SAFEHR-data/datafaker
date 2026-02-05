@@ -6,8 +6,9 @@ from typing import Any, Generator, Iterable, Iterator, Mapping, Sequence, Tuple
 
 from sqlalchemy import Connection, insert, inspect
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session
-from sqlalchemy.schema import CreateSchema, MetaData, Table
+from sqlalchemy.schema import CreateColumn, CreateSchema, CreateTable, MetaData, Table
 
 from datafaker.base import FileUploader, TableGenerator
 from datafaker.settings import get_settings
@@ -22,6 +23,39 @@ from datafaker.utils import (
 
 Story = Generator[Tuple[str, dict[str, Any]], dict[str, Any], None]
 RowCounts = Counter[str]
+
+
+@compiles(CreateColumn, "duckdb")
+def remove_serial(element: CreateColumn, compiler: Any, **kw: Any) -> str:
+    """
+    Intercede in compilation for column creation, removing PostgreSQL's ``SERIAL``.
+
+    DuckDB does not understand ``SERIAL``, and we don't care about
+    autoincrementing in datafaker. Ideally ``duckdb_engine`` would remove
+    this for us, or DuckDB would implement ``SERIAL``
+    :param element: The CreateColumn being executed.
+    :param compiler: Actually a DDLCompiler, but that type is not exported.
+    :param kw: Further arguments.
+    :return: Corrected SQL.
+    """
+    text: str = compiler.visit_create_column(element, **kw)
+    return text.replace(" SERIAL ", " INTEGER ")
+
+
+@compiles(CreateTable, "duckdb")
+def remove_on_delete_cascade(element: CreateTable, compiler: Any, **kw: Any) -> str:
+    """
+    Intercede in compilation for column creation, removing ``ON DELETE CASCADE``.
+
+    DuckDB does not understand cascades, and we don't care about
+    that in datafaker. Ideally ``duckdb_engine`` would remove this for us.
+    :param element: The CreateTable being executed.
+    :param compiler: Actually a DDLCompiler, but that type is not exported.
+    :param kw: Further arguments.
+    :return: Corrected SQL.
+    """
+    text: str = compiler.visit_create_table(element, **kw)
+    return text.replace(" ON DELETE CASCADE", "")
 
 
 def create_db_tables(metadata: MetaData) -> None:

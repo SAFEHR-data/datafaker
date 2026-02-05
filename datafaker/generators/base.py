@@ -291,9 +291,18 @@ class Buckets:
             )
             self.buckets: Sequence[int] = [0] * 10
             for rb in raw_buckets:
-                if rb.b is not None:
-                    bucket = min(9, max(0, int(rb.b) + 1))
-                    self.buckets[bucket] += rb.f / count
+                try:
+                    x = float(rb.b)
+                    if x.is_integer():
+                        bucket = min(9, max(0, int(x) + 1))
+                        self.buckets[bucket] += rb.f / count
+                except TypeError:
+                    # We get a type error if there are no rows returned at all
+                    # because rb.b is None in this case.
+                    # We could just test for None explicitly, but this way
+                    # catches errors if SQLAlchemy returns something that
+                    # isn't a number for some other unknown reason.
+                    pass
             self.mean = mean
             self.stddev = stddev
 
@@ -406,7 +415,7 @@ class ConstantGeneratorFactory(GeneratorFactory):
     """Just the null generator."""
 
     def get_generators(
-        self, columns: list[Column], engine: Engine
+        self, columns: list[Column], _engine: Engine
     ) -> Sequence[Generator]:
         """Get the generators appropriate for these columns."""
         if len(columns) != 1:
