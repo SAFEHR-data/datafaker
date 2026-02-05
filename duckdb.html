@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Working with CSV and Parquet files with DuckDB &mdash; datafaker 0.0 documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/sphinx_highlight.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            datafaker
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Datafaker Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="docker.html">Using Docker</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="introduction.html">Introductory Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="introduction.html#more-in-depth-tutorial">More In-Depth Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="orm.html">ORM Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="loan_data.html">Example: Loan Data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="health_data.html">Advanced Example: OMOP Health Data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="custom_generators.html">Including your own generators</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="faq.html">FAQ</a></li>
+<li class="toctree-l1"><a class="reference internal" href="glossary.html">Glossary</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">datafaker</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Working with CSV and Parquet files with DuckDB</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/duckdb.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="working-with-csv-and-parquet-files-with-duckdb">
+<h1>Working with CSV and Parquet files with DuckDB<a class="headerlink" href="#working-with-csv-and-parquet-files-with-duckdb" title="Permalink to this heading"></a></h1>
+<p>DuckDB is supported for both the source and the destination database.
+DuckDB is famous for being able to work with <code class="docutils literal notranslate"><span class="pre">.parquet</span></code> and <code class="docutils literal notranslate"><span class="pre">.csv</span></code> files without first pulling the data into its own database.
+(A Parquet file is a data format like CSV but much more efficient for storage and searching, and not human readable).</p>
+<section id="using-duckdb-without-using-parquet-or-csv-files">
+<h2>Using DuckDB without using Parquet or CSV files<a class="headerlink" href="#using-duckdb-without-using-parquet-or-csv-files" title="Permalink to this heading"></a></h2>
+<p>DuckDB will work as source and/or destination databases like this (on Mac or Linux):</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">SRC_DSN</span><span class="o">=</span>duckdb:////path/to/file/duck.db
+<span class="nb">export</span><span class="w"> </span><span class="nv">DST_DSN</span><span class="o">=</span>duckdb:////path/to/file/fake.db
+</pre></div>
+</div>
+<p>Or in Windows:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nb">set</span> <span class="n">SRC_DSN</span><span class="o">=</span><span class="n">duckdb</span><span class="p">:</span><span class="o">///</span><span class="n">C</span><span class="p">:</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">file</span><span class="o">/</span><span class="n">duck</span><span class="o">.</span><span class="n">db</span>
+<span class="nb">set</span> <span class="n">DST_DSN</span><span class="o">=</span><span class="n">duckdb</span><span class="p">:</span><span class="o">///</span><span class="n">C</span><span class="p">:</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">file</span><span class="o">/</span><span class="n">fake</span><span class="o">.</span><span class="n">db</span>
+</pre></div>
+</div>
+<p>This will use the DuckDB database in the file <code class="docutils literal notranslate"><span class="pre">/path/to/file/duck.db</span></code> and output to the file <code class="docutils literal notranslate"><span class="pre">/path/to/file/fake.db</span></code>.</p>
+<p>Using Datafaker’s <code class="docutils literal notranslate"><span class="pre">create-tables</span></code> command will create the new database file <code class="docutils literal notranslate"><span class="pre">/path/to/file/fake.db</span></code>.</p>
+</section>
+<section id="using-duckdb-to-source-from-parquet-or-csv-files">
+<h2>Using DuckDB to source from Parquet or CSV files<a class="headerlink" href="#using-duckdb-to-source-from-parquet-or-csv-files" title="Permalink to this heading"></a></h2>
+<p>You do not need to set up a real DuckDB database if all your source data is in Parquet or CSV files.
+Simply set your source connection string to an in-memory database:</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">SRC_DSN</span><span class="o">=</span>duckdb:///:memory:
+</pre></div>
+</div>
+<p>If you do this, <cite>datafaker make-tables</cite> will not work as there is nothing in this database.
+You can write your <code class="docutils literal notranslate"><span class="pre">orm.yaml</span></code> file by hand, but you can try
+<cite>datafaker make-tables –parquet-dir /path/to/directory/containing/parquet/files</cite>
+to give you a head start; the <code class="docutils literal notranslate"><span class="pre">orm.yaml</span></code> file produced will be valid, but it
+might be wrong in many ways. Look out for the warnings given, and take
+special care checking that foreign keys are specified correctly.</p>
+<p>Let us look at an example of how to write an <code class="docutils literal notranslate"><span class="pre">orm.yaml</span></code> file.
+Assume you have two Parquet files, <code class="docutils literal notranslate"><span class="pre">artist.parquet</span></code> and <code class="docutils literal notranslate"><span class="pre">artwork.parquet</span></code>.</p>
+<p>Our <code class="docutils literal notranslate"><span class="pre">orm.yaml</span></code> file must specify these files and the columns within them.
+You must specify each table (named after its parquet file), the SQL type of each table,
+whether each column is nullable (default is <code class="docutils literal notranslate"><span class="pre">true</span></code>) or a primary key (default is <code class="docutils literal notranslate"><span class="pre">false</span></code>)
+and the target for any column that represents a foreign key.</p>
+<p>For example:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">tables</span><span class="p">:</span>
+<span class="w">   </span><span class="nt">artist.parquet</span><span class="p">:</span><span class="w">  </span><span class="c1"># this is the name of the parquet file</span>
+<span class="w">      </span><span class="nt">columns</span><span class="p">:</span>
+<span class="w">         </span><span class="nt">artist_id</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">INTEGER</span>
+<span class="w">            </span><span class="nt">primary</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">  </span><span class="c1"># mark artist_id as the primary key</span>
+<span class="w">            </span><span class="nt">nullable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">  </span><span class="c1"># columns are nullable by default, so set this if not.</span>
+<span class="w">         </span><span class="nt">name</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">TEXT</span>
+<span class="w">         </span><span class="nt">gender</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">TEXT</span>
+<span class="w">         </span><span class="nt">nationality</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">TEXT</span>
+<span class="w">         </span><span class="nt">birth_date</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DATE</span>
+<span class="w">         </span><span class="nt">end_date</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DATE</span>
+<span class="w">   </span><span class="nt">artwork.parquet</span><span class="p">:</span><span class="w">  </span><span class="c1"># The other parquet file</span>
+<span class="w">      </span><span class="nt">columns</span><span class="p">:</span>
+<span class="w">         </span><span class="nt">artwork_id</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">INTEGER</span>
+<span class="w">            </span><span class="nt">primary</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">            </span><span class="nt">nullable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">         </span><span class="nt">artist_id</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">foreign_keys</span><span class="p">:</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">artist.parquet.artist_id</span><span class="w">  </span><span class="c1"># Maps to the artist_id column of the artist.parquet file</span>
+<span class="w">         </span><span class="nt">name</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">TEXT</span>
+<span class="w">         </span><span class="nt">date</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DATE</span>
+<span class="w">         </span><span class="nt">medium</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">TEXT</span>
+</pre></div>
+</div>
+<p>Now you can run <code class="docutils literal notranslate"><span class="pre">datafaker</span> <span class="pre">configure-tables</span></code> and similar to begin configuring datafaker.</p>
+</section>
+<section id="using-duckdb-to-write-fake-parquet-or-csv-files">
+<h2>Using DuckDB to write fake Parquet or CSV files<a class="headerlink" href="#using-duckdb-to-write-fake-parquet-or-csv-files" title="Permalink to this heading"></a></h2>
+<p>You cannot use an in-memory DuckDB for the destination database because it needs to survive multiple calls to <code class="docutils literal notranslate"><span class="pre">datafaker</span></code>,
+but Datafaker will create the DuckDB file for you if you set the <cite>DST_DSN</cite> environment variable appropriately.</p>
+<p>After using <code class="docutils literal notranslate"><span class="pre">datafaker</span> <span class="pre">create-tables</span></code>, <code class="docutils literal notranslate"><span class="pre">datafaker</span> <span class="pre">create-generators</span></code>, and <code class="docutils literal notranslate"><span class="pre">datafaker</span> <span class="pre">create-data</span></code>,
+you now have a database file containing the fake data. If you want CSV or parquet files you can use the following commands:</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">DST_DSN</span><span class="o">=</span>duckdb:////path/to/file/fake.db
+mkdir<span class="w"> </span>fake_csv
+datafaker<span class="w"> </span>dump-data<span class="w"> </span>--output<span class="w"> </span>fake_csv/
+mkdir<span class="w"> </span>fake_parquet
+datafaker<span class="w"> </span>dump-data<span class="w"> </span>--parquet<span class="w"> </span>--output<span class="w"> </span>fake_parquet/
+</pre></div>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Setting <code class="docutils literal notranslate"><span class="pre">SRC_SCHEMA</span></code> or <code class="docutils literal notranslate"><span class="pre">DST_SCHEMA</span></code> can expose a <a class="reference external" href="https://github.com/duckdb/duckdb/issues/20530">DuckDB bug</a> that produces very confusing error messages.
+If you must use a schema, you must prefix it with the basename of the database file.
+For example, if <code class="docutils literal notranslate"><span class="pre">DST_DSN</span></code> is set to <code class="docutils literal notranslate"><span class="pre">duckdb:////path/to/file.db</span></code> then <code class="docutils literal notranslate"><span class="pre">DST_SCHEMA</span></code> could be set to <code class="docutils literal notranslate"><span class="pre">file.myschema</span></code>.</p>
+</div>
+<p>You now have a directory of fake data in CSV format and anther directory of the same fake data in parquet format.</p>
+</section>
+<section id="parquet-end-to-end-recipe">
+<h2>Parquet end-to-end recipe:<a class="headerlink" href="#parquet-end-to-end-recipe" title="Permalink to this heading"></a></h2>
+<p>Suppose you have some sensitive parquet files and want to make fake versions of them.
+You have some files that are vocabulary files and you don’t want new versions of those.
+Here is a step-by-step guide to achieving this.</p>
+<p>Firstly, ensure that you have Datafaker and DuckDB installed.</p>
+<p>Now set the environment variables:</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">SRC_DSN</span><span class="o">=</span>duckdb:///:memory:
+<span class="nb">export</span><span class="w"> </span><span class="nv">DST_DSN</span><span class="o">=</span>duckdb:///./fake.db
+</pre></div>
+</div>
+<p>for Mac or Linux, or on Windows use:</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span><span class="nb">set</span><span class="w"> </span><span class="nv">SRC_DSN</span><span class="o">=</span>duckdb:///:memory:
+<span class="nb">set</span><span class="w"> </span><span class="nv">DST_DSN</span><span class="o">=</span>duckdb:///./fake.db
+</pre></div>
+</div>
+<p>Now generate the <code class="docutils literal notranslate"><span class="pre">orm.yaml</span></code>:</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>datafaker<span class="w"> </span>make-tables<span class="w"> </span>--parquet-dir<span class="w"> </span>.
+</pre></div>
+</div>
+<p>… and edit the <code class="docutils literal notranslate"><span class="pre">orm.yaml</span></code> file as detailed above.</p>
+<p>Now configure the tables and generators, and summary statistics:</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>datafaker<span class="w"> </span>configure-tables
+datafaker<span class="w"> </span>configure-generators
+datafaker<span class="w"> </span>configure-missingness
+datafaker<span class="w"> </span>make-stats
+</pre></div>
+</div>
+<p>Now you have your three files: <code class="docutils literal notranslate"><span class="pre">orm.yaml</span></code>, <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code> and <code class="docutils literal notranslate"><span class="pre">src-stats.yaml</span></code>,
+and can create the fake data parquet files in a new directory called <code class="docutils literal notranslate"><span class="pre">fake</span></code>:</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>datafaker<span class="w"> </span>create-tables
+datafaker<span class="w"> </span>create-generators
+datafaker<span class="w"> </span>create-data<span class="w"> </span>--num-passes<span class="w"> </span><span class="m">100</span>
+mkdir<span class="w"> </span>fake
+datafaker<span class="w"> </span>dump-data<span class="w"> </span>--parquet<span class="w"> </span>--output<span class="w"> </span>fake
+</pre></div>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023, anon.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

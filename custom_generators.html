@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Including your own generators &mdash; datafaker 0.0 documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/sphinx_highlight.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="API Reference" href="api.html" />
+    <link rel="prev" title="Configuration Reference" href="configuration.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            datafaker
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Datafaker Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="docker.html">Using Docker</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="introduction.html">Introductory Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="introduction.html#more-in-depth-tutorial">More In-Depth Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="orm.html">ORM Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="loan_data.html">Example: Loan Data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="health_data.html">Advanced Example: OMOP Health Data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration Reference</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Including your own generators</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#row-generators">Row generators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#story-generators">Story generators</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="faq.html">FAQ</a></li>
+<li class="toctree-l1"><a class="reference internal" href="glossary.html">Glossary</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">datafaker</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Including your own generators</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/custom_generators.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="including-your-own-generators">
+<h1>Including your own generators<a class="headerlink" href="#including-your-own-generators" title="Permalink to this heading"></a></h1>
+<p>There are two types of generators; row generators (possibly a misnomer) and story generators.
+While there are many row generators included with datafaker (such as <code class="docutils literal notranslate"><span class="pre">dist_gen.normal</span></code> or <code class="docutils literal notranslate"><span class="pre">generic.text.first_name</span></code>),
+there are no story generators.</p>
+<p>However, you can make your own!</p>
+<section id="row-generators">
+<h2>Row generators<a class="headerlink" href="#row-generators" title="Permalink to this heading"></a></h2>
+<p>The <cite>configure-generators</cite> command allows you to set the included row generators for single columns.
+It is possible to have row generators that set more than one column at a time, but none of the built-in generators do this;
+to add your own Python functions that write any number of values at once, put them into a file and copy it to the directory you are running datafaker from.
+Now set the name of this file (minus the <code class="docutils literal notranslate"><span class="pre">.py</span></code>) as the <code class="docutils literal notranslate"><span class="pre">row_generators_module</span></code> in your <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code>, for example:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">row_generators_module</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_row_gens</span>
+<span class="nt">tables</span><span class="p">:</span>
+<span class="nt">person</span><span class="p">:</span>
+<span class="w">   </span><span class="nt">row_generators</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_row_gens.generate_ifespan</span>
+<span class="w">        </span><span class="nt">kwargs</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">current_year</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2025</span>
+<span class="w">        </span><span class="nt">columns_assigned</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">birthdate, deathdate</span>
+</pre></div>
+</div>
+<p>This will call the function <code class="docutils literal notranslate"><span class="pre">lifespan</span></code> in your <code class="docutils literal notranslate"><span class="pre">my_row_gens.py</span></code> file with argument <code class="docutils literal notranslate"><span class="pre">current_year=2025</span></code>;
+it must produce a tuple of two values, which will be put into the <code class="docutils literal notranslate"><span class="pre">birthdate</span></code> and <code class="docutils literal notranslate"><span class="pre">deathdate</span></code> columns of the <code class="docutils literal notranslate"><span class="pre">person</span></code> table.</p>
+<p>You might prefer to instantiate one or more classes at the start and call methods on them for each value or tuple of values generated.
+This is achieved with <code class="docutils literal notranslate"><span class="pre">object_instantiation</span></code> in the following way:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">row_generators_module</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_row_gens</span>
+<span class="nt">object_instantiation</span><span class="p">:</span>
+<span class="nt">uct</span><span class="p">:</span>
+<span class="w">   </span><span class="nt">class</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_row_gens.Lifespan</span>
+<span class="w">   </span><span class="nt">kwargs</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">current_year</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2025</span>
+<span class="nt">tables</span><span class="p">:</span>
+<span class="nt">person</span><span class="p">:</span>
+<span class="w">   </span><span class="nt">row_generators</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uct.generate_ifespan</span>
+<span class="w">        </span><span class="nt">columns_assigned</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">birthdate, deathdate</span>
+</pre></div>
+</div>
+<p>Here we are instantiating a <code class="docutils literal notranslate"><span class="pre">Lifespan</span></code> class defined in your <code class="docutils literal notranslate"><span class="pre">my_row_gens.py</span></code> file.
+We are instantiating this class as an object called <code class="docutils literal notranslate"><span class="pre">uct</span></code> which is then referenced in the method call <code class="docutils literal notranslate"><span class="pre">uct.generate_lifespan</span></code>.
+We have defined this class to accept the <code class="docutils literal notranslate"><span class="pre">current_year</span></code> parameter in the constructor of the <code class="docutils literal notranslate"><span class="pre">Lifespan</span></code> class so it doesn’t have to be passed for each <code class="docutils literal notranslate"><span class="pre">generate_lifespan</span></code> call;
+we can see how the <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code> file has changed to pass this value into the constructor instead of the method.
+You don’t need to do it this way, it is fine to pass extra parameters to methods of classes if you want.</p>
+</section>
+<section id="story-generators">
+<h2>Story generators<a class="headerlink" href="#story-generators" title="Permalink to this heading"></a></h2>
+<p>Story generators allow you to generate lines for any table in any order and create links between them.
+Again, you must define your own; <code class="docutils literal notranslate"><span class="pre">datafaker</span></code> provides no built-in story generators.</p>
+<p>You can put your story generators in their own Python file, or you can re-use your row generators file if you like.</p>
+<p>A story generator is a Python Generator function (a function that calls <code class="docutils literal notranslate"><span class="pre">yield</span></code> to return multiple values rather than <code class="docutils literal notranslate"><span class="pre">return</span></code> a single one).</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="configuration.html" class="btn btn-neutral float-left" title="Configuration Reference" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="api.html" class="btn btn-neutral float-right" title="API Reference" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023, anon.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

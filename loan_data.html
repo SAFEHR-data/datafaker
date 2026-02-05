@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Example: Loan Data &mdash; datafaker 0.0 documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/sphinx_highlight.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Advanced Example: OMOP Health Data" href="health_data.html" />
+    <link rel="prev" title="ORM Reference" href="orm.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            datafaker
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Datafaker Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="docker.html">Using Docker</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="introduction.html">Introductory Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="introduction.html#more-in-depth-tutorial">More In-Depth Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="orm.html">ORM Reference</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Example: Loan Data</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#intro">Intro</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#setup">Setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#generating-data-uniformly-at-random">Generating Data Uniformly at Random</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#improving-data-generation-with-vocabularies">Improving Data Generation with Vocabularies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#adding-a-foreign-key">Adding a Foreign Key</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#marginal-distributions-with-differential-privacy">Marginal Distributions with Differential Privacy</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="health_data.html">Advanced Example: OMOP Health Data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="custom_generators.html">Including your own generators</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="faq.html">FAQ</a></li>
+<li class="toctree-l1"><a class="reference internal" href="glossary.html">Glossary</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">datafaker</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Example: Loan Data</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/loan_data.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="example-loan-data">
+<span id="page-example-loan-data"></span><h1>Example: Loan Data<a class="headerlink" href="#example-loan-data" title="Permalink to this heading"></a></h1>
+<section id="intro">
+<h2>Intro<a class="headerlink" href="#intro" title="Permalink to this heading"></a></h2>
+<p>There are many potential applications of synthetic data in banking and finance where the nature of the data, being both personally and commercially sensitive, may rule out sharing real, identifiable data.</p>
+<p>Here, we show how to use SqlSynthGen to generate a simple (uniformly random) synthetic version of the freely-available <a class="reference external" href="https://relational.fit.cvut.cz/dataset/Financial">PKDD’99</a> dataset.
+This dataset contains 606 successful and 76 not successful loan applications.</p>
+</section>
+<section id="setup">
+<h2>Setup<a class="headerlink" href="#setup" title="Permalink to this heading"></a></h2>
+<p>The PKDD’99 dataset is stored on a MariaDB database, which means that we need a local MariaDB database to store the synthetic data.
+MariaDB installation instructions can be found <a class="reference external" href="https://mariadb.org/download/?t=mariadb&amp;p=mariadb&amp;r=11.2.0#entry-header">here</a>.
+We presume that you have a local server running on port 3306, with a user called <code class="docutils literal notranslate"><span class="pre">myuser</span></code>, a password <code class="docutils literal notranslate"><span class="pre">mypassword</span></code> and a database called <code class="docutils literal notranslate"><span class="pre">financial</span></code>.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>mysql
+<span class="go">MariaDB &gt; create user &#39;myuser&#39;@&#39;localhost&#39; identified by &#39;mypassword&#39;;</span>
+<span class="go">MariaDB &gt; create database financial;</span>
+<span class="go">MariaDB &gt; grant all privileges on financial.* to &#39;myuser&#39;@&#39;localhost&#39;;</span>
+<span class="go">MariaDB &gt; \q</span>
+</pre></div>
+</div>
+<p>After <a class="reference internal" href="installation.html#page-installation"><span class="std std-ref">installing SqlSynthGen</span></a>, we create a <cite>.env</cite> file to set some environment variables to define the source database as the one linked at the bottom of the PKDD’99 page, and the destination database as the local one:</p>
+<p><strong>.env</strong></p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">SRC_DSN=&quot;mariadb+pymysql://guest:relational@relational.fit.cvut.cz:3306/Financial_ijs&quot;</span>
+<span class="go">DST_DSN=&quot;mariadb+pymysql://myuser:mypassword@localhost:3306/financial&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="generating-data-uniformly-at-random">
+<h2>Generating Data Uniformly at Random<a class="headerlink" href="#generating-data-uniformly-at-random" title="Permalink to this heading"></a></h2>
+<p>We run SqlSynthGen’s <code class="docutils literal notranslate"><span class="pre">make-tables</span></code> command to create a file called <code class="docutils literal notranslate"><span class="pre">orm.py</span></code> that contains the schema of the source database.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>sqlsynthgen<span class="w"> </span>make-tables
+</pre></div>
+</div>
+<p>Inspecting the <code class="docutils literal notranslate"><span class="pre">orm.py</span></code> file, we see that the <code class="docutils literal notranslate"><span class="pre">tkeys</span></code> table has column called <code class="docutils literal notranslate"><span class="pre">goodClient</span></code>, which is a <code class="docutils literal notranslate"><span class="pre">TINYINT</span></code>.
+SqlSynthGen doesn’t know what to do with <code class="docutils literal notranslate"><span class="pre">TINYINT</span></code> columns, so we need to create a config file to tell it how to handle them.
+This isn’t necessary for normal <code class="docutils literal notranslate"><span class="pre">Integer</span></code> columns.</p>
+<p>Looking at the <code class="docutils literal notranslate"><span class="pre">goodClient</span></code> values:</p>
+<table class="docutils align-default" id="id1">
+<caption><span class="caption-text">tkeys</span><a class="headerlink" href="#id1" title="Permalink to this table"></a></caption>
+<thead>
+<tr class="row-odd"><th class="head"><p>id</p></th>
+<th class="head"><p>goodClient</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>0</p></td>
+<td><p>1</p></td>
+</tr>
+<tr class="row-odd"><td><p>1</p></td>
+<td><p>0</p></td>
+</tr>
+<tr class="row-even"><td><p>2</p></td>
+<td><p>0</p></td>
+</tr>
+<tr class="row-odd"><td><p>3</p></td>
+<td><p>0</p></td>
+</tr>
+</tbody>
+</table>
+<p>we see that they are always 0 or 1 so we will pick randomly from 0 and 1 for our synthetic value:</p>
+<p><strong>config.yaml</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nn">---</span>
+<span class="nt">tables</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">tkeys</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">row_generators</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">generic.random.choice</span>
+<span class="w">        </span><span class="nt">columns_assigned</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">goodClient</span>
+<span class="w">        </span><span class="nt">args</span><span class="p">:</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">1</span><span class="p p-Indicator">]</span>
+</pre></div>
+</div>
+<p>We run SqlSynthGen’s <code class="docutils literal notranslate"><span class="pre">create-generators</span></code> command to create <code class="docutils literal notranslate"><span class="pre">df.py</span></code>, which contains a generator class for each table in the source database:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>sqlsynthgen<span class="w"> </span>create-generators<span class="w"> </span>--config<span class="w"> </span>config.yaml
+</pre></div>
+</div>
+<p>We then run SqlSynthGen’s <code class="docutils literal notranslate"><span class="pre">create-tables</span></code> command to create the tables in the destination database:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>sqlsynthgen<span class="w"> </span>create-tables
+</pre></div>
+</div>
+<p>Note that, alternatively, you could use another tool, such as <code class="docutils literal notranslate"><span class="pre">mysqldump</span></code> to create the tables in the destination database.</p>
+<p>Finally, we run SqlSynthGen’s <code class="docutils literal notranslate"><span class="pre">create-data</span></code> command to populate the tables with synthetic data:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>sqlsynthgen<span class="w"> </span>create-data<span class="w"> </span>--num-passes<span class="w"> </span><span class="m">100</span>
+</pre></div>
+</div>
+<p>This will make 100 rows in each of the nine tables with uniformly random data.</p>
+</section>
+<section id="improving-data-generation-with-vocabularies">
+<h2>Improving Data Generation with Vocabularies<a class="headerlink" href="#improving-data-generation-with-vocabularies" title="Permalink to this heading"></a></h2>
+<p>We can do better than generating data randomly and uniformly, however.
+We notice that the <code class="docutils literal notranslate"><span class="pre">districts</span></code> table doesn’t contain any sensitive data so we choose to copy it whole to the destination database:</p>
+<p><strong>config.yaml</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nn">---</span>
+<span class="nt">tables</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">tkeys</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">row_generators</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">generic.random.choice</span>
+<span class="w">        </span><span class="nt">columns_assigned</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">goodClient</span>
+<span class="w">        </span><span class="nt">args</span><span class="p">:</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">1</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">districts</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">vocabulary_table</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</pre></div>
+</div>
+<p>We can export the vocabularies to <code class="docutils literal notranslate"><span class="pre">.yaml</span></code> files, delete the old synthetic data, import the vocabularies and create new synthetic data with:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>sqlsynthgen<span class="w"> </span>create-generators
+<span class="gp">$ </span>sqlsynthgen<span class="w"> </span>remove-data
+<span class="gp">$ </span>sqlsynthgen<span class="w"> </span>create-vocab
+<span class="gp">$ </span>sqlsynthgen<span class="w"> </span>create-data<span class="w"> </span>--num-passes<span class="w"> </span><span class="m">100</span>
+</pre></div>
+</div>
+<p>This will give us an exact copy of the <code class="docutils literal notranslate"><span class="pre">districts</span></code> table:</p>
+<table class="docutils align-default" id="id2">
+<caption><span class="caption-text">districts</span><a class="headerlink" href="#id2" title="Permalink to this table"></a></caption>
+<thead>
+<tr class="row-odd"><th class="head"><p>id</p></th>
+<th class="head"><p>A2</p></th>
+<th class="head"><p>A3</p></th>
+<th class="head"><p>A4</p></th>
+<th class="head"><p>A5</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>1</p></td>
+<td><p>Hl.m. Praha</p></td>
+<td><p>Prague</p></td>
+<td><p>1204953</p></td>
+<td><p>0</p></td>
+</tr>
+<tr class="row-odd"><td><p>2</p></td>
+<td><p>Benesov</p></td>
+<td><p>central Bohemia</p></td>
+<td><p>88884</p></td>
+<td><p>80</p></td>
+</tr>
+<tr class="row-even"><td><p>3</p></td>
+<td><p>Beroun</p></td>
+<td><p>central Bohemia</p></td>
+<td><p>75232</p></td>
+<td><p>55</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="adding-a-foreign-key">
+<h2>Adding a Foreign Key<a class="headerlink" href="#adding-a-foreign-key" title="Permalink to this heading"></a></h2>
+<p>We notice that the source database does not have a foreign key constraint between the <code class="docutils literal notranslate"><span class="pre">clients.tkey_id</span></code> column and the <code class="docutils literal notranslate"><span class="pre">tkeys.id</span></code> column, even though it looks like there ought to be one.</p>
+<p>We add it manually to the orm.py file:</p>
+<p><strong>orm.py</strong>:</p>
+<div class="highlight-python3 notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span><span class="k">class</span><span class="w"> </span><span class="nc">Clients</span><span class="p">(</span><span class="n">Base</span><span class="p">):</span>
+<span class="linenos">2</span>    <span class="n">__tablename__</span> <span class="o">=</span> <span class="s1">&#39;clients&#39;</span>
+<span class="linenos">3</span>    <span class="n">__table_args__</span> <span class="o">=</span> <span class="p">(</span>
+<span class="linenos">4</span>        <span class="n">ForeignKeyConstraint</span><span class="p">([</span><span class="s1">&#39;district_id&#39;</span><span class="p">],</span> <span class="p">[</span><span class="s1">&#39;districts.id&#39;</span><span class="p">],</span> <span class="n">ondelete</span><span class="o">=</span><span class="s1">&#39;CASCADE&#39;</span><span class="p">,</span> <span class="n">onupdate</span><span class="o">=</span><span class="s1">&#39;CASCADE&#39;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;clients_ibfk_1&#39;</span><span class="p">),</span>
+<span class="linenos">5</span>        <span class="c1"># Added manually</span>
+<span class="linenos">6</span>        <span class="n">ForeignKeyConstraint</span><span class="p">([</span><span class="s1">&#39;tkey_id&#39;</span><span class="p">],</span> <span class="p">[</span><span class="s1">&#39;tkeys.id&#39;</span><span class="p">],</span> <span class="n">ondelete</span><span class="o">=</span><span class="s1">&#39;CASCADE&#39;</span><span class="p">,</span> <span class="n">onupdate</span><span class="o">=</span><span class="s1">&#39;CASCADE&#39;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;clients_tkey_id&#39;</span><span class="p">),</span>
+<span class="linenos">7</span>    <span class="p">)</span>
+<span class="linenos">8</span>    <span class="o">...</span>
+</pre></div>
+</div>
+<p>We’ll need to recreate the <code class="docutils literal notranslate"><span class="pre">df.py</span></code> file, the destination database and the data:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>sqlsynthgen<span class="w"> </span>create-generators<span class="w"> </span>--config-file<span class="w"> </span>config.yaml<span class="w"> </span>--force
+<span class="gp">$ </span>sqlsynthgen<span class="w"> </span>remove-tables<span class="w"> </span>--yes
+<span class="gp">$ </span>sqlsynthgen<span class="w"> </span>create-tables
+<span class="gp">$ </span>sqlsynthgen<span class="w"> </span>create-vocab
+<span class="gp">$ </span>sqlsynthgen<span class="w"> </span>create-data<span class="w"> </span>--num-passes<span class="w"> </span><span class="m">100</span>
+</pre></div>
+</div>
+<p>We now have a FK relationship and all synthetic values of <code class="docutils literal notranslate"><span class="pre">clients.tkey_id</span></code> exist in the synthetic <code class="docutils literal notranslate"><span class="pre">tkeys.id</span></code> column.</p>
+</section>
+<section id="marginal-distributions-with-differential-privacy">
+<h2>Marginal Distributions with Differential Privacy<a class="headerlink" href="#marginal-distributions-with-differential-privacy" title="Permalink to this heading"></a></h2>
+<p>For many of the remaining categorical columns, such as <code class="docutils literal notranslate"><span class="pre">cards.type</span></code>, we may decide that we want to use the real values in the right proportions.
+Here is a sample of the <code class="docutils literal notranslate"><span class="pre">cards</span></code> table:</p>
+<table class="docutils align-default" id="id3">
+<caption><span class="caption-text">cards</span><a class="headerlink" href="#id3" title="Permalink to this table"></a></caption>
+<thead>
+<tr class="row-odd"><th class="head"><p>id</p></th>
+<th class="head"><p>disp_id</p></th>
+<th class="head"><p>type</p></th>
+<th class="head"><p>issued</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>1</p></td>
+<td><p>9</p></td>
+<td><p>gold</p></td>
+<td><p>1998-10-16</p></td>
+</tr>
+<tr class="row-odd"><td><p>2</p></td>
+<td><p>19</p></td>
+<td><p>classic</p></td>
+<td><p>1998-03-13</p></td>
+</tr>
+<tr class="row-even"><td><p>3</p></td>
+<td><p>41</p></td>
+<td><p>gold</p></td>
+<td><p>1995-09-03</p></td>
+</tr>
+</tbody>
+</table>
+<p>We can take the real values in the right proportions, and even add noise to make them differentially private by using the <a class="reference internal" href="introduction.html#source-statistics"><span class="std std-ref">source-statistics</span></a> and SmartNoise SQL features:</p>
+<p><strong>config.yaml</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nn">---</span>
+<span class="nt">src-stats</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">count_card_types</span>
+<span class="w">    </span><span class="nt">query</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;</span>
+<span class="w">      </span><span class="no">SELECT</span>
+<span class="w">        </span><span class="no">c.type AS card_type,</span>
+<span class="w">        </span><span class="no">d.client_id</span>
+<span class="w">      </span><span class="no">FROM cards c</span>
+<span class="w">      </span><span class="no">JOIN disps d</span>
+<span class="w">        </span><span class="no">on c.disp_id = d.id</span>
+<span class="w">    </span><span class="nt">dp-query</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;</span>
+<span class="w">      </span><span class="no">SELECT</span>
+<span class="w">        </span><span class="no">count(*) AS the_count,</span>
+<span class="w">        </span><span class="no">card_type</span>
+<span class="w">      </span><span class="no">FROM query_result</span>
+<span class="w">      </span><span class="no">GROUP BY card_type</span>
+<span class="w">    </span><span class="nt">epsilon</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span>
+<span class="w">    </span><span class="nt">delta</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0001</span>
+<span class="w">    </span><span class="nt">snsql-metadata</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">client_id</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">client_id</span>
+<span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">int</span>
+<span class="w">        </span><span class="nt">private_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">True</span>
+<span class="w">      </span><span class="nt">card_type</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">card_type</span>
+<span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">string</span>
+<span class="w">        </span><span class="nt">private_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">False</span>
+<span class="nt">row_generators_module</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_row_generators</span>
+<span class="nt">tables</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cards</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">row_generators</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_row_generators.my_card_func</span>
+<span class="w">        </span><span class="nt">kwargs</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">stats</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">SRC_STATS[&quot;count_card_types&quot;]</span>
+<span class="w">        </span><span class="nt">columns_assigned</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">type</span>
+<span class="w">  </span><span class="nt">tkeys</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">row_generators</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">generic.random.choice</span>
+<span class="w">        </span><span class="nt">columns_assigned</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">goodClient</span>
+<span class="w">        </span><span class="nt">args</span><span class="p">:</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">1</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">districts</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">vocabulary_table</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</pre></div>
+</div>
+<p>We define a custom row-generator to use the source statistics and Python’s <code class="docutils literal notranslate"><span class="pre">random.choices()</span></code> function to choose a value:</p>
+<p><strong>my_row_generators.py</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">my_card_func</span><span class="p">(</span><span class="n">stats</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Choose a weighted card type.&quot;&quot;&quot;</span>
+    <span class="n">total</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">([</span><span class="n">x</span><span class="p">[</span><span class="s2">&quot;the_count&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">stats</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">random</span><span class="o">.</span><span class="n">choices</span><span class="p">(</span>
+        <span class="n">population</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="s2">&quot;card_type&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">stats</span><span class="p">),</span>
+        <span class="n">weights</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="s2">&quot;the_count&quot;</span><span class="p">]</span> <span class="o">/</span> <span class="n">total</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">stats</span><span class="p">),</span>
+    <span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>As before, we will need to re-create <code class="docutils literal notranslate"><span class="pre">df.py</span></code> and the data.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>sqlsynthgen<span class="w"> </span>create-generators<span class="w"> </span>--config-file<span class="w"> </span>config.yaml<span class="w"> </span>--force
+<span class="gp">$ </span>sqlsynthgen<span class="w"> </span>make-stats<span class="w"> </span>--config-file<span class="w"> </span>config.yaml<span class="w"> </span>--force
+<span class="gp">$ </span>sqlsynthgen<span class="w"> </span>remove-data<span class="w"> </span>--yes
+<span class="gp">$ </span>sqlsynthgen<span class="w"> </span>create-vocab
+<span class="gp">$ </span>sqlsynthgen<span class="w"> </span>create-data<span class="w"> </span>--num-passes<span class="w"> </span><span class="m">100</span>
+</pre></div>
+</div>
+<p>For further refinement, you can use “story generators” to create inter-table correlations so that, for example, the number of loan applications depends on the number of cards they have or the average amount of a bank transfer depends on the home city of a client.
+See the <a class="reference internal" href="introduction.html#page-introduction"><span class="std std-ref">introduction</span></a> for more.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="orm.html" class="btn btn-neutral float-left" title="ORM Reference" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="health_data.html" class="btn btn-neutral float-right" title="Advanced Example: OMOP Health Data" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023, anon.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

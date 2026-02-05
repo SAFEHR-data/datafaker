@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Advanced Example: OMOP Health Data &mdash; datafaker 0.0 documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/sphinx_highlight.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Configuration Reference" href="configuration.html" />
+    <link rel="prev" title="Example: Loan Data" href="loan_data.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            datafaker
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Datafaker Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="docker.html">Using Docker</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="introduction.html">Introductory Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="introduction.html#more-in-depth-tutorial">More In-Depth Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="orm.html">ORM Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="loan_data.html">Example: Loan Data</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Advanced Example: OMOP Health Data</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#dealing-with-circular-foreign-keys">Dealing with Circular Foreign Keys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#vocabulary-tables">Vocabulary Tables</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#entity-attribute-values">Entity Attribute Values</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="custom_generators.html">Including your own generators</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="faq.html">FAQ</a></li>
+<li class="toctree-l1"><a class="reference internal" href="glossary.html">Glossary</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">datafaker</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Advanced Example: OMOP Health Data</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/health_data.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="advanced-example-omop-health-data">
+<span id="page-example-health-data"></span><h1>Advanced Example: OMOP Health Data<a class="headerlink" href="#advanced-example-omop-health-data" title="Permalink to this heading"></a></h1>
+<p>The OMOP common data model (CDM) is a widely used format for storing health data.
+Here we will show how datafaker can be configured to generate data for OMOP.</p>
+<p>Before getting into the config itself, we need to discuss a few peculiarities of the OMOP CDM that need to be taken into account:</p>
+<ol class="arabic simple">
+<li><p>Some versions of OMOP contain a circular foreign key, for instance between the <code class="docutils literal notranslate"><span class="pre">vocabulary</span></code>, <code class="docutils literal notranslate"><span class="pre">concept</span></code>, and <code class="docutils literal notranslate"><span class="pre">domain</span></code> tables.</p></li>
+<li><p>There are several standardized vocabulary tables (<code class="docutils literal notranslate"><span class="pre">concept</span></code>, <code class="docutils literal notranslate"><span class="pre">concept_relationship</span></code>, etc).
+These should be marked as such using <code class="docutils literal notranslate"><span class="pre">configure-tables</span></code>, and will be exported to <code class="docutils literal notranslate"><span class="pre">.yaml</span></code> files during the <code class="docutils literal notranslate"><span class="pre">make-vocab</span></code> step.
+However, some of these vocabulary tables may be too large to practically be writable to <code class="docutils literal notranslate"><span class="pre">.yaml</span></code> files, and will need to be dealt with manually.
+You should also check the license agreement of each standardized vocabulary before sharing any of the <code class="docutils literal notranslate"><span class="pre">.yaml</span></code> files.</p></li>
+</ol>
+<section id="dealing-with-circular-foreign-keys">
+<h2>Dealing with Circular Foreign Keys<a class="headerlink" href="#dealing-with-circular-foreign-keys" title="Permalink to this heading"></a></h2>
+<p>Datafaker will warn if schemas have circular foreign keys as these can indicate an error in the schema
+(by circular references we mean a table has a foreign key to itself, or to another table that has a foreign key back to the first table, or some longer loop).
+Datafaker cannot cope with circular keys between generated tables because it needs to generate data in referenced tables before it can generate references to them,
+and a circular dependency loop implies that there is no sensible order in which to do this.
+However, datafaker can cope with circular foreign keys between vocabulary (or ignored) tables without user intervention.</p>
+</section>
+<section id="vocabulary-tables">
+<h2>Vocabulary Tables<a class="headerlink" href="#vocabulary-tables" title="Permalink to this heading"></a></h2>
+<p>The OMOP schema has many vocabulary tables.
+Using the <code class="docutils literal notranslate"><span class="pre">configure-tables</span></code> command, tables can be marked as <code class="docutils literal notranslate"><span class="pre">vocabulary</span></code> tables;
+this means that the destination table will not have any generators run,
+but will instead get all its data copied directly from the source database’s table via a <code class="docutils literal notranslate"><span class="pre">yaml</span></code> file.</p>
+<p>This mechanism can cope with tables of tens or hundreds of thousands of rows without too much trouble.
+Datafaker can be make to cope with even more by passing the <code class="docutils literal notranslate"><span class="pre">--compress</span></code> flag to the <code class="docutils literal notranslate"><span class="pre">make-vocab</span></code> command,
+which will produce compressed <code class="docutils literal notranslate"><span class="pre">.yaml.gz</span></code> files instead of plain text <code class="docutils literal notranslate"><span class="pre">.yaml</span></code> files.
+More stability might be achieved by limiting <code class="docutils literal notranslate"><span class="pre">make-vocab</span></code> to one table at a time via the <code class="docutils literal notranslate"><span class="pre">--only</span> <span class="pre">TABLENAME</span></code> option.
+Even still, a <code class="docutils literal notranslate"><span class="pre">make-vocab</span></code> call can take many hours to complete.</p>
+<p>If all of these mechanisms fail, the offending tables will need to be marked (using <code class="docutils literal notranslate"><span class="pre">configure-tables</span></code>) as <code class="docutils literal notranslate"><span class="pre">ignore</span></code>.
+Such tables can be downloaded manually via the database’s own software
+(for example <code class="docutils literal notranslate"><span class="pre">psql</span></code> for Postgres), or you can just leave them ignored.
+For example, if you do not have permission to publish the OMOP concepts table, you might have to leave it as ignored.
+If you do leave a concept table ignored, the default generator for all foreign keys to it will be a plain integer genenerator, which is probably not what you want.
+Instead, use one of the choice generators for such foreign keys. The null-partitioned grouped generators will also work.</p>
+<p>The standard OMOP vocabulary tables are as follows:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Table name</p></th>
+<th class="head"><p>Approximate size</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>concept</p></td>
+<td><p>7 million rows</p></td>
+</tr>
+<tr class="row-odd"><td><p>concept_ancestor</p></td>
+<td><p>80 million rows</p></td>
+</tr>
+<tr class="row-even"><td><p>concept_class</p></td>
+<td><p>small</p></td>
+</tr>
+<tr class="row-odd"><td><p>concept_relationship</p></td>
+<td><p>50 million rows</p></td>
+</tr>
+<tr class="row-even"><td><p>concept_synonym</p></td>
+<td><p>2 million rows</p></td>
+</tr>
+<tr class="row-odd"><td><p>domain</p></td>
+<td><p>small</p></td>
+</tr>
+<tr class="row-even"><td><p>drug_strength</p></td>
+<td><p>3 million rows</p></td>
+</tr>
+<tr class="row-odd"><td><p>relationship</p></td>
+<td><p>small</p></td>
+</tr>
+<tr class="row-even"><td><p>source_to_concept_map</p></td>
+<td><p>small</p></td>
+</tr>
+<tr class="row-odd"><td><p>vocabulary</p></td>
+<td><p>small</p></td>
+</tr>
+</tbody>
+</table>
+<p>You might also want to treat other tables such as <code class="docutils literal notranslate"><span class="pre">care_site</span></code>, <code class="docutils literal notranslate"><span class="pre">cdm_source</span></code> and <code class="docutils literal notranslate"><span class="pre">location</span></code> as vocabulary.</p>
+<p>So, <code class="docutils literal notranslate"><span class="pre">concept</span></code>, <code class="docutils literal notranslate"><span class="pre">concept_ancestor</span></code>, <code class="docutils literal notranslate"><span class="pre">concept_relationship</span></code>, <code class="docutils literal notranslate"><span class="pre">concept_synonym</span></code> and <code class="docutils literal notranslate"><span class="pre">drug_strength</span></code>
+might need to be ignored and dealt with manually depending on the source database’s speed
+and the capabilities of the machine running datafaker.</p>
+</section>
+<section id="entity-attribute-values">
+<h2>Entity Attribute Values<a class="headerlink" href="#entity-attribute-values" title="Permalink to this heading"></a></h2>
+<p>We can get reasonable fidelity in most OMOP tables with simple generators that are suggested
+by the <code class="docutils literal notranslate"><span class="pre">propose</span></code> command in <code class="docutils literal notranslate"><span class="pre">configure-generators</span></code> for each individual column.
+However, there are two tables that are very different. These are <code class="docutils literal notranslate"><span class="pre">observation</span></code> and <code class="docutils literal notranslate"><span class="pre">measurement</span></code>.</p>
+<p>These tables have a <code class="docutils literal notranslate"><span class="pre">concept_id</span></code> column which indicates what some of the rest of the columns mean.
+Depending on the value in the <code class="docutils literal notranslate"><span class="pre">concept_id</span></code> column, you will have a different pattern of nulls in the rest of the table,
+a different spread of values for numeric colums, and a different set of choices for other columns.</p>
+<p>For example, in the <code class="docutils literal notranslate"><span class="pre">measurement</span></code> table, if the <code class="docutils literal notranslate"><span class="pre">measurement_concept_id</span></code> is <code class="docutils literal notranslate"><span class="pre">4152194</span></code>
+(which references <code class="docutils literal notranslate"><span class="pre">Systolic</span> <span class="pre">blood</span> <span class="pre">pressure</span></code> in the <code class="docutils literal notranslate"><span class="pre">concept</span></code> table),
+then <code class="docutils literal notranslate"><span class="pre">unit_concept_id</span></code> is <code class="docutils literal notranslate"><span class="pre">8876</span></code> (which references the unit of pressure <code class="docutils literal notranslate"><span class="pre">mmHg</span></code>),
+<code class="docutils literal notranslate"><span class="pre">unit_source_value</span></code> is null and <code class="docutils literal notranslate"><span class="pre">value_as_number</span></code> has values somewhere near 160.
+This means that measurements of the systolic blood pressure are numeric and around 160mmHg.
+Other types of measurements will have their own ranges of values.</p>
+<p>Having all different kinds of measurements in the one table presents a challenge for generating fake data.
+Datafaker has “null-partitioned grouped” generators for this sort of difficulty.</p>
+<p>Datafaker’s null-partitioned grouped generators are multi-column genenerators.
+The amount of data captured in the <code class="docutils literal notranslate"><span class="pre">src-stats.yaml</span></code> file for this sort of generator is, sadly, prodigious.
+“Null-partitioning” refers to dividing the table into different “partitions” based on which columns are null,
+then gathering data for each partition separately (and also gathering data on how big each partition is).
+Each partition will have multiple results, one for each combination of values in the non-numeric columns.</p>
+<p>Even if the source data has no examples of a row with a particular pattern of columns being null,
+datafaler will still generate a query for that partition (which will return no results),
+just in case a later run of <code class="docutils literal notranslate"><span class="pre">make-stats</span></code> does find some matching data.
+Therefore the amount of queries appearing in <code class="docutils literal notranslate"><span class="pre">src-stats.yaml</span></code> grows exponentially with the number of columns being generated for.
+For example, with eight columns generated, 257 query results will appear in <code class="docutils literal notranslate"><span class="pre">src-stats.yaml</span></code>!
+That’s a doubling for every column added plus one for the sizes of the partitions.</p>
+<p>Therefore, depending on the user’s patience for generating such data and
+your information governance process’ capacity for looking through it,
+restraint might be called for in merging too many columns!</p>
+<p>But which columns should we merge for <code class="docutils literal notranslate"><span class="pre">observation</span></code> and <code class="docutils literal notranslate"><span class="pre">measurement</span></code> tables?</p>
+<p>The essential columns for the <code class="docutils literal notranslate"><span class="pre">observation</span></code> table would seem to be: <code class="docutils literal notranslate"><span class="pre">observation_concept_id</span></code>,
+<code class="docutils literal notranslate"><span class="pre">value_as_number</span></code>, <code class="docutils literal notranslate"><span class="pre">value_as_string</span></code>, <code class="docutils literal notranslate"><span class="pre">value_as_concept_id</span></code>, and <code class="docutils literal notranslate"><span class="pre">unit_concept_id</span></code>.
+But note that these columns are essential to be in the generator output only if they need to be present in the destination database at all.
+For example, if the destination database is producing the minimal data required to be processed by the
+<a class="reference external" href="https://ukhealthdata.org/wp-content/uploads/2024/11/2024-OHDSI-UK-Cohort-Discovery-Poster-v0.2-B-Kirby.pdf">UK HRA’s Cohort Discovery Tool</a>,
+then the <code class="docutils literal notranslate"><span class="pre">unit_concept_id</span></code> column will not be produced and so does not need to be in any generator.</p>
+<p>Another group of columns (depending on what the source data looks like) that could be nice:
+<code class="docutils literal notranslate"><span class="pre">observation_type_concept_id</span></code>, <code class="docutils literal notranslate"><span class="pre">qualifier_concept_id</span></code>, <code class="docutils literal notranslate"><span class="pre">observation_source_value</span></code>,
+<code class="docutils literal notranslate"><span class="pre">observation_source_concept_id</span></code>, <code class="docutils literal notranslate"><span class="pre">unit_source_value</span></code> and <code class="docutils literal notranslate"><span class="pre">qualifier_source_value</span></code>.
+Check if the source database puts meaningful values into these columns before adding.</p>
+<p>If your <code class="docutils literal notranslate"><span class="pre">provider</span></code> table is a vocabulary table and there are not too many different values,
+<code class="docutils literal notranslate"><span class="pre">provider_id</span></code> can be added usefully.</p>
+<p><code class="docutils literal notranslate"><span class="pre">observation_date</span></code> and <code class="docutils literal notranslate"><span class="pre">observation_datetime</span></code> should not be added because these generators do not know how to handle dates,
+and so will just treat them as a set of choices on the same level as <code class="docutils literal notranslate"><span class="pre">observation_concept_id</span></code>.
+This would destroy any correlation in the data, so please don’t do it.
+A later update of datafaker might allow dates and datetimes to be numeric values,
+which would then piggyback onto the correlation and so keep it intact.</p>
+<p>Similarly <code class="docutils literal notranslate"><span class="pre">observation_id</span></code> and <code class="docutils literal notranslate"><span class="pre">visit_occurrence_id</span></code> would destroy all correlation and <code class="docutils literal notranslate"><span class="pre">person_id</span></code> would destroy
+all correlation except that of any single individual with multiple observations of the same type.
+Do not add these.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">measurement</span></code> table is very similar. Essential columns are <code class="docutils literal notranslate"><span class="pre">measurement_concept_id</span></code>,
+<code class="docutils literal notranslate"><span class="pre">value_as_number</span></code>, <code class="docutils literal notranslate"><span class="pre">value_as_concept_id</span></code> and <code class="docutils literal notranslate"><span class="pre">unit_concept_id</span></code>
+(with the same caveat as for the <code class="docutils literal notranslate"><span class="pre">observation</span></code> table). Useful columns are
+<code class="docutils literal notranslate"><span class="pre">measurement_type_concept_id</span></code>, <code class="docutils literal notranslate"><span class="pre">operator_concept_id</span></code>, <code class="docutils literal notranslate"><span class="pre">range_low</span></code>, <code class="docutils literal notranslate"><span class="pre">range_high</span></code>,
+<code class="docutils literal notranslate"><span class="pre">measurement_source_value</span></code>, <code class="docutils literal notranslate"><span class="pre">measurement_source_concept_id</span></code>, <code class="docutils literal notranslate"><span class="pre">unit_source_value</span></code> and <code class="docutils literal notranslate"><span class="pre">value_source_value</span></code>.
+<code class="docutils literal notranslate"><span class="pre">provider_id</span></code> is possibly useful, but only if the <code class="docutils literal notranslate"><span class="pre">provider</span></code> table is a vocabulary table.
+The following columns should not be added: <code class="docutils literal notranslate"><span class="pre">measurement_id</span></code>, <code class="docutils literal notranslate"><span class="pre">person_id</span></code>,
+<code class="docutils literal notranslate"><span class="pre">measurement_date</span></code>, <code class="docutils literal notranslate"><span class="pre">measurement_datetime</span></code> and <code class="docutils literal notranslate"><span class="pre">visit_occurrence_id</span></code>.</p>
+<p>You currently have a choice of four null-partitioned generators.
+You can have any combination of sampled and suppressed or not, and normal or lognormal.</p>
+<p>Normal vs lognormal are simply different distributions. Different measurements will suit one distribution or the other.
+Sadly we have to choose one or the other for the whole table.
+Generally lognormal seems to work a little better; it will never produce negative values,
+which is usually good but will sometimes be bad.</p>
+<p>This will produce fairly faithful fake data.
+What is completely lacking is correlations between the different rows in the table.
+For instance, diastolic and systolic blood pressure readings are taken at times and have values that are independent of each other,
+the patients are given random drugs at random times, uncorrelated with their diagnoses or any other aspect of their medical record, etcetera.
+To go further we would have to write a <a class="reference internal" href="introduction.html#story-generators"><span class="std std-ref">story generator</span></a> in Python which can carry information over from one line to others.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="loan_data.html" class="btn btn-neutral float-left" title="Example: Loan Data" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="configuration.html" class="btn btn-neutral float-right" title="Configuration Reference" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023, anon.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
