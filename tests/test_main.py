@@ -8,7 +8,7 @@ from click.testing import Result
 from typer.testing import CliRunner
 
 from datafaker.main import app
-from datafaker.settings import Settings
+from datafaker.settings import Settings, SettingsError
 from tests.utils import DatafakerTestCase, get_test_settings
 
 runner = CliRunner(mix_stderr=False)
@@ -44,7 +44,7 @@ class TestCLI(DatafakerTestCase):
 
     @patch("datafaker.main.read_config_file")
     @patch("datafaker.main.load_metadata_for_output")
-    @patch("datafaker.main.get_settings")
+    @patch("datafaker.settings.get_settings")
     @patch("datafaker.main.Path")
     @patch("datafaker.main.make_table_generators")
     @patch("datafaker.main.generators_require_stats")
@@ -86,7 +86,7 @@ class TestCLI(DatafakerTestCase):
 
     @patch("datafaker.main.read_config_file")
     @patch("datafaker.main.load_metadata_for_output")
-    @patch("datafaker.main.get_settings")
+    @patch("datafaker.settings.get_settings")
     @patch("datafaker.main.Path")
     @patch("datafaker.main.make_table_generators")
     @patch("datafaker.main.generators_require_stats")
@@ -150,7 +150,7 @@ class TestCLI(DatafakerTestCase):
 
     @patch("datafaker.main.read_config_file")
     @patch("datafaker.main.load_metadata_for_output")
-    @patch("datafaker.main.get_settings")
+    @patch("datafaker.settings.get_settings")
     @patch("datafaker.main.Path")
     @patch("datafaker.main.make_table_generators")
     # pylint: disable=too-many-positional-arguments,too-many-arguments
@@ -258,7 +258,7 @@ class TestCLI(DatafakerTestCase):
 
     @patch("datafaker.main.Path")
     @patch("datafaker.main.make_tables_file")
-    @patch("datafaker.main.get_settings")
+    @patch("datafaker.settings.get_settings")
     def test_make_tables(
         self,
         mock_get_settings: MagicMock,
@@ -310,13 +310,12 @@ class TestCLI(DatafakerTestCase):
         self.assertEqual(1, result.exit_code)
 
     @patch.dict(os.environ, {"SRC_SCHEMA": "myschema"}, clear=True)
-    @patch("datafaker.main.logger")
-    def test_make_tables_errors_if_src_dsn_missing(
-        self, mock_logger: MagicMock
-    ) -> None:
+    def test_make_tables_errors_if_src_dsn_missing(self) -> None:
         """Test the make-tables sub-command refuses to work if SRC_DSN is not set."""
 
-        result = runner.invoke(
+        self.assertRaises(
+            SettingsError,
+            runner.invoke,
             app,
             [
                 "make-tables",
@@ -324,14 +323,10 @@ class TestCLI(DatafakerTestCase):
             ],
             catch_exceptions=False,
         )
-        mock_logger.error.assert_called_once_with(
-            "Missing source database connection details."
-        )
-        self.assertEqual(1, result.exit_code)
 
     @patch("datafaker.main.make_tables_file")
     @patch("datafaker.main.Path")
-    @patch("datafaker.main.get_settings")
+    @patch("datafaker.settings.get_settings")
     def test_make_tables_with_force_enabled(
         self,
         mock_get_settings: MagicMock,
@@ -371,7 +366,7 @@ class TestCLI(DatafakerTestCase):
 
     @patch("datafaker.main.Path")
     @patch("datafaker.main.make_src_stats")
-    @patch("datafaker.main.get_settings")
+    @patch("datafaker.settings.get_settings")
     def test_make_stats(
         self,
         mock_get_settings: MagicMock,
@@ -428,11 +423,13 @@ class TestCLI(DatafakerTestCase):
 
     @patch("datafaker.main.logger")
     @patch.dict(os.environ, {"SRC_SCHEMA": "myschema"}, clear=True)
-    def test_make_stats_errors_if_no_src_dsn(self, mock_logger: MagicMock) -> None:
+    def test_make_stats_errors_if_no_src_dsn(self) -> None:
         """Test the make-stats sub-command with missing settings."""
         example_conf_path = "tests/examples/example_config.yaml"
 
-        result = runner.invoke(
+        self.assertRaises(
+            SettingsError,
+            runner.invoke,
             app,
             [
                 "make-stats",
@@ -441,14 +438,10 @@ class TestCLI(DatafakerTestCase):
             ],
             catch_exceptions=False,
         )
-        mock_logger.error.assert_called_once_with(
-            "Missing source database connection details."
-        )
-        self.assertEqual(1, result.exit_code)
 
     @patch("datafaker.main.Path")
     @patch("datafaker.main.make_src_stats")
-    @patch("datafaker.main.get_settings")
+    @patch("datafaker.settings.get_settings")
     def test_make_stats_with_force_enabled(
         self,
         mock_get_settings: MagicMock,

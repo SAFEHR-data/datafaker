@@ -22,6 +22,10 @@ from typing import Any, Optional
 from pydantic import BaseSettings, validator
 
 
+class SettingsError(Exception):
+    """An error in the environment variables."""
+
+
 class Settings(BaseSettings):
     """A Pydantic settings class with optional and mandatory settings.
 
@@ -57,15 +61,15 @@ class Settings(BaseSettings):
     @validator("src_dsn")
     def validate_src_dsn(cls, dsn: Optional[str], values: Any) -> Optional[str]:
         """Create and validate the source DB DSN."""
-        if dsn and dsn.startswith("mariadb"):
-            assert values.get("src_schema") is None
+        if dsn and dsn.startswith("mariadb") and values.get("src_schema") is not None:
+            raise SettingsError("mariadb does not support SRC_SCHEMA")
         return dsn
 
     @validator("dst_dsn")
     def validate_dst_dsn(cls, dsn: Optional[str], values: Any) -> Optional[str]:
         """Create and validate the destination DB DSN."""
-        if dsn and dsn.startswith("mariadb"):
-            assert values.get("dst_schema") is None
+        if dsn and dsn.startswith("mariadb") and values.get("dst_schema") is not None:
+            raise SettingsError("mariadb does not support DST_SCHEMA")
         return dsn
 
     @dataclass
@@ -80,3 +84,29 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Return the same Settings object every call."""
     return Settings()
+
+
+def get_source_dsn() -> str:
+    """Return source address or throw a validation error if it is not set."""
+    dsn = get_settings().src_dsn
+    if dsn:
+        return dsn
+    raise SettingsError("Missing SRC_DSN setting")
+
+
+def get_source_schema() -> Optional[str]:
+    """Return source schema."""
+    return get_settings().src_schema
+
+
+def get_destination_dsn() -> str:
+    """Return destination address or throw a validation error if it is not set."""
+    dsn = get_settings().dst_dsn
+    if dsn:
+        return dsn
+    raise SettingsError("Missing DST_DSN setting")
+
+
+def get_destination_schema() -> Optional[str]:
+    """Return destination schema."""
+    return get_settings().dst_schema

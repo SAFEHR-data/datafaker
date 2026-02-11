@@ -13,6 +13,7 @@ import yaml
 from jsonschema.exceptions import ValidationError
 from jsonschema.validators import validate
 from sqlalchemy import MetaData, Table
+from sqlalchemy.exc import InternalError, OperationalError
 from typer import Argument, Exit, Option, Typer
 
 from datafaker.create import create_db_data, create_db_tables, create_db_vocab
@@ -34,7 +35,14 @@ from datafaker.make import (
     make_vocabulary_tables,
 )
 from datafaker.remove import remove_db_data, remove_db_tables, remove_db_vocab
-from datafaker.settings import Settings, get_settings
+from datafaker.settings import (
+    Settings,
+    SettingsError,
+    get_destination_dsn,
+    get_destination_schema,
+    get_source_dsn,
+    get_source_schema,
+)
 from datafaker.utils import (
     CONFIG_SCHEMA_PATH,
     conf_logger,
@@ -57,6 +65,19 @@ DF_FILENAME: Final[str] = "df.py"
 STATS_FILENAME: Final[str] = "src-stats.yaml"
 
 app = Typer(no_args_is_help=True)
+
+
+def datafaker() -> None:
+    """Run the app and catch internal exceptions."""
+    try:
+        app()
+    except OperationalError as exc:
+        logger.error(str(exc))
+        # Outside of app() typer.Exit(1) doesn't work
+        sys.exit(1)
+    except SettingsError as exc:
+        logger.error(str(exc))
+        sys.exit(1)
 
 
 def _check_file_non_existence(file_path: Path) -> None:
@@ -294,9 +315,6 @@ def make_vocab(
     Example:
         $ datafaker make-vocab --config-file config.yml
     """
-    settings = get_settings()
-    _require_src_db_dsn(settings)
-
     generator_config = read_config_file(config_file) if config_file is not None else {}
     orm_metadata = load_metadata(orm_file, generator_config)
     make_vocabulary_tables(
@@ -331,11 +349,12 @@ def make_stats(
 
     config = read_config_file(config_file) if config_file is not None else {}
 
-    settings = get_settings()
-    src_dsn: str = _require_src_db_dsn(settings)
-
     src_stats = asyncio.get_event_loop().run_until_complete(
-        make_src_stats(src_dsn, config, settings.src_schema)
+        make_src_stats(
+            get_source_dsn(),
+            config,
+            get_source_schema(),
+        )
     )
     stats_file_path.write_text(yaml.dump(src_stats), encoding="utf-8")
     logger.debug("%s created.", stats_file)
@@ -369,10 +388,11 @@ def make_tables(
     if not force:
         _check_file_non_existence(orm_file_path)
 
-    settings = get_settings()
-    src_dsn: str = _require_src_db_dsn(settings)
-
-    content = make_tables_file(src_dsn, settings.src_schema, parquet_dir)
+    content = make_tables_file(
+        get_source_dsn(),
+        get_source_schema(),
+        parquet_dir,
+    )
     orm_file_path.write_text(content, encoding="utf-8")
     logger.debug("%s created.", orm_file)
 
@@ -386,8 +406,6 @@ def configure_tables(
 ) -> None:
     """Interactively set tables to ignored, vocabulary or primary private."""
     logger.debug("Configuring tables in %s.", config_file)
-    settings = get_settings()
-    src_dsn: str = _require_src_db_dsn(settings)
     config_file_path = Path(config_file)
     config = {}
     if config_file_path.exists():
@@ -397,7 +415,10 @@ def configure_tables(
     # we don't pass config here so that no tables are ignored
     metadata = load_metadata(orm_file)
     config_updated = update_config_tables(
-        src_dsn, settings.src_schema, metadata, config
+        get_source_dsn(),
+        get_source_schema(),
+        metadata,
+        config,
     )
     if config_updated is None:
         logger.debug("Cancelled")
@@ -416,8 +437,6 @@ def configure_missing(
 ) -> None:
     """Interactively set the missingness of the generated data."""
     logger.debug("Configuring missingness in %s.", config_file)
-    settings = get_settings()
-    src_dsn: str = _require_src_db_dsn(settings)
     config_file_path = Path(config_file)
     config: dict[str, Any] = {}
     if config_file_path.exists():
@@ -427,7 +446,12 @@ def configure_missing(
         if isinstance(config_any, dict):
             config = config_any
     metadata = load_metadata(orm_file, config)
-    config_updated = update_missingness(src_dsn, settings.src_schema, metadata, config)
+    config_updated = update_missingness(
+        get_source_dsn(),
+        get_source_schema(),
+        metadata,
+        config,
+    )
     if config_updated is None:
         logger.debug("Cancelled")
         return
@@ -452,8 +476,6 @@ def configure_generators(
 ) -> None:
     """Interactively set generators for column data."""
     logger.debug("Configuring generators in %s.", config_file)
-    settings = get_settings()
-    src_dsn: str = _require_src_db_dsn(settings)
     config_file_path = Path(config_file)
     config = {}
     if config_file_path.exists():
@@ -462,7 +484,11 @@ def configure_generators(
         )
     metadata = load_metadata(orm_file)
     config_updated = update_config_generators(
-        src_dsn, settings.src_schema, metadata, config, spec_path=spec
+        get_source_dsn(),
+        get_source_schema(),
+        metadata,
+        config,
+        spec_path=spec,
     )
     if config_updated is None:
         logger.debug("Cancelled")
@@ -576,10 +602,8 @@ def dump_data(
                 " specified, or specify an existing directory"
             )
             sys.exit(1)
-    settings = get_settings()
-    dst_dsn: str = settings.dst_dsn or ""
-    assert dst_dsn != "", "Missing DST_DSN setting."
-    schema_name = settings.dst_schema
+    dst_dsn = get_destination_dsn()
+    schema_name = get_destination_schema()
     config = read_config_file(config_file) if config_file is not None else {}
     metadata = load_metadata_for_output(orm_file, config)
     mtables = convert_table_names_to_tables(table, metadata)
@@ -677,7 +701,12 @@ def remove_tables(
         else:
             config = read_config_file(config_file)
             metadata = load_metadata_for_output(orm_file, config)
-            remove_db_tables(metadata)
+            try:
+                remove_db_tables(metadata)
+            except InternalError as exc:
+                logger.error("Failed to drop tables: %s", exc)
+                logger.error("Please try again using the --all option.")
+                sys.exit(1)
         logger.debug("Tables dropped.")
     else:
         logger.info("Would remove tables if called with --yes.")
@@ -727,4 +756,4 @@ def version() -> None:
 
 
 if __name__ == "__main__":
-    app()
+    datafaker()
