@@ -1,5 +1,6 @@
 """ Tests for the configure-tables command. """
-from collections.abc import MutableMapping
+import re
+from collections.abc import MutableMapping, Sized
 from typing import Any
 
 from sqlalchemy import select
@@ -452,7 +453,7 @@ class ConfigureTablesInstrumentsTests(ConfigureTablesTests):
 
 
 class TrickyTests(ConfigureTablesTests):
-    """Testing configure-tables with the instrument.sql database."""
+    """Testing configure-tables with arguments that could cause SQL errors."""
 
     dump_file_path = "tricky.sql"
     database_name = "tricky"
@@ -536,6 +537,21 @@ class TrickyTests(ConfigureTablesTests):
                 "Failed to display", "/".join(m for (m, _a, _kw) in tc.messages)
             )
 
+    def assert_message_correctly_formatted(
+        self, m: str, a: Sized, kw: dict[str, Any]
+    ) -> None:
+        """
+        Assert that the ``{...}`` interpolations in ``m`` match the arguments given.
+
+        :param m: The message.
+        :param a: List of positional arguments.
+        :param kw: Dict of keyword arguments.
+        """
+        interpolations = set(re.findall(r"\{([A-Za-z0-9_]+)\}", m))
+        positions = set(range(len(a)))
+        keywords = set(kw.keys())
+        self.assertSetEqual(interpolations, positions | keywords)
+
     def test_sql_error_does_not_throw_exception(self) -> None:
         """
         Select with a SQL error.
@@ -543,4 +559,6 @@ class TrickyTests(ConfigureTablesTests):
         with self._get_cmd({}) as tc:
             tc.reset()
             tc.do_select("+++")
-            self.assertIn("SQL query", "/".join(m for (m, a, kw) in tc.messages))
+            self.assertIn("SQL query", "/".join(m for (m, _a, _kw) in tc.messages))
+            for m, a, kw in tc.messages:
+                self.assert_message_correctly_formatted(m, a, kw)

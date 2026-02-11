@@ -173,9 +173,8 @@ class TestDuckDb(TestDatabaseBase):
 
     @classmethod
     def skip(cls) -> str | None:
-        if shutil.which("duckdb"):
-            return None
-        return "need to find 'duckdb': install DuckDB to enable"
+        """Return None because DuckDB always works."""
+        return None
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         """Initialize TestDuckDb"""

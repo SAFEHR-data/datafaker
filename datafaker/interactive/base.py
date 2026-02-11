@@ -361,7 +361,7 @@ class DbCmd(ABC, cmd.Cmd):
             try:
                 result = connection.execute(sqlalchemy.text(query))
             except sqlalchemy.exc.DatabaseError as exc:
-                self.print(self.ERROR_FAILED_SQL, exc, query)
+                self.print(self.ERROR_FAILED_SQL, exc=exc, query=query)
                 return
             row_count = result.rowcount
             self.print(self.ROW_COUNT_MSG, row_count)
@@ -403,7 +403,7 @@ class DbCmd(ABC, cmd.Cmd):
             try:
                 result = connection.execute(query)
             except sqlalchemy.exc.SQLAlchemyError as exc:
-                self.print(self.ERROR_FAILED_SQL, exc, query)
+                self.print(self.ERROR_FAILED_SQL, exc=exc, query=query)
                 return
             self.print_table(list(result.keys()), result.fetchmany(max_peek_rows))
 
