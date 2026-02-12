@@ -421,7 +421,6 @@ class TestCLI(DatafakerTestCase):
         )
         self.assertEqual(1, result.exit_code)
 
-    @patch("datafaker.main.logger")
     @patch.dict(os.environ, {"SRC_SCHEMA": "myschema"}, clear=True)
     def test_make_stats_errors_if_no_src_dsn(self) -> None:
         """Test the make-stats sub-command with missing settings."""

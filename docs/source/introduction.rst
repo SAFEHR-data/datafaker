@@ -624,4 +624,37 @@ the ``fulltext`` column is where to find all the words in the ``title`` and ``de
 So ideally we should be able to generate ``title`` and ``description``, then set the ``fulltext`` column
 with the SQL expression ``TO_TSVECTOR(CONCAT(title, ' ', description))``.
 
-Sorry, this is not possible at the moment. Only normalized databases are properly supported.
+Sorry, this is not possible at the moment using the configuration commands;
+stories should be used if this column is necessary.
+One possible solution is to remove this column from the ``orm.yaml`` file.
+Find the portion that corresponds to the ``film`` table in this file:
+
+.. code-block::yaml
+  film:
+    columns:
+      description:
+        nullable: true
+        primary: false
+        type: TEXT
+      film_id:
+        nullable: false
+        primary: true
+        type: INTEGER
+      fulltext:
+        nullable: false
+        primary: false
+        type: TSVECTOR
+      language_id:
+        foreign_keys:
+        - language.language_id
+        nullable: false
+        primary: false
+        type: INTEGER
+      ### ... lines removed ... ###
+      title:
+        nullable: false
+        primary: false
+        type: TEXT
+    unique: []
+
+Simply remove the ``fulltext:`` section and this column will not appear in the destination database.
