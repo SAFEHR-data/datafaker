@@ -111,7 +111,7 @@ class ConfigureTablesSrcTests(ConfigureTablesTests):
             )
 
     def test_configure_tables(self) -> None:
-        """Test that we can change columns to ignore, vocab or generate."""
+        """Test that we can change tables to ignore, vocab or generate."""
         config = {
             "tables": {
                 "unique_constraint_test": {

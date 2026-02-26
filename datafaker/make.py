@@ -24,7 +24,7 @@ from typing_extensions import Self
 
 from datafaker import providers
 from datafaker.parquet2orm import get_parquet_orm
-from datafaker.settings import get_settings
+from datafaker.settings import get_source_dsn, get_source_schema
 from datafaker.utils import (
     MaybeAsyncEngine,
     create_db_engine,
@@ -453,11 +453,12 @@ def _get_provider_for_column(column: Column) -> Tuple[list[str], str, dict[str, 
     if not generator_function:
         generator_function = "generic.null_provider.null"
         logger.warning(
-            "Unsupported SQLAlchemy type %s for column %s. "
+            "Unsupported SQLAlchemy type %s for column %s of table %s. "
             "Setting this column to NULL always, "
             "you may want to configure a row generator for it instead.",
             column.type,
             column.name,
+            column.table.name,
         )
 
     return variable_names, generator_function, generator_arguments
@@ -551,11 +552,12 @@ def make_vocabulary_tables(
     table_names: set[str] | None = None,
 ) -> None:
     """Extract the data from the source database for each vocabulary table."""
-    settings = get_settings()
-    src_dsn: str = settings.src_dsn or ""
-    assert src_dsn != "", "Missing SRC_DSN setting."
-
-    engine = get_sync_engine(create_db_engine(src_dsn, schema_name=settings.src_schema))
+    engine = get_sync_engine(
+        create_db_engine(
+            get_source_dsn(),
+            schema_name=get_source_schema(),
+        )
+    )
     vocab_names = get_vocabulary_table_names(config)
     if table_names is None:
         table_names = vocab_names

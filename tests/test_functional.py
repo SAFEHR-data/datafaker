@@ -109,15 +109,15 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
             {
                 (
                     "Unsupported SQLAlchemy type CIDR for column "
-                    "column_with_unusual_type. Setting this column to NULL "
-                    "always, you may want to configure a row generator for "
-                    "it instead."
+                    "column_with_unusual_type of table strange_type_table. "
+                    "Setting this column to NULL always, you may want to "
+                    "configure a row generator for it instead."
                 ),
                 (
                     "Unsupported SQLAlchemy type BIT for column "
-                    "column_with_unusual_type_and_length. Setting this column "
-                    "to NULL always, you may want to configure a row generator "
-                    "for it instead."
+                    "column_with_unusual_type_and_length of table "
+                    "strange_type_table. Setting this column to NULL always, "
+                    "you may want to configure a row generator for it instead."
                 ),
             },
             set(completed_process.stderr.split("\n")) - {""},
@@ -259,12 +259,12 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
         )
         self.assertEqual(
             "Unsupported SQLAlchemy type CIDR "
-            "for column column_with_unusual_type. "
+            "for column column_with_unusual_type of table strange_type_table. "
             "Setting this column to NULL always, "
             "you may want to configure a row generator for it instead.\n"
             "Unsupported SQLAlchemy type BIT "
-            "for column column_with_unusual_type_and_length. "
-            "Setting this column to NULL always, "
+            "for column column_with_unusual_type_and_length of table "
+            "strange_type_table. Setting this column to NULL always, "
             "you may want to configure a row generator for it instead.\n",
             completed_process.stderr,
         )

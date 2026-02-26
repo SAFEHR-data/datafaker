@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateColumn, CreateSchema, CreateTable, MetaData, Table
 
 from datafaker.base import FileUploader, TableGenerator
-from datafaker.settings import get_settings
+from datafaker.settings import get_destination_dsn, get_destination_schema
 from datafaker.utils import (
     create_db_engine,
     get_sync_engine,
@@ -60,15 +60,12 @@ def remove_on_delete_cascade(element: CreateTable, compiler: Any, **kw: Any) -> 
 
 def create_db_tables(metadata: MetaData) -> None:
     """Create tables described by the sqlalchemy metadata object."""
-    settings = get_settings()
-    dst_dsn: str = settings.dst_dsn or ""
-    assert dst_dsn != "", "Missing DST_DSN setting."
-
+    dst_dsn = get_destination_dsn()
     engine = get_sync_engine(create_db_engine(dst_dsn))
+    schema_name = get_destination_schema()
 
     # Create schema, if necessary.
-    if settings.dst_schema:
-        schema_name = settings.dst_schema
+    if schema_name is not None:
         with engine.connect() as connection:
             # Do not try to create a schema if the schema already exists.
             # This is necessary if the user does not have schema creation privileges
@@ -97,12 +94,11 @@ def create_db_vocab(
     :param config: The configuration from --config-file
     :return: List of table names loaded.
     """
-    settings = get_settings()
-    dst_dsn: str = settings.dst_dsn or ""
-    assert dst_dsn != "", "Missing DST_DSN setting."
-
     dst_engine = get_sync_engine(
-        create_db_engine(dst_dsn, schema_name=settings.dst_schema)
+        create_db_engine(
+            get_destination_dsn(),
+            schema_name=get_destination_schema(),
+        )
     )
 
     tables_loaded: list[str] = []
@@ -137,16 +133,12 @@ def create_db_data(
     metadata: MetaData,
 ) -> RowCounts:
     """Connect to a database and populate it with data."""
-    settings = get_settings()
-    dst_dsn: str = settings.dst_dsn or ""
-    assert dst_dsn != "", "Missing DST_DSN setting."
-
     return create_db_data_into(
         sorted_tables,
         df_module,
         num_passes,
-        dst_dsn,
-        settings.dst_schema,
+        get_destination_dsn(),
+        get_destination_schema(),
         metadata,
     )
 

@@ -3,7 +3,7 @@ from typing import Any, Mapping, Optional
 
 from sqlalchemy import MetaData, delete
 
-from datafaker.settings import get_settings
+from datafaker.settings import get_destination_dsn, get_destination_schema
 from datafaker.utils import (
     create_db_engine,
     get_sync_engine,
@@ -17,10 +17,11 @@ from datafaker.utils import (
 
 def remove_db_data(metadata: MetaData, config: Mapping[str, Any]) -> None:
     """Truncate the synthetic data tables but not the vocabularies."""
-    settings = get_settings()
-    assert settings.dst_dsn, "Missing destination database settings"
     remove_db_data_from(
-        metadata, config, settings.dst_dsn, schema_name=settings.dst_schema
+        metadata,
+        config,
+        get_destination_dsn(),
+        schema_name=get_destination_schema(),
     )
 
 
@@ -41,10 +42,11 @@ def remove_db_vocab(
     metadata: MetaData, meta_dict: Mapping[str, Any], config: Mapping[str, Any]
 ) -> None:
     """Truncate the vocabulary tables."""
-    settings = get_settings()
-    assert settings.dst_dsn, "Missing destination database settings"
     dst_engine = get_sync_engine(
-        create_db_engine(settings.dst_dsn, schema_name=settings.dst_schema)
+        create_db_engine(
+            get_destination_dsn(),
+            schema_name=get_destination_schema(),
+        )
     )
 
     with dst_engine.connect() as dst_conn:
@@ -58,10 +60,11 @@ def remove_db_vocab(
 
 def remove_db_tables(metadata: Optional[MetaData]) -> None:
     """Drop the tables in the destination schema."""
-    settings = get_settings()
-    assert settings.dst_dsn, "Missing destination database settings"
     dst_engine = get_sync_engine(
-        create_db_engine(settings.dst_dsn, schema_name=settings.dst_schema)
+        create_db_engine(
+            get_destination_dsn(),
+            schema_name=get_destination_schema(),
+        )
     )
     if metadata is None:
         metadata = MetaData()

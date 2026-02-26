@@ -79,7 +79,11 @@ def read_config_file(path: str) -> dict:
     with open(path, "r", encoding="utf8") as f:
         config = yaml.safe_load(f)
 
-    assert isinstance(config, dict)
+    if not isinstance(config, dict):
+        logger.error(
+            "The config file is invalid, its top level should be an associative array."
+        )
+        return {}
 
     schema_config = json.loads(CONFIG_SCHEMA_PATH.read_text(encoding="UTF-8"))
     try:
