@@ -2,11 +2,12 @@
 import asyncio
 import decimal
 import inspect
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from types import TracebackType
-from typing import Any, Callable, Final, Mapping, Optional, Sequence, Tuple, Type, Union
+from typing import Any, Final, Optional, Tuple, Type, Union
 
 import pandas as pd
 import snsql
@@ -800,7 +801,10 @@ def fix_types(dics: list[dict]) -> list[dict]:
 
 
 async def make_src_stats(
-    dsn: str, config: Mapping, schema_name: Optional[str] = None
+    dsn: str,
+    config: Mapping,
+    schema_name: Optional[str] = None,
+    parquet_dir: Optional[Path] = None,
 ) -> dict[str, dict[str, Any]]:
     """
     Run the src-stats queries specified by the configuration.
@@ -815,7 +819,12 @@ async def make_src_stats(
     :return: The dictionary of src-stats.
     """
     use_asyncio = config.get("use-asyncio", False)
-    engine = create_db_engine(dsn, schema_name=schema_name, use_asyncio=use_asyncio)
+    engine = create_db_engine(
+        dsn,
+        schema_name=schema_name,
+        use_asyncio=use_asyncio,
+        parquet_dir=parquet_dir,
+    )
     async with DbConnection(engine) as db_conn:
         return await make_src_stats_connection(config, db_conn)
 

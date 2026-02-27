@@ -5,6 +5,7 @@ import importlib.util
 import io
 import json
 import logging
+import os
 import random
 import re
 import string
@@ -188,6 +189,7 @@ def create_db_engine(
     db_dsn: str,
     schema_name: Optional[str] = None,
     use_asyncio: bool = False,
+    parquet_dir: Optional[Path] = None,
     **kwargs: Any,
 ) -> MaybeAsyncEngine:
     """Create a SQLAlchemy Engine."""
@@ -197,12 +199,22 @@ def create_db_engine(
     else:
         engine = create_engine(db_dsn, **kwargs)
 
+    settings = {}
     if schema_name is not None:
+        settings["search_path"] = schema_name
+    if parquet_dir is not None:
+        joined = ",".join(_find_parquet_directories(parquet_dir))
+        # double up single quotes
+        dj = joined.replace("'", "''")
+        # enclose in single quotes
+        settings["file_search_path"] = f"'{dj}'"
+
+    if settings:
         event_engine = get_sync_engine(engine)
 
         @event.listens_for(event_engine, "connect", insert=True)
         def connect(dbapi_connection: DBAPIConnection, _: Any) -> None:
-            set_search_path(dbapi_connection, schema_name)
+            set_db_settings(dbapi_connection, settings)
 
     return engine
 
@@ -236,7 +248,24 @@ def create_db_engine_dst(
     return create_db_engine(db_dsn, schema_name, use_asyncio)
 
 
-def set_search_path(connection: DBAPIConnection, schema: str) -> None:
+def _find_parquet_directories(parquet_dir: Path) -> list[str]:
+    """Find all the directories under ``parquet_dir`` that contain parquet files."""
+    return [
+        path
+        for path, _, filenames in os.walk(parquet_dir)
+        if _names_include_parquet(Path(path), filenames)
+    ]
+
+
+def _names_include_parquet(path: Path, file_names: Iterable[str]) -> bool:
+    for fn in file_names:
+        entry = path / fn
+        if entry.is_file() and entry.suffix in {".parquet", ".parq"}:
+            return True
+    return False
+
+
+def set_db_settings(connection: DBAPIConnection, settings: Mapping[str, str]) -> None:
     """Set the SEARCH_PATH for a PostgreSQL connection."""
     # https://docs.sqlalchemy.org/en/20/dialects/postgresql.html#remote-schema-table-introspection-and-postgresql-search-path
     existing_autocommit = connection.autocommit
@@ -244,7 +273,8 @@ def set_search_path(connection: DBAPIConnection, schema: str) -> None:
 
     cursor = connection.cursor()
     # Parametrised queries don't work with asyncpg, hence the f-string.
-    cursor.execute(f"SET search_path TO {schema};")
+    sql = "".join(f"SET {k} TO {v};" for k, v in settings.items())
+    cursor.execute(sql)
     cursor.close()
 
     connection.autocommit = existing_autocommit

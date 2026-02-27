@@ -333,6 +333,15 @@ def make_stats(
     force: bool = Option(
         False, "--force", "-f", help="Overwrite any existing vocabulary file."
     ),
+    parquet_dir: Optional[Path] = Option(
+        None,
+        help=(
+            "Directory of Parquet files to consider part of the database."
+            " This can be useful when using DuckDB."
+        ),
+        file_okay=False,
+        dir_okay=True,
+    ),
 ) -> None:
     """Compute summary statistics from the source database.
 
@@ -354,6 +363,7 @@ def make_stats(
             get_source_dsn(),
             config,
             get_source_schema(),
+            parquet_dir=parquet_dir,
         )
     )
     stats_file_path.write_text(yaml.dump(src_stats), encoding="utf-8")

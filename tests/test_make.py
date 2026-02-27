@@ -1,16 +1,19 @@
 """Tests for the main module."""
 import asyncio
 import os
+import tempfile
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
+import pandas as pd
 import yaml
 from sqlalchemy import BigInteger, Column, String, select
 from sqlalchemy.dialects.mysql.types import INTEGER
 from sqlalchemy.dialects.postgresql import UUID
 
 from datafaker.make import _get_provider_for_column, make_src_stats
-from tests.utils import GeneratesDBTestCase, RequiresDBTestCase
+from tests.utils import DatafakerTestCase, GeneratesDBTestCase, RequiresDBTestCase
 
 
 class TestMakeGenerators(GeneratesDBTestCase):
@@ -227,3 +230,55 @@ class TestMakeStats(RequiresDBTestCase):
         debug_template = "src-stats query %s returned no results"
         mock_logger.debug.assert_any_call(debug_template, query_name1)
         mock_logger.debug.assert_any_call(debug_template, query_name2)
+
+
+class TestMakeStatsParquet(DatafakerTestCase):
+    """
+    Output to the database should not have access to parquet files.
+
+    Otherwise there is a risk of leakage of source data.
+    """
+
+    parquet_name = "fruit.parquet"
+
+    def setUp(self) -> None:
+        """Go to the directory where there are parquet files."""
+        super().setUp()
+        self.parquet_dir = Path(tempfile.mkdtemp("parq"))
+        self.write_parquet()
+
+    def write_parquet(self) -> None:
+        """Write a parquet file into the current directory."""
+        fruit: dict[str, list[Any]] = {
+            "id": [1, 2, 3],
+            "one": ["lemon", "orange", "lime"],
+            "two": ["grape", "fig", "melon"],
+        }
+        pd.DataFrame.from_dict(fruit).to_parquet(
+            Path(self.parquet_dir) / self.parquet_name
+        )
+
+    def test_make_stats_parquet(self) -> None:
+        """Test that make stats can access parquet if we want it to."""
+        src_stats = asyncio.get_event_loop().run_until_complete(
+            make_src_stats(
+                "duckdb:///:memory:",
+                {
+                    "src-stats": [
+                        {"name": "one_query", "query": "SELECT one FROM fruit.parquet"},
+                        {"name": "two_query", "query": "SELECT two FROM fruit.parquet"},
+                    ]
+                },
+                parquet_dir=self.parquet_dir,
+            )
+        )
+        self.assertIn("one_query", src_stats)
+        self.assertSetEqual(
+            {v.get("one") for v in src_stats["one_query"]["results"]},
+            {"lemon", "orange", "lime"},
+        )
+        self.assertIn("two_query", src_stats)
+        self.assertSetEqual(
+            {v.get("two") for v in src_stats["two_query"]["results"]},
+            {"grape", "fig", "melon"},
+        )
