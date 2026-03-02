@@ -13,7 +13,7 @@ from sqlalchemy.schema import CreateColumn, CreateSchema, CreateTable, MetaData,
 from datafaker.base import FileUploader, TableGenerator
 from datafaker.settings import get_destination_dsn, get_destination_schema
 from datafaker.utils import (
-    create_db_engine,
+    create_db_engine_dst,
     get_sync_engine,
     get_vocabulary_table_names,
     logger,
@@ -61,9 +61,15 @@ def remove_on_delete_cascade(element: CreateTable, compiler: Any, **kw: Any) -> 
 def create_db_tables(metadata: MetaData) -> None:
     """Create tables described by the sqlalchemy metadata object."""
     dst_dsn = get_destination_dsn()
-    engine = get_sync_engine(create_db_engine(dst_dsn))
-    schema_name = get_destination_schema()
+    assert dst_dsn != "", "Missing DST_DSN setting."
+    create_db_tables_into(metadata, dst_dsn, get_destination_schema())
 
+
+def create_db_tables_into(
+    metadata: MetaData, dst_dsn: str, schema_name: str | None = None
+) -> None:
+    """Create tables described by the sqlalchemy metadata object with explicit DSN."""
+    engine = get_sync_engine(create_db_engine_dst(dst_dsn))
     # Create schema, if necessary.
     if schema_name is not None:
         with engine.connect() as connection:
@@ -75,9 +81,11 @@ def create_db_tables(metadata: MetaData) -> None:
                 connection.commit()
 
         # Recreate the engine, this time with a schema specified
-        engine = get_sync_engine(create_db_engine(dst_dsn, schema_name=schema_name))
+        engine.dispose()
+        engine = get_sync_engine(create_db_engine_dst(dst_dsn, schema_name=schema_name))
 
     metadata.create_all(engine)
+    engine.dispose()
 
 
 def create_db_vocab(
@@ -95,7 +103,7 @@ def create_db_vocab(
     :return: List of table names loaded.
     """
     dst_engine = get_sync_engine(
-        create_db_engine(
+        create_db_engine_dst(
             get_destination_dsn(),
             schema_name=get_destination_schema(),
         )
@@ -165,7 +173,7 @@ def create_db_data_into(
     :param db_dsn: Connection string for the destination database.
     :param schema_name: Destination schema name.
     """
-    dst_engine = get_sync_engine(create_db_engine(db_dsn, schema_name=schema_name))
+    dst_engine = get_sync_engine(create_db_engine_dst(db_dsn, schema_name=schema_name))
 
     row_counts: Counter[str] = Counter()
     with dst_engine.connect() as dst_conn:
@@ -177,6 +185,7 @@ def create_db_data_into(
                 df_module.story_generator_list,
                 metadata,
             )
+    dst_engine.dispose()
     return row_counts
 
 
