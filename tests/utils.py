@@ -193,9 +193,6 @@ class TestDuckDb(TestDatabaseBase):
         """Start the test database"""
         self.close()
         self._make_con_string()
-        # create the database (must be non-read-only)
-        # duckdb_con = duckdb.connect(self._db_path)
-        # duckdb_con.close()
 
     def close(self) -> None:
         """Tear down the test database."""
