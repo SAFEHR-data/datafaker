@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import select
 
 from datafaker.interactive import TableCmd
+from datafaker.interactive.base import DbCmd
 from datafaker.serialize_metadata import dict_to_metadata
 from tests.utils import RequiresDBTestCase, TestDbCmdMixin
 
@@ -18,7 +19,15 @@ class ConfigureTablesTests(RequiresDBTestCase):
     """Testing configure-tables."""
 
     def _get_cmd(self, config: MutableMapping[str, Any]) -> TestTableCmd:
-        return TestTableCmd(self.dsn, self.schema_name, self.metadata, config)
+        return TestTableCmd(
+            DbCmd.Settings(
+                self.dsn,
+                self.schema_name,
+                config,
+                self.metadata,
+                None,
+            )
+        )
 
 
 class ConfigureTablesSrcTests(ConfigureTablesTests):
@@ -384,7 +393,9 @@ class ConfigureTablesInstrumentsTests(ConfigureTablesTests):
                 },
             },
         }
-        with TestTableCmd(self.dsn, self.schema_name, self.metadata, config) as tc:
+        with TestTableCmd(
+            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
+        ) as tc:
             tc.do_next("manufacturer")
             tc.do_vocabulary("")
             tc.reset()
@@ -426,7 +437,9 @@ class ConfigureTablesInstrumentsTests(ConfigureTablesTests):
                 },
             },
         }
-        with TestTableCmd(self.dsn, self.schema_name, self.metadata, config) as tc:
+        with TestTableCmd(
+            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
+        ) as tc:
             tc.do_next("signature_model")
             tc.do_empty("")
             tc.reset()
@@ -525,10 +538,13 @@ class TrickyTests(ConfigureTablesTests):
         Select with repeated fields (#70).
         """
         with TestTableCmd(
-            src_dsn=self.dsn,
-            src_schema=self.schema_name,
-            metadata=self.metadata,
-            config={},
+            DbCmd.Settings(
+                self.dsn,
+                self.schema_name,
+                config={},
+                metadata=self.metadata,
+                parquet_dir=None,
+            ),
             print_tables=True,
         ) as tc:
             tc.reset()

@@ -1,6 +1,7 @@
 """Convert between a Python dict describing a database schema and a SQLAlchemy MetaData."""
 import typing
 from functools import partial
+from pathlib import Path
 
 import parsy
 from sqlalchemy import Column, Dialect, Engine, ForeignKey, MetaData, Table
@@ -282,14 +283,17 @@ def dict_to_table(
 
 
 def metadata_to_dict(
-    meta: MetaData, schema_name: str | None, engine: Engine
+    meta: MetaData,
+    schema_name: str | None,
+    engine: Engine,
+    parquet_dir: Path | None,
 ) -> dict[str, typing.Any]:
     """
     Convert a metadata object into a Python dict.
 
     The output will be ready for output to ``orm.yaml``.
     """
-    return {
+    d = {
         "tables": {
             str(table.name): table_to_dict(table, engine.dialect)
             for table in meta.tables.values()
@@ -297,6 +301,9 @@ def metadata_to_dict(
         "dsn": str(engine.url),
         "schema": schema_name,
     }
+    if parquet_dir is not None:
+        d["parquet-dir"] = str(parquet_dir)
+    return d
 
 
 def should_ignore_fk(tables_dict: dict[str, TableT], fk: str) -> bool:

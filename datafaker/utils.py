@@ -68,7 +68,7 @@ class Empty(Generic[T]):
         return (x for x in e)
 
 
-def read_config_file(path: str) -> dict:
+def read_config_file(path: Path) -> dict:
     """Read a config file, warning if it is invalid.
 
     Args:
@@ -77,7 +77,7 @@ def read_config_file(path: str) -> dict:
     Returns:
         The config file as a dictionary.
     """
-    with open(path, "r", encoding="utf8") as f:
+    with path.open("r", encoding="utf8") as f:
         config = yaml.safe_load(f)
 
     if not isinstance(config, dict):

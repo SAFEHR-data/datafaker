@@ -47,7 +47,7 @@ class TestCreate(GeneratesDBTestCase):
             }
             self.set_configuration(config)
             meta_dict = metadata_to_dict(
-                self.metadata, self.schema_name, self.sync_engine
+                self.metadata, self.schema_name, self.sync_engine, None
             )
             create_db_tables(self.metadata)
             create_db_vocab(self.metadata, meta_dict, config, Path("./tests/examples"))

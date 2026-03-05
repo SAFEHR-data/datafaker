@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 
 import pandas as pd
+import yaml
 from typer.testing import CliRunner
 
 from datafaker.dump import CsvTableWriter, get_parquet_table_writer
@@ -89,6 +90,12 @@ class EndToEndParquetTestCase(DatafakerTestCase):
     database_type = TestDuckDb
     examples_dir = Path("tests/examples/duckdb")
 
+    def set_working_dir(self) -> None:
+        """Change to our working directory."""
+        working_dir = tempfile.mkdtemp()
+        shutil.move(self.parquet_dir / "config.yaml", Path(working_dir) / "config.yaml")
+        os.chdir(working_dir)
+
     def setUp(self) -> None:
         """Set up the files in a temporary directory."""
         super().setUp()
@@ -97,12 +104,41 @@ class EndToEndParquetTestCase(DatafakerTestCase):
         for fname in os.listdir(self.examples_dir):
             shutil.copy(self.examples_dir / fname, self.parquet_dir / fname)
         self.start_dir = os.getcwd()
-        os.chdir(self.parquet_dir)
+        self.set_working_dir()
 
     def tearDown(self) -> None:
         """Return to the start directory."""
         os.chdir(self.start_dir)
         return super().tearDown()
+
+    def make_orm_yaml(self, runner: CliRunner) -> None:
+        """Make the orm.yaml file, if necessary."""
+        runner.invoke(
+            app,
+            [
+                "make-tables",
+                "--parquet-dir",
+                str(self.parquet_dir),
+                "--orm-file",
+                "orm_auto.yaml",
+            ],
+        )
+        # Fix up the orm.yaml; the dates might not have types set
+        with Path("orm_auto.yaml").open(encoding="utf-8") as orm_fh:
+            orm = yaml.load(orm_fh, yaml.SafeLoader)
+        t = orm["tables"]
+        t["manufacturer.parquet"]["columns"]["founded"]["type"] = "DATETIME"
+        t["model.parquet"]["columns"]["introduced"]["type"] = "DATETIME"
+        t["signature_model.parquet"]["columns"]["player_id"]["type"] = "INTEGER"
+        t["signature_model.parquet"]["columns"]["player_id"]["foreign_keys"] = [
+            "player.parquet.id"
+        ]
+        t["signature_model.parquet"]["columns"]["based_on"]["type"] = "INTEGER"
+        t["signature_model.parquet"]["columns"]["based_on"]["foreign_keys"] = [
+            "model.parquet.id"
+        ]
+        with Path("orm.yaml").open("w", encoding="utf-8") as out_fh:
+            yaml.dump(orm, out_fh, yaml.SafeDumper)
 
     def test_end_to_end_parquet(self) -> None:
         """
@@ -121,6 +157,8 @@ class EndToEndParquetTestCase(DatafakerTestCase):
                 # "dst_schema": "fake.dstschema", if you must
             },
         )
+
+        self.make_orm_yaml(runner)
 
         # Configure with the spec file
         result = runner.invoke(
@@ -173,3 +211,19 @@ class EndToEndParquetTestCase(DatafakerTestCase):
             self.assertLessEqual(v, i + 1)
         # Check that many of the possible keys have been used
         self.assertLess(num_passes / 3, len(player_ids))
+
+
+class CurrentDirEndToEndParquetTestCase(EndToEndParquetTestCase):
+    """
+    Read in parquet, make some generators, output parquet.
+
+    Do it from the parquet directory.
+    """
+
+    def set_working_dir(self) -> None:
+        """Change to our working directory."""
+        os.chdir(self.parquet_dir)
+
+    def make_orm_yaml(self, _runner: CliRunner) -> None:
+        """Make the orm.yaml file, if necessary."""
+        # not necessary, we already have an orm.yaml

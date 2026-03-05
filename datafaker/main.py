@@ -28,6 +28,7 @@ from datafaker.interactive import (
     update_config_tables,
     update_missingness,
 )
+from datafaker.interactive.base import DbCmd
 from datafaker.make import (
     make_src_stats,
     make_table_generators,
@@ -36,7 +37,6 @@ from datafaker.make import (
 )
 from datafaker.remove import remove_db_data, remove_db_tables, remove_db_vocab
 from datafaker.settings import (
-    Settings,
     SettingsError,
     get_destination_dsn,
     get_destination_schema,
@@ -87,19 +87,8 @@ def _check_file_non_existence(file_path: Path) -> None:
         sys.exit(1)
 
 
-def _require_src_db_dsn(settings: Settings) -> str:
-    """Return the source DB DSN.
-
-    Check that source DB details have been set. Exit with error message if not.
-    """
-    if (src_dsn := settings.src_dsn) is None:
-        logger.error("Missing source database connection details.")
-        sys.exit(1)
-    return src_dsn
-
-
 def load_metadata_config(
-    orm_file_name: str, config: dict | None = None
+    orm_file_path: Path, config: dict | None = None
 ) -> dict[str, Any]:
     """
     Load the ``orm.yaml`` file, returning a dict representation.
@@ -110,7 +99,7 @@ def load_metadata_config(
     :return: A dict representing the ``orm.yaml`` file, with the tables
         the ``config`` says to ignore removed.
     """
-    with open(orm_file_name, encoding="utf-8") as orm_fh:
+    with orm_file_path.open(encoding="utf-8") as orm_fh:
         meta_dict = yaml.load(orm_fh, yaml.Loader)
         if not isinstance(meta_dict, dict):
             return {}
@@ -123,7 +112,7 @@ def load_metadata_config(
         return meta_dict
 
 
-def load_metadata(orm_file_name: str, config: dict | None = None) -> MetaData:
+def load_metadata(orm_file_path: Path, config: dict | None = None) -> MetaData:
     """
     Load metadata from ``orm.yaml``.
 
@@ -131,15 +120,15 @@ def load_metadata(orm_file_name: str, config: dict | None = None) -> MetaData:
     :param config: Used to exclude tables that are marked as ``ignore: true``.
     :return: SQLAlchemy MetaData object representing the database described by the loaded file.
     """
-    meta_dict = load_metadata_config(orm_file_name, config)
+    meta_dict = load_metadata_config(orm_file_path, config)
     return dict_to_metadata(meta_dict, None)
 
 
 def load_metadata_for_output(
-    orm_file_name: str, config: dict | None = None
+    orm_file_path: Path, config: dict | None = None
 ) -> MetaData:
     """Load metadata excluding any foreign keys pointing to ignored tables."""
-    meta_dict = load_metadata_config(orm_file_name, config)
+    meta_dict = load_metadata_config(orm_file_path, config)
     return dict_to_metadata(meta_dict, config)
 
 
@@ -153,12 +142,20 @@ def main(
 
 @app.command()
 def create_data(
-    orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
+    orm_file: Path = Option(
+        ORM_FILENAME,
+        help="The name of the ORM yaml file",
+        dir_okay=False,
+    ),
     df_file: str = Option(
         DF_FILENAME,
         help="The name of the generators file. Must be in the current working directory.",
+        dir_okay=False,
     ),
-    config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
+    config_file: Optional[Path] = Option(
+        CONFIG_FILENAME,
+        help="The configuration file",
+    ),
     num_passes: int = Option(1, help="Number of passes (rows or stories) to make"),
 ) -> None:
     """Populate the schema in the target directory with synthetic data.
@@ -210,8 +207,16 @@ def create_data(
 
 @app.command()
 def create_vocab(
-    orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
-    config_file: str = Option(CONFIG_FILENAME, help="The configuration file"),
+    orm_file: Path = Option(
+        ORM_FILENAME,
+        help="The name of the ORM yaml file",
+        dir_okay=False,
+    ),
+    config_file: Path = Option(
+        CONFIG_FILENAME,
+        help="The configuration file",
+        dir_okay=False,
+    ),
 ) -> None:
     """Import vocabulary data into the target database.
 
@@ -229,8 +234,16 @@ def create_vocab(
 
 @app.command()
 def create_tables(
-    orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
-    config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
+    orm_file: Path = Option(
+        ORM_FILENAME,
+        help="The name of the ORM yaml file",
+        dir_okay=False,
+    ),
+    config_file: Optional[Path] = Option(
+        CONFIG_FILENAME,
+        help="The configuration file",
+        dir_okay=False,
+    ),
 ) -> None:
     """Create schema from the ORM YAML file.
 
@@ -249,16 +262,29 @@ def create_tables(
 
 @app.command()
 def create_generators(
-    orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
-    df_file: str = Option(DF_FILENAME, help="Path to write Python generators to."),
-    config_file: str = Option(CONFIG_FILENAME, help="The configuration file"),
-    stats_file: Optional[str] = Option(
+    orm_file: Path = Option(
+        ORM_FILENAME,
+        help="The name of the ORM yaml file",
+        dir_okay=False,
+    ),
+    df_file: Path = Option(
+        DF_FILENAME,
+        help="Path to write Python generators to.",
+        dir_okay=False,
+    ),
+    config_file: Path = Option(
+        CONFIG_FILENAME,
+        help="The configuration file",
+        dir_okay=False,
+    ),
+    stats_file: Optional[Path] = Option(
         None,
         help=(
             "Statistics file (output of make-stats); default is src-stats.yaml if the "
             "config file references SRC_STATS, or None otherwise."
         ),
         show_default=False,
+        dir_okay=False,
     ),
     force: bool = Option(
         False, "--force", "-f", help="Overwrite any existing Python generators file."
@@ -274,13 +300,12 @@ def create_generators(
     """
     logger.debug("Making %s.", df_file)
 
-    df_file_path = Path(df_file)
     if not force:
-        _check_file_non_existence(df_file_path)
+        _check_file_non_existence(df_file)
 
     generator_config = read_config_file(config_file) if config_file is not None else {}
     if stats_file is None and generators_require_stats(generator_config):
-        stats_file = STATS_FILENAME
+        stats_file = Path(STATS_FILENAME)
     orm_metadata = load_metadata_for_output(orm_file, generator_config)
     result: str = make_table_generators(
         orm_metadata,
@@ -290,15 +315,23 @@ def create_generators(
         stats_file,
     )
 
-    df_file_path.write_text(result, encoding="utf-8")
+    df_file.write_text(result, encoding="utf-8")
 
     logger.debug("%s created.", df_file)
 
 
 @app.command()
 def make_vocab(
-    orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
-    config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
+    orm_file: Path = Option(
+        ORM_FILENAME,
+        help="The name of the ORM yaml file",
+        dir_okay=False,
+    ),
+    config_file: Optional[Path] = Option(
+        CONFIG_FILENAME,
+        help="The configuration file",
+        dir_okay=False,
+    ),
     force: bool = Option(
         False,
         "--force/--no-force",
@@ -328,45 +361,39 @@ def make_vocab(
 
 @app.command()
 def make_stats(
-    config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
-    stats_file: str = Option(STATS_FILENAME),
+    orm_file: Path = Option(
+        ORM_FILENAME,
+        help="The name of the ORM yaml file",
+        dir_okay=False,
+    ),
+    config_file: Optional[Path] = Option(
+        CONFIG_FILENAME,
+        help="The configuration file",
+        dir_okay=False,
+    ),
+    stats_file: Path = Option(STATS_FILENAME),
     force: bool = Option(
         False, "--force", "-f", help="Overwrite any existing vocabulary file."
     ),
-    parquet_dir: Optional[Path] = Option(
-        None,
-        help=(
-            "Directory of Parquet files to consider part of the database."
-            " This can be useful when using DuckDB."
-        ),
-        file_okay=False,
-        dir_okay=True,
-    ),
 ) -> None:
-    """Compute summary statistics from the source database.
-
-    Writes the statistics to a YAML file.
-
-    Example:
-        $ datafaker make_stats --config-file=example_config.yaml
-    """
+    """Compute summary statistics from the source database."""
     logger.debug("Creating %s.", stats_file)
 
-    stats_file_path = Path(stats_file)
     if not force:
-        _check_file_non_existence(stats_file_path)
+        _check_file_non_existence(stats_file)
 
     config = read_config_file(config_file) if config_file is not None else {}
+    meta_dict = load_metadata_config(orm_file, config)
 
     src_stats = asyncio.get_event_loop().run_until_complete(
         make_src_stats(
             get_source_dsn(),
             config,
             get_source_schema(),
-            parquet_dir=parquet_dir,
+            parquet_dir=meta_dict.get("parquet-dir", None),
         )
     )
-    stats_file_path.write_text(yaml.dump(src_stats), encoding="utf-8")
+    stats_file.write_text(yaml.dump(src_stats), encoding="utf-8")
     logger.debug("%s created.", stats_file)
 
 
@@ -409,73 +436,93 @@ def make_tables(
 
 @app.command()
 def configure_tables(
-    config_file: str = Option(
-        CONFIG_FILENAME, help="Path to write the configuration file to"
+    config_file: Path = Option(
+        CONFIG_FILENAME,
+        help="Path to write the configuration file to",
+        dir_okay=False,
     ),
-    orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
+    orm_file: Path = Option(
+        ORM_FILENAME,
+        help="The name of the ORM yaml file",
+        dir_okay=False,
+    ),
 ) -> None:
     """Interactively set tables to ignored, vocabulary or primary private."""
     logger.debug("Configuring tables in %s.", config_file)
-    config_file_path = Path(config_file)
     config = {}
-    if config_file_path.exists():
+    if config_file.exists():
         config = yaml.load(
-            config_file_path.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader
+            config_file.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader
         )
     # we don't pass config here so that no tables are ignored
-    metadata = load_metadata(orm_file)
+    meta_dict = load_metadata_config(orm_file)
+    metadata = dict_to_metadata(meta_dict, None)
     config_updated = update_config_tables(
         get_source_dsn(),
         get_source_schema(),
         metadata,
         config,
+        Path(meta_dict["parquet-dir"]) if "parquet-dir" in meta_dict else None,
     )
     if config_updated is None:
         logger.debug("Cancelled")
         return
     content = yaml.dump(config_updated)
-    config_file_path.write_text(content, encoding="utf-8")
+    config_file.write_text(content, encoding="utf-8")
     logger.debug("Tables configured in %s.", config_file)
 
 
 @app.command()
 def configure_missing(
-    config_file: str = Option(
-        CONFIG_FILENAME, help="Path to write the configuration file to"
+    config_file: Path = Option(
+        CONFIG_FILENAME,
+        help="Path to write the configuration file to",
+        dir_okay=False,
     ),
-    orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
+    orm_file: Path = Option(
+        ORM_FILENAME,
+        help="The name of the ORM yaml file",
+        dir_okay=False,
+    ),
 ) -> None:
     """Interactively set the missingness of the generated data."""
     logger.debug("Configuring missingness in %s.", config_file)
-    config_file_path = Path(config_file)
     config: dict[str, Any] = {}
-    if config_file_path.exists():
+    if config_file.exists():
         config_any = yaml.load(
-            config_file_path.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader
+            config_file.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader
         )
         if isinstance(config_any, dict):
             config = config_any
-    metadata = load_metadata(orm_file, config)
+    meta_dict = load_metadata_config(orm_file, config)
+    metadata = dict_to_metadata(meta_dict, None)
     config_updated = update_missingness(
         get_source_dsn(),
         get_source_schema(),
         metadata,
         config,
+        Path(meta_dict["parquet-dir"]) if "parquet-dir" in meta_dict else None,
     )
     if config_updated is None:
         logger.debug("Cancelled")
         return
     content = yaml.dump(config_updated)
-    config_file_path.write_text(content, encoding="utf-8")
+    config_file.write_text(content, encoding="utf-8")
     logger.debug("Generators missingness in %s.", config_file)
 
 
 @app.command()
 def configure_generators(
-    config_file: str = Option(
-        CONFIG_FILENAME, help="Path of the configuration file to alter"
+    config_file: Path = Option(
+        CONFIG_FILENAME,
+        help="Path of the configuration file to alter",
+        dir_okay=False,
     ),
-    orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
+    orm_file: Path = Option(
+        ORM_FILENAME,
+        help="The name of the ORM yaml file",
+        dir_okay=False,
+    ),
     spec: Path = Option(
         None,
         help=(
@@ -486,25 +533,28 @@ def configure_generators(
 ) -> None:
     """Interactively set generators for column data."""
     logger.debug("Configuring generators in %s.", config_file)
-    config_file_path = Path(config_file)
     config = {}
-    if config_file_path.exists():
+    if config_file.exists():
         config = yaml.load(
-            config_file_path.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader
+            config_file.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader
         )
-    metadata = load_metadata(orm_file)
+    meta_dict = load_metadata_config(orm_file)
+    metadata = dict_to_metadata(meta_dict, None)
     config_updated = update_config_generators(
-        get_source_dsn(),
-        get_source_schema(),
-        metadata,
-        config,
+        DbCmd.Settings(
+            get_source_dsn(),
+            get_source_schema(),
+            config,
+            metadata,
+            meta_dict.get("parquet-dir", None),
+        ),
         spec_path=spec,
     )
     if config_updated is None:
         logger.debug("Cancelled")
         return
     content = yaml.dump(config_updated)
-    config_file_path.write_text(content, encoding="utf-8")
+    config_file.write_text(content, encoding="utf-8")
     logger.debug("Generators configured in %s.", config_file)
 
 
@@ -548,12 +598,12 @@ def _dump_csv_to_stdout(
 
 def _get_writer(
     parquet: bool,
-    output: str | None,
+    output: Path | None,
     metadata: MetaData,
     dsn: str,
     schema_name: str | None,
 ) -> TableWriter:
-    if parquet or output and output.endswith(ParquetTableWriter.EXTENSION):
+    if parquet or output and output.suffix == ParquetTableWriter.EXTENSION:
         return get_parquet_table_writer(metadata, dsn, schema_name)
     return CsvTableWriter(metadata, dsn, schema_name)
 
@@ -579,21 +629,29 @@ def _dump_tables_to_directory(
 
 @app.command()
 def dump_data(
-    config_file: Optional[str] = Option(
-        CONFIG_FILENAME, help="Path of the configuration file to use"
+    config_file: Optional[Path] = Option(
+        CONFIG_FILENAME,
+        help="Path of the configuration file to use",
+        dir_okay=False,
     ),
-    orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
+    orm_file: Path = Option(
+        ORM_FILENAME,
+        help="The name of the ORM yaml file",
+        dir_okay=False,
+    ),
     table: list[str] = Option(
         default=[],
         help="The tables to dump (default is all non-ignored, non-vocabulary tables)",
     ),
-    output: str
+    output: Path
     | None = Option(
         None,
         help=(
             "Output CSV or Parquet file name,"
             " directory to write into or - to output to the console"
         ),
+        file_okay=True,
+        dir_okay=True,
     ),
     parquet: bool = Option(
         False,
@@ -650,8 +708,16 @@ def validate_config(
 
 @app.command()
 def remove_data(
-    orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
-    config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
+    orm_file: Path = Option(
+        ORM_FILENAME,
+        help="The name of the ORM yaml file",
+        dir_okay=False,
+    ),
+    config_file: Optional[Path] = Option(
+        CONFIG_FILENAME,
+        help="The configuration file",
+        dir_okay=False,
+    ),
     yes: bool = Option(
         False, "--yes", prompt="Are you sure?", help="Just remove, don't ask first"
     ),
@@ -669,8 +735,16 @@ def remove_data(
 
 @app.command()
 def remove_vocab(
-    orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
-    config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
+    orm_file: Path = Option(
+        ORM_FILENAME,
+        help="The name of the ORM yaml file",
+        dir_okay=False,
+    ),
+    config_file: Optional[Path] = Option(
+        CONFIG_FILENAME,
+        help="The configuration file",
+        dir_okay=False,
+    ),
     yes: bool = Option(
         False, "--yes", prompt="Are you sure?", help="Just remove, don't ask first"
     ),
@@ -689,8 +763,16 @@ def remove_vocab(
 
 @app.command()
 def remove_tables(
-    orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
-    config_file: str = Option(CONFIG_FILENAME, help="The configuration file"),
+    orm_file: Path = Option(
+        ORM_FILENAME,
+        help="The name of the ORM yaml file",
+        dir_okay=False,
+    ),
+    config_file: Path = Option(
+        CONFIG_FILENAME,
+        help="The configuration file",
+        dir_okay=False,
+    ),
     # pylint: disable=redefined-builtin
     all: bool = Option(
         False,
@@ -732,8 +814,16 @@ class TableType(str, Enum):
 
 @app.command()
 def list_tables(
-    orm_file: str = Option(ORM_FILENAME, help="The name of the ORM yaml file"),
-    config_file: Optional[str] = Option(CONFIG_FILENAME, help="The configuration file"),
+    orm_file: Path = Option(
+        ORM_FILENAME,
+        help="The name of the ORM yaml file",
+        dir_okay=False,
+    ),
+    config_file: Optional[Path] = Option(
+        CONFIG_FILENAME,
+        help="The configuration file",
+        dir_okay=False,
+    ),
     tables: TableType = Option(TableType.GENERATED, help="Which tables to list"),
 ) -> None:
     """List the names of tables described in the metadata file."""

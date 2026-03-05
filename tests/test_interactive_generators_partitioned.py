@@ -7,6 +7,7 @@ from unittest import TestCase
 from sqlalchemy import Connection, MetaData, insert, select
 
 from datafaker.generators import NullPartitionedNormalGeneratorFactory
+from datafaker.interactive.base import DbCmd
 from tests.test_interactive_generators import TestGeneratorCmd
 from tests.utils import GeneratesDBTestCase
 
@@ -140,7 +141,9 @@ class NullPartitionedTests(GeneratesDBTestCase):
 
     def _get_cmd(self, config: MutableMapping[str, Any]) -> TestGeneratorCmd:
         """Get the configure-generators object as our command."""
-        return TestGeneratorCmd(self.dsn, self.schema_name, self.metadata, config)
+        return TestGeneratorCmd(
+            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
+        )
 
     def _propose(self, gc: TestGeneratorCmd) -> dict[str, tuple[int, str, list[str]]]:
         gc.reset()

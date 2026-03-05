@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from types import TracebackType
 from typing import Any, Optional, Type
 
@@ -121,22 +122,38 @@ class DbCmd(ABC, cmd.Cmd):
         :return: The table entry or None if this table should not be interacted with.
         """
 
+    @dataclass
+    class Settings:
+        """Settings for the source database."""
+
+        dsn: str
+        schema: str | None
+        config: MutableMapping[str, Any]
+        metadata: MetaData
+        parquet_dir: Path | None
+
     def __init__(
         self,
-        src_dsn: str,
-        src_schema: str | None,
-        metadata: MetaData,
-        config: MutableMapping[str, Any],
+        settings: Settings,
     ):
-        """Initialise a DbCmd."""
+        """
+        Initialise a DbCmd.
+
+        :param src_dsn: The database connection string for the source database.
+        :param src_schema: The name of the schema name for the source database.
+        :param metadata: The metadata for the source database.
+        :param config: The ``config.xml`` object.
+        :param parquet_dir: The directory where parquet files are stored that
+          are to be considered part of the source database (only for DuckDB).
+        """
         super().__init__()
-        self.config: MutableMapping[str, Any] = config
-        self.metadata = metadata
+        self.config: MutableMapping[str, Any] = settings.config
+        self.metadata = settings.metadata
         self._table_entries: list[TableEntry] = []
-        tables_config: MutableMapping = config.get("tables", {})
+        tables_config: MutableMapping = self.config.get("tables", {})
         if not isinstance(tables_config, MutableMapping):
             tables_config = {}
-        for name in metadata.tables.keys():
+        for name in self.metadata.tables.keys():
             table_config = tables_config.get(name, {})
             if not isinstance(table_config, MutableMapping):
                 table_config = {}
@@ -144,7 +161,11 @@ class DbCmd(ABC, cmd.Cmd):
             if entry is not None:
                 self._table_entries.append(entry)
         self.table_index = 0
-        self.engine = create_db_engine(src_dsn, schema_name=src_schema)
+        self.engine = create_db_engine(
+            settings.dsn,
+            schema_name=settings.schema,
+            parquet_dir=settings.parquet_dir,
+        )
 
     @property
     def sync_engine(self) -> Engine:
