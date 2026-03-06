@@ -817,25 +817,26 @@ def generators_require_stats(config: Mapping) -> bool:
     stats_required = False
     for where, call in (ois | sgs | table_calls).items():
         for n, arg in enumerate(call.get("args", [])):
-            try:
-                names = (
-                    node.id
-                    for node in ast.walk(ast.parse(arg))
-                    if isinstance(node, ast.Name)
-                )
-                if any(name == "SRC_STATS" for name in names):
-                    stats_required = True
-            except SyntaxError as e:
-                errors.append(
-                    (
-                        "Syntax error in argument %d of %s: %s\n%s%s",
-                        n + 1,
-                        where,
-                        e.msg,
-                        arg,
-                        underline_error(e),
+            if isinstance(arg, str):
+                try:
+                    names = (
+                        node.id
+                        for node in ast.walk(ast.parse(arg))
+                        if isinstance(node, ast.Name)
                     )
-                )
+                    if any(name == "SRC_STATS" for name in names):
+                        stats_required = True
+                except SyntaxError as e:
+                    errors.append(
+                        (
+                            "Syntax error in argument %d of %s: %s\n%s%s",
+                            n + 1,
+                            where,
+                            e.msg,
+                            arg,
+                            underline_error(e),
+                        )
+                    )
         for k, arg in call.get("kwargs", {}).items():
             if isinstance(arg, str):
                 try:

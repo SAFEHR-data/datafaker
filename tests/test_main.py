@@ -103,29 +103,35 @@ class TestCliGeneratorOutput(DatafakerTestCase):
         with Path("df.py").open(encoding="utf-8") as dfh:
             self.assertEqual(dfh.read(), "some text")
 
-
-class TestCLI(DatafakerTestCase):
-    """Tests for the command-line interface."""
-
     @patch("datafaker.main.logger")
     def test_create_generators_errors_if_file_exists(
         self,
         mock_logger: MagicMock,
     ) -> None:
         """Test the create-generators sub-command doesn't overwrite."""
+        df_path = Path("df.py")
+
+        with df_path.open(mode="w", encoding="utf-8") as dfh:
+            dfh.write("already exists!\n")
 
         result = runner.invoke(
             app,
             [
                 "create-generators",
+                "--config-file",
+                self.example_conf,
             ],
             catch_exceptions=False,
         )
         mock_logger.error.assert_called_once_with(
             "%s should not already exist. Exiting...",
-            Path("df.py"),
+            df_path,
         )
         self.assertEqual(1, result.exit_code)
+
+
+class TestCLI(DatafakerTestCase):
+    """Tests for the command-line interface."""
 
     @patch("datafaker.main.read_config_file")
     @patch("datafaker.main.load_metadata_for_output")
