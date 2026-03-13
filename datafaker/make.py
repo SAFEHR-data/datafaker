@@ -31,6 +31,7 @@ from datafaker.utils import (
     create_db_engine,
     download_table,
     get_columns_assigned,
+    get_metadata,
     get_property,
     get_related_table_names,
     get_row_generators,
@@ -703,8 +704,7 @@ def make_tables_file(
     """Construct the YAML file representing the schema."""
     engine = get_sync_engine(create_db_engine(db_dsn, schema_name=schema_name))
 
-    metadata = MetaData()
-    metadata.reflect(engine)
+    metadata = get_metadata(engine)
     meta_dict = metadata_to_dict(metadata, schema_name, engine, parquet_dir)
 
     if parquet_dir is not None:

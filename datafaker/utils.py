@@ -33,7 +33,12 @@ from jsonschema.exceptions import ValidationError
 from jsonschema.validators import validate
 from sqlalchemy import Connection, Engine, ForeignKey, create_engine, event, select
 from sqlalchemy.engine.interfaces import DBAPIConnection
-from sqlalchemy.exc import IntegrityError, ProgrammingError
+from sqlalchemy.exc import (
+    IntegrityError,
+    NoSuchModuleError,
+    OperationalError,
+    ProgrammingError,
+)
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import (
@@ -43,6 +48,7 @@ from sqlalchemy.schema import (
     MetaData,
     Table,
 )
+from typer import Exit
 
 # Define some types used repeatedly in the code base
 MaybeAsyncEngine = Union[Engine, AsyncEngine]
@@ -193,11 +199,16 @@ def create_db_engine(
     **kwargs: Any,
 ) -> MaybeAsyncEngine:
     """Create a SQLAlchemy Engine."""
-    if use_asyncio:
-        async_dsn = db_dsn.replace("postgresql://", "postgresql+asyncpg://")
-        engine: MaybeAsyncEngine = create_async_engine(async_dsn, **kwargs)
-    else:
-        engine = create_engine(db_dsn, **kwargs)
+    try:
+        if use_asyncio:
+            async_dsn = db_dsn.replace("postgresql://", "postgresql+asyncpg://")
+            engine: MaybeAsyncEngine = create_async_engine(async_dsn, **kwargs)
+        else:
+            engine = create_engine(db_dsn, **kwargs)
+    except NoSuchModuleError as exc:
+        logger.error("Failed to connect to the database: %s", exc)
+        logger.error("Perhaps the dialect '%s' is invalid.", db_dsn.split(":")[0])
+        raise Exit(1) from exc
 
     settings = {}
     if schema_name is not None:
@@ -246,6 +257,17 @@ def create_db_engine_dst(
             },
         )
     return create_db_engine(db_dsn, schema_name, use_asyncio)
+
+
+def get_metadata(engine: Engine) -> MetaData:
+    """Get the MetaData object associated with the engine passed."""
+    md = MetaData()
+    try:
+        md.reflect(engine)
+    except OperationalError as exc:
+        logger.error("Cannot connect to database: %s", exc)
+        raise Exit(1) from exc
+    return md
 
 
 def _find_parquet_directories(parquet_dir: Path) -> list[str]:

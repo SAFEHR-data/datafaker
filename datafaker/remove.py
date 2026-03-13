@@ -6,6 +6,7 @@ from sqlalchemy import MetaData, delete
 from datafaker.settings import get_destination_dsn, get_destination_schema
 from datafaker.utils import (
     create_db_engine,
+    get_metadata,
     get_sync_engine,
     get_vocabulary_table_names,
     logger,
@@ -67,6 +68,5 @@ def remove_db_tables(metadata: Optional[MetaData]) -> None:
         )
     )
     if metadata is None:
-        metadata = MetaData()
-        metadata.reflect(dst_engine)
+        metadata = get_metadata(dst_engine)
     metadata.drop_all(dst_engine)
