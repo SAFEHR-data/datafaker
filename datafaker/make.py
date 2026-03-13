@@ -2,11 +2,12 @@
 import asyncio
 import decimal
 import inspect
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from types import TracebackType
-from typing import Any, Callable, Final, Mapping, Optional, Sequence, Tuple, Type, Union
+from typing import Any, Final, Optional, Tuple, Type, Union
 
 import pandas as pd
 import snsql
@@ -582,9 +583,9 @@ def make_vocabulary_tables(
 def make_table_generators(  # pylint: disable=too-many-locals
     metadata: MetaData,
     config: Mapping,
-    orm_filename: str,
-    config_filename: str,
-    src_stats_filename: Optional[str],
+    orm_filename: Path,
+    config_filename: Path,
+    src_stats_filename: Optional[Path],
 ) -> str:
     """
     Create datafaker generator classes.
@@ -704,7 +705,7 @@ def make_tables_file(
 
     metadata = MetaData()
     metadata.reflect(engine)
-    meta_dict = metadata_to_dict(metadata, schema_name, engine)
+    meta_dict = metadata_to_dict(metadata, schema_name, engine, parquet_dir)
 
     if parquet_dir is not None:
         extra_meta = get_parquet_orm(parquet_dir)
@@ -800,7 +801,10 @@ def fix_types(dics: list[dict]) -> list[dict]:
 
 
 async def make_src_stats(
-    dsn: str, config: Mapping, schema_name: Optional[str] = None
+    dsn: str,
+    config: Mapping,
+    schema_name: Optional[str] = None,
+    parquet_dir: Optional[Path] = None,
 ) -> dict[str, dict[str, Any]]:
     """
     Run the src-stats queries specified by the configuration.
@@ -815,7 +819,12 @@ async def make_src_stats(
     :return: The dictionary of src-stats.
     """
     use_asyncio = config.get("use-asyncio", False)
-    engine = create_db_engine(dsn, schema_name=schema_name, use_asyncio=use_asyncio)
+    engine = create_db_engine(
+        dsn,
+        schema_name=schema_name,
+        use_asyncio=use_asyncio,
+        parquet_dir=parquet_dir,
+    )
     async with DbConnection(engine) as db_conn:
         return await make_src_stats_connection(config, db_conn)
 

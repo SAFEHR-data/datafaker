@@ -7,6 +7,7 @@ from typing import Any, Iterable
 from sqlalchemy import Connection, MetaData, select
 
 from datafaker.generators.choice import ChoiceGeneratorFactory
+from datafaker.interactive.base import DbCmd
 from datafaker.interactive.generators import GeneratorCmd
 from tests.utils import (
     GeneratesDBTestCase,
@@ -39,7 +40,9 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
 
     def _get_cmd(self, config: MutableMapping[str, Any]) -> TestGeneratorCmd:
         """Get the command we are using for this test case."""
-        return TestGeneratorCmd(self.dsn, self.schema_name, self.metadata, config)
+        return TestGeneratorCmd(
+            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
+        )
 
     def test_null_configuration(self) -> None:
         """Test that the tables having null configuration does not break."""
@@ -594,7 +597,9 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
         ChoiceGeneratorFactory.SUPPRESS_COUNT = 5
 
     def _get_cmd(self, config: MutableMapping[str, Any]) -> TestGeneratorCmd:
-        return TestGeneratorCmd(self.dsn, self.schema_name, self.metadata, config)
+        return TestGeneratorCmd(
+            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
+        )
 
     def _propose(self, gc: TestGeneratorCmd) -> dict[str, tuple[int, str, list[str]]]:
         gc.reset()
@@ -756,7 +761,9 @@ class GeneratorTests(GeneratesDBTestCase):
 
     def _get_cmd(self, config: MutableMapping[str, Any]) -> TestGeneratorCmd:
         """We are using configure-generators."""
-        return TestGeneratorCmd(self.dsn, self.schema_name, self.metadata, config)
+        return TestGeneratorCmd(
+            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
+        )
 
     def test_set_null(self) -> None:
         """Test that we can sample real missingness and reproduce it."""

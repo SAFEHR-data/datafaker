@@ -1,10 +1,9 @@
 """Table configuration command shell."""
-from collections.abc import Mapping, MutableMapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
 import sqlalchemy
-from sqlalchemy import MetaData
 
 from datafaker.interactive.base import (
     TYPE_LETTER,
@@ -92,15 +91,12 @@ to exit this program."""
 
     def __init__(
         self,
-        src_dsn: str,
-        src_schema: str | None,
-        metadata: MetaData,
-        config: MutableMapping[str, Any],
+        settings: DbCmd.Settings,
         *args: Any,
         **kwargs: Any,
     ) -> None:
         """Initialise a TableCmd."""
-        super().__init__(src_dsn, src_schema, metadata, config, *args, **kwargs)
+        super().__init__(settings, *args, **kwargs)
         self.set_prompt()
 
     @property

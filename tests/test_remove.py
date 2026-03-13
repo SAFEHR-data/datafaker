@@ -54,7 +54,12 @@ class RemoveThingsTestCase(RequiresDBTestCase):
             src_dsn=self.dsn,
             dst_dsn=self.dsn,
         )
-        meta_dict = metadata_to_dict(self.metadata, self.schema_name, self.sync_engine)
+        meta_dict = metadata_to_dict(
+            self.metadata,
+            self.schema_name,
+            self.sync_engine,
+            parquet_dir=None,
+        )
         config = {
             "tables": {
                 "manufacturer": {"vocabulary_table": True},

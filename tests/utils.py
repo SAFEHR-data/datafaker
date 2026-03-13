@@ -5,11 +5,13 @@ import random
 import re
 import shutil
 import string
+import sys
 import time
 import traceback
 from abc import ABC, abstractmethod
 from collections.abc import MutableSequence, Sequence
 from functools import lru_cache
+from importlib import resources
 from pathlib import Path
 from subprocess import run
 from tempfile import mkdtemp, mkstemp
@@ -234,9 +236,29 @@ class DatafakerTestCase(TestCase):
     examples_dir = Path("tests/examples")
     dump_file_path: str | None = None
     database_name: str | None = None
+    use_temporary_cwd = False
+    copy_files: list[str] = []
+    copy_from_directory: Path = Path(".")
 
     def setUp(self) -> None:
+        super().setUp()
         settings.get_settings.cache_clear()
+        if self.use_temporary_cwd:
+            self.start_dir = os.getcwd()
+            self.working_dir = mkdtemp("test")
+            from_dir = resources.files(sys.modules["tests"]) / str(
+                self.copy_from_directory
+            )
+            for cf in self.copy_files:
+                with resources.as_file(from_dir / cf) as cff:
+                    shutil.copy(cff, self.working_dir)
+            os.chdir(self.working_dir)
+
+    def tearDown(self) -> None:
+        if self.use_temporary_cwd:
+            os.chdir(self.start_dir)
+            shutil.rmtree(self.working_dir)
+        super().tearDown()
 
     def assertReturnCode(  # pylint: disable=invalid-name
         self, result: Any, expected_code: int
@@ -448,9 +470,9 @@ class GeneratesDBTestCase(RequiresDBTestCase):
         datafaker_content = make_table_generators(
             self.metadata,
             config,
-            self.orm_file_path,
-            self.config_file_path,
-            self.stats_file_path,
+            Path(self.orm_file_path),
+            Path(self.config_file_path),
+            Path(self.stats_file_path),
         )
         (generators_fd, self.generators_file_path) = mkstemp(".py", "dfgen_", text=True)
         with os.fdopen(generators_fd, "w", encoding="utf-8") as datafaker_fh:

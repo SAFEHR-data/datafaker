@@ -1,10 +1,8 @@
 """Missingness configuration shell."""
 import re
-from collections.abc import Iterable, Mapping, MutableMapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import cast
-
-from sqlalchemy import MetaData
 
 from datafaker.interactive.base import DbCmd, TableEntry
 
@@ -139,20 +137,14 @@ data from the database. Use 'quit' to exit this tool."""
 
     def __init__(
         self,
-        src_dsn: str,
-        src_schema: str | None,
-        metadata: MetaData,
-        config: MutableMapping,
+        settings: DbCmd.Settings,
     ):
         """
         Initialise a MissingnessCmd.
 
-        :param src_dsn: connection string for the source database.
-        :param src_schema: schema name for the source database.
-        :param metadata: SQLAlchemy metadata for the source database.
-        :param config: Configuration from the ``config.yaml`` file.
+        :param settings: source database settings.
         """
-        super().__init__(src_dsn, src_schema, metadata, config)
+        super().__init__(settings)
         self.set_prompt()
 
     @property

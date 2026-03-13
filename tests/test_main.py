@@ -1,6 +1,7 @@
 """Tests for the main module."""
 import os
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, call, patch
 
 import yaml
@@ -14,38 +15,17 @@ from tests.utils import DatafakerTestCase, get_test_settings
 runner = CliRunner(mix_stderr=False)
 
 
-class TestCLI(DatafakerTestCase):
+class TestCliGeneratorOutput(DatafakerTestCase):
     """Tests for the command-line interface."""
 
-    @patch("datafaker.main.read_config_file")
-    @patch("datafaker.main.dict_to_metadata")
-    @patch("datafaker.main.load_metadata_config")
-    @patch("datafaker.main.create_db_vocab")
-    def test_create_vocab(
-        self,
-        mock_create: MagicMock,
-        mock_mdict: MagicMock,
-        mock_meta: MagicMock,
-        mock_config: MagicMock,
-    ) -> None:
-        """Test the create-vocab sub-command."""
-        result = runner.invoke(
-            app,
-            [
-                "create-vocab",
-            ],
-            catch_exceptions=False,
-        )
-
-        mock_create.assert_called_once_with(
-            mock_meta.return_value, mock_mdict.return_value, mock_config.return_value
-        )
-        self.assertSuccess(result)
+    use_temporary_cwd = True
+    example_conf = "example_config.yaml"
+    copy_files = [example_conf, "orm.yaml"]
+    copy_from_directory = Path("examples")
 
     @patch("datafaker.main.read_config_file")
     @patch("datafaker.main.load_metadata_for_output")
     @patch("datafaker.settings.get_settings")
-    @patch("datafaker.main.Path")
     @patch("datafaker.main.make_table_generators")
     @patch("datafaker.main.generators_require_stats")
     # pylint: disable=too-many-positional-arguments,too-many-arguments
@@ -53,14 +33,12 @@ class TestCLI(DatafakerTestCase):
         self,
         mock_require_stats: MagicMock,
         mock_make: MagicMock,
-        mock_path: MagicMock,
         mock_settings: MagicMock,
         mock_load_meta: MagicMock,
         mock_config: MagicMock,
     ) -> None:
         """Test the create-generators sub-command."""
         mock_require_stats.return_value = False
-        mock_path.return_value.exists.return_value = False
         mock_make.return_value = "some text"
         mock_settings.return_value.src_postges_dsn = ""
 
@@ -68,26 +46,26 @@ class TestCLI(DatafakerTestCase):
             app,
             [
                 "create-generators",
+                "--config-file",
+                self.example_conf,
             ],
             catch_exceptions=False,
         )
+        self.assertSuccess(result)
 
         mock_make.assert_called_once_with(
             mock_load_meta.return_value,
             mock_config.return_value,
-            "orm.yaml",
-            "config.yaml",
+            Path("orm.yaml"),
+            Path(self.example_conf),
             None,
         )
-        mock_path.return_value.write_text.assert_called_once_with(
-            "some text", encoding="utf-8"
-        )
-        self.assertSuccess(result)
+        with Path("df.py").open(encoding="utf-8") as dfh:
+            self.assertEqual(dfh.read(), "some text")
 
     @patch("datafaker.main.read_config_file")
     @patch("datafaker.main.load_metadata_for_output")
     @patch("datafaker.settings.get_settings")
-    @patch("datafaker.main.Path")
     @patch("datafaker.main.make_table_generators")
     @patch("datafaker.main.generators_require_stats")
     # pylint: disable=too-many-positional-arguments,too-many-arguments
@@ -95,14 +73,12 @@ class TestCLI(DatafakerTestCase):
         self,
         mock_require_stats: MagicMock,
         mock_make: MagicMock,
-        mock_path: MagicMock,
         mock_settings: MagicMock,
         mock_load_meta: MagicMock,
         mock_config: MagicMock,
     ) -> None:
         """Test the create-generators sub-command."""
         mock_require_stats.return_value = True
-        mock_path.return_value.exists.return_value = False
         mock_make.return_value = "some text"
         mock_settings.return_value.src_postges_dsn = ""
 
@@ -110,6 +86,8 @@ class TestCLI(DatafakerTestCase):
             app,
             [
                 "create-generators",
+                "--config-file",
+                self.example_conf,
             ],
             catch_exceptions=False,
         )
@@ -117,54 +95,58 @@ class TestCLI(DatafakerTestCase):
         mock_make.assert_called_once_with(
             mock_load_meta.return_value,
             mock_config.return_value,
-            "orm.yaml",
-            "config.yaml",
-            "src-stats.yaml",
-        )
-        mock_path.return_value.write_text.assert_called_once_with(
-            "some text", encoding="utf-8"
+            Path("orm.yaml"),
+            Path(self.example_conf),
+            Path("src-stats.yaml"),
         )
         self.assertSuccess(result)
+        with Path("df.py").open(encoding="utf-8") as dfh:
+            self.assertEqual(dfh.read(), "some text")
 
-    @patch("datafaker.main.Path")
     @patch("datafaker.main.logger")
     def test_create_generators_errors_if_file_exists(
-        self, mock_logger: MagicMock, mock_path: MagicMock
+        self,
+        mock_logger: MagicMock,
     ) -> None:
         """Test the create-generators sub-command doesn't overwrite."""
+        df_path = Path("df.py")
 
-        mock_path.return_value.exists.return_value = True
-        mock_path.return_value.__str__.return_value = "df.py"
+        with df_path.open(mode="w", encoding="utf-8") as dfh:
+            dfh.write("already exists!\n")
 
         result = runner.invoke(
             app,
             [
                 "create-generators",
+                "--config-file",
+                self.example_conf,
             ],
             catch_exceptions=False,
         )
         mock_logger.error.assert_called_once_with(
-            "%s should not already exist. Exiting...", mock_path.return_value
+            "%s should not already exist. Exiting...",
+            df_path,
         )
         self.assertEqual(1, result.exit_code)
+
+
+class TestCLI(DatafakerTestCase):
+    """Tests for the command-line interface."""
 
     @patch("datafaker.main.read_config_file")
     @patch("datafaker.main.load_metadata_for_output")
     @patch("datafaker.settings.get_settings")
-    @patch("datafaker.main.Path")
     @patch("datafaker.main.make_table_generators")
     # pylint: disable=too-many-positional-arguments,too-many-arguments
     def test_create_generators_with_force_enabled(
         self,
         mock_make: MagicMock,
-        mock_path: MagicMock,
         mock_settings: MagicMock,
         mock_load_meta: MagicMock,
         mock_config: MagicMock,
     ) -> None:
         """Tests the create-generators sub-commands overwrite files when instructed."""
 
-        mock_path.return_value.exists.return_value = True
         mock_make.return_value = "make result"
         mock_settings.return_value.src_postges_dsn = ""
 
@@ -178,20 +160,15 @@ class TestCLI(DatafakerTestCase):
                     ],
                 )
 
+                self.assertSuccess(result)
                 mock_make.assert_called_once_with(
                     mock_load_meta.return_value,
                     mock_config.return_value,
-                    "orm.yaml",
-                    "config.yaml",
+                    Path("orm.yaml"),
+                    Path("config.yaml"),
                     None,
                 )
-                mock_path.return_value.write_text.assert_called_once_with(
-                    "make result", encoding="utf-8"
-                )
-                self.assertSuccess(result)
-
                 mock_make.reset_mock()
-                mock_path.reset_mock()
 
     @patch("datafaker.main.create_db_tables")
     @patch("datafaker.main.read_config_file")
@@ -364,125 +341,6 @@ class TestCLI(DatafakerTestCase):
                 mock_make_tables.reset_mock()
                 mock_path.reset_mock()
 
-    @patch("datafaker.main.Path")
-    @patch("datafaker.main.make_src_stats")
-    @patch("datafaker.settings.get_settings")
-    def test_make_stats(
-        self,
-        mock_get_settings: MagicMock,
-        mock_make: MagicMock,
-        mock_path: MagicMock,
-    ) -> None:
-        """Test the make-stats sub-command."""
-        example_conf_path = "tests/examples/example_config.yaml"
-        output_path = Path("make_stats_output.yaml")
-        mock_path.return_value.exists.return_value = False
-        mock_make.return_value = {"a": 1}
-        mock_get_settings.return_value = get_test_settings()
-        result = runner.invoke(
-            app,
-            [
-                "make-stats",
-                f"--stats-file={output_path}",
-                f"--config-file={example_conf_path}",
-            ],
-            catch_exceptions=False,
-        )
-        self.assertSuccess(result)
-        with open(example_conf_path, "r", encoding="utf8") as f:
-            config = yaml.safe_load(f)
-        mock_make.assert_called_once_with(get_test_settings().src_dsn, config, None)
-        mock_path.return_value.write_text.assert_called_once_with(
-            "a: 1\n", encoding="utf-8"
-        )
-
-    @patch("datafaker.main.Path")
-    @patch("datafaker.main.logger")
-    def test_make_stats_errors_if_file_exists(
-        self, mock_logger: MagicMock, mock_path: MagicMock
-    ) -> None:
-        """Test the make-stats sub-command when the stats file already exists."""
-        mock_path.return_value.exists.return_value = True
-        example_conf_path = "tests/examples/example_config.yaml"
-        output_path = "make_stats_output.yaml"
-        mock_path.return_value.__str__.return_value = output_path
-
-        result = runner.invoke(
-            app,
-            [
-                "make-stats",
-                f"--stats-file={output_path}",
-                f"--config-file={example_conf_path}",
-            ],
-            catch_exceptions=False,
-        )
-        mock_logger.error.assert_called_once_with(
-            "%s should not already exist. Exiting...", mock_path.return_value
-        )
-        self.assertEqual(1, result.exit_code)
-
-    @patch.dict(os.environ, {"SRC_SCHEMA": "myschema"}, clear=True)
-    def test_make_stats_errors_if_no_src_dsn(self) -> None:
-        """Test the make-stats sub-command with missing settings."""
-        example_conf_path = "tests/examples/example_config.yaml"
-
-        self.assertRaises(
-            SettingsError,
-            runner.invoke,
-            app,
-            [
-                "make-stats",
-                f"--config-file={example_conf_path}",
-                "--stats-file=tests/examples/does-not-exist.yaml",
-            ],
-            catch_exceptions=False,
-        )
-
-    @patch("datafaker.main.Path")
-    @patch("datafaker.main.make_src_stats")
-    @patch("datafaker.settings.get_settings")
-    def test_make_stats_with_force_enabled(
-        self,
-        mock_get_settings: MagicMock,
-        mock_make_src_stats: MagicMock,
-        mock_path: MagicMock,
-    ) -> None:
-        """Tests that the make-stats command overwrite files when instructed."""
-        test_config_file: str = "tests/examples/example_config.yaml"
-        with open(test_config_file, "r", encoding="utf8") as f:
-            config_file_content: dict = yaml.safe_load(f)
-
-        mock_path.return_value.exists.return_value = True
-        test_settings: Settings = get_test_settings()
-        mock_get_settings.return_value = test_settings
-        make_test_output: dict = {"some_stat": 0}
-        mock_make_src_stats.return_value = make_test_output
-
-        for force_option in ["--force", "-f"]:
-            with self.subTest(f"Using option {force_option}"):
-                result: Result = runner.invoke(
-                    app,
-                    [
-                        "make-stats",
-                        "--stats-file=stats_file.yaml",
-                        f"--config-file={test_config_file}",
-                        force_option,
-                    ],
-                )
-
-                mock_make_src_stats.assert_called_once_with(
-                    test_settings.src_dsn,
-                    config_file_content,
-                    test_settings.src_schema,
-                )
-                mock_path.return_value.write_text.assert_called_once_with(
-                    "some_stat: 0\n", encoding="utf-8"
-                )
-                self.assertSuccess(result)
-
-                mock_make_src_stats.reset_mock()
-                mock_path.reset_mock()
-
     def test_validate_config(self) -> None:
         """Test the validate-config sub-command."""
         result = runner.invoke(
@@ -541,7 +399,7 @@ class TestCLI(DatafakerTestCase):
             catch_exceptions=False,
         )
         self.assertEqual(0, result.exit_code)
-        mock_read_config.assert_called_once_with("config.yaml")
+        mock_read_config.assert_called_once_with(Path("config.yaml"))
         mock_remove.assert_called_once_with(
             mock_d2m.return_value,
             mock_load_metadata.return_value,
@@ -562,3 +420,150 @@ class TestCLI(DatafakerTestCase):
         )
         self.assertEqual(0, result.exit_code)
         mock_remove.assert_called_once_with(mock_meta.return_value)
+
+
+class TestCliOutput(DatafakerTestCase):
+    """Test CLI commands that output files."""
+
+    use_temporary_cwd = True
+    example_conf = "example_config.yaml"
+    copy_files = [example_conf, "orm.yaml"]
+    copy_from_directory = Path("examples")
+
+    def load_yaml(self, file_name: str | Path) -> Any:
+        """Load the YAML and return it as a dict."""
+        with open(file_name, "r", encoding="utf-8") as fh:
+            return yaml.load(fh, yaml.SafeLoader)
+
+    @patch("datafaker.main.read_config_file")
+    @patch("datafaker.main.dict_to_metadata")
+    @patch("datafaker.main.load_metadata_config")
+    @patch("datafaker.main.create_db_vocab")
+    def test_create_vocab(
+        self,
+        mock_create: MagicMock,
+        mock_mdict: MagicMock,
+        mock_meta: MagicMock,
+        mock_config: MagicMock,
+    ) -> None:
+        """Test the create-vocab sub-command."""
+        result = runner.invoke(
+            app,
+            [
+                "create-vocab",
+            ],
+            catch_exceptions=False,
+        )
+
+        mock_create.assert_called_once_with(
+            mock_meta.return_value, mock_mdict.return_value, mock_config.return_value
+        )
+        self.assertSuccess(result)
+
+    @patch("datafaker.main.make_src_stats")
+    @patch("datafaker.settings.get_settings")
+    def test_make_stats(
+        self,
+        mock_get_settings: MagicMock,
+        mock_make: MagicMock,
+    ) -> None:
+        """Test the make-stats sub-command."""
+        output_path = Path("make_stats_output.yaml")
+        mock_make.return_value = {"a": 1}
+        mock_get_settings.return_value = get_test_settings()
+        result = runner.invoke(
+            app,
+            [
+                "make-stats",
+                f"--stats-file={output_path}",
+                f"--config-file={self.example_conf}",
+            ],
+            catch_exceptions=False,
+        )
+        self.assertSuccess(result)
+        config = self.load_yaml(self.example_conf)
+        mock_make.assert_called_once_with(
+            get_test_settings().src_dsn, config, None, parquet_dir=None
+        )
+        output = self.load_yaml(output_path)
+        self.assertDictEqual(output, {"a": 1})
+
+    @patch("datafaker.main.logger")
+    def test_make_stats_errors_if_file_exists(
+        self,
+        mock_logger: MagicMock,
+    ) -> None:
+        """Test the make-stats sub-command when the stats file already exists."""
+        output_path = "make_stats_output.yaml"
+        with open(output_path, "w", encoding="utf-8") as fh:
+            fh.write("some content\n")
+
+        result = runner.invoke(
+            app,
+            [
+                "make-stats",
+                f"--stats-file={output_path}",
+                f"--config-file={self.example_conf}",
+            ],
+            catch_exceptions=False,
+        )
+        mock_logger.error.assert_called_once_with(
+            "%s should not already exist. Exiting...", Path(output_path)
+        )
+        self.assertEqual(1, result.exit_code)
+
+    @patch.dict(os.environ, {"SRC_SCHEMA": "myschema"}, clear=True)
+    def test_make_stats_errors_if_no_src_dsn(self) -> None:
+        """Test the make-stats sub-command with missing settings."""
+
+        self.assertRaises(
+            SettingsError,
+            runner.invoke,
+            app,
+            [
+                "make-stats",
+                f"--config-file={self.example_conf}",
+                "--stats-file=does-not-exist.yaml",
+            ],
+            catch_exceptions=False,
+        )
+
+    @patch("datafaker.main.make_src_stats")
+    @patch("datafaker.settings.get_settings")
+    def test_make_stats_with_force_enabled(
+        self,
+        mock_get_settings: MagicMock,
+        mock_make_src_stats: MagicMock,
+    ) -> None:
+        """Tests that the make-stats command overwrite files when instructed."""
+        with open(self.example_conf, "r", encoding="utf8") as f:
+            config_file_content: dict = yaml.safe_load(f)
+
+        test_settings: Settings = get_test_settings()
+        mock_get_settings.return_value = test_settings
+        make_test_output: dict = {"some_stat": 0}
+        mock_make_src_stats.return_value = make_test_output
+
+        for force_option in ["--force", "-f"]:
+            with self.subTest(f"Using option {force_option}"):
+                result: Result = runner.invoke(
+                    app,
+                    [
+                        "make-stats",
+                        "--stats-file=stats_file.yaml",
+                        f"--config-file={self.example_conf}",
+                        force_option,
+                    ],
+                )
+
+                mock_make_src_stats.assert_called_once_with(
+                    test_settings.src_dsn,
+                    config_file_content,
+                    test_settings.src_schema,
+                    parquet_dir=None,
+                )
+                mock_make_src_stats.reset_mock()
+                self.assertDictEqual(
+                    self.load_yaml("stats_file.yaml"), {"some_stat": 0}
+                )
+                self.assertSuccess(result)

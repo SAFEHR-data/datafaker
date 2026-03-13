@@ -213,6 +213,7 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
         completed_process = self.invoke(
             "--verbose",
             "make-stats",
+            f"--orm-file={self.alt_orm_file_path}",
             f"--stats-file={self.stats_file_path}",
             f"--config-file={self.config_file_path}",
             "--force",
@@ -498,6 +499,7 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
         )
         self.invoke(
             "make-stats",
+            f"--orm-file={self.alt_orm_file_path}",
             f"--stats-file={self.stats_file_path}",
             f"--config-file={self.config_file_path}",
             "--force",
