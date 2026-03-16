@@ -213,6 +213,9 @@ def create_db_engine(
         logger.error("Failed to connect to the database: %s", exc)
         logger.error("Perhaps the dialect '%s' is invalid.", db_dsn.split(":")[0])
         raise Exit(1) from exc
+    except ValueError as exc:
+        logger.error("DSN %s is malformed: %s", db_dsn, exc)
+        raise Exit(1) from exc
 
     settings = {}
     if schema_name is not None:

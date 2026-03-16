@@ -371,7 +371,7 @@ class TestCLI(DatafakerTestCase):
 
     @patch("datafaker.main.Path")
     @patch("datafaker.settings.get_settings")
-    def test_incorrect_dsn_causes_nice_error_message(
+    def test_invalid_host_causes_nice_error_message(
         self,
         mock_get_settings: MagicMock,
         mock_path: MagicMock,
@@ -380,6 +380,34 @@ class TestCLI(DatafakerTestCase):
         mock_get_settings.return_value = Settings(
             # postgres: not postgresql: will cause sqlalchemy to fail to connect
             src_dsn="postgresql://suser:spassword@invalid_host:5432/sdbname",
+            dst_dsn="postgresql://duser:dpassword@dhost:5432/ddbname",
+            # To stop any local .env files influencing the test
+            # The mypy ignore can be removed once we upgrade to pydantic 2.
+            _env_file=None,  # type: ignore[call-arg]
+        )
+        mock_path.return_value.exists.return_value = True
+
+        result = runner.invoke(
+            app,
+            [
+                "make-tables",
+                "--force",
+                "--orm-file=tests/examples/example_orm.yaml",
+            ],
+        )
+        self.assertIs(type(result.exception), SystemExit)
+
+    @patch("datafaker.main.Path")
+    @patch("datafaker.settings.get_settings")
+    def test_incorrect_dsn_causes_nice_error_message(
+        self,
+        mock_get_settings: MagicMock,
+        mock_path: MagicMock,
+    ) -> None:
+        """Test the make-tables sub-command, when the force option is activated."""
+        mock_get_settings.return_value = Settings(
+            # postgres: not postgresql: will cause sqlalchemy to fail to connect
+            src_dsn="postgresql://suser:spassword:localhost:5432/sdbname",
             dst_dsn="postgresql://duser:dpassword@dhost:5432/ddbname",
             # To stop any local .env files influencing the test
             # The mypy ignore can be removed once we upgrade to pydantic 2.
