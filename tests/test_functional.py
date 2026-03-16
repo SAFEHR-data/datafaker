@@ -638,6 +638,49 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
             config_file,
             expected_error="No module named 'incorrect_module'",
         )
+        self.assertReturnCode(completed_process, 1)
+
+    def test_story_hyphens_in_name(self) -> None:
+        """Test hyphens in story generator names cause an error to be emitted."""
+        config_file = "config_story_hyphens.yaml"
+        config = {
+            "story_generators_module": "story-generators",
+        }
+        with Path(config_file).open("w", encoding="utf-8") as fh:
+            fh.write(yaml.dump(config))
+        self.invoke(
+            "make-tables",
+            "--force",
+        )
+        completed_process = self.invoke(
+            "create-generators",
+            "--force",
+            "--config-file",
+            config_file,
+            expected_error="hyphen",
+        )
+        self.assertReturnCode(completed_process, 1)
+
+    def test_row_hyphens_in_name(self) -> None:
+        """Test hyphens in row generator names cause an error to be emitted."""
+        config_file = "config_row_hyphens.yaml"
+        config = {
+            "row_generators_module": "row-generators",
+        }
+        with Path(config_file).open("w", encoding="utf-8") as fh:
+            fh.write(yaml.dump(config))
+        self.invoke(
+            "make-tables",
+            "--force",
+        )
+        completed_process = self.invoke(
+            "create-generators",
+            "--force",
+            "--config-file",
+            config_file,
+            expected_error="hyphen",
+        )
+        self.assertReturnCode(completed_process, 1)
 
 
 class DuckDbFunctionalTestCase(DBFunctionalTestCaseBase):
