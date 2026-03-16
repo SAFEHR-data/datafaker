@@ -116,7 +116,11 @@ def import_file(file_path: str) -> ModuleType:
     if spec is None or spec.loader is None:
         raise ImportError(f"No loadable module at {file_path}")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    try:
+        spec.loader.exec_module(module)
+    except ModuleNotFoundError as e:
+        logger.error("Failed to load module at %s with error:", file_path)
+        logger.error(e)
     return module
 
 
