@@ -5,6 +5,10 @@ import importlib.util
 import io
 import json
 import logging
+import os
+import random
+import re
+import string
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -17,6 +21,7 @@ from typing import (
     Generic,
     Iterable,
     Optional,
+    Type,
     TypeVar,
     Union,
 )
@@ -63,7 +68,7 @@ class Empty(Generic[T]):
         return (x for x in e)
 
 
-def read_config_file(path: str) -> dict:
+def read_config_file(path: Path) -> dict:
     """Read a config file, warning if it is invalid.
 
     Args:
@@ -72,10 +77,14 @@ def read_config_file(path: str) -> dict:
     Returns:
         The config file as a dictionary.
     """
-    with open(path, "r", encoding="utf8") as f:
+    with path.open("r", encoding="utf8") as f:
         config = yaml.safe_load(f)
 
-    assert isinstance(config, dict)
+    if not isinstance(config, dict):
+        logger.error(
+            "The config file is invalid, its top level should be an associative array."
+        )
+        return {}
 
     schema_config = json.loads(CONFIG_SCHEMA_PATH.read_text(encoding="UTF-8"))
     try:
@@ -180,6 +189,7 @@ def create_db_engine(
     db_dsn: str,
     schema_name: Optional[str] = None,
     use_asyncio: bool = False,
+    parquet_dir: Optional[Path] = None,
     **kwargs: Any,
 ) -> MaybeAsyncEngine:
     """Create a SQLAlchemy Engine."""
@@ -189,17 +199,73 @@ def create_db_engine(
     else:
         engine = create_engine(db_dsn, **kwargs)
 
+    settings = {}
     if schema_name is not None:
+        settings["search_path"] = schema_name
+    if parquet_dir is not None:
+        joined = ",".join(_find_parquet_directories(parquet_dir))
+        # double up single quotes
+        dj = joined.replace("'", "''")
+        # enclose in single quotes
+        settings["file_search_path"] = f"'{dj}'"
+
+    if settings:
         event_engine = get_sync_engine(engine)
 
         @event.listens_for(event_engine, "connect", insert=True)
         def connect(dbapi_connection: DBAPIConnection, _: Any) -> None:
-            set_search_path(dbapi_connection, schema_name)
+            set_db_settings(dbapi_connection, settings)
 
     return engine
 
 
-def set_search_path(connection: DBAPIConnection, schema: str) -> None:
+def create_db_engine_dst(
+    db_dsn: str,
+    schema_name: Optional[str] = None,
+    use_asyncio: bool = False,
+) -> MaybeAsyncEngine:
+    """
+    Create a SQLAlchemy Engine suitable for output.
+
+    This prevents DuckDB from reading any parquet files avoiding any
+    possible leakage from existing source files into the destination database.
+    :param db_dsn: The database connection string.
+    :param schema_name: The name of the schema within the database to use.
+    :param use_asyncio: True if an asynchronous connection is required.
+    :return: The ``Engine`` or ``AsyncEngine``.
+    """
+    if db_dsn.startswith("duckdb:"):
+        return create_db_engine(
+            db_dsn,
+            schema_name,
+            use_asyncio,
+            connect_args={
+                "config": {
+                    "enable_external_access": False,
+                }
+            },
+        )
+    return create_db_engine(db_dsn, schema_name, use_asyncio)
+
+
+def _find_parquet_directories(parquet_dir: Path) -> list[str]:
+    """Find all the directories under ``parquet_dir`` that contain parquet files."""
+    return [
+        path
+        for path, _, filenames in os.walk(parquet_dir)
+        if _names_include_parquet(Path(path), filenames)
+    ]
+
+
+def _names_include_parquet(path: Path, file_names: Iterable[str]) -> bool:
+    for fn in file_names:
+        entry = path / fn
+        if entry.is_file() and entry.suffix in {".parquet", ".parq"}:
+            return True
+    return False
+
+
+def set_db_settings(connection: DBAPIConnection, settings: Mapping[str, str]) -> None:
     """Set the SEARCH_PATH for a PostgreSQL connection."""
     # https://docs.sqlalchemy.org/en/20/dialects/postgresql.html#remote-schema-table-introspection-and-postgresql-search-path
     existing_autocommit = connection.autocommit
@@ -207,7 +273,8 @@ def set_search_path(connection: DBAPIConnection, schema: str) -> None:
 
     cursor = connection.cursor()
     # Parametrised queries don't work with asyncpg, hence the f-string.
-    cursor.execute(f"SET search_path TO {schema};")
+    sql = "".join(f"SET {k} TO {v};" for k, v in settings.items())
+    cursor.execute(sql)
     cursor.close()
 
     connection.autocommit = existing_autocommit
@@ -337,17 +404,21 @@ def get_flag(maybe_dict: Any, key: Any) -> bool:
     return isinstance(maybe_dict, Mapping) and maybe_dict.get(key, False)
 
 
-def get_property(maybe_dict: Any, key: Any, default: T) -> T:
+def get_property(maybe_dict: Any, key: Any, required_type: Type[T], default: T) -> T:
     """
     Get a specific property from a dict or a default if that does not exist.
 
     :param maybe_dict: A mapping, or possibly not.
     :param key: A key in ``maybe_dict``, or possibly not.
+    :param required_type: The type ``maybe_dict[key]`` needs to be an instance of.
     :param default: The return value if ``maybe_dict`` is not a mapping,
     or if ``key`` is not a key of ``maybe_dict``.
     :return: ``maybe_dict[key]`` if this makes sense, or ``default`` if not.
     """
-    return maybe_dict.get(key, default) if isinstance(maybe_dict, Mapping) else default
+    if not isinstance(maybe_dict, Mapping):
+        return default
+    v = maybe_dict.get(key, default)
+    return v if isinstance(v, required_type) else default
 
 
 def fk_refers_to_ignored_table(fk: ForeignKey) -> bool:
@@ -437,6 +508,15 @@ def get_vocabulary_table_names(config: Mapping) -> set[str]:
     }
 
 
+def get_ignored_table_names(config: Mapping) -> set[str]:
+    """Extract the table names with a ignore: true property."""
+    return {
+        table_name
+        for (table_name, table_config) in config.get("tables", {}).items()
+        if get_flag(table_config, "ignore")
+    }
+
+
 def get_columns_assigned(
     row_generator_config: Mapping[str, Any]
 ) -> Generator[str, None, None]:
@@ -475,15 +555,37 @@ def get_row_generators(
             yield (name, rg)
 
 
+_alphanumeric_re = re.compile(r"[^a-zA-Z0-9]")
+
+
+def normalize_table_name(table_name: str) -> str:
+    """Remove non alphanumeric characters from table name."""
+    name = _alphanumeric_re.sub("_", table_name)
+    if not name or not name[0].isalpha():
+        return "_" + name
+    return name
+
+
 def make_foreign_key_name(table_name: str, col_name: str) -> str:
     """Make a suitable foreign key name."""
-    return f"{table_name}_{col_name}_fkey"
+    ntn = normalize_table_name(table_name)
+    name = f"{ntn}_{col_name}_fkey"
+    # really this should be max_identifier_length in the sqlalchemy dialect
+    if len(name) < 64:
+        return name
+    rand = "".join(random.choice(string.ascii_letters) for _ in range(6))
+    return f"{ntn[:24]}_{col_name[:24]}_{rand}_fkey"
+
+
+def make_primary_key_name(table_name: str) -> str:
+    """Make a suitable primary key name."""
+    return f"{normalize_table_name(table_name)}_primary_key"
 
 
 def remove_vocab_foreign_key_constraints(
     metadata: MetaData,
     config: Mapping[str, Any],
-    dst_engine: Connection | Engine,
+    dst_engine: Union[Connection, Engine],
 ) -> None:
     """
     Remove the foreign key constraints from vocabulary tables.
@@ -527,7 +629,7 @@ def reinstate_vocab_foreign_key_constraints(
     metadata: MetaData,
     meta_dict: Mapping[str, Any],
     config: Mapping[str, Any],
-    dst_engine: Connection | Engine,
+    dst_engine: Union[Connection, Engine],
 ) -> None:
     """
     Put the removed foreign keys back into the destination database.
@@ -657,6 +759,22 @@ def sorted_non_vocabulary_tables(metadata: MetaData, config: Mapping) -> list[Ta
     return [metadata.tables[tn] for tn in sorted_tables]
 
 
+def generated_tables(metadata: MetaData, config: Mapping) -> list[Table]:
+    """
+    Get all the non-ignored, non-vocabulary tables.
+
+    :param metadata: MetaData of the database.
+    :param config: Mapping from `config.yaml`.
+    :return: All the non-ignored, non-vocabulary tables.
+    """
+    not_for_output = get_vocabulary_table_names(config) | get_ignored_table_names(
+        config
+    )
+    return [
+        table for table in metadata.tables.values() if table.name not in not_for_output
+    ]
+
+
 def underline_error(e: SyntaxError) -> str:
     r"""
     Make an underline for this error.
@@ -699,25 +817,26 @@ def generators_require_stats(config: Mapping) -> bool:
     stats_required = False
     for where, call in (ois | sgs | table_calls).items():
         for n, arg in enumerate(call.get("args", [])):
-            try:
-                names = (
-                    node.id
-                    for node in ast.walk(ast.parse(arg))
-                    if isinstance(node, ast.Name)
-                )
-                if any(name == "SRC_STATS" for name in names):
-                    stats_required = True
-            except SyntaxError as e:
-                errors.append(
-                    (
-                        "Syntax error in argument %d of %s: %s\n%s%s",
-                        n + 1,
-                        where,
-                        e.msg,
-                        arg,
-                        underline_error(e),
+            if isinstance(arg, str):
+                try:
+                    names = (
+                        node.id
+                        for node in ast.walk(ast.parse(arg))
+                        if isinstance(node, ast.Name)
                     )
-                )
+                    if any(name == "SRC_STATS" for name in names):
+                        stats_required = True
+                except SyntaxError as e:
+                    errors.append(
+                        (
+                            "Syntax error in argument %d of %s: %s\n%s%s",
+                            n + 1,
+                            where,
+                            e.msg,
+                            arg,
+                            underline_error(e),
+                        )
+                    )
         for k, arg in call.get("kwargs", {}).items():
             if isinstance(arg, str):
                 try:
@@ -742,3 +861,19 @@ def generators_require_stats(config: Mapping) -> bool:
     for error in errors:
         logger.error(*error)
     return stats_required
+
+
+def split_column_full_name(col_fullname: str) -> tuple[str, str]:
+    """
+    Split a column fullname into table and column.
+
+    :param col_fn: The string, such as ``artist.artist_id`` or ``artist.parquet.artist_id``.
+    :return: A pair of strings; the table name and the column name. For example
+    ``("artist.parquet", "artist_id")``. If there is no ``.`` in ``col_fullname``
+    ``(None, col_fullname)`` will be returned.
+    """
+    name_parts = col_fullname.split(".")
+    return (
+        ".".join(name_parts[:-1]),
+        name_parts[-1],
+    )

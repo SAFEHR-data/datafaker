@@ -6,13 +6,14 @@ from typing import Any, Generator, Iterable, Iterator, Mapping, Sequence, Tuple
 
 from sqlalchemy import Connection, insert, inspect
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session
-from sqlalchemy.schema import CreateSchema, MetaData, Table
+from sqlalchemy.schema import CreateColumn, CreateSchema, CreateTable, MetaData, Table
 
 from datafaker.base import FileUploader, TableGenerator
-from datafaker.settings import get_settings
+from datafaker.settings import get_destination_dsn, get_destination_schema, get_settings
 from datafaker.utils import (
-    create_db_engine,
+    create_db_engine_dst,
     get_sync_engine,
     get_vocabulary_table_names,
     logger,
@@ -24,17 +25,53 @@ Story = Generator[Tuple[str, dict[str, Any]], dict[str, Any], None]
 RowCounts = Counter[str]
 
 
+@compiles(CreateColumn, "duckdb")
+def remove_serial(element: CreateColumn, compiler: Any, **kw: Any) -> str:
+    """
+    Intercede in compilation for column creation, removing PostgreSQL's ``SERIAL``.
+
+    DuckDB does not understand ``SERIAL``, and we don't care about
+    autoincrementing in datafaker. Ideally ``duckdb_engine`` would remove
+    this for us, or DuckDB would implement ``SERIAL``
+    :param element: The CreateColumn being executed.
+    :param compiler: Actually a DDLCompiler, but that type is not exported.
+    :param kw: Further arguments.
+    :return: Corrected SQL.
+    """
+    text: str = compiler.visit_create_column(element, **kw)
+    return text.replace(" SERIAL ", " INTEGER ")
+
+
+@compiles(CreateTable, "duckdb")
+def remove_on_delete_cascade(element: CreateTable, compiler: Any, **kw: Any) -> str:
+    """
+    Intercede in compilation for column creation, removing ``ON DELETE CASCADE``.
+
+    DuckDB does not understand cascades, and we don't care about
+    that in datafaker. Ideally ``duckdb_engine`` would remove this for us.
+    :param element: The CreateTable being executed.
+    :param compiler: Actually a DDLCompiler, but that type is not exported.
+    :param kw: Further arguments.
+    :return: Corrected SQL.
+    """
+    text: str = compiler.visit_create_table(element, **kw)
+    return text.replace(" ON DELETE CASCADE", "")
+
+
 def create_db_tables(metadata: MetaData) -> None:
     """Create tables described by the sqlalchemy metadata object."""
-    settings = get_settings()
-    dst_dsn: str = settings.dst_dsn or ""
+    dst_dsn = get_destination_dsn()
     assert dst_dsn != "", "Missing DST_DSN setting."
+    create_db_tables_into(metadata, dst_dsn, get_destination_schema())
 
-    engine = get_sync_engine(create_db_engine(dst_dsn))
 
+def create_db_tables_into(
+    metadata: MetaData, dst_dsn: str, schema_name: str | None = None
+) -> None:
+    """Create tables described by the sqlalchemy metadata object with explicit DSN."""
+    engine = get_sync_engine(create_db_engine_dst(dst_dsn))
     # Create schema, if necessary.
-    if settings.dst_schema:
-        schema_name = settings.dst_schema
+    if schema_name is not None:
         with engine.connect() as connection:
             # Do not try to create a schema if the schema already exists.
             # This is necessary if the user does not have schema creation privileges
@@ -44,9 +81,11 @@ def create_db_tables(metadata: MetaData) -> None:
                 connection.commit()
 
         # Recreate the engine, this time with a schema specified
-        engine = get_sync_engine(create_db_engine(dst_dsn, schema_name=schema_name))
+        engine.dispose()
+        engine = get_sync_engine(create_db_engine_dst(dst_dsn, schema_name=schema_name))
 
     metadata.create_all(engine)
+    engine.dispose()
 
 
 def create_db_vocab(
@@ -68,7 +107,10 @@ def create_db_vocab(
     assert dst_dsn != "", "Missing DST_DSN setting."
 
     dst_engine = get_sync_engine(
-        create_db_engine(dst_dsn, schema_name=settings.dst_schema)
+        create_db_engine_dst(
+            get_destination_dsn(),
+            schema_name=get_destination_schema(),
+        )
     )
 
     tables_loaded: list[str] = []
@@ -100,42 +142,42 @@ def create_db_data(
     sorted_tables: Sequence[Table],
     df_module: ModuleType,
     num_passes: int,
+    metadata: MetaData,
 ) -> RowCounts:
     """Connect to a database and populate it with data."""
-    settings = get_settings()
-    dst_dsn: str = settings.dst_dsn or ""
-    assert dst_dsn != "", "Missing DST_DSN setting."
-
     return create_db_data_into(
         sorted_tables,
         df_module,
         num_passes,
-        dst_dsn,
-        settings.dst_schema,
+        get_destination_dsn(),
+        get_destination_schema(),
+        metadata,
     )
 
 
+# pylint: disable=too-many-arguments too-many-positional-arguments
 def create_db_data_into(
     sorted_tables: Sequence[Table],
     df_module: ModuleType,
     num_passes: int,
     db_dsn: str,
     schema_name: str | None,
+    metadata: MetaData,
 ) -> RowCounts:
     """
     Populate the database.
 
     :param sorted_tables: The table names to populate, sorted so that foreign
-    keys' targets are populated before the foreign keys themselves.
+        keys' targets are populated before the foreign keys themselves.
     :param table_generator_dict: A mapping  of table names to the generators
-    used to make data for them.
+        used to make data for them.
     :param story_generator_list: A list of story generators to be run after the
-    table generators on each pass.
+        table generators on each pass.
     :param num_passes: Number of passes to perform.
     :param db_dsn: Connection string for the destination database.
     :param schema_name: Destination schema name.
     """
-    dst_engine = get_sync_engine(create_db_engine(db_dsn, schema_name=schema_name))
+    dst_engine = get_sync_engine(create_db_engine_dst(db_dsn, schema_name=schema_name))
 
     row_counts: Counter[str] = Counter()
     with dst_engine.connect() as dst_conn:
@@ -145,7 +187,9 @@ def create_db_data_into(
                 sorted_tables,
                 df_module.table_generator_dict,
                 df_module.story_generator_list,
+                metadata,
             )
+    dst_engine.dispose()
     return row_counts
 
 
@@ -191,11 +235,11 @@ class StoryIterator:
         Get the name of the current table.
 
         :return: The table name, or None if there are  no more stories
-        to process.
+            to process.
         """
         return self._table_name
 
-    def insert(self) -> None:
+    def insert(self, metadata: MetaData) -> None:
         """
         Put the row in the table.
 
@@ -207,7 +251,7 @@ class StoryIterator:
         table = self._table_dict[self._table_name]
         if table.name in self._table_generator_dict:
             table_generator = self._table_generator_dict[table.name]
-            default_values = table_generator(self._dst_conn)
+            default_values = table_generator(self._dst_conn, metadata)
         else:
             default_values = {}
         insert_values = {**default_values, **self._provided_values}
@@ -253,6 +297,7 @@ def populate(
     tables: Sequence[Table],
     table_generator_dict: Mapping[str, TableGenerator],
     story_generator_list: Sequence[Mapping[str, Any]],
+    metadata: MetaData,
 ) -> RowCounts:
     """Populate a database schema with synthetic data."""
     row_counts: Counter[str] = Counter()
@@ -277,7 +322,7 @@ def populate(
     for table in tables:
         # Do we have a story row to enter into this table?
         if story_iterator.has_table(table.name):
-            story_iterator.insert()
+            story_iterator.insert(metadata)
             row_counts[table.name] = row_counts.get(table.name, 0) + 1
             story_iterator.next()
         if table.name not in table_generator_dict:
@@ -291,7 +336,7 @@ def populate(
         try:
             with dst_conn.begin():
                 for _ in range(table_generator.num_rows_per_pass):
-                    stmt = insert(table).values(table_generator(dst_conn))
+                    stmt = insert(table).values(table_generator(dst_conn, metadata))
                     dst_conn.execute(stmt)
                     row_counts[table.name] = row_counts.get(table.name, 0) + 1
                 dst_conn.commit()
@@ -301,7 +346,7 @@ def populate(
 
     # Insert any remaining stories
     while not story_iterator.is_ended():
-        story_iterator.insert()
+        story_iterator.insert(metadata)
         t = story_iterator.table_name()
         if t is None:
             raise AssertionError(

@@ -12,13 +12,13 @@ from sqlalchemy import Column, Engine, text
 from sqlalchemy.types import Integer, Numeric, String, TypeEngine
 from typing_extensions import Self
 
-from datafaker.base import DistributionGenerator
+from datafaker.providers import DistributionProvider
 from datafaker.utils import logger
 
 NumericType = Union[int, float]
 
 
-dist_gen = DistributionGenerator()
+dist_gen = DistributionProvider()
 generic = mimesis.Generic(locale=mimesis.locales.Locale.EN_GB)
 
 
@@ -86,7 +86,7 @@ class Generator(ABC):
         """
         return {}
 
-    def custom_queries(self) -> dict[str, dict[str, str]]:
+    def custom_queries(self) -> dict[str, dict[str, Any]]:
         """
         Get the SQL queries to add to SRC_STATS.
 
@@ -95,7 +95,7 @@ class Generator(ABC):
 
         For example {"myquery": {
             "query": "SELECT one, too AS two FROM mytable WHERE too > 1",
-            "comment": "big enough one and two from table mytable"
+            "comments": ["big enough one and two from table mytable"]
         }}
         will populate SRC_STATS["myquery"]["results"][0]["one"]
         and SRC_STATS["myquery"]["results"][0]["two"]
@@ -209,7 +209,7 @@ class PredefinedGenerator(Generator):
                     logger.debug("Custom query %s is '%s'", name, query)
                     self._custom_queries[name] = {
                         "query": query,
-                        "comment": comments[0] if comments else None,
+                        "comments": comments,
                     }
 
     def function_name(self) -> str:
@@ -224,7 +224,7 @@ class PredefinedGenerator(Generator):
         """Get the query fragments the generators need to call."""
         return self._select_aggregate_clauses
 
-    def custom_queries(self) -> dict[str, dict[str, str]]:
+    def custom_queries(self) -> dict[str, dict[str, Any]]:
         """Get the queries the generators need to call."""
         return self._custom_queries
 
@@ -248,7 +248,9 @@ class GeneratorFactory(ABC):
 
     @abstractmethod
     def get_generators(
-        self, columns: list[Column], engine: Engine
+        self,
+        columns: list[Column],
+        engine: Engine,
     ) -> Sequence[Generator]:
         """Get the generators appropriate to these columns."""
 
@@ -289,9 +291,18 @@ class Buckets:
             )
             self.buckets: Sequence[int] = [0] * 10
             for rb in raw_buckets:
-                if rb.b is not None:
-                    bucket = min(9, max(0, int(rb.b) + 1))
-                    self.buckets[bucket] += rb.f / count
+                try:
+                    x = float(rb.b)
+                    if x.is_integer():
+                        bucket = min(9, max(0, int(x) + 1))
+                        self.buckets[bucket] += rb.f / count
+                except TypeError:
+                    # We get a type error if there are no rows returned at all
+                    # because rb.b is None in this case.
+                    # We could just test for None explicitly, but this way
+                    # catches errors if SQLAlchemy returns something that
+                    # isn't a number for some other unknown reason.
+                    pass
             self.mean = mean
             self.stddev = stddev
 
@@ -350,7 +361,7 @@ class Buckets:
 class MultiGeneratorFactory(GeneratorFactory):
     """A composite factory."""
 
-    def __init__(self, factories: list[GeneratorFactory]):
+    def __init__(self, *factories: GeneratorFactory):
         """Initialise a MultiGeneratorFactory."""
         super().__init__()
         self.factories = factories
@@ -404,7 +415,7 @@ class ConstantGeneratorFactory(GeneratorFactory):
     """Just the null generator."""
 
     def get_generators(
-        self, columns: list[Column], engine: Engine
+        self, columns: list[Column], _engine: Engine
     ) -> Sequence[Generator]:
         """Get the generators appropriate for these columns."""
         if len(columns) != 1:

@@ -1,10 +1,13 @@
 """ Tests for the configure-tables command. """
-from collections.abc import MutableMapping
+import re
+from collections.abc import MutableMapping, Sized
 from typing import Any
 
 from sqlalchemy import select
 
 from datafaker.interactive import TableCmd
+from datafaker.interactive.base import DbCmd
+from datafaker.serialize_metadata import dict_to_metadata
 from tests.utils import RequiresDBTestCase, TestDbCmdMixin
 
 
@@ -16,7 +19,15 @@ class ConfigureTablesTests(RequiresDBTestCase):
     """Testing configure-tables."""
 
     def _get_cmd(self, config: MutableMapping[str, Any]) -> TestTableCmd:
-        return TestTableCmd(self.dsn, self.schema_name, self.metadata, config)
+        return TestTableCmd(
+            DbCmd.Settings(
+                self.dsn,
+                self.schema_name,
+                config,
+                self.metadata,
+                None,
+            )
+        )
 
 
 class ConfigureTablesSrcTests(ConfigureTablesTests):
@@ -109,7 +120,7 @@ class ConfigureTablesSrcTests(ConfigureTablesTests):
             )
 
     def test_configure_tables(self) -> None:
-        """Test that we can change columns to ignore, vocab or generate."""
+        """Test that we can change tables to ignore, vocab or generate."""
         config = {
             "tables": {
                 "unique_constraint_test": {
@@ -168,6 +179,58 @@ class ConfigureTablesSrcTests(ConfigureTablesTests):
             self.assertFalse(tables["empty_vocabulary"].get("ignore", False))
             self.assertFalse(tables["empty_vocabulary"].get("primary_private", False))
             self.assertEqual(tables["empty_vocabulary"].get("num_rows_per_pass", 1), 0)
+
+    def test_configure_naming_columns(self) -> None:
+        """Test that we can change tables' naming columns."""
+        config = {
+            "tables": {
+                "unique_constraint_test": {
+                    "vocabulary_table": True,
+                    "name_column": None,
+                },
+                "no_pk_test": {
+                    "ignore": True,
+                    "name_column": "not_an_id",
+                },
+                "hospital_visit": {
+                    "num_rows_per_pass": 0,
+                },
+                "empty_vocabulary": {
+                    "num_rows_per_pass": 0,
+                    "name_column": "entry_id",
+                },
+            },
+        }
+        with self._get_cmd(config) as tc:
+            tc.do_next("unique_constraint_test")
+            tc.do_generate("name c")
+            tc.do_next("person")
+            tc.do_vocabulary("")
+            tc.do_next("mitigation_type")
+            tc.do_ignore("")
+            tc.do_next("hospital_visit")
+            tc.do_private("")
+            tc.do_quit("")
+            # changing name column but not type
+            tc.do_next("empty_vocabulary")
+            tc.do_empty("name entry_name")
+            tc.do_quit("")
+            tables = tc.config["tables"]
+            self.assertEqual(
+                tables["unique_constraint_test"].get("name_column", None),
+                "c",
+            )
+            self.assertEqual(
+                tables["no_pk_test"].get("name_column", None),
+                "not_an_id",
+            )
+            self.assertIsNone(tables["person"].get("name_column", None))
+            self.assertIsNone(tables["mitigation_type"].get("name_column", None))
+            self.assertIsNone(tables["hospital_visit"].get("name_column", None))
+            self.assertEqual(
+                tables["empty_vocabulary"].get("name_column", None),
+                "entry_name",
+            )
 
     def test_print_data(self) -> None:
         """Test that we can print random rows from the table and random data from columns."""
@@ -330,7 +393,9 @@ class ConfigureTablesInstrumentsTests(ConfigureTablesTests):
                 },
             },
         }
-        with TestTableCmd(self.dsn, self.schema_name, self.metadata, config) as tc:
+        with TestTableCmd(
+            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
+        ) as tc:
             tc.do_next("manufacturer")
             tc.do_vocabulary("")
             tc.reset()
@@ -372,7 +437,9 @@ class ConfigureTablesInstrumentsTests(ConfigureTablesTests):
                 },
             },
         }
-        with TestTableCmd(self.dsn, self.schema_name, self.metadata, config) as tc:
+        with TestTableCmd(
+            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
+        ) as tc:
             tc.do_next("signature_model")
             tc.do_empty("")
             tc.reset()
@@ -396,3 +463,118 @@ class ConfigureTablesInstrumentsTests(ConfigureTablesTests):
                     {},
                 ),
             )
+
+
+class TrickyTests(ConfigureTablesTests):
+    """Testing configure-tables with arguments that could cause SQL errors."""
+
+    dump_file_path = "tricky.sql"
+    database_name = "tricky"
+    schema_name = "public"
+
+    def do_and_test_peek_tricky(self, tc: TestTableCmd) -> None:
+        """Peek the "names" table and check the output."""
+        tc.reset()
+        tc.do_peek("")
+        self.assertSetEqual(set(tc.headings), {"id", "offset", "count", "sensible"})
+        self.assertSetEqual(
+            set(tc.rows), {(1, 10, 5, "reasonable"), (2, None, 6, "clear-headed")}
+        )
+
+    def test_peek_with_tricky_names(self) -> None:
+        """
+        Peek with column names that are function names (#66).
+        """
+        with self._get_cmd({}) as tc:
+            tc.do_next("names")
+            self.do_and_test_peek_tricky(tc)
+
+    def test_count_with_tricky_names(self) -> None:
+        """
+        Count with column names that are function names (#66).
+        """
+        with self._get_cmd({}) as tc:
+            tc.do_next("names")
+            self.do_and_test_peek_tricky(tc)
+            tc.do_counts("")
+            self.assertSequenceEqual(tc.rows, [["offset", 1], ["sensible", 0]])
+
+    def test_incorrect_orm_yaml_columns(self) -> None:
+        """
+        Peek with incorrect columns in orm.yaml (#70).
+        """
+        self.metadata = dict_to_metadata(
+            {
+                "tables": {
+                    "names": {
+                        "columns": {
+                            "id": {
+                                "primary": True,
+                                "nullable": False,
+                                "type": "INTEGER",
+                            },
+                            "sensible": {
+                                "primary": False,
+                                "nullable": False,
+                                "type": "TEXT",
+                            },
+                            "nonexistent": {
+                                "primary": False,
+                                "nullable": False,
+                                "type": "TEXT",
+                            },
+                        }
+                    }
+                }
+            }
+        )
+        with self._get_cmd({}) as tc:
+            tc.reset()
+            tc.do_peek("")
+            self.assertIn("SQL query", "/".join(m for (m, _a, _kw) in tc.messages))
+
+    def test_repeated_field_does_not_throw_exception(self) -> None:
+        """
+        Select with repeated fields (#70).
+        """
+        with TestTableCmd(
+            DbCmd.Settings(
+                self.dsn,
+                self.schema_name,
+                config={},
+                metadata=self.metadata,
+                parquet_dir=None,
+            ),
+            print_tables=True,
+        ) as tc:
+            tc.reset()
+            tc.do_select('sensible AS same, "offset" AS same FROM names')
+            self.assertIn(
+                "Failed to display", "/".join(m for (m, _a, _kw) in tc.messages)
+            )
+
+    def assert_message_correctly_formatted(
+        self, m: str, a: Sized, kw: dict[str, Any]
+    ) -> None:
+        """
+        Assert that the ``{...}`` interpolations in ``m`` match the arguments given.
+
+        :param m: The message.
+        :param a: List of positional arguments.
+        :param kw: Dict of keyword arguments.
+        """
+        interpolations = set(re.findall(r"\{([A-Za-z0-9_]+)\}", m))
+        positions = set(range(len(a)))
+        keywords = set(kw.keys())
+        self.assertSetEqual(interpolations, positions | keywords)
+
+    def test_sql_error_does_not_throw_exception(self) -> None:
+        """
+        Select with a SQL error.
+        """
+        with self._get_cmd({}) as tc:
+            tc.reset()
+            tc.do_select("+++")
+            self.assertIn("SQL query", "/".join(m for (m, _a, _kw) in tc.messages))
+            for m, a, kw in tc.messages:
+                self.assert_message_correctly_formatted(m, a, kw)

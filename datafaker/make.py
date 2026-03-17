@@ -2,11 +2,12 @@
 import asyncio
 import decimal
 import inspect
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from types import TracebackType
-from typing import Any, Callable, Final, Mapping, Optional, Sequence, Tuple, Type
+from typing import Any, Final, Optional, Tuple, Type, Union
 
 import pandas as pd
 import snsql
@@ -23,19 +24,21 @@ from sqlalchemy.sql import Executable, sqltypes
 from typing_extensions import Self
 
 from datafaker import providers
-from datafaker.settings import get_settings
+from datafaker.parquet2orm import get_parquet_orm
+from datafaker.settings import get_source_dsn, get_source_schema
 from datafaker.utils import (
     MaybeAsyncEngine,
     create_db_engine,
     download_table,
     get_columns_assigned,
-    get_flag,
     get_property,
     get_related_table_names,
     get_row_generators,
     get_sync_engine,
     get_vocabulary_table_names,
     logger,
+    make_primary_key_name,
+    split_column_full_name,
 )
 
 from .serialize_metadata import metadata_to_dict
@@ -91,8 +94,8 @@ def make_column_choices(
 
     :param table_config: The ``tables`` part of ``config.yaml``.
     :return: A list of ``ColumnChoice`` objects; that is, descriptions of
-    functions and their arguments to call to reveal a list of columns that
-    should have values generated for them.
+        functions and their arguments to call to reveal a list of columns that
+        should have values generated for them.
     """
     return [
         ColumnChoice(
@@ -126,7 +129,7 @@ class TableGeneratorInfo:
     column_choices: list[ColumnChoice]
     rows_per_pass: int
     row_gens: list[RowGeneratorInfo] = field(default_factory=list)
-    unique_constraints: Sequence[UniqueConstraint | _PrimaryConstraint] = field(
+    unique_constraints: Sequence[Union[UniqueConstraint, _PrimaryConstraint]] = field(
         default_factory=list
     )
 
@@ -212,9 +215,9 @@ def _get_default_generator(column: Column) -> RowGeneratorInfo:
                 "Can't handle multiple foreign keys for one column."
             )
         fkey = next(iter(column.foreign_keys))
-        target_name_parts = fkey.target_fullname.split(".")
-        target_table_name = ".".join(target_name_parts[:-1])
-        target_column_name = target_name_parts[-1]
+        (target_table_name, target_column_name) = split_column_full_name(
+            fkey.target_fullname
+        )
 
         variable_names = [column.name]
         generator_function = "generic.column_value_provider.column_value"
@@ -287,7 +290,7 @@ def _integer_generator(column: Column) -> tuple[str, dict[str, str]]:
 
     :param column: The column to get the generator for.
     :return: A pair consisting of the name of a generator and its
-    arguments.
+        arguments.
     """
     if not column.primary_key:
         return ("generic.numeric.integer_number", {})
@@ -424,7 +427,7 @@ def _get_generator_and_arguments(column: Column) -> tuple[str | None, dict[str, 
     Get the generator and its arguments from the column type.
 
     :return: A tuple of a string representing the generator callable and a dict of
-    keyword arguments to supply to it.
+        keyword arguments to supply to it.
     """
     generator_function = _get_generator_for_column(type(column.type))
 
@@ -438,12 +441,10 @@ def _get_provider_for_column(column: Column) -> Tuple[list[str], str, dict[str, 
     """
     Get a default Mimesis provider and its arguments for a SQL column type.
 
-    Args:
-        column: SQLAlchemy column object
+    :param column: SQLAlchemy column object
 
-    Returns:
-        Tuple[str, str, list[str]]: Tuple containing the variable names to assign to,
-        generator function and any generator arguments.
+    :return: Tuple[str, str, list[str]]: Tuple containing the variable names
+        to assign to, generator function and any generator arguments.
     """
     variable_names: list[str] = [column.name]
 
@@ -453,11 +454,12 @@ def _get_provider_for_column(column: Column) -> Tuple[list[str], str, dict[str, 
     if not generator_function:
         generator_function = "generic.null_provider.null"
         logger.warning(
-            "Unsupported SQLAlchemy type %s for column %s. "
+            "Unsupported SQLAlchemy type %s for column %s of table %s. "
             "Setting this column to NULL always, "
             "you may want to configure a row generator for it instead.",
             column.type,
             column.name,
+            column.table.name,
         )
 
     return variable_names, generator_function, generator_arguments
@@ -493,7 +495,7 @@ def _get_generator_for_table(
     constraints: Sequence[UniqueConstraint | _PrimaryConstraint] = unique_constraints
     if 1 < len(primary_keys):
         primary_constraint = _PrimaryConstraint(
-            columns=primary_keys, name=f"{table.name}_primary_key"
+            columns=primary_keys, name=make_primary_key_name(table.name)
         )
         constraints = unique_constraints + [primary_constraint]
     column_choices = make_column_choices(table_config)
@@ -507,10 +509,10 @@ def _get_generator_for_table(
         nonnull_columns = {str(col.name) for col in table.columns}
     table_data: TableGeneratorInfo = TableGeneratorInfo(
         table_name=table.name,
-        class_name=table.name.title() + "Generator",
+        class_name=table.name.title().replace(".", "") + "Generator",
         nonnull_columns=nonnull_columns,
         column_choices=column_choices,
-        rows_per_pass=get_property(table_config, "num_rows_per_pass", 1),
+        rows_per_pass=get_property(table_config, "num_rows_per_pass", int, 1),
         unique_constraints=constraints,
     )
 
@@ -551,11 +553,12 @@ def make_vocabulary_tables(
     table_names: set[str] | None = None,
 ) -> None:
     """Extract the data from the source database for each vocabulary table."""
-    settings = get_settings()
-    src_dsn: str = settings.src_dsn or ""
-    assert src_dsn != "", "Missing SRC_DSN setting."
-
-    engine = get_sync_engine(create_db_engine(src_dsn, schema_name=settings.src_schema))
+    engine = get_sync_engine(
+        create_db_engine(
+            get_source_dsn(),
+            schema_name=get_source_schema(),
+        )
+    )
     vocab_names = get_vocabulary_table_names(config)
     if table_names is None:
         table_names = vocab_names
@@ -580,9 +583,9 @@ def make_vocabulary_tables(
 def make_table_generators(  # pylint: disable=too-many-locals
     metadata: MetaData,
     config: Mapping,
-    orm_filename: str,
-    config_filename: str,
-    src_stats_filename: Optional[str],
+    orm_filename: Path,
+    config_filename: Path,
+    src_stats_filename: Optional[Path],
 ) -> str:
     """
     Create datafaker generator classes.
@@ -590,19 +593,17 @@ def make_table_generators(  # pylint: disable=too-many-locals
     The orm and vocabulary YAML files must already have been
     generated (by make-tables and make-vocab).
 
-    Args:
-      metadata: database ORM
-      config: Configuration to control the generator creation.
-      orm_filename: "orm.yaml" file path so that the generator
-      file can load the MetaData object
-      config_filename: "config.yaml" file path so that the generator
-      file can load the MetaData object
-      src_stats_filename: A filename for where to read src stats from.
+    :param metadata: database ORM
+    :param config: Configuration to control the generator creation.
+    :param orm_filename: "orm.yaml" file path so that the generator
+        file can load the MetaData object
+    :param config_filename: "config.yaml" file path so that the generator
+        file can load the MetaData object
+    :param src_stats_filename: A filename for where to read src stats from.
         Optional, if `None` this feature will be skipped
-      overwrite_files: Whether to overwrite pre-existing vocabulary files
+    :param overwrite_files: Whether to overwrite pre-existing vocabulary files
 
-    Returns:
-      A string that is a valid Python module, once written to file.
+    :return: A string that is a valid Python module, once written to file.
     """
     row_generator_module_name: str = config.get("row_generators_module", None)
     story_generator_module_name = config.get("story_generators_module", None)
@@ -695,35 +696,23 @@ def _generate_vocabulary_table(
 
 
 def make_tables_file(
-    db_dsn: str, schema_name: Optional[str], config: Mapping[str, Any]
+    db_dsn: str,
+    schema_name: Optional[str],
+    parquet_dir: Optional[Path] = None,
 ) -> str:
     """Construct the YAML file representing the schema."""
-    tables_config = config.get("tables", {})
     engine = get_sync_engine(create_db_engine(db_dsn, schema_name=schema_name))
 
-    def reflect_if(table_name: str, _: Any) -> bool:
-        table_config = tables_config.get(table_name, {})
-        ignore = get_flag(table_config, "ignore")
-        return not ignore
-
     metadata = MetaData()
-    metadata.reflect(
-        engine,
-        only=reflect_if,
-    )
-    meta_dict = metadata_to_dict(metadata, schema_name, engine)
+    metadata.reflect(engine)
+    meta_dict = metadata_to_dict(metadata, schema_name, engine, parquet_dir)
 
-    for table_name in metadata.tables.keys():
-        table_config = tables_config.get(table_name, {})
-        ignore = get_flag(table_config, "ignore")
-        if ignore:
-            logger.warning(
-                "Table %s is supposed to be ignored but there is a foreign key "
-                "reference to it. "
-                "You may need to create this table manually at the dst schema before "
-                "running create-tables.",
-                table_name,
-            )
+    if parquet_dir is not None:
+        extra_meta = get_parquet_orm(parquet_dir)
+        if extra_meta:
+            md_tables = get_property(meta_dict, "tables", dict, {})
+            new_tables = {**extra_meta, **md_tables}
+            meta_dict["tables"] = new_tables
 
     return yaml.dump(meta_dict)
 
@@ -812,7 +801,10 @@ def fix_types(dics: list[dict]) -> list[dict]:
 
 
 async def make_src_stats(
-    dsn: str, config: Mapping, schema_name: Optional[str] = None
+    dsn: str,
+    config: Mapping,
+    schema_name: Optional[str] = None,
+    parquet_dir: Optional[Path] = None,
 ) -> dict[str, dict[str, Any]]:
     """
     Run the src-stats queries specified by the configuration.
@@ -827,7 +819,12 @@ async def make_src_stats(
     :return: The dictionary of src-stats.
     """
     use_asyncio = config.get("use-asyncio", False)
-    engine = create_db_engine(dsn, schema_name=schema_name, use_asyncio=use_asyncio)
+    engine = create_db_engine(
+        dsn,
+        schema_name=schema_name,
+        use_asyncio=use_asyncio,
+        parquet_dir=parquet_dir,
+    )
     async with DbConnection(engine) as db_conn:
         return await make_src_stats_connection(config, db_conn)
 

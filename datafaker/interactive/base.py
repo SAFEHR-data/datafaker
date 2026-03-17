@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from types import TracebackType
 from typing import Any, Optional, Type
 
@@ -94,6 +95,7 @@ def fk_column_name(fk: ForeignKey) -> str:
     return str(fk.target_fullname)
 
 
+# pylint: disable=too-many-public-methods
 class DbCmd(ABC, cmd.Cmd):
     """Base class for interactive configuration commands."""
 
@@ -104,6 +106,8 @@ class DbCmd(ABC, cmd.Cmd):
         "Error: '{0}' is not the name of a table"
         " in this database or a column in this table"
     )
+    ERROR_FAILED_SQL = 'SQL query "{query}" caused exception {exc}'
+    ERROR_FAILED_DISPLAY = "Error: Failed to display: {}"
     ROW_COUNT_MSG = "Total row count: {}"
 
     @abstractmethod
@@ -118,22 +122,38 @@ class DbCmd(ABC, cmd.Cmd):
         :return: The table entry or None if this table should not be interacted with.
         """
 
+    @dataclass
+    class Settings:
+        """Settings for the source database."""
+
+        dsn: str
+        schema: str | None
+        config: MutableMapping[str, Any]
+        metadata: MetaData
+        parquet_dir: Path | None
+
     def __init__(
         self,
-        src_dsn: str,
-        src_schema: str | None,
-        metadata: MetaData,
-        config: MutableMapping[str, Any],
+        settings: Settings,
     ):
-        """Initialise a DbCmd."""
+        """
+        Initialise a DbCmd.
+
+        :param src_dsn: The database connection string for the source database.
+        :param src_schema: The name of the schema name for the source database.
+        :param metadata: The metadata for the source database.
+        :param config: The ``config.xml`` object.
+        :param parquet_dir: The directory where parquet files are stored that
+          are to be considered part of the source database (only for DuckDB).
+        """
         super().__init__()
-        self.config: MutableMapping[str, Any] = config
-        self.metadata = metadata
+        self.config: MutableMapping[str, Any] = settings.config
+        self.metadata = settings.metadata
         self._table_entries: list[TableEntry] = []
-        tables_config: MutableMapping = config.get("tables", {})
+        tables_config: MutableMapping = self.config.get("tables", {})
         if not isinstance(tables_config, MutableMapping):
             tables_config = {}
-        for name in metadata.tables.keys():
+        for name in self.metadata.tables.keys():
             table_config = tables_config.get(name, {})
             if not isinstance(table_config, MutableMapping):
                 table_config = {}
@@ -141,7 +161,11 @@ class DbCmd(ABC, cmd.Cmd):
             if entry is not None:
                 self._table_entries.append(entry)
         self.table_index = 0
-        self.engine = create_db_engine(src_dsn, schema_name=src_schema)
+        self.engine = create_db_engine(
+            settings.dsn,
+            schema_name=settings.schema,
+            parquet_dir=settings.parquet_dir,
+        )
 
     @property
     def sync_engine(self) -> Engine:
@@ -292,7 +316,7 @@ class DbCmd(ABC, cmd.Cmd):
         self.config["src-stats"] = new_src_stats
         return new_src_stats
 
-    def get_nonnull_columns(self, table_name: str) -> list[str]:
+    def get_nullable_columns(self, table_name: str) -> list[str]:
         """Get the names of the nullable columns in the named table."""
         metadata_table = self.metadata.tables[table_name]
         return [
@@ -324,8 +348,8 @@ class DbCmd(ABC, cmd.Cmd):
         if len(self._table_entries) <= self.table_index:
             return
         table_name = self.table_name()
-        nonnull_columns = self.get_nonnull_columns(table_name)
-        colcounts = [f", COUNT({nnc}) AS {nnc}" for nnc in nonnull_columns]
+        nullable_columns = self.get_nullable_columns(table_name)
+        colcounts = [f', COUNT("{nnc}") AS "{nnc}"' for nnc in nullable_columns]
         with self.sync_engine.connect() as connection:
             result = (
                 connection.execute(
@@ -353,11 +377,12 @@ class DbCmd(ABC, cmd.Cmd):
     def do_select(self, arg: str) -> None:
         """Run a select query over the database and show the first 50 results."""
         max_select_rows = 50
+        query = "SELECT " + arg
         with self.sync_engine.connect() as connection:
             try:
-                result = connection.execute(sqlalchemy.text("SELECT " + arg))
+                result = connection.execute(sqlalchemy.text(query))
             except sqlalchemy.exc.DatabaseError as exc:
-                self.print("Failed to execute: {}", exc)
+                self.print(self.ERROR_FAILED_SQL, exc=exc, query=query)
                 return
             row_count = result.rowcount
             self.print(self.ROW_COUNT_MSG, row_count)
@@ -365,7 +390,11 @@ class DbCmd(ABC, cmd.Cmd):
                 self.print("Showing the first {} rows", max_select_rows)
             fields = list(result.keys())
             rows = result.fetchmany(max_select_rows)
-            self.print_table(fields, rows)
+            try:
+                self.print_table(fields, rows)
+            except ValueError as exc:
+                self.print(self.ERROR_FAILED_DISPLAY, exc)
+                return
 
     def do_peek(self, arg: str) -> None:
         """
@@ -383,9 +412,9 @@ class DbCmd(ABC, cmd.Cmd):
         col_names = arg.split()
         if not col_names:
             col_names = self._get_column_names()
-        nonnulls = [cn + " IS NOT NULL" for cn in col_names]
+        nonnulls = [f'"{cn}" IS NOT NULL' for cn in col_names]
         with self.sync_engine.connect() as connection:
-            cols = ",".join(col_names)
+            cols = ", ".join(f'"{cn}"' for cn in col_names)
             where = "WHERE" if nonnulls else ""
             nonnull = " OR ".join(nonnulls)
             query = sqlalchemy.text(
@@ -395,9 +424,15 @@ class DbCmd(ABC, cmd.Cmd):
             try:
                 result = connection.execute(query)
             except sqlalchemy.exc.SQLAlchemyError as exc:
-                self.print(f'SQL query "{query}" caused exception {exc}')
+                self.print(self.ERROR_FAILED_SQL, exc=exc, query=query)
                 return
             self.print_table(list(result.keys()), result.fetchmany(max_peek_rows))
+
+    def get_column_completions(self, text: str) -> list[str]:
+        """Get completions for text to column names in the current table."""
+        return [
+            col for col in self.table_metadata().columns.keys() if col.startswith(text)
+        ]
 
     def complete_peek(
         self, text: str, _line: str, _begidx: int, _endidx: int
@@ -405,6 +440,4 @@ class DbCmd(ABC, cmd.Cmd):
         """Completions for the ``peek`` command."""
         if len(self._table_entries) <= self.table_index:
             return []
-        return [
-            col for col in self.table_metadata().columns.keys() if col.startswith(text)
-        ]
+        return self.get_column_completions(text)

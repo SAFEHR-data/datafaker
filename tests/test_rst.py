@@ -5,7 +5,23 @@ from pathlib import Path
 from typing import Any
 from unittest import TestCase
 
+from docutils.parsers.rst import directives
 from restructuredtext_lint import lint_file
+from sphinxcontrib.mermaid import Mermaid
+
+
+def _level_to_string(level: int) -> str:
+    """Get a string description of an error level."""
+    return ["Severe", "Error", "Warning"][level]
+
+
+def _error_message(lint_error: Any) -> str:
+    """Turn a linting error into an error message."""
+    source = getattr(lint_error, "source")
+    line = getattr(lint_error, "line")
+    level = _level_to_string(getattr(lint_error, "level"))
+    message = getattr(lint_error, "full_message")
+    return f"{source}({line}): {level}: {message}"
 
 
 def _level_to_string(level: int) -> str:
@@ -29,6 +45,7 @@ class RstTests(TestCase):
         """Run the linter on the docs/ directory."""
         docs_path = Path("docs/")
         rst_files = docs_path.glob("**/*.rst")
+        directives.register_directive("mermaid", Mermaid)
 
         all_errors = []
         for rst_file in rst_files:

@@ -32,7 +32,7 @@ computer.
 
 Running the image in this way will give you a command prompt from which
 datafaker can be called. Tab completion can be used. For example, if
-you type ``sq<TAB> ma<TAB>t<TAB>`` you will see
+you type ``dataf<TAB> ma<TAB>t<TAB>`` you will see
 ``datafaker make-tables``; although you might have to wait a second
 or two after some of the ``<TAB>`` key presses for the completed text
 to appear. Tab completion can also be used for command options such

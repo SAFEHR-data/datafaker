@@ -151,14 +151,14 @@ class ChoiceGenerator(Generator):
             "a": self.values,
         }
 
-    def custom_queries(self) -> dict[str, dict[str, str]]:
+    def custom_queries(self) -> dict[str, dict[str, Any]]:
         """Get the queries the generators need to call."""
         qs = super().custom_queries()
         return {
             **qs,
             f"auto__{self.table_name}__{self.column_name}": {
                 "query": self._query,
-                "comment": self._comment,
+                "comments": [self._comment],
             },
         }
 
@@ -306,8 +306,8 @@ class ChoiceGeneratorFactory(GeneratorFactory):
         with engine.connect() as connection:
             results = connection.execute(
                 text(
-                    f"SELECT {column_name} AS v, COUNT({column_name})"
-                    f" AS f FROM {table_name} GROUP BY v"
+                    f'SELECT "{column_name}" AS v, COUNT("{column_name}")'
+                    f' AS f FROM "{table_name}" GROUP BY v'
                     f" ORDER BY f DESC LIMIT {MAXIMUM_CHOICES + 1}"
                 )
             )
@@ -325,28 +325,41 @@ class ChoiceGeneratorFactory(GeneratorFactory):
                             table_name, column_name, vg.cvs, vg.counts
                         ),
                     ]
-            results = connection.execute(
+                if vg.counts_not_suppressed:
+                    generators += [
+                        ZipfChoiceGenerator(
+                            table_name,
+                            column_name,
+                            vg.values_not_suppressed,
+                            vg.counts_not_suppressed,
+                            suppress_count=self.SUPPRESS_COUNT,
+                        ),
+                        UniformChoiceGenerator(
+                            table_name,
+                            column_name,
+                            vg.values_not_suppressed,
+                            vg.counts_not_suppressed,
+                            suppress_count=self.SUPPRESS_COUNT,
+                        ),
+                        WeightedChoiceGenerator(
+                            table_name=table_name,
+                            column_name=column_name,
+                            values=vg.cvs_not_suppressed,
+                            counts=vg.counts_not_suppressed,
+                            suppress_count=self.SUPPRESS_COUNT,
+                        ),
+                    ]
+            sampled_results = connection.execute(
                 text(
                     f"SELECT v, COUNT(v) AS f FROM"
-                    f" (SELECT {column_name} as v FROM {table_name}"
+                    f' (SELECT "{column_name}" as v FROM "{table_name}"'
                     f" ORDER BY RANDOM() LIMIT {self.SAMPLE_COUNT})"
                     f" AS _inner GROUP BY v ORDER BY f DESC"
                 )
             )
-            if results is not None:
-                vg = ValueGatherer(results, self.SUPPRESS_COUNT)
+            if sampled_results is not None:
+                vg = ValueGatherer(sampled_results, self.SUPPRESS_COUNT)
                 if vg.counts:
-                    generators += [
-                        ZipfChoiceGenerator(
-                            table_name, column_name, vg.values, vg.counts
-                        ),
-                        UniformChoiceGenerator(
-                            table_name, column_name, vg.values, vg.counts
-                        ),
-                        WeightedChoiceGenerator(
-                            table_name, column_name, vg.cvs, vg.counts
-                        ),
-                    ]
                     generators += [
                         ZipfChoiceGenerator(
                             table_name,

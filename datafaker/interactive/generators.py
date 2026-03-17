@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Optional, cast
 
 import sqlalchemy
-from sqlalchemy import Column, MetaData
+from sqlalchemy import Column
 
 from datafaker.generators import everything_factory
 from datafaker.generators.base import Generator, PredefinedGenerator
@@ -16,6 +16,7 @@ from datafaker.utils import (
     get_row_generators,
     logger,
     primary_private_fks,
+    split_column_full_name,
     table_is_private,
 )
 
@@ -146,10 +147,7 @@ information about the columns in the current table. Use 'peek',
 
     def __init__(
         self,
-        src_dsn: str,
-        src_schema: str | None,
-        metadata: MetaData,
-        config: MutableMapping[str, Any],
+        settings: DbCmd.Settings,
     ) -> None:
         """
         Initialise a ``GeneratorCmd``.
@@ -159,7 +157,7 @@ information about the columns in the current table. Use 'peek',
         :param metadata: SQLAlchemy metadata for the source database
         :param config: Configuration loaded from ``config.yaml``
         """
-        super().__init__(src_dsn, src_schema, metadata, config)
+        super().__init__(settings)
         self.generators: list[Generator] | None = None
         self.generator_index = 0
         self.generators_valid_columns: Optional[tuple[int, list[str]]] = None
@@ -283,9 +281,7 @@ information about the columns in the current table. Use 'peek',
                             {
                                 "name": cq_key,
                                 "query": cq["query"],
-                                "comments": [cq["comment"]]
-                                if "comment" in cq and cq["comment"]
-                                else [],
+                                "comments": cq.get("comments", []),
                             }
                         )
                     rg: dict[str, Any] = {
@@ -450,27 +446,33 @@ information about the columns in the current table. Use 'peek',
 
         :return: True on success.
         """
-        parts = target.split(".", 1)
-        table_index = self._get_table_index(parts[0])
-        if table_index is None:
-            if len(parts) == 1:
-                gen_index = self._get_generator_index(self.table_index, parts[0])
-                if gen_index is not None:
-                    self.generator_index = gen_index
-                    self.set_prompt()
-                    return True
-            self.print(self.ERROR_NO_SUCH_TABLE_OR_COLUMN, parts[0])
-            return False
-        gen_index = None
-        if 1 < len(parts) and parts[1]:
-            gen_index = self._get_generator_index(table_index, parts[1])
-            if gen_index is None:
-                self.print("we cannot set the generator for column {0}", parts[1])
+        (first_part, last_part) = split_column_full_name(target)
+        gen_index: int | None = None
+        if first_part:
+            # target == table.column
+            table_index = self._get_table_index(first_part)
+            if table_index is None:
+                self.print(self.ERROR_NO_SUCH_TABLE, first_part)
                 return False
-        self._set_table_index(table_index)
-        if gen_index is not None:
-            self.generator_index = gen_index
-            self.set_prompt()
+            gen_index = self._get_generator_index(table_index, last_part)
+            if gen_index is None:
+                self.print(self.ERROR_NO_SUCH_COLUMN, last_part)
+                return False
+        else:
+            # target == table or target == column
+            table_index = self._get_table_index(last_part)
+            gen_index = 0
+            if table_index is None:
+                # not table, perhaps it's column
+                gen_index = self._get_generator_index(self.table_index, last_part)
+                if gen_index is None:
+                    # it's neither
+                    self.print(self.ERROR_NO_SUCH_TABLE_OR_COLUMN, last_part)
+                    return False
+        if table_index is not None:
+            self._set_table_index(table_index)
+        self.generator_index = gen_index
+        self.set_prompt()
         return True
 
     def do_next(self, arg: str) -> None:
@@ -511,10 +513,9 @@ information about the columns in the current table. Use 'peek',
         self, text: str, _line: str, _begidx: int, _endidx: int
     ) -> list[str]:
         """Completions for the arguments of the ``next`` command."""
-        parts = text.split(".", 1)
-        first_part = parts[0]
-        if 1 < len(parts):
-            column_name = parts[1]
+        (first_part, last_part) = split_column_full_name(text)
+        if first_part:
+            # first_part is table, last_part is column
             table_index = self._get_table_index(first_part)
             if table_index is None:
                 return []
@@ -523,22 +524,24 @@ information about the columns in the current table. Use 'peek',
                 f"{first_part}.{column}"
                 for gen in table_entry.new_generators
                 for column in gen.columns
-                if column.startswith(column_name)
+                if column.startswith(last_part)
             ]
+        # first_part is None, last_part might be table or column.
         table_names = [
             entry.name
             for entry in self.table_entries
-            if entry.name.startswith(first_part)
+            if entry.name.startswith(last_part)
         ]
-        if first_part in table_names:
-            table_names.append(f"{first_part}.")
+        if last_part in table_names:
+            # we have a complete table name, so allow the completion with a dot to show this
+            table_names.append(f"{last_part}.")
         current_table = self.get_table()
         if current_table:
             column_names = [
                 col
                 for gen in current_table.new_generators
                 for col in gen.columns
-                if col.startswith(first_part)
+                if col.startswith(last_part)
             ]
         else:
             column_names = []
@@ -569,7 +572,9 @@ information about the columns in the current table. Use 'peek',
             self.generators = None
         if self.generators is None:
             columns = self._column_metadata()
-            gens = everything_factory().get_generators(columns, self.sync_engine)
+            gens = everything_factory(self.config).get_generators(
+                columns, self.sync_engine
+            )
             sorted_gens = sorted(gens, key=lambda g: g.fit(9999))
             self.generators = sorted_gens
             self.generators_valid_columns = (

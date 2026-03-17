@@ -1,10 +1,8 @@
 """Missingness configuration shell."""
 import re
-from collections.abc import Iterable, Mapping, MutableMapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import cast
-
-from sqlalchemy import MetaData
 
 from datafaker.interactive.base import DbCmd, TableEntry
 
@@ -21,7 +19,7 @@ class MissingnessType:
     )
     name: str
     query: str
-    comment: str
+    comments: list[str]
     columns: list[str]
 
     @classmethod
@@ -73,8 +71,8 @@ data from the database. Use 'quit' to exit this tool."""
 
     def find_missingness_query(
         self, missingness_generator: Mapping
-    ) -> tuple[str, str] | None:
-        """Find query and comment from src-stats for the passed missingness generator."""
+    ) -> tuple[str, list[str]] | None:
+        """Find query and comments from src-stats for the passed missingness generator."""
         kwargs = missingness_generator.get("kwargs", {})
         patterns = kwargs.get("patterns", "")
         pattern_match = self.PATTERN_RE.match(patterns)
@@ -85,7 +83,7 @@ data from the database. Use 'quit' to exit this tool."""
                     query = src_stat.get("query", None)
                     if not isinstance(query, str):
                         return None
-                    return (query, src_stat.get("comment", ""))
+                    return (query, src_stat.get("comments", []))
         return None
 
     def make_table_entry(
@@ -106,27 +104,27 @@ data from the database. Use 'quit' to exit this tool."""
             return None
         mgs = table_config.get("missingness_generators", [])
         old = None
-        nonnull_columns = self.get_nonnull_columns(table_name)
-        if not nonnull_columns:
+        nullable_columns = self.get_nullable_columns(table_name)
+        if not nullable_columns:
             return None
         if not mgs:
             old = MissingnessType(
                 name="none",
                 query="",
-                comment="",
+                comments=[],
                 columns=[],
             )
         elif len(mgs) == 1:
             mg = mgs[0]
             mg_name = mg.get("name", None)
             if isinstance(mg_name, str):
-                query_comment = self.find_missingness_query(mg)
-                if query_comment is not None:
-                    (query, comment) = query_comment
+                query_comments = self.find_missingness_query(mg)
+                if query_comments is not None:
+                    (query, comments) = query_comments
                     old = MissingnessType(
                         name=mg_name,
                         query=query,
-                        comment=comment,
+                        comments=comments,
                         columns=mg.get("columns_assigned", []),
                     )
         if old is None:
@@ -139,20 +137,14 @@ data from the database. Use 'quit' to exit this tool."""
 
     def __init__(
         self,
-        src_dsn: str,
-        src_schema: str | None,
-        metadata: MetaData,
-        config: MutableMapping,
+        settings: DbCmd.Settings,
     ):
         """
         Initialise a MissingnessCmd.
 
-        :param src_dsn: connection string for the source database.
-        :param src_schema: schema name for the source database.
-        :param metadata: SQLAlchemy metadata for the source database.
-        :param config: Configuration from the ``config.yaml`` file.
+        :param settings: source database settings.
         """
-        super().__init__(src_dsn, src_schema, metadata, config)
+        super().__init__(settings)
         self.set_prompt()
 
     @property
@@ -209,9 +201,7 @@ data from the database. Use 'quit' to exit this tool."""
                     {
                         "name": src_stat_key,
                         "query": entry.new_type.query,
-                        "comments": []
-                        if entry.new_type.comment is None
-                        else [entry.new_type.comment],
+                        "comments": entry.new_type.comments,
                     }
                 )
             self.set_table_config(entry.name, table)
@@ -291,7 +281,7 @@ data from the database. Use 'quit' to exit this tool."""
         if not self._set_table_index(self.table_index - 1):
             self.print(self.ERROR_ALREADY_AT_START)
 
-    def _set_type(self, name: str, query: str, comment: str) -> None:
+    def _set_type(self, name: str, query: str, comments: list[str]) -> None:
         """Set the current table entry's query."""
         if len(self.table_entries) <= self.table_index:
             return
@@ -299,8 +289,8 @@ data from the database. Use 'quit' to exit this tool."""
         entry.new_type = MissingnessType(
             name=name,
             query=query,
-            comment=comment,
-            columns=self.get_nonnull_columns(entry.name),
+            comments=comments,
+            columns=self.get_nullable_columns(entry.name),
         )
 
     def _set_none(self) -> None:
@@ -339,12 +329,12 @@ data from the database. Use 'quit' to exit this tool."""
             MissingnessType.sampled_query(
                 entry.name,
                 count,
-                self.get_nonnull_columns(entry.name),
+                self.get_nullable_columns(entry.name),
             ),
-            (
+            [
                 "The missingness patterns and how often they appear in a"
                 f" sample of {count} from table {entry.name}"
-            ),
+            ],
         )
         self.print("Table {} set to sampled missingness", self.table_name())
         self.next_table()

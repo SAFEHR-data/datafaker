@@ -242,6 +242,10 @@
                   }
                 }
               }
+            },
+            "name_column": {
+              "description": "Column that provides a name for each row in the table. Used to make foreign keys to this table more readable in the src-stats.yaml file.",
+              "type": "string"
             }
           }
         }

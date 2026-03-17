@@ -9,30 +9,22 @@ from sqlalchemy import create_engine, inspect
 from typer.testing import CliRunner, Result
 
 from datafaker.main import app
-from tests.utils import RequiresDBTestCase
+from tests.utils import RequiresDBTestCase, TestDuckDb
 
 # pylint: disable=subprocess-run-check
 
 
-class DBFunctionalTestCase(RequiresDBTestCase):
-    """End-to-end tests that require a database."""
-
-    dump_file_path = "src.dump"
-    database_name = "src"
-    schema_name = "public"
+class DBFunctionalTestCaseBase(RequiresDBTestCase):
+    """Base class for test that call the CLI and require a database."""
 
     examples_dir = Path("tests/examples")
 
     orm_file_path = Path("orm.yaml")
     datafaker_file_path = Path("df.py")
 
-    alt_orm_file_path = Path("my_orm.yaml")
-    alt_datafaker_file_path = Path("my_df.py")
-
     generator_file_paths = tuple(
         map(Path, ("story_generators.py", "row_generators.py")),
     )
-    # dump_file_path = Path("dst.dump")
     config_file_path = Path("example_config2.yaml")
     stats_file_path = Path("example_stats.yaml")
 
@@ -41,17 +33,6 @@ class DBFunctionalTestCase(RequiresDBTestCase):
     def setUp(self) -> None:
         """Pre-test setup."""
         super().setUp()
-        self.env = {
-            "src_dsn": self.dsn,
-            "src_schema": self.schema_name,
-            "dst_dsn": self.dsn,
-            "dst_schema": "dstschema",
-        }
-        self.runner = CliRunner(
-            mix_stderr=False,
-            env=self.env,
-        )
-
         self.env = {
             "src_dsn": self.dsn,
             "src_schema": self.schema_name,
@@ -86,6 +67,17 @@ class DBFunctionalTestCase(RequiresDBTestCase):
         self.assertEqual(completed_process.stderr, "")
         self.assertEqual(completed_process.stdout, "")
 
+
+class DBFunctionalTestCase(DBFunctionalTestCaseBase):
+    """End-to-end tests that require a database."""
+
+    dump_file_path = "src.dump"
+    database_name = "src"
+    schema_name = "public"
+
+    alt_orm_file_path = Path("my_orm.yaml")
+    alt_datafaker_file_path = Path("my_df.py")
+
     def test_workflow_minimal_args(self) -> None:
         """Test the recommended CLI workflow runs without errors."""
         shutil.copy(self.config_file_path, "config.yaml")
@@ -117,15 +109,15 @@ class DBFunctionalTestCase(RequiresDBTestCase):
             {
                 (
                     "Unsupported SQLAlchemy type CIDR for column "
-                    "column_with_unusual_type. Setting this column to NULL "
-                    "always, you may want to configure a row generator for "
-                    "it instead."
+                    "column_with_unusual_type of table strange_type_table. "
+                    "Setting this column to NULL always, you may want to "
+                    "configure a row generator for it instead."
                 ),
                 (
                     "Unsupported SQLAlchemy type BIT for column "
-                    "column_with_unusual_type_and_length. Setting this column "
-                    "to NULL always, you may want to configure a row generator "
-                    "for it instead."
+                    "column_with_unusual_type_and_length of table "
+                    "strange_type_table. Setting this column to NULL always, "
+                    "you may want to configure a row generator for it instead."
                 ),
             },
             set(completed_process.stderr.split("\n")) - {""},
@@ -207,7 +199,6 @@ class DBFunctionalTestCase(RequiresDBTestCase):
         completed_process = self.invoke(
             "--verbose",
             "make-tables",
-            f"--config-file={self.config_file_path}",
             f"--orm-file={self.alt_orm_file_path}",
             "--force",
         )
@@ -222,6 +213,7 @@ class DBFunctionalTestCase(RequiresDBTestCase):
         completed_process = self.invoke(
             "--verbose",
             "make-stats",
+            f"--orm-file={self.alt_orm_file_path}",
             f"--stats-file={self.stats_file_path}",
             f"--config-file={self.config_file_path}",
             "--force",
@@ -268,12 +260,12 @@ class DBFunctionalTestCase(RequiresDBTestCase):
         )
         self.assertEqual(
             "Unsupported SQLAlchemy type CIDR "
-            "for column column_with_unusual_type. "
+            "for column column_with_unusual_type of table strange_type_table. "
             "Setting this column to NULL always, "
             "you may want to configure a row generator for it instead.\n"
             "Unsupported SQLAlchemy type BIT "
-            "for column column_with_unusual_type_and_length. "
-            "Setting this column to NULL always, "
+            "for column column_with_unusual_type_and_length of table "
+            "strange_type_table. Setting this column to NULL always, "
             "you may want to configure a row generator for it instead.\n",
             completed_process.stderr,
         )
@@ -507,6 +499,7 @@ class DBFunctionalTestCase(RequiresDBTestCase):
         )
         self.invoke(
             "make-stats",
+            f"--orm-file={self.alt_orm_file_path}",
             f"--stats-file={self.stats_file_path}",
             f"--config-file={self.config_file_path}",
             "--force",
@@ -589,14 +582,16 @@ class DBFunctionalTestCase(RequiresDBTestCase):
         """Check that we create a destination schema if it doesn't exist."""
         env = {"dst_schema": "doesntexistyetschema"}
 
-        engine = create_engine(self.env["dst_dsn"])
+        dst_dsn = self.env["dst_dsn"]
+        assert dst_dsn is not None
+
+        engine = create_engine(dst_dsn)
         inspector = inspect(engine)
         self.assertFalse(inspector.has_schema(env["dst_schema"]))
 
         self.invoke(
             "make-tables",
             "--force",
-            f"--config-file={self.config_file_path}",
             env=env,
         )
 
@@ -607,6 +602,16 @@ class DBFunctionalTestCase(RequiresDBTestCase):
         )
         self.assertEqual("", completed_process.stderr)
 
-        engine = create_engine(self.env["dst_dsn"])
+        engine = create_engine(dst_dsn)
         inspector = inspect(engine)
         self.assertTrue(inspector.has_schema(env["dst_schema"]))
+
+
+class DuckDbFunctionalTestCase(DBFunctionalTestCaseBase):
+    """End-to-end tests for the DuckDB workflow."""
+
+    dump_file_path = "instrument.sql"
+    database_name = "instrument"
+    schema_name = "public"
+
+    database_type = TestDuckDb

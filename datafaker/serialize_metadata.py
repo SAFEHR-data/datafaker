@@ -1,13 +1,14 @@
 """Convert between a Python dict describing a database schema and a SQLAlchemy MetaData."""
 import typing
 from functools import partial
+from pathlib import Path
 
 import parsy
 from sqlalchemy import Column, Dialect, Engine, ForeignKey, MetaData, Table
 from sqlalchemy.dialects import oracle, postgresql
 from sqlalchemy.sql import schema, sqltypes
 
-from datafaker.utils import make_foreign_key_name
+from datafaker.utils import get_property, make_foreign_key_name, split_column_full_name
 
 TableT = dict[str, typing.Any]
 
@@ -282,14 +283,17 @@ def dict_to_table(
 
 
 def metadata_to_dict(
-    meta: MetaData, schema_name: str | None, engine: Engine
+    meta: MetaData,
+    schema_name: str | None,
+    engine: Engine,
+    parquet_dir: Path | None,
 ) -> dict[str, typing.Any]:
     """
     Convert a metadata object into a Python dict.
 
     The output will be ready for output to ``orm.yaml``.
     """
-    return {
+    d = {
         "tables": {
             str(table.name): table_to_dict(table, engine.dialect)
             for table in meta.tables.values()
@@ -297,6 +301,9 @@ def metadata_to_dict(
         "dsn": str(engine.url),
         "schema": schema_name,
     }
+    if parquet_dir is not None:
+        d["parquet-dir"] = str(parquet_dir)
+    return d
 
 
 def should_ignore_fk(tables_dict: dict[str, TableT], fk: str) -> bool:
@@ -307,12 +314,9 @@ def should_ignore_fk(tables_dict: dict[str, TableT], fk: str) -> bool:
     :param tables_dict: The ``tables`` value from ``config.yaml``.
     :param fk: The name of the foreign key.
     """
-    fk_bits = fk.split(".", 2)
-    if len(fk_bits) != 2:
-        return True
-    if fk_bits[0] not in tables_dict:
-        return False
-    return bool(tables_dict[fk_bits[0]].get("ignore", False))
+    (table, _column) = split_column_full_name(fk)
+    td = get_property(tables_dict, table, dict, {})
+    return get_property(td, "ignore", bool, False)
 
 
 def _always_false(_: str) -> bool:
