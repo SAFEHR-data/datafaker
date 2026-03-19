@@ -22,24 +22,6 @@ from datafaker.utils import (
 )
 
 
-class TableGenerator(ABC):
-    """Abstract base class for table generator classes."""
-
-    num_rows_per_pass: int = 1
-
-    @abstractmethod
-    def __call__(self, dst_db_conn: Connection, metadata: MetaData) -> dict[str, Any]:
-        """Return, as a dictionary, a new row for the table that we are generating.
-
-        The only argument, `dst_db_conn`, should be a database connection to the
-        database to which the data is being written. Most generators won't use it, but
-        some do, and thus it's required by the interface.
-
-        The return value should be a dictionary with column names as strings for keys,
-        and the values being the values for the new row.
-        """
-
-
 @dataclass
 class FileUploader:
     """For uploading data files."""

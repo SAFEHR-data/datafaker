@@ -100,32 +100,6 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
         self.assert_silent_success(completed_process)
 
         completed_process = self.invoke(
-            "create-generators",
-            "--force",
-            "--stats-file=src-stats.yaml",
-        )
-        self.assertNoException(completed_process)
-        self.assertEqual(
-            {
-                (
-                    "Unsupported SQLAlchemy type CIDR for column "
-                    "column_with_unusual_type of table strange_type_table. "
-                    "Setting this column to NULL always, you may want to "
-                    "configure a row generator for it instead."
-                ),
-                (
-                    "Unsupported SQLAlchemy type BIT for column "
-                    "column_with_unusual_type_and_length of table "
-                    "strange_type_table. Setting this column to NULL always, "
-                    "you may want to configure a row generator for it instead."
-                ),
-            },
-            set(completed_process.stderr.split("\n")) - {""},
-        )
-        self.assertSuccess(completed_process)
-        self.assertEqual("", completed_process.stdout)
-
-        completed_process = self.invoke(
             "create-tables",
         )
         self.assert_silent_success(completed_process)
@@ -141,7 +115,9 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
         )
         self.assert_silent_success(completed_process)
 
-        completed_process = self.invoke("create-data")
+        completed_process = self.invoke(
+            "create-data",
+        )
         self.assertNoException(completed_process)
         self.assertEqual("", completed_process.stderr)
         self.assertSuccess(completed_process)
@@ -251,33 +227,6 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
 
         completed_process = self.invoke(
             "--verbose",
-            "create-generators",
-            f"--orm-file={self.alt_orm_file_path}",
-            f"--df-file={self.alt_datafaker_file_path}",
-            f"--config-file={self.config_file_path}",
-            f"--stats-file={self.stats_file_path}",
-            "--force",
-        )
-        self.assertEqual(
-            "Unsupported SQLAlchemy type CIDR "
-            "for column column_with_unusual_type of table strange_type_table. "
-            "Setting this column to NULL always, "
-            "you may want to configure a row generator for it instead.\n"
-            "Unsupported SQLAlchemy type BIT "
-            "for column column_with_unusual_type_and_length of table "
-            "strange_type_table. Setting this column to NULL always, "
-            "you may want to configure a row generator for it instead.\n",
-            completed_process.stderr,
-        )
-        self.assertSuccess(completed_process)
-        self.assertEqual(
-            f"Making {self.alt_datafaker_file_path}.\n"
-            f"{self.alt_datafaker_file_path} created.\n",
-            completed_process.stdout,
-        )
-
-        completed_process = self.invoke(
-            "--verbose",
             "create-tables",
             f"--orm-file={self.alt_orm_file_path}",
             f"--config-file={self.config_file_path}",
@@ -324,7 +273,7 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
             "--verbose",
             "create-data",
             f"--orm-file={self.alt_orm_file_path}",
-            f"--df-file={self.alt_datafaker_file_path}",
+            f"--stats-file={self.stats_file_path}",
             f"--config-file={self.config_file_path}",
             "--num-passes=2",
         )
@@ -529,7 +478,7 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
             "create-data",
             f"--config-file={self.config_file_path}",
             f"--orm-file={self.alt_orm_file_path}",
-            f"--df-file={self.alt_datafaker_file_path}",
+            f"--stats-file={self.stats_file_path}",
             "--num-passes=1",
         )
         self.assertEqual("", completed_process.stderr)

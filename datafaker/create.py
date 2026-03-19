@@ -1,7 +1,6 @@
 """Functions and classes to create and populate the target database."""
-import pathlib
 from collections import Counter
-from types import ModuleType
+from pathlib import Path
 from typing import Any, Generator, Iterable, Iterator, Mapping, Sequence, Tuple
 
 from sqlalchemy import Connection, insert, inspect
@@ -10,10 +9,19 @@ from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateColumn, CreateSchema, CreateTable, MetaData, Table
 
-from datafaker.base import FileUploader, TableGenerator
+from datafaker.base import FileUploader
+from datafaker.make import get_generation_info
+from datafaker.populate import (
+    TableGenerator,
+    get_symbols,
+    get_table_generator_dict,
+    get_story_generator_list,
+    get_vocab_dict,
+)
 from datafaker.settings import get_destination_dsn, get_destination_schema, get_settings
 from datafaker.utils import (
     create_db_engine_dst,
+    get_property,
     get_sync_engine,
     get_vocabulary_table_names,
     logger,
@@ -92,7 +100,7 @@ def create_db_vocab(
     metadata: MetaData,
     meta_dict: dict[str, Any],
     config: Mapping,
-    base_path: pathlib.Path = pathlib.Path("."),
+    base_path: Path = Path("."),
 ) -> list[str]:
     """
     Load vocabulary tables from files.
@@ -140,14 +148,16 @@ def create_db_vocab(
 
 def create_db_data(
     sorted_tables: Sequence[Table],
-    df_module: ModuleType,
+    config: Mapping[str, Any],
+    src_stats_filename: Path | None,
     num_passes: int,
     metadata: MetaData,
 ) -> RowCounts:
     """Connect to a database and populate it with data."""
     return create_db_data_into(
         sorted_tables,
-        df_module,
+        config,
+        src_stats_filename,
         num_passes,
         get_destination_dsn(),
         get_destination_schema(),
@@ -158,7 +168,8 @@ def create_db_data(
 # pylint: disable=too-many-arguments too-many-positional-arguments
 def create_db_data_into(
     sorted_tables: Sequence[Table],
-    df_module: ModuleType,
+    config: Mapping[str, Any],
+    src_stats_filename: Path | None,
     num_passes: int,
     db_dsn: str,
     schema_name: str | None,
@@ -176,17 +187,31 @@ def create_db_data_into(
     :param num_passes: Number of passes to perform.
     :param db_dsn: Connection string for the destination database.
     :param schema_name: Destination schema name.
+    :param metadata: Destination database metadata.
     """
     dst_engine = get_sync_engine(create_db_engine_dst(db_dsn, schema_name=schema_name))
-
+    gen_info = get_generation_info(metadata, config, Path("orm.blah"), Path("config.blah"), src_stats_filename)
     row_counts: Counter[str] = Counter()
     with dst_engine.connect() as dst_conn:
+        context = get_symbols(
+            gen_info.row_generator_module_name,
+            gen_info.story_generator_module_name,
+            get_property(config, "object_instantiation", dict, {}),
+            gen_info.src_stats_filename,
+            dst_conn,
+            metadata,
+        )
         for _ in range(num_passes):
             row_counts += populate(
                 dst_conn,
                 sorted_tables,
-                df_module.table_generator_dict,
-                df_module.story_generator_list,
+                get_table_generator_dict(
+                    dst_conn,
+                    gen_info.tables,
+                    gen_info.max_unique_constraint_tries,
+                    context,
+                ),
+                get_story_generator_list(gen_info.story_generators, context),
                 metadata,
             )
     dst_engine.dispose()
@@ -336,7 +361,7 @@ def populate(
         try:
             with dst_conn.begin():
                 for _ in range(table_generator.num_rows_per_pass):
-                    stmt = insert(table).values(table_generator(dst_conn, metadata))
+                    stmt = insert(table).values(table_generator(dst_conn))
                     dst_conn.execute(stmt)
                     row_counts[table.name] = row_counts.get(table.name, 0) + 1
                 dst_conn.commit()

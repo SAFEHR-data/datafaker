@@ -66,7 +66,8 @@ class FunctionCall:
     """Contains the df.py content related function calls."""
 
     function_name: str
-    argument_values: list[str]
+    args: list[str]
+    kwargs: dict[str, str]
 
 
 @dataclass
@@ -83,7 +84,8 @@ class ColumnChoice:
     """Choose columns based on a random number in [0,1)."""
 
     function_name: str
-    argument_values: list[str]
+    args: list[str]
+    kwargs: dict[str, str]
 
 
 def make_column_choices(
@@ -100,7 +102,8 @@ def make_column_choices(
     return [
         ColumnChoice(
             function_name=mg["name"],
-            argument_values=[f"{k}={v}" for k, v in mg.get("kwargs", {}).items()],
+            args=mg.get("args", []),
+            kwargs=mg.get("kwargs", {}),
         )
         for mg in table_config.get("missingness_generators", [])
         if "name" in mg
@@ -168,12 +171,11 @@ def _get_function_call(
     if keyword_arguments is None:
         keyword_arguments = {}
 
-    argument_values: list[str] = [str(value) for value in positional_arguments]
-    argument_values += [
-        f"{key}={_render_value(value)}" for key, value in keyword_arguments.items()
-    ]
-
-    return FunctionCall(function_name=function_name, argument_values=argument_values)
+    return FunctionCall(
+        function_name=function_name,
+        args=positional_arguments,
+        kwargs=keyword_arguments,
+    )
 
 
 def _get_row_generator(
@@ -580,13 +582,29 @@ def make_vocabulary_tables(
         )
 
 
-def make_table_generators(  # pylint: disable=too-many-locals
+@dataclass
+class GenerationInfo:
+    """Information for the generation of all data."""
+    provider_imports: list[str]
+    orm_file_name: Path
+    config_file_name: Path
+    row_generator_module_name: str | None
+    story_generator_module_name: str | None
+    object_instantiation: dict[str, dict]
+    src_stats_filename: Path | None
+    tables: list[TableGeneratorInfo]
+    vocabulary_tables: list[VocabularyTableGeneratorInfo]
+    story_generators: list[StoryGeneratorInfo]
+    max_unique_constraint_tries: int | None
+
+
+def get_generation_info(  # pylint: disable=too-many-locals
     metadata: MetaData,
     config: Mapping,
     orm_filename: Path,
     config_filename: Path,
     src_stats_filename: Optional[Path],
-) -> str:
+) -> GenerationInfo:
     """
     Create datafaker generator classes.
 
@@ -605,10 +623,16 @@ def make_table_generators(  # pylint: disable=too-many-locals
 
     :return: A string that is a valid Python module, once written to file.
     """
-    row_generator_module_name: str = config.get("row_generators_module", None)
-    story_generator_module_name = config.get("story_generators_module", None)
-    object_instantiation: dict[str, dict] = config.get("object_instantiation", {})
-    tables_config = config.get("tables", {})
+    row_generator_module_name = get_property(
+        config, "row_generators_module", str | None, None
+    )
+    story_generator_module_name = get_property(
+        config, "story_generators_module", str | None, None
+    )
+    object_instantiation = get_property(
+        config, "object_instantiation", dict, {}
+    )
+    tables_config = get_property(config, "tables", dict, {})
 
     tables: list[TableGeneratorInfo] = []
     vocabulary_tables: list[VocabularyTableGeneratorInfo] = []
@@ -637,20 +661,47 @@ def make_table_generators(  # pylint: disable=too-many-locals
 
     story_generators = _get_story_generators(config)
 
-    max_unique_constraint_tries = config.get("max-unique-constraint-tries", None)
+    max_unique_constraint_tries = get_property(
+        config, "max-unique-constraint-tries", str | None, None
+    )
+    return GenerationInfo(
+        provider_imports=PROVIDER_IMPORTS,
+        orm_file_name=orm_filename,
+        config_file_name=config_filename,
+        row_generator_module_name=row_generator_module_name,
+        story_generator_module_name=story_generator_module_name,
+        object_instantiation=object_instantiation,
+        src_stats_filename=src_stats_filename,
+        tables=tables,
+        vocabulary_tables=vocabulary_tables,
+        story_generators=story_generators,
+        max_unique_constraint_tries=max_unique_constraint_tries,
+    )
+
+
+def make_table_generators(  # pylint: disable=too-many-locals
+    metadata: MetaData,
+    config: Mapping,
+    orm_filename: Path,
+    config_filename: Path,
+    src_stats_filename: Optional[Path],
+) -> str:
+    gi = get_generation_info(
+        metadata, config, orm_filename, config_filename, src_stats_filename
+    )
     return generate_df_content(
         {
-            "provider_imports": PROVIDER_IMPORTS,
-            "orm_file_name": orm_filename,
-            "config_file_name": config_filename,
-            "row_generator_module_name": row_generator_module_name,
-            "story_generator_module_name": story_generator_module_name,
-            "object_instantiation": object_instantiation,
-            "src_stats_filename": src_stats_filename,
-            "tables": tables,
-            "vocabulary_tables": vocabulary_tables,
-            "story_generators": story_generators,
-            "max_unique_constraint_tries": max_unique_constraint_tries,
+            "provider_imports": gi.provider_imports,
+            "orm_file_name": gi.orm_file_name,
+            "config_file_name": gi.config_file_name,
+            "row_generator_module_name": gi.row_generator_module_name,
+            "story_generator_module_name": gi.story_generator_module_name,
+            "object_instantiation": gi.object_instantiation,
+            "src_stats_filename": gi.src_stats_filename,
+            "tables": gi.tables,
+            "vocabulary_tables": gi.vocabulary_tables,
+            "story_generators": gi.story_generators,
+            "max_unique_constraint_tries": gi.max_unique_constraint_tries,
         }
     )
 

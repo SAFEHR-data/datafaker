@@ -191,7 +191,6 @@ class TestCLI(DatafakerTestCase):
 
     @patch("datafaker.main.sorted_non_vocabulary_tables")
     @patch("datafaker.main.logger")
-    @patch("datafaker.main.import_file")
     @patch("datafaker.main.create_db_data")
     @patch("datafaker.main.load_metadata_for_output")
     # pylint: disable=too-many-arguments too-many-positional-arguments
@@ -199,7 +198,6 @@ class TestCLI(DatafakerTestCase):
         self,
         mock_load_metadata: MagicMock,
         mock_create: MagicMock,
-        mock_import: MagicMock,
         mock_logger: MagicMock,
         mock_tables: MagicMock,
     ) -> None:
@@ -215,7 +213,6 @@ class TestCLI(DatafakerTestCase):
             ],
             catch_exceptions=False,
         )
-        self.assertListEqual([call("df.py")], mock_import.call_args_list)
 
         mock_create.assert_called_once_with(
             mock_tables.return_value,

@@ -404,7 +404,7 @@ def get_flag(maybe_dict: Any, key: Any) -> bool:
     return isinstance(maybe_dict, Mapping) and maybe_dict.get(key, False)
 
 
-def get_property(maybe_dict: Any, key: Any, required_type: Type[T], default: T) -> T:
+def get_property(maybe_dict: Any, key: Any, required_type: type[T], default: T) -> T:
     """
     Get a specific property from a dict or a default if that does not exist.
 
@@ -797,7 +797,7 @@ def generators_require_stats(config: Mapping) -> bool:
 
     :param config: ``config.yaml`` object.
     :return: True if any of the arguments for any of the generators
-    reference ``SRC_STATS``.
+      reference ``SRC_STATS``.
     """
     ois = {
         f"object_instantiation.{k}": call

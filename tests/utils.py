@@ -486,10 +486,10 @@ class GeneratesDBTestCase(RequiresDBTestCase):
     def create_data(self, config: Mapping[str, Any], num_passes: int = 1) -> None:
         """Create fake data in the DB."""
         # `create-data` with all this stuff
-        datafaker_module = import_file(self.generators_file_path)
         create_db_data_into(
             sorted_non_vocabulary_tables(self.metadata, config),
-            datafaker_module,
+            config,
+            Path(self.stats_file_path),
             num_passes,
             self.dst_dsn,
             self.dst_schema_name,

@@ -13,15 +13,17 @@ import pandas as pd
 from sqlalchemy import Connection, Engine, select
 from sqlalchemy.schema import MetaData, Table
 
-from datafaker.base import TableGenerator
+from datafaker.populate import TableGenerator
 from datafaker.create import (
     create_db_data_into,
     create_db_tables,
+    create_db_tables_into,
     create_db_vocab,
     populate,
 )
-from datafaker.serialize_metadata import metadata_to_dict
-from tests.utils import DatafakerTestCase, GeneratesDBTestCase
+from datafaker.serialize_metadata import metadata_to_dict, dict_to_metadata
+from datafaker.utils import sorted_non_vocabulary_tables
+from tests.utils import DatafakerTestCase, GeneratesDBTestCase, RequiresDBTestCase
 
 
 class TestCreate(GeneratesDBTestCase):
@@ -306,6 +308,7 @@ class CreateReadsNoParquetTestCase(DatafakerTestCase):
             "duckdb:///:memory:data",
             None,
             MagicMock(),
+            MagicMock(),
         )
         assert mock_populate.side_effect.called
 
@@ -338,3 +341,41 @@ class CreateReadsNoParquetTestCase(DatafakerTestCase):
                 base_path=Path("base"),
             )
         assert file_uploader.return_value.load.called
+
+
+class CreateDataTestCase(RequiresDBTestCase):
+    """Tests for create-data."""
+    dump_file_path = "empty.sql"
+    database_name = "empty"
+    schema_name = "public"
+
+    def test_create_data_minimal(self) -> None:
+        """Test creating one table with one PK column."""
+        config = {}
+        orm = {
+            "tables": {
+                "one": {
+                    "columns": {
+                        "id": {
+                            "primary": True,
+                            "type": "INTEGER",
+                        }
+                    }
+                }
+            }
+        }
+        metadata = dict_to_metadata(orm, config)
+        create_db_tables_into(metadata, self.dsn, self.schema_name)
+        row_counts = create_db_data_into(
+            sorted_non_vocabulary_tables(metadata, config),
+            config,
+            None,
+            4,
+            self.dsn,
+            self.schema_name,
+            metadata,
+        )
+        with self.sync_engine.connect() as connection:
+            stmt = select(metadata.tables["one"])
+            rows = connection.execute(stmt).fetchall()
+            self.assertListEqual(rows, [(1,), (2,), (3,), (4,)])

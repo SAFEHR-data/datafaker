@@ -1,23 +1,25 @@
 from collections.abc import Iterable, Mapping, MutableMapping, Sequence
+from pathlib import Path
 from mimesis import Generic
 from mimesis.locales import Locale
 import sqlalchemy
 from typing import Any, Callable
 import yaml
 
-from datafaker.base import FileUploader, TableGenerator
+from datafaker.base import FileUploader, ColumnPresence
 from datafaker.make import TableGeneratorInfo, StoryGeneratorInfo  #TODO: move these in here!
 
 from datafaker.providers import (
     BytesProvider,
     ColumnValueProvider,
+    DistributionProvider,
     NullProvider,
     SQLGroupByProvider,
     TimedeltaProvider,
     TimespanProvider,
     WeightedBooleanProvider,
 )
-from datafaker.utils import logging, get_vocabulary_table_names
+from datafaker.utils import logging, get_vocabulary_table_names, import_file
 
 generic = Generic(locale=Locale.EN_GB)
 
@@ -38,7 +40,12 @@ def _eval_structure(config: Any, context: Mapping) -> Any:
     :return: Object matching the structure of ``config`` with strings eval'ed.
     """
     if isinstance(config, str):
-        return eval(config, locals=context)
+        try:
+            return eval(config, None, context)
+        except SyntaxError as exc:
+            raise exc
+        except NameError as exc:
+            raise exc
     if isinstance(config, Mapping):
         return {
             k: _eval_structure(v, context)
@@ -49,7 +56,7 @@ def _eval_structure(config: Any, context: Mapping) -> Any:
     return config
 
 
-def _get_object(class_name: Any, context: Mapping) -> Any:
+def _get_object(class_name: str, context: Mapping) -> Any:
     """
     Get an object out of the context.
 
@@ -59,26 +66,25 @@ def _get_object(class_name: Any, context: Mapping) -> Any:
     :return: A value from ``context`` if there are no qualifying names,
     otherwise the attribute of the base object.
     """
-    if not isinstance(class_name, str):
-        return None
-    if not isinstance(kwargs, Mapping):
-        kwargs = {}
     parts = class_name.split(".")
     if parts[0] not in context:
-        logging.error('No such object "%"', parts[0])
-        return None
+        raise ValueError('No such object "%"', parts[0])
     value = context[parts[0]]
     so_far = parts[0]
     for part in parts[1:]:
         so_far += "." + part
         if not hasattr(value, part):
-            logging.error('No such attribute "%"', so_far)
-            return None
+            raise ValueError('No such attribute "%"', so_far)
         value = getattr(value, part)
     return value
 
 
-def _call_from_context(callable_name: Any, kwargs: Any, context: Mapping) -> Any:
+def _call_from_context(
+    callable_name: str,
+    args: list[Any],
+    kwargs: dict[str, Any],
+    context: Mapping
+) -> Any:
     """
     Call a callable from the classes (or functions) in the context.
 
@@ -89,25 +95,83 @@ def _call_from_context(callable_name: Any, kwargs: Any, context: Mapping) -> Any
     cls = _get_object(callable_name, context)
     if not isinstance(cls, Callable):
         return None
-    kws = _eval_structure(kwargs, context)
-    if kws is None:
-        return None
-    return cls(**kws)
+    arg_objs = [
+        _eval_structure(arg, context)
+        for arg in args
+    ]
+    kwarg_objs = {
+        k: _eval_structure(v, context)
+        for k, v in kwargs.items()
+    }
+    return cls(*arg_objs, **kwarg_objs)
 
 
-def _get_src_stats(src_stats_filename: str) -> Any:
+def get_symbols(
+    row_generator_module_name: str | None,
+    story_generator_module_name: str | None,
+    object_instantiation: dict[str, dict[str, Any]] | None,
+    src_stats_filename: str | None,
+    dst_db_conn: sqlalchemy.Connection,
+    metadata: sqlalchemy.MetaData,
+) -> dict[str, Any]:
+    """Get the symbols that may be referred to by various configuration settings."""
+    symbols = {
+        "dst_db_conn": dst_db_conn,
+        "metadata": metadata,
+        "generic": generic,
+        "numeric": generic.numeric,
+        "person": generic.person,
+        "dist_gen": DistributionProvider(),
+        "column_presence": ColumnPresence(),
+    }
+    _get_symbol_import(symbols, row_generator_module_name)
+    _get_symbol_import(symbols, story_generator_module_name)
+    if object_instantiation:
+        _get_symbols_instantiation(symbols, object_instantiation)
+    if src_stats_filename:
+        with Path(src_stats_filename).open(encoding="utf-8") as fh:
+            symbols["SRC_STATS"] = yaml.load(fh, yaml.SafeLoader)
+    return symbols
+
+
+def _get_symbol_import(symbols: dict[str, Any], module_name: str | None) -> None:
     """
-    Get the SRC_STATS object
+    Load a module and add it as a symbol.
+
+    :param symbols: Dict to add the module to.
+    :param module_name: if None, nothing will be added to ``symbols``.
+      Otherwise the ``module_name`` module will be loaded and added as
+      ``symbols[module_name]``.
     """
-    with open(src_stats_filename, "r", encoding="utf-8") as f:
-        return yaml.load(f, yaml.SafeLoader)
+    if module_name is None:
+        return
+    symbols[module_name] = import_file(module_name + ".py")
+
+
+def _get_symbols_instantiation(symbols: dict[str, Any], objs: dict[str, Any]) -> None:
+    """
+    Instantiate objects and add them to the ``symbols`` dictionary.
+
+    :param symbols: Dict to add the new objects to; also the context for the
+      instantiations.
+    :param objs: Dict of names to instantiation configurations. The names are
+      the keys that will be added to ``symbols``, the values are each callable
+      named by ``objs[name]["class"]`` with the arguments provided by
+      ``objs[name]["kwargs"]`` (which is a dict of argument names to a
+      Python string of the value to pass to that argument, such as ``'0'`` for
+      the number zero or ``"hello"`` for the string "hello").
+    """
+    for name, inst in objs.items():
+        clbl = inst.get("class", None)
+        kwargs = inst.get("kwargs", {})
+        if isinstance(clbl, str) and isinstance(kwargs, dict):
+            symbols[name] = _call_from_context(clbl, kwargs, symbols)
 
 
 class TableGenerator:
 
     def __init__(
         self,
-        rows_per_pass: int,
         dst_db_conn: sqlalchemy.Connection,
         table_data: TableGeneratorInfo,
         max_unique_constraint_tries: int | None,
@@ -123,10 +187,8 @@ class TableGenerator:
           this could cause an infinite loop if there are no solutions, or very long
           execution if there are few solutions with many constraints.
         """
-        self.num_rows_per_pass = rows_per_pass
         self.table_data = table_data
         self.max_unique_constraint_tries = max_unique_constraint_tries
-        self.db_conn = dst_db_conn
         self.existing_constraint_hashes: MutableMapping[str, set[int]] = {}
         self.context: Mapping = {}
         for constraint in table_data.unique_constraints:
@@ -137,17 +199,27 @@ class TableGenerator:
                 for result in query_result
             ])
 
+    @property
+    def num_rows_per_pass(self):
+        """Get the number of rows this generator should produce relative to all the rest."""
+        return self.table_data.rows_per_pass
+
+    @property
+    def name(self):
+        """Get the name of the table whose rows we are generating."""
+        return self.table_data.table_name
+
     def set_context(self, context: Mapping) -> None:
         """Sets all the Python symbols that must be known to the configuration."""
         self.context = context
 
-    def __call__(self):
+    def __call__(self, db_conn: sqlalchemy.Connection):
         """Generate some rows of the relevant table in the database."""
         result: dict[str, Any] = {}
         columns_to_generate = set(self.table_data.nonnull_columns)
         # Which missingness patterns do we want?
         for choice in self.table_data.column_choices:
-            cols = _call_from_context(choice.function_name, choice.argument_values, self.context)
+            cols = _call_from_context(choice.function_name, choice.args, choice.kwargs, self.context)
             columns_to_generate.update(cols)
 
         max_tries = self.max_unique_constraint_tries
@@ -158,9 +230,17 @@ class TableGenerator:
                 max_tries -= 1
             for row_gen in self.table_data.row_gens:
                 if set(row_gen.variable_names) & columns_to_generate:
-                    values = _call_from_context(row_gen.function_call.function_name, row_gen.function_call.argument_values, self.context)
-                    for index, variable_name in enumerate(row_gen.variable_names):
-                        result[variable_name] = values[index]
+                    values = _call_from_context(
+                        row_gen.function_call.function_name,
+                        row_gen.function_call.args,
+                        row_gen.function_call.kwargs,
+                        self.context,
+                    )
+                    if len(row_gen.variable_names) == 1:
+                        result[row_gen.variable_names[0]] = values
+                    else:
+                        for index, variable_name in enumerate(row_gen.variable_names):
+                            result[variable_name] = values[index]
             columns_to_generate = set()
             for constraint in self.table_data.unique_constraints:
                 cf_hash = hash(tuple(
@@ -175,15 +255,33 @@ class TableGenerator:
             self.existing_constraint_hashes.add(cf_hash)
         return result
 
+
+def _make_table_generator(
+    dst_db_conn: sqlalchemy.Connection,
+    table_data: TableGeneratorInfo,
+    max_unique_constraint_tries: int | None,
+    context: Mapping,
+):
+    """Make a ``TableGenerator`` with context attached."""
+    gen = TableGenerator(dst_db_conn, table_data, max_unique_constraint_tries)
+    gen.set_context(context)
+    return gen
+
+
 def get_table_generator_dict(
-    rows_per_pass: int,
     dst_db_conn: sqlalchemy.Connection,
     tables_data: Iterable[TableGeneratorInfo],
     max_unique_constraint_tries: int | None,
+    context: Mapping,
 ):
     """Get a dict of table names to row generators that generate rows for that table."""
     return {
-        table_data.table_name: TableGenerator(rows_per_pass, dst_db_conn, table_data, max_unique_constraint_tries)
+        table_data.table_name: _make_table_generator(
+            dst_db_conn,
+            table_data,
+            max_unique_constraint_tries,
+            context,
+        )
         for table_data in tables_data
     }
 

@@ -147,14 +147,18 @@ def create_data(
         help="The name of the ORM yaml file",
         dir_okay=False,
     ),
-    df_file: str = Option(
-        DF_FILENAME,
-        help="The name of the generators file. Must be in the current working directory.",
-        dir_okay=False,
-    ),
     config_file: Optional[Path] = Option(
         CONFIG_FILENAME,
         help="The configuration file",
+    ),
+    stats_file: Optional[Path] = Option(
+        None,
+        help=(
+            "Statistics file (output of make-stats); default is src-stats.yaml if the "
+            "config file references SRC_STATS, or None otherwise."
+        ),
+        show_default=False,
+        dir_okay=False,
     ),
     num_passes: int = Option(1, help="Number of passes (rows or stories) to make"),
 ) -> None:
@@ -179,11 +183,11 @@ def create_data(
     logger.debug("Creating data.")
     config = read_config_file(config_file) if config_file is not None else {}
     orm_metadata = load_metadata_for_output(orm_file, config)
-    df_module = import_file(df_file)
     try:
         row_counts = create_db_data(
             sorted_non_vocabulary_tables(orm_metadata, config),
-            df_module,
+            config,
+            stats_file,
             num_passes,
             orm_metadata,
         )
