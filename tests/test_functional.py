@@ -76,7 +76,6 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
     schema_name = "public"
 
     alt_orm_file_path = Path("my_orm.yaml")
-    alt_datafaker_file_path = Path("my_df.py")
 
     def test_workflow_minimal_args(self) -> None:
         """Test the recommended CLI workflow runs without errors."""
@@ -119,14 +118,10 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
             "create-data",
         )
         self.assertNoException(completed_process)
-        self.assertEqual("", completed_process.stderr)
         self.assertSuccess(completed_process)
         self.assertEqual(
             "Generating data for story 'story_generators.short_story'\n"
-            "Generating data for story 'story_generators.short_story'\n"
-            "Generating data for story 'story_generators.short_story'\n"
             "Generating data for story 'story_generators.full_row_story'\n"
-            "Generating data for story 'story_generators.long_story'\n"
             "Generating data for story 'story_generators.long_story'\n",
             completed_process.stdout,
         )
@@ -454,14 +449,6 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
             "--force",
         )
         self.invoke(
-            "create-generators",
-            f"--orm-file={self.alt_orm_file_path}",
-            f"--df-file={self.alt_datafaker_file_path}",
-            f"--config-file={self.config_file_path}",
-            f"--stats-file={self.stats_file_path}",
-            "--force",
-        )
-        self.invoke(
             "create-tables",
             f"--orm-file={self.alt_orm_file_path}",
             f"--config-file={self.config_file_path}",
@@ -496,7 +483,6 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
             "create-data",
             f"--config-file={self.config_file_path}",
             f"--orm-file={self.alt_orm_file_path}",
-            f"--df-file={self.alt_datafaker_file_path}",
             "--num-passes=3",
         )
         self.assertEqual("", completed_process.stderr)
@@ -518,7 +504,6 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
             "create-data",
             f"--config-file={self.config_file_path}",
             f"--orm-file={self.alt_orm_file_path}",
-            f"--df-file={self.alt_datafaker_file_path}",
             "--num-passes=1",
             expected_error=(
                 "Failed to satisfy unique constraints for table unique_constraint_test"

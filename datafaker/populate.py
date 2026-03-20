@@ -4,10 +4,9 @@ from mimesis import Generic
 from mimesis.locales import Locale
 import sqlalchemy
 from typing import Any, Callable
-import yaml
 
 from datafaker.base import FileUploader, ColumnPresence
-from datafaker.make import TableGeneratorInfo, StoryGeneratorInfo  #TODO: move these in here!
+from datafaker.make import FunctionCall, TableGeneratorInfo, StoryGeneratorInfo
 
 from datafaker.providers import (
     BytesProvider,
@@ -106,17 +105,24 @@ def _call_from_context(
     return cls(*arg_objs, **kwarg_objs)
 
 
+def call_function(fn: FunctionCall, context: Mapping) -> Any:
+    return _call_from_context(
+        fn.function_name,
+        fn.args,
+        fn.kwargs,
+        context,
+    )
+
+
 def get_symbols(
     row_generator_module_name: str | None,
     story_generator_module_name: str | None,
     object_instantiation: dict[str, dict[str, Any]] | None,
-    src_stats_filename: str | None,
-    dst_db_conn: sqlalchemy.Connection,
+    src_stats: dict[str, dict[str, Any]] | None,
     metadata: sqlalchemy.MetaData,
 ) -> dict[str, Any]:
     """Get the symbols that may be referred to by various configuration settings."""
     symbols = {
-        "dst_db_conn": dst_db_conn,
         "metadata": metadata,
         "generic": generic,
         "numeric": generic.numeric,
@@ -128,9 +134,8 @@ def get_symbols(
     _get_symbol_import(symbols, story_generator_module_name)
     if object_instantiation:
         _get_symbols_instantiation(symbols, object_instantiation)
-    if src_stats_filename:
-        with Path(src_stats_filename).open(encoding="utf-8") as fh:
-            symbols["SRC_STATS"] = yaml.load(fh, yaml.SafeLoader)
+    if src_stats is not None:
+        symbols["SRC_STATS"] = src_stats
     return symbols
 
 
@@ -165,7 +170,7 @@ def _get_symbols_instantiation(symbols: dict[str, Any], objs: dict[str, Any]) ->
         clbl = inst.get("class", None)
         kwargs = inst.get("kwargs", {})
         if isinstance(clbl, str) and isinstance(kwargs, dict):
-            symbols[name] = _call_from_context(clbl, kwargs, symbols)
+            symbols[name] = _call_from_context(clbl, [], kwargs, symbols)
 
 
 class TableGenerator:
@@ -191,13 +196,14 @@ class TableGenerator:
         self.max_unique_constraint_tries = max_unique_constraint_tries
         self.existing_constraint_hashes: MutableMapping[str, set[int]] = {}
         self.context: Mapping = {}
-        for constraint in table_data.unique_constraints:
-            expr = sqlalchemy.select(constraint.columns)
-            query_result = dst_db_conn.execute(expr).fetchall()
-            self.existing_constraint_hashes[constraint.name] = set([
-                hash(tuple(result))
-                for result in query_result
-            ])
+        with dst_db_conn.begin():
+            for constraint in table_data.unique_constraints:
+                expr = sqlalchemy.select(constraint.columns)
+                query_result = dst_db_conn.execute(expr).fetchall()
+                self.existing_constraint_hashes[constraint.name] = set([
+                    hash(tuple(result))
+                    for result in query_result
+                ])
 
     @property
     def num_rows_per_pass(self):
@@ -230,10 +236,8 @@ class TableGenerator:
                 max_tries -= 1
             for row_gen in self.table_data.row_gens:
                 if set(row_gen.variable_names) & columns_to_generate:
-                    values = _call_from_context(
-                        row_gen.function_call.function_name,
-                        row_gen.function_call.args,
-                        row_gen.function_call.kwargs,
+                    values = call_function(
+                        row_gen.function_call,
                         self.context,
                     )
                     if len(row_gen.variable_names) == 1:
@@ -252,7 +256,7 @@ class TableGenerator:
             cf_hash = hash(tuple(
                 result[col.name] for col in constraint.columns
             ))
-            self.existing_constraint_hashes.add(cf_hash)
+            self.existing_constraint_hashes[constraint.name].add(cf_hash)
         return result
 
 
@@ -292,14 +296,3 @@ def get_vocab_dict(config: Mapping, metadata: sqlalchemy.MetaData) -> Mapping[st
         name: FileUploader(metadata.tables[name])
         for name in get_vocabulary_table_names(config)
     }
-
-def get_story_generator_list(story_generator_infos: Iterable[StoryGeneratorInfo], context: Mapping) -> list[Mapping]:
-    """Get a list of mappings describing story generators that must be run."""
-    return [
-        {
-            "function": _call_from_context(gen_data.function_call.function_name, gen_data.function_call.argument_values, context),
-            "num_stories_per_pass": gen_data.num_stories_per_pass,
-            "name": gen_data.function_call.function_name,
-        }
-        for gen_data in story_generator_infos
-    ]

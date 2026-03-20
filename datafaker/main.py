@@ -31,7 +31,6 @@ from datafaker.interactive import (
 from datafaker.interactive.base import DbCmd
 from datafaker.make import (
     make_src_stats,
-    make_table_generators,
     make_tables_file,
     make_vocabulary_tables,
 )
@@ -182,6 +181,8 @@ def create_data(
     """
     logger.debug("Creating data.")
     config = read_config_file(config_file) if config_file is not None else {}
+    if stats_file is None and generators_require_stats(config):
+        stats_file = Path(STATS_FILENAME)
     orm_metadata = load_metadata_for_output(orm_file, config)
     try:
         row_counts = create_db_data(
@@ -294,34 +295,8 @@ def create_generators(
         False, "--force", "-f", help="Overwrite any existing Python generators file."
     ),
 ) -> None:
-    """Make a datafaker file of generator classes.
-
-    This CLI command takes an object relation model output by sqlcodegen and
-    returns a set of synthetic data generators for each attribute
-
-    Example:
-        $ datafaker create-generators
-    """
-    logger.debug("Making %s.", df_file)
-
-    if not force:
-        _check_file_non_existence(df_file)
-
-    generator_config = read_config_file(config_file) if config_file is not None else {}
-    if stats_file is None and generators_require_stats(generator_config):
-        stats_file = Path(STATS_FILENAME)
-    orm_metadata = load_metadata_for_output(orm_file, generator_config)
-    result: str = make_table_generators(
-        orm_metadata,
-        generator_config,
-        orm_file,
-        config_file,
-        stats_file,
-    )
-
-    df_file.write_text(result, encoding="utf-8")
-
-    logger.debug("%s created.", df_file)
+    """Obsolete command."""
+    logger.error("This command is deprecated; it does nothing.")
 
 
 @app.command()

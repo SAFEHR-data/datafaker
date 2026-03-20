@@ -27,7 +27,7 @@ from tests.utils import DatafakerTestCase, GeneratesDBTestCase, RequiresDBTestCa
 
 
 class TestCreate(GeneratesDBTestCase):
-    """Test the make_table_generators function."""
+    """Test that we can create data."""
 
     dump_file_path = "instrument.sql"
     database_name = "instrument"
@@ -67,7 +67,7 @@ class TestCreate(GeneratesDBTestCase):
             self.assertEqual(rows[2].given_name, "Mus")
             self.assertEqual(rows[2].family_name, "Al-Said")
 
-    def test_make_table_generators(self) -> None:
+    def test_column_defaults_in_stories(self) -> None:
         """Test that we can handle column defaults in stories."""
         random.seed(56)
         config: Mapping[str, Any] = {}

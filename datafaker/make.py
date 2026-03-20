@@ -63,7 +63,7 @@ class VocabularyTableGeneratorInfo:
 
 @dataclass
 class FunctionCall:
-    """Contains the df.py content related function calls."""
+    """Which function to call with what."""
 
     function_name: str
     args: list[str]
@@ -586,24 +586,18 @@ def make_vocabulary_tables(
 class GenerationInfo:
     """Information for the generation of all data."""
     provider_imports: list[str]
-    orm_file_name: Path
-    config_file_name: Path
     row_generator_module_name: str | None
     story_generator_module_name: str | None
     object_instantiation: dict[str, dict]
-    src_stats_filename: Path | None
     tables: list[TableGeneratorInfo]
     vocabulary_tables: list[VocabularyTableGeneratorInfo]
     story_generators: list[StoryGeneratorInfo]
     max_unique_constraint_tries: int | None
 
 
-def get_generation_info(  # pylint: disable=too-many-locals
+def get_generation_info(
     metadata: MetaData,
     config: Mapping,
-    orm_filename: Path,
-    config_filename: Path,
-    src_stats_filename: Optional[Path],
 ) -> GenerationInfo:
     """
     Create datafaker generator classes.
@@ -666,43 +660,13 @@ def get_generation_info(  # pylint: disable=too-many-locals
     )
     return GenerationInfo(
         provider_imports=PROVIDER_IMPORTS,
-        orm_file_name=orm_filename,
-        config_file_name=config_filename,
         row_generator_module_name=row_generator_module_name,
         story_generator_module_name=story_generator_module_name,
         object_instantiation=object_instantiation,
-        src_stats_filename=src_stats_filename,
         tables=tables,
         vocabulary_tables=vocabulary_tables,
         story_generators=story_generators,
         max_unique_constraint_tries=max_unique_constraint_tries,
-    )
-
-
-def make_table_generators(  # pylint: disable=too-many-locals
-    metadata: MetaData,
-    config: Mapping,
-    orm_filename: Path,
-    config_filename: Path,
-    src_stats_filename: Optional[Path],
-) -> str:
-    gi = get_generation_info(
-        metadata, config, orm_filename, config_filename, src_stats_filename
-    )
-    return generate_df_content(
-        {
-            "provider_imports": gi.provider_imports,
-            "orm_file_name": gi.orm_file_name,
-            "config_file_name": gi.config_file_name,
-            "row_generator_module_name": gi.row_generator_module_name,
-            "story_generator_module_name": gi.story_generator_module_name,
-            "object_instantiation": gi.object_instantiation,
-            "src_stats_filename": gi.src_stats_filename,
-            "tables": gi.tables,
-            "vocabulary_tables": gi.vocabulary_tables,
-            "story_generators": gi.story_generators,
-            "max_unique_constraint_tries": gi.max_unique_constraint_tries,
-        }
     )
 
 

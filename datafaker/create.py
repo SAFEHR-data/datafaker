@@ -2,6 +2,7 @@
 from collections import Counter
 from pathlib import Path
 from typing import Any, Generator, Iterable, Iterator, Mapping, Sequence, Tuple
+import yaml
 
 from sqlalchemy import Connection, insert, inspect
 from sqlalchemy.exc import IntegrityError
@@ -12,10 +13,11 @@ from sqlalchemy.schema import CreateColumn, CreateSchema, CreateTable, MetaData,
 from datafaker.base import FileUploader
 from datafaker.make import get_generation_info
 from datafaker.populate import (
+    StoryGeneratorInfo,
     TableGenerator,
+    call_function,
     get_symbols,
     get_table_generator_dict,
-    get_story_generator_list,
     get_vocab_dict,
 )
 from datafaker.settings import get_destination_dsn, get_destination_schema, get_settings
@@ -154,10 +156,15 @@ def create_db_data(
     metadata: MetaData,
 ) -> RowCounts:
     """Connect to a database and populate it with data."""
+    if src_stats_filename:
+        with src_stats_filename.open(encoding="utf-8") as fh:
+            src_stats = yaml.load(fh, yaml.SafeLoader)
+    else:
+        src_stats = None
     return create_db_data_into(
         sorted_tables,
         config,
-        src_stats_filename,
+        src_stats,
         num_passes,
         get_destination_dsn(),
         get_destination_schema(),
@@ -169,7 +176,7 @@ def create_db_data(
 def create_db_data_into(
     sorted_tables: Sequence[Table],
     config: Mapping[str, Any],
-    src_stats_filename: Path | None,
+    src_stats: dict[str, dict[str, Any]] | None,
     num_passes: int,
     db_dsn: str,
     schema_name: str | None,
@@ -190,17 +197,17 @@ def create_db_data_into(
     :param metadata: Destination database metadata.
     """
     dst_engine = get_sync_engine(create_db_engine_dst(db_dsn, schema_name=schema_name))
-    gen_info = get_generation_info(metadata, config, Path("orm.blah"), Path("config.blah"), src_stats_filename)
+    gen_info = get_generation_info(metadata, config)
+    context = get_symbols(
+        gen_info.row_generator_module_name,
+        gen_info.story_generator_module_name,
+        get_property(config, "object_instantiation", dict, {}),
+        src_stats,
+        metadata,
+    )
     row_counts: Counter[str] = Counter()
     with dst_engine.connect() as dst_conn:
-        context = get_symbols(
-            gen_info.row_generator_module_name,
-            gen_info.story_generator_module_name,
-            get_property(config, "object_instantiation", dict, {}),
-            gen_info.src_stats_filename,
-            dst_conn,
-            metadata,
-        )
+        context["dst_db_conn"] = dst_conn
         for _ in range(num_passes):
             row_counts += populate(
                 dst_conn,
@@ -211,8 +218,8 @@ def create_db_data_into(
                     gen_info.max_unique_constraint_tries,
                     context,
                 ),
-                get_story_generator_list(gen_info.story_generators, context),
-                metadata,
+                gen_info.story_generators,
+                context,
             )
     dst_engine.dispose()
     return row_counts
@@ -224,24 +231,51 @@ class StoryIterator:
 
     def __init__(
         self,
-        stories: Iterable[tuple[str, Story]],
+        stories: Iterable[StoryGeneratorInfo],
         table_dict: Mapping[str, Table],
         table_generator_dict: Mapping[str, TableGenerator],
         dst_conn: Connection,
+        context: Mapping,
     ):
         """Initialise a Story Iterator."""
-        self._stories: Iterator[tuple[str, Story]] = iter(stories)
+        self._story_infos: Iterator[StoryGeneratorInfo] = iter(stories)
         self._table_dict: Mapping[str, Table] = table_dict
         self._table_generator_dict: Mapping[str, TableGenerator] = table_generator_dict
         self._dst_conn: Connection = dst_conn
-        self._table_name: str | None
+        self._table_name: str | None = None
         self._final_values: dict[str, Any] | None = None
+        # Number of times the current story should be run
+        self._story_counts = 1
+        self._story_function_call = None
+        self._context = context
+        self._story = iter([])
+        self.next()
+
+    def _get_next_story(self) -> None:
+        """
+        Iterate to the next ``_story_infos``.
+
+        :return: False if there are no more.
+        """
         try:
-            name, self._story = next(self._stories)
-            logger.info("Generating data for story '%s'", name)
-            self._table_name, self._provided_values = next(self._story)
+            sgi = next(self._story_infos)
+            self._story_counts = sgi.num_stories_per_pass
+            self._story_function_call = sgi.function_call
+            logger.info("Generating data for story '%s'", sgi.function_call.function_name)
+            self._story = call_function(sgi.function_call, self._context)
+            self._final_values = None
         except StopIteration:
             self._table_name = None
+            return False
+        return True
+
+    def _get_values(self) -> None:
+        if self._final_values is None:
+            self._table_name, self._provided_values = next(self._story)
+        else:
+            self._table_name, self._provided_values = self._story.send(
+                self._final_values
+            )
 
     def is_ended(self) -> bool:
         """
@@ -249,7 +283,8 @@ class StoryIterator:
 
         If so, insert() can be called.
         """
-        return self._table_name is None
+        return self._story_counts == -1
+
 
     def has_table(self, table_name: str) -> bool:
         """Check if we have a row for table ``table_name``."""
@@ -264,7 +299,7 @@ class StoryIterator:
         """
         return self._table_name
 
-    def insert(self, metadata: MetaData) -> None:
+    def insert(self) -> None:
         """
         Put the row in the table.
 
@@ -276,7 +311,7 @@ class StoryIterator:
         table = self._table_dict[self._table_name]
         if table.name in self._table_generator_dict:
             table_generator = self._table_generator_dict[table.name]
-            default_values = table_generator(self._dst_conn, metadata)
+            default_values = table_generator(self._dst_conn)
         else:
             default_values = {}
         insert_values = {**default_values, **self._provided_values}
@@ -300,20 +335,16 @@ class StoryIterator:
         """Advance to the next row."""
         while True:
             try:
-                if self._final_values is None:
-                    self._table_name, self._provided_values = next(self._story)
-                    return
-                self._table_name, self._provided_values = self._story.send(
-                    self._final_values
-                )
+                self._get_values()
                 return
-            except StopIteration:
-                try:
-                    name, self._story = next(self._stories)
-                    logger.info("Generating data for story '%s'", name)
-                    self._final_values = None
-                except StopIteration:
-                    self._table_name = None
+            except StopIteration as exc:
+                self._final_values = None
+                self._story_counts -= 1
+                if 0 < self._story_counts:
+                    # Reinitialize the same story again
+                    self._story = call_function(self._story_function_call, self._context)
+                elif not self._get_next_story():
+                    self._story_counts = -1
                     return
 
 
@@ -321,8 +352,8 @@ def populate(
     dst_conn: Connection,
     tables: Sequence[Table],
     table_generator_dict: Mapping[str, TableGenerator],
-    story_generator_list: Sequence[Mapping[str, Any]],
-    metadata: MetaData,
+    story_generator_infos: Sequence[StoryGeneratorInfo],
+    context: Mapping,
 ) -> RowCounts:
     """Populate a database schema with synthetic data."""
     row_counts: Counter[str] = Counter()
@@ -330,24 +361,20 @@ def populate(
     # Generate stories
     # Each story generator returns a python generator (an unfortunate naming clash with
     # what we call generators). Iterating over it yields individual rows for the
-    # database. First, collect all of the python generators into a single list.
-    stories: list[tuple[str, Story]] = sum(
-        [
-            [
-                (sg["name"], sg["function"](dst_conn))
-                for _ in range(sg["num_stories_per_pass"])
-            ]
-            for sg in story_generator_list
-        ],
-        [],
+    # database.
+    story_iterator = StoryIterator(
+        story_generator_infos,
+        table_dict,
+        table_generator_dict,
+        dst_conn,
+        context,
     )
-    story_iterator = StoryIterator(stories, table_dict, table_generator_dict, dst_conn)
 
     # Generate individual rows, table by table.
     for table in tables:
         # Do we have a story row to enter into this table?
         if story_iterator.has_table(table.name):
-            story_iterator.insert(metadata)
+            story_iterator.insert()
             row_counts[table.name] = row_counts.get(table.name, 0) + 1
             story_iterator.next()
         if table.name not in table_generator_dict:
@@ -358,20 +385,20 @@ def populate(
             continue
         logger.debug("Generating data for table '%s'", table.name)
         # Run all the inserts for one table in a transaction
-        try:
-            with dst_conn.begin():
+        with dst_conn.begin():
+            try:
                 for _ in range(table_generator.num_rows_per_pass):
                     stmt = insert(table).values(table_generator(dst_conn))
                     dst_conn.execute(stmt)
                     row_counts[table.name] = row_counts.get(table.name, 0) + 1
                 dst_conn.commit()
-        except:
-            dst_conn.rollback()
-            raise
+            except:
+                dst_conn.rollback()
+                raise
 
     # Insert any remaining stories
     while not story_iterator.is_ended():
-        story_iterator.insert(metadata)
+        story_iterator.insert()
         t = story_iterator.table_name()
         if t is None:
             raise AssertionError(
