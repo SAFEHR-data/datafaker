@@ -27,6 +27,7 @@ from datafaker import settings
 from datafaker.create import create_db_data_into, create_db_tables_into
 from datafaker.interactive.base import DbCmd
 from datafaker.make import make_src_stats, make_tables_file
+from datafaker.populate import reset_generic
 from datafaker.utils import (
     MaybeAsyncEngine,
     T,
@@ -244,6 +245,7 @@ class DatafakerTestCase(TestCase):
         """Set up the test case with an actual orm.yaml file."""
         super().setUp()
         settings.get_settings.cache_clear()
+        reset_generic()
         if self.use_temporary_cwd:
             self.start_dir = os.getcwd()
             self.working_dir = mkdtemp("test")
@@ -473,10 +475,15 @@ class GeneratesDBTestCase(RequiresDBTestCase):
     def create_data(self, config: Mapping[str, Any], num_passes: int = 1) -> None:
         """Create fake data in the DB."""
         # `create-data` with all this stuff
+        if self.stats_file_path is None:
+            src_stats = None
+        else:
+            with Path(self.stats_file_path).open(encoding="utf-8") as fh:
+                src_stats = yaml.load(fh, yaml.SafeLoader)
         create_db_data_into(
             sorted_non_vocabulary_tables(self.metadata, config),
             config,
-            Path(self.stats_file_path),
+            src_stats,
             num_passes,
             self.dst_dsn,
             self.dst_schema_name,

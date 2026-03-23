@@ -9,16 +9,15 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateColumn, CreateSchema, CreateTable, MetaData, Table
+import typer
 
 from datafaker.base import FileUploader
-from datafaker.make import get_generation_info
+from datafaker.make import get_generation_info, StoryGeneratorInfo
 from datafaker.populate import (
-    StoryGeneratorInfo,
     TableGenerator,
     call_function,
     get_symbols,
     get_table_generator_dict,
-    get_vocab_dict,
 )
 from datafaker.settings import get_destination_dsn, get_destination_schema, get_settings
 from datafaker.utils import (
@@ -157,8 +156,15 @@ def create_db_data(
 ) -> RowCounts:
     """Connect to a database and populate it with data."""
     if src_stats_filename:
-        with src_stats_filename.open(encoding="utf-8") as fh:
-            src_stats = yaml.load(fh, yaml.SafeLoader)
+        try:
+            with src_stats_filename.open(encoding="utf-8") as fh:
+                src_stats = yaml.load(fh, yaml.SafeLoader)
+        except FileNotFoundError:
+            logger.error(
+                "No source stats file '%', this should be the output of the 'make-stats' command",
+                src_stats_filename,
+            )
+            raise typer.Exit(1)
     else:
         src_stats = None
     return create_db_data_into(
@@ -187,10 +193,8 @@ def create_db_data_into(
 
     :param sorted_tables: The table names to populate, sorted so that foreign
         keys' targets are populated before the foreign keys themselves.
-    :param table_generator_dict: A mapping  of table names to the generators
-        used to make data for them.
-    :param story_generator_list: A list of story generators to be run after the
-        table generators on each pass.
+    :param config: The data from the ``config.yaml`` file.
+    :param src_stats: The data from the ``src-stats.yaml`` file.
     :param num_passes: Number of passes to perform.
     :param db_dsn: Connection string for the destination database.
     :param schema_name: Destination schema name.

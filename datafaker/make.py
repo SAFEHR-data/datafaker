@@ -656,7 +656,7 @@ def get_generation_info(
     story_generators = _get_story_generators(config)
 
     max_unique_constraint_tries = get_property(
-        config, "max-unique-constraint-tries", str | None, None
+        config, "max-unique-constraint-tries", int | None, None
     )
     return GenerationInfo(
         provider_imports=PROVIDER_IMPORTS,

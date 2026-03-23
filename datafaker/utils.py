@@ -546,9 +546,7 @@ def get_row_generators(
     :param table_config: The element from the ``tables:`` stanza of ``config.xml``.
     :return: Pair of (name, row generator config).
     """
-    rgs = table_config.get("row_generators", None)
-    if isinstance(rgs, str) or not hasattr(rgs, "__iter__"):
-        return
+    rgs = get_property(table_config, "row_generators", list, [])
     for rg in rgs:
         name = rg.get("name", None)
         if name:

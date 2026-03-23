@@ -21,6 +21,7 @@ from datafaker.create import (
     create_db_vocab,
     populate,
 )
+from datafaker.make import FunctionCall, StoryGeneratorInfo
 from datafaker.serialize_metadata import metadata_to_dict, dict_to_metadata
 from datafaker.utils import sorted_non_vocabulary_tables
 from tests.utils import DatafakerTestCase, GeneratesDBTestCase, RequiresDBTestCase
@@ -99,7 +100,8 @@ class TestPopulate(DatafakerTestCase):
     """Test create.populate."""
 
     # pylint: disable=too-many-locals
-    def test_populate(self) -> None:
+    @patch("datafaker.populate._get_object")
+    def test_populate(self, mock_get_object: MagicMock) -> None:
         """Test the populate function."""
         table_name = "table_name"
 
@@ -107,9 +109,7 @@ class TestPopulate(DatafakerTestCase):
             """Mock story."""
             yield table_name, {}
 
-        def mock_story_gen(_: Any) -> Generator[Tuple[str, dict], None, None]:
-            """A function that returns mock stories."""
-            return story()
+        mock_get_object.return_value = story
 
         for num_stories_per_pass, num_rows_per_pass, num_initial_rows in itt.product(
             [0, 2], [0, 3], [0, 17]
@@ -130,11 +130,11 @@ class TestPopulate(DatafakerTestCase):
 
                 story_generators: list[dict[str, Any]] = (
                     [
-                        {
-                            "function": mock_story_gen,
-                            "num_stories_per_pass": num_stories_per_pass,
-                            "name": "mock_story_gen",
-                        }
+                        StoryGeneratorInfo(
+                            "mock_story_gen name",
+                            FunctionCall("mock_story_gen", [], {}),
+                            num_stories_per_pass,
+                        )
                     ]
                     if num_stories_per_pass > 0
                     else []
@@ -304,10 +304,10 @@ class CreateReadsNoParquetTestCase(DatafakerTestCase):
         create_db_data_into(
             [MagicMock()],
             MagicMock(),
+            None,
             1,
             "duckdb:///:memory:data",
             None,
-            MagicMock(),
             MagicMock(),
         )
         assert mock_populate.side_effect.called
@@ -366,11 +366,12 @@ class CreateDataTestCase(RequiresDBTestCase):
         }
         metadata = dict_to_metadata(orm, config)
         create_db_tables_into(metadata, self.dsn, self.schema_name)
+        generate_count = 4
         row_counts = create_db_data_into(
             sorted_non_vocabulary_tables(metadata, config),
             config,
             None,
-            4,
+            generate_count,
             self.dsn,
             self.schema_name,
             metadata,
@@ -379,3 +380,52 @@ class CreateDataTestCase(RequiresDBTestCase):
             stmt = select(metadata.tables["one"])
             rows = connection.execute(stmt).fetchall()
             self.assertListEqual(rows, [(1,), (2,), (3,), (4,)])
+        self.assertListEqual(list(row_counts.keys()), ['one'])
+        self.assertEqual(row_counts["one"], generate_count)
+
+    def test_unique_constraint_minimal(self) -> None:
+        config = {
+            "tables": {
+                "one": {
+                    "row_generators": [{
+                        "name": "dist_gen.constant",
+                        "kwargs": {
+                            "value": 123,
+                        },
+                        "columns_assigned": ["tiger"],
+                    }]
+                }
+            },
+            "max-unique-constraint-tries": 20,
+        }
+        orm = {
+            "tables": {
+                "one": {
+                    "columns": {
+                        "id": {
+                            "primary": True,
+                            "type": "INTEGER",
+                        },
+                        "tiger": {
+                            "type": "INTEGER",
+                        },
+                    },
+                    "unique": [
+                        {"name": "tiger_uniq", "columns": ["tiger"]}
+                    ]
+                }
+            }
+        }
+        metadata = dict_to_metadata(orm, config)
+        create_db_tables_into(metadata, self.dsn, self.schema_name)
+        self.assertRaises(
+            RuntimeError,
+            create_db_data_into,
+            sorted_non_vocabulary_tables(metadata, config),
+            config,
+            None,
+            2,
+            self.dsn,
+            self.schema_name,
+            metadata,
+        )

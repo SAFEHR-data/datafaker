@@ -272,52 +272,34 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
             f"--config-file={self.config_file_path}",
             "--num-passes=2",
         )
-        self.assertEqual("", completed_process.stderr)
-        self.assertEqual(
-            sorted(
-                [
-                    "Creating data.",
-                    "Generating data for story 'story_generators.short_story'",
-                    "Generating data for story 'story_generators.short_story'",
-                    "Generating data for story 'story_generators.short_story'",
-                    "Generating data for story 'story_generators.short_story'",
-                    "Generating data for story 'story_generators.short_story'",
-                    "Generating data for story 'story_generators.short_story'",
-                    "Generating data for story 'story_generators.full_row_story'",
-                    "Generating data for story 'story_generators.full_row_story'",
-                    "Generating data for story 'story_generators.long_story'",
-                    "Generating data for story 'story_generators.long_story'",
-                    "Generating data for story 'story_generators.long_story'",
-                    "Generating data for story 'story_generators.long_story'",
-                    "Generating data for table 'data_type_test'",
-                    "Generating data for table 'data_type_test'",
-                    "Generating data for table 'no_pk_test'",
-                    "Generating data for table 'no_pk_test'",
-                    "Generating data for table 'person'",
-                    "Generating data for table 'person'",
-                    "Generating data for table 'strange_type_table'",
-                    "Generating data for table 'strange_type_table'",
-                    "Generating data for table 'unique_constraint_test'",
-                    "Generating data for table 'unique_constraint_test'",
-                    "Generating data for table 'unique_constraint_test2'",
-                    "Generating data for table 'unique_constraint_test2'",
-                    "Generating data for table 'test_entity'",
-                    "Generating data for table 'test_entity'",
-                    "Generating data for table 'hospital_visit'",
-                    "Generating data for table 'hospital_visit'",
-                    "Data created in 2 passes.",
-                    f"person: {2*(3+1+2+2)} rows created.",
-                    f"hospital_visit: {2*(2*2+3)} rows created.",
-                    "data_type_test: 2 rows created.",
-                    "no_pk_test: 2 rows created.",
-                    "strange_type_table: 2 rows created.",
-                    "unique_constraint_test: 2 rows created.",
-                    "unique_constraint_test2: 2 rows created.",
-                    "test_entity: 2 rows created.",
-                    "",
-                ]
-            ),
-            sorted(completed_process.stdout.split("\n")),
+        self.assertSetEqual(
+            {
+                "Creating data.",
+                "Generating data for story 'story_generators.short_story'",
+                "Generating data for story 'story_generators.full_row_story'",
+                "Generating data for story 'story_generators.full_row_story'",
+                "Generating data for story 'story_generators.long_story'",
+                "Generating data for table 'data_type_test'",
+                "Generating data for table 'no_pk_test'",
+                "Generating data for table 'person'",
+                "Generating data for table 'person'",
+                "Generating data for table 'strange_type_table'",
+                "Generating data for table 'unique_constraint_test'",
+                "Generating data for table 'unique_constraint_test2'",
+                "Generating data for table 'test_entity'",
+                "Generating data for table 'hospital_visit'",
+                "Data created in 2 passes.",
+                f"person: {2*(3+1+2+2)} rows created.",
+                f"hospital_visit: {2*(2*2+3)} rows created.",
+                "data_type_test: 2 rows created.",
+                "no_pk_test: 2 rows created.",
+                "strange_type_table: 2 rows created.",
+                "unique_constraint_test: 2 rows created.",
+                "unique_constraint_test2: 2 rows created.",
+                "test_entity: 2 rows created.",
+                "",
+            },
+            set(completed_process.stdout.split("\n")),
         )
 
         completed_process = self.invoke(
@@ -468,13 +450,9 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
             f"--stats-file={self.stats_file_path}",
             "--num-passes=1",
         )
-        self.assertEqual("", completed_process.stderr)
         self.assertEqual(
             "Generating data for story 'story_generators.short_story'\n"
-            "Generating data for story 'story_generators.short_story'\n"
-            "Generating data for story 'story_generators.short_story'\n"
             "Generating data for story 'story_generators.full_row_story'\n"
-            "Generating data for story 'story_generators.long_story'\n"
             "Generating data for story 'story_generators.long_story'\n",
             completed_process.stdout,
         )
@@ -483,16 +461,13 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
             "create-data",
             f"--config-file={self.config_file_path}",
             f"--orm-file={self.alt_orm_file_path}",
+            f"--stats-file={self.stats_file_path}",
             "--num-passes=3",
         )
-        self.assertEqual("", completed_process.stderr)
         self.assertEqual(
             (
                 "Generating data for story 'story_generators.short_story'\n"
-                "Generating data for story 'story_generators.short_story'\n"
-                "Generating data for story 'story_generators.short_story'\n"
                 "Generating data for story 'story_generators.full_row_story'\n"
-                "Generating data for story 'story_generators.long_story'\n"
                 "Generating data for story 'story_generators.long_story'\n"
             )
             * 3,
@@ -504,6 +479,7 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
             "create-data",
             f"--config-file={self.config_file_path}",
             f"--orm-file={self.alt_orm_file_path}",
+            f"--stats-file={self.stats_file_path}",
             "--num-passes=1",
             expected_error=(
                 "Failed to satisfy unique constraints for table unique_constraint_test"

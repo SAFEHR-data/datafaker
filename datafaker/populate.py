@@ -6,7 +6,7 @@ import sqlalchemy
 from typing import Any, Callable
 
 from datafaker.base import FileUploader, ColumnPresence
-from datafaker.make import FunctionCall, TableGeneratorInfo, StoryGeneratorInfo
+from datafaker.make import FunctionCall, TableGeneratorInfo
 
 from datafaker.providers import (
     BytesProvider,
@@ -18,17 +18,34 @@ from datafaker.providers import (
     TimespanProvider,
     WeightedBooleanProvider,
 )
-from datafaker.utils import logging, get_vocabulary_table_names, import_file
+from datafaker.utils import get_vocabulary_table_names, import_file
 
-generic = Generic(locale=Locale.EN_GB)
+def make_generic():
+    g = Generic(locale=Locale.EN_GB)
+    g.add_providers(
+        BytesProvider,
+        ColumnValueProvider,
+        DistributionProvider,
+        NullProvider,
+        SQLGroupByProvider,
+        TimedeltaProvider,
+        TimespanProvider,
+        WeightedBooleanProvider,
+    )
+    return g
 
-generic.add_provider(BytesProvider)
-generic.add_provider(ColumnValueProvider)
-generic.add_provider(NullProvider)
-generic.add_provider(SQLGroupByProvider)
-generic.add_provider(TimedeltaProvider)
-generic.add_provider(TimespanProvider)
-generic.add_provider(WeightedBooleanProvider)
+
+generic = make_generic()
+
+
+def reset_generic():
+    """
+    Reset all the generators.
+
+    Only really useful in test code.
+    """
+    global generic
+    generic = make_generic()
 
 
 def _eval_structure(config: Any, context: Mapping) -> Any:
@@ -57,10 +74,10 @@ def _eval_structure(config: Any, context: Mapping) -> Any:
 
 def _get_object(class_name: str, context: Mapping) -> Any:
     """
-    Get an object out of the context.
+    Fetch an object from the context.
 
     :param class_name: The name of the class, qualified if necessary.
-    Like "module.MyClass.Nested"
+      Like "module.MyClass.Nested"
     :param context: Mapping of strings to objects with those names.
     :return: A value from ``context`` if there are no qualifying names,
     otherwise the attribute of the base object.
@@ -287,12 +304,4 @@ def get_table_generator_dict(
             context,
         )
         for table_data in tables_data
-    }
-
-
-def get_vocab_dict(config: Mapping, metadata: sqlalchemy.MetaData) -> Mapping[str, FileUploader]:
-    """Get a dict of table names to objects that can populate those tables from YAML files."""
-    return {
-        name: FileUploader(metadata.tables[name])
-        for name in get_vocabulary_table_names(config)
     }
