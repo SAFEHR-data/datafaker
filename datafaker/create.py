@@ -2,17 +2,17 @@
 from collections import Counter
 from pathlib import Path
 from typing import Any, Generator, Iterable, Iterator, Mapping, Sequence, Tuple
-import yaml
 
+import typer
+import yaml
 from sqlalchemy import Connection, insert, inspect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateColumn, CreateSchema, CreateTable, MetaData, Table
-import typer
 
 from datafaker.base import FileUploader
-from datafaker.make import get_generation_info, StoryGeneratorInfo
+from datafaker.make import StoryGeneratorInfo, get_generation_info
 from datafaker.populate import (
     TableGenerator,
     call_function,
@@ -255,7 +255,7 @@ class StoryIterator:
         self._story = iter([])
         self.next()
 
-    def _get_next_story(self) -> None:
+    def _get_next_story(self) -> bool:
         """
         Iterate to the next ``_story_infos``.
 
@@ -265,7 +265,9 @@ class StoryIterator:
             sgi = next(self._story_infos)
             self._story_counts = sgi.num_stories_per_pass
             self._story_function_call = sgi.function_call
-            logger.info("Generating data for story '%s'", sgi.function_call.function_name)
+            logger.info(
+                "Generating data for story '%s'", sgi.function_call.function_name
+            )
             self._story = call_function(sgi.function_call, self._context)
             self._final_values = None
         except StopIteration:
@@ -288,7 +290,6 @@ class StoryIterator:
         If so, insert() can be called.
         """
         return self._story_counts == -1
-
 
     def has_table(self, table_name: str) -> bool:
         """Check if we have a row for table ``table_name``."""
@@ -346,7 +347,9 @@ class StoryIterator:
                 self._story_counts -= 1
                 if 0 < self._story_counts:
                     # Reinitialize the same story again
-                    self._story = call_function(self._story_function_call, self._context)
+                    self._story = call_function(
+                        self._story_function_call, self._context
+                    )
                 elif not self._get_next_story():
                     self._story_counts = -1
                     return

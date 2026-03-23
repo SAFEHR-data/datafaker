@@ -66,8 +66,8 @@ class FunctionCall:
     """Which function to call with what."""
 
     function_name: str
-    args: list[str]
-    kwargs: dict[str, str]
+    args: list[Any]
+    kwargs: dict[str, Any]
 
 
 @dataclass
@@ -585,6 +585,7 @@ def make_vocabulary_tables(
 @dataclass
 class GenerationInfo:
     """Information for the generation of all data."""
+
     provider_imports: list[str]
     row_generator_module_name: str | None
     story_generator_module_name: str | None
@@ -623,9 +624,7 @@ def get_generation_info(
     story_generator_module_name = get_property(
         config, "story_generators_module", str | None, None
     )
-    object_instantiation = get_property(
-        config, "object_instantiation", dict, {}
-    )
+    object_instantiation = get_property(config, "object_instantiation", dict, {})
     tables_config = get_property(config, "tables", dict, {})
 
     tables: list[TableGeneratorInfo] = []

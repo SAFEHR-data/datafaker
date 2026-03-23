@@ -13,7 +13,6 @@ import pandas as pd
 from sqlalchemy import Connection, Engine, select
 from sqlalchemy.schema import MetaData, Table
 
-from datafaker.populate import TableGenerator
 from datafaker.create import (
     create_db_data_into,
     create_db_tables,
@@ -22,7 +21,8 @@ from datafaker.create import (
     populate,
 )
 from datafaker.make import FunctionCall, StoryGeneratorInfo
-from datafaker.serialize_metadata import metadata_to_dict, dict_to_metadata
+from datafaker.populate import TableGenerator
+from datafaker.serialize_metadata import dict_to_metadata, metadata_to_dict
 from datafaker.utils import sorted_non_vocabulary_tables
 from tests.utils import DatafakerTestCase, GeneratesDBTestCase, RequiresDBTestCase
 
@@ -128,7 +128,7 @@ class TestPopulate(DatafakerTestCase):
                     {table_name: num_initial_rows} if num_initial_rows > 0 else {}
                 )
 
-                story_generators: list[dict[str, Any]] = (
+                story_generators: list[StoryGeneratorInfo] = (
                     [
                         StoryGeneratorInfo(
                             "mock_story_gen name",
@@ -345,6 +345,7 @@ class CreateReadsNoParquetTestCase(DatafakerTestCase):
 
 class CreateDataTestCase(RequiresDBTestCase):
     """Tests for create-data."""
+
     dump_file_path = "empty.sql"
     database_name = "empty"
     schema_name = "public"
@@ -379,21 +380,23 @@ class CreateDataTestCase(RequiresDBTestCase):
         with self.sync_engine.connect() as connection:
             stmt = select(metadata.tables["one"])
             rows = connection.execute(stmt).fetchall()
-            self.assertListEqual(rows, [(1,), (2,), (3,), (4,)])
-        self.assertListEqual(list(row_counts.keys()), ['one'])
+            self.assertEqual(rows, [(1,), (2,), (3,), (4,)])
+        self.assertListEqual(list(row_counts.keys()), ["one"])
         self.assertEqual(row_counts["one"], generate_count)
 
     def test_unique_constraint_minimal(self) -> None:
         config = {
             "tables": {
                 "one": {
-                    "row_generators": [{
-                        "name": "dist_gen.constant",
-                        "kwargs": {
-                            "value": 123,
-                        },
-                        "columns_assigned": ["tiger"],
-                    }]
+                    "row_generators": [
+                        {
+                            "name": "dist_gen.constant",
+                            "kwargs": {
+                                "value": 123,
+                            },
+                            "columns_assigned": ["tiger"],
+                        }
+                    ]
                 }
             },
             "max-unique-constraint-tries": 20,
@@ -410,9 +413,7 @@ class CreateDataTestCase(RequiresDBTestCase):
                             "type": "INTEGER",
                         },
                     },
-                    "unique": [
-                        {"name": "tiger_uniq", "columns": ["tiger"]}
-                    ]
+                    "unique": [{"name": "tiger_uniq", "columns": ["tiger"]}],
                 }
             }
         }

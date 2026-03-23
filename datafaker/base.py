@@ -1,15 +1,15 @@
 """Base table generator classes."""
+import gzip
+import os
+import random
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
-import gzip
 from io import TextIOWrapper
-import os
 from pathlib import Path
-import random
 from typing import Any
-import yaml
 
+import yaml
 from sqlalchemy import Connection, insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.schema import MetaData, Table

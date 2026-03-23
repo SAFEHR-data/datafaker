@@ -1,10 +1,9 @@
 """Data dumping functions."""
 import csv
 import io
-from typing import TYPE_CHECKING
-
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pandas as pd
 import sqlalchemy

@@ -1,13 +1,13 @@
 from collections.abc import Iterable, Mapping, MutableMapping, Sequence
 from pathlib import Path
-from mimesis import Generic
-from mimesis.locales import Locale
-import sqlalchemy
 from typing import Any, Callable
 
-from datafaker.base import FileUploader, ColumnPresence
-from datafaker.make import FunctionCall, TableGeneratorInfo
+import sqlalchemy
+from mimesis import Generic
+from mimesis.locales import Locale
 
+from datafaker.base import ColumnPresence, FileUploader
+from datafaker.make import FunctionCall, TableGeneratorInfo
 from datafaker.providers import (
     BytesProvider,
     ColumnValueProvider,
@@ -20,7 +20,8 @@ from datafaker.providers import (
 )
 from datafaker.utils import get_vocabulary_table_names, import_file
 
-def make_generic():
+
+def make_generic() -> Generic:
     g = Generic(locale=Locale.EN_GB)
     g.add_providers(
         BytesProvider,
@@ -38,7 +39,7 @@ def make_generic():
 generic = make_generic()
 
 
-def reset_generic():
+def reset_generic() -> None:
     """
     Reset all the generators.
 
@@ -63,10 +64,7 @@ def _eval_structure(config: Any, context: Mapping) -> Any:
         except NameError as exc:
             raise exc
     if isinstance(config, Mapping):
-        return {
-            k: _eval_structure(v, context)
-            for k, v in config.items()
-        }
+        return {k: _eval_structure(v, context) for k, v in config.items()}
     if isinstance(config, Sequence):
         return [_eval_structure(v, context) for v in config]
     return config
@@ -96,10 +94,7 @@ def _get_object(class_name: str, context: Mapping) -> Any:
 
 
 def _call_from_context(
-    callable_name: str,
-    args: list[Any],
-    kwargs: dict[str, Any],
-    context: Mapping
+    callable_name: str, args: list[Any], kwargs: dict[str, Any], context: Mapping
 ) -> Any:
     """
     Call a callable from the classes (or functions) in the context.
@@ -111,14 +106,8 @@ def _call_from_context(
     cls = _get_object(callable_name, context)
     if not isinstance(cls, Callable):
         return None
-    arg_objs = [
-        _eval_structure(arg, context)
-        for arg in args
-    ]
-    kwarg_objs = {
-        k: _eval_structure(v, context)
-        for k, v in kwargs.items()
-    }
+    arg_objs = [_eval_structure(arg, context) for arg in args]
+    kwarg_objs = {k: _eval_structure(v, context) for k, v in kwargs.items()}
     return cls(*arg_objs, **kwarg_objs)
 
 
@@ -191,7 +180,6 @@ def _get_symbols_instantiation(symbols: dict[str, Any], objs: dict[str, Any]) ->
 
 
 class TableGenerator:
-
     def __init__(
         self,
         dst_db_conn: sqlalchemy.Connection,
@@ -217,10 +205,9 @@ class TableGenerator:
             for constraint in table_data.unique_constraints:
                 expr = sqlalchemy.select(constraint.columns)
                 query_result = dst_db_conn.execute(expr).fetchall()
-                self.existing_constraint_hashes[constraint.name] = set([
-                    hash(tuple(result))
-                    for result in query_result
-                ])
+                self.existing_constraint_hashes[constraint.name] = set(
+                    [hash(tuple(result)) for result in query_result]
+                )
 
     @property
     def num_rows_per_pass(self):
@@ -242,13 +229,17 @@ class TableGenerator:
         columns_to_generate = set(self.table_data.nonnull_columns)
         # Which missingness patterns do we want?
         for choice in self.table_data.column_choices:
-            cols = _call_from_context(choice.function_name, choice.args, choice.kwargs, self.context)
+            cols = _call_from_context(
+                choice.function_name, choice.args, choice.kwargs, self.context
+            )
             columns_to_generate.update(cols)
 
         max_tries = self.max_unique_constraint_tries
         while columns_to_generate:
             if max_tries == 0:
-                raise RuntimeError(f"Failed to satisfy unique constraints for table {self.table_data.table_name} after {self.max_unique_constraint_tries} attempts.")
+                raise RuntimeError(
+                    f"Failed to satisfy unique constraints for table {self.table_data.table_name} after {self.max_unique_constraint_tries} attempts."
+                )
             if max_tries is not None:
                 max_tries -= 1
             for row_gen in self.table_data.row_gens:
@@ -264,15 +255,11 @@ class TableGenerator:
                             result[variable_name] = values[index]
             columns_to_generate = set()
             for constraint in self.table_data.unique_constraints:
-                cf_hash = hash(tuple(
-                    result[col.name] for col in constraint.columns
-                ))
+                cf_hash = hash(tuple(result[col.name] for col in constraint.columns))
                 if cf_hash in self.existing_constraint_hashes[constraint.name]:
                     columns_to_generate.update(c.name for c in constraint.columns)
         for constraint in self.table_data.unique_constraints:
-            cf_hash = hash(tuple(
-                result[col.name] for col in constraint.columns
-            ))
+            cf_hash = hash(tuple(result[col.name] for col in constraint.columns))
             self.existing_constraint_hashes[constraint.name].add(cf_hash)
         return result
 

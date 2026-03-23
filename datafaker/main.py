@@ -29,11 +29,7 @@ from datafaker.interactive import (
     update_missingness,
 )
 from datafaker.interactive.base import DbCmd
-from datafaker.make import (
-    make_src_stats,
-    make_tables_file,
-    make_vocabulary_tables,
-)
+from datafaker.make import make_src_stats, make_tables_file, make_vocabulary_tables
 from datafaker.remove import remove_db_data, remove_db_tables, remove_db_vocab
 from datafaker.settings import (
     SettingsError,
