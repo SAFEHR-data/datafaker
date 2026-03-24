@@ -352,7 +352,7 @@ class CreateDataTestCase(RequiresDBTestCase):
 
     def test_create_data_minimal(self) -> None:
         """Test creating one table with one PK column."""
-        config = {}
+        config: dict[str, Any] = {}
         orm = {
             "tables": {
                 "one": {
@@ -385,6 +385,7 @@ class CreateDataTestCase(RequiresDBTestCase):
         self.assertEqual(row_counts["one"], generate_count)
 
     def test_unique_constraint_minimal(self) -> None:
+        """Test that unique constraints cause a failure with a constant provider."""
         config = {
             "tables": {
                 "one": {

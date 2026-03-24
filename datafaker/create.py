@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateColumn, CreateSchema, CreateTable, MetaData, Table
 
 from datafaker.base import FileUploader
-from datafaker.make import StoryGeneratorInfo, get_generation_info
+from datafaker.make import FunctionCall, StoryGeneratorInfo, get_generation_info
 from datafaker.populate import (
     TableGenerator,
     call_function,
@@ -159,12 +159,12 @@ def create_db_data(
         try:
             with src_stats_filename.open(encoding="utf-8") as fh:
                 src_stats = yaml.load(fh, yaml.SafeLoader)
-        except FileNotFoundError:
+        except FileNotFoundError as exc:
             logger.error(
-                "No source stats file '%', this should be the output of the 'make-stats' command",
+                "No source stats file '%s', this should be the output of the 'make-stats' command",
                 src_stats_filename,
             )
-            raise typer.Exit(1)
+            raise typer.Exit(1) from exc
     else:
         src_stats = None
     return create_db_data_into(
@@ -205,7 +205,7 @@ def create_db_data_into(
     context = get_symbols(
         gen_info.row_generator_module_name,
         gen_info.story_generator_module_name,
-        get_property(config, "object_instantiation", dict, {}),
+        get_property(config, "object_instantiation", {}),
         src_stats,
         metadata,
     )
@@ -229,6 +229,14 @@ def create_db_data_into(
     return row_counts
 
 
+def empty_story_generator() -> (
+    Generator[tuple[str, dict[str, Any]], dict[str, Any], None]
+):
+    """Get a story generator that generates no values."""
+    empt: list[tuple[str, dict[str, Any]]] = []
+    yield from empt
+
+
 # pylint: disable=too-many-instance-attributes
 class StoryIterator:
     """Iterates through all the rows produced by all the stories."""
@@ -250,9 +258,10 @@ class StoryIterator:
         self._final_values: dict[str, Any] | None = None
         # Number of times the current story should be run
         self._story_counts = 1
-        self._story_function_call = None
+        self._story_function_call: FunctionCall
         self._context = context
-        self._story = iter([])
+        self._story = empty_story_generator()
+        self._provided_values: dict[str, Any]
         self.next()
 
     def _get_next_story(self) -> bool:
@@ -276,6 +285,7 @@ class StoryIterator:
         return True
 
     def _get_values(self) -> None:
+        """Get the values from the current story and advance the iterator."""
         if self._final_values is None:
             self._table_name, self._provided_values = next(self._story)
         else:
@@ -342,7 +352,7 @@ class StoryIterator:
             try:
                 self._get_values()
                 return
-            except StopIteration as exc:
+            except StopIteration:
                 self._final_values = None
                 self._story_counts -= 1
                 if 0 < self._story_counts:

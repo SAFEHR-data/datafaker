@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from types import TracebackType
-from typing import Any, Final, Optional, Tuple, Type, Union
+from typing import Any, Final, Optional, Tuple, Type
 
 import pandas as pd
 import snsql
@@ -15,11 +15,17 @@ import yaml
 from black import FileMode, format_str
 from jinja2 import Environment, FileSystemLoader, Template
 from mimesis.providers.base import BaseProvider
-from sqlalchemy import CursorResult, Engine, MetaData, UniqueConstraint, text
+from sqlalchemy import CursorResult, Engine, MetaData, text
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
-from sqlalchemy.schema import Column, Table
+from sqlalchemy.schema import (
+    Column,
+    ColumnCollectionConstraint,
+    PrimaryKeyConstraint,
+    Table,
+    UniqueConstraint,
+)
 from sqlalchemy.sql import Executable, sqltypes
 from typing_extensions import Self
 
@@ -28,10 +34,12 @@ from datafaker.parquet2orm import get_parquet_orm
 from datafaker.settings import get_source_dsn, get_source_schema
 from datafaker.utils import (
     MaybeAsyncEngine,
+    constraint_name,
     create_db_engine,
     download_table,
     get_columns_assigned,
     get_property,
+    get_property_or_none,
     get_related_table_names,
     get_row_generators,
     get_sync_engine,
@@ -66,8 +74,8 @@ class FunctionCall:
     """Which function to call with what."""
 
     function_name: str
-    args: list[Any]
-    kwargs: dict[str, Any]
+    args: Sequence[Any]
+    kwargs: Mapping[str, Any]
 
 
 @dataclass
@@ -111,18 +119,6 @@ def make_column_choices(
 
 
 @dataclass
-class _PrimaryConstraint:
-    """
-    Describes a Uniqueness constraint for a multi-column primary key.
-
-    Not a real constraint, but enough to write df.py.
-    """
-
-    columns: list[Column]
-    name: str
-
-
-@dataclass
 class TableGeneratorInfo:
     """Contains the df.py content related to regular tables."""
 
@@ -132,7 +128,7 @@ class TableGeneratorInfo:
     column_choices: list[ColumnChoice]
     rows_per_pass: int
     row_gens: list[RowGeneratorInfo] = field(default_factory=list)
-    unique_constraints: Sequence[Union[UniqueConstraint, _PrimaryConstraint]] = field(
+    unique_constraints: Sequence[ColumnCollectionConstraint] = field(
         default_factory=list
     )
 
@@ -467,19 +463,6 @@ def _get_provider_for_column(column: Column) -> Tuple[list[str], str, dict[str, 
     return variable_names, generator_function, generator_arguments
 
 
-def _constraint_sort_key(constraint: UniqueConstraint) -> str:
-    """Extract a string out of a UniqueConstraint that is unique to that constraint.
-
-    We sort the constraints so that the output of make_tables is deterministic, this is
-    the sort key.
-    """
-    return (
-        constraint.name
-        if isinstance(constraint.name, str)
-        else "_".join(map(str, constraint.columns))
-    )
-
-
 def _get_generator_for_table(
     table_config: Mapping[str, Any],
     table: Table,
@@ -491,12 +474,12 @@ def _get_generator_for_table(
             for constraint in table.constraints
             if isinstance(constraint, UniqueConstraint)
         ),
-        key=_constraint_sort_key,
+        key=constraint_name,
     )
     primary_keys = [c for c in table.columns if c.primary_key]
-    constraints: Sequence[UniqueConstraint | _PrimaryConstraint] = unique_constraints
+    constraints: Sequence[ColumnCollectionConstraint] = unique_constraints
     if 1 < len(primary_keys):
-        primary_constraint = _PrimaryConstraint(
+        primary_constraint = PrimaryKeyConstraint(
             columns=primary_keys, name=make_primary_key_name(table.name)
         )
         constraints = unique_constraints + [primary_constraint]
@@ -514,7 +497,7 @@ def _get_generator_for_table(
         class_name=table.name.title().replace(".", "") + "Generator",
         nonnull_columns=nonnull_columns,
         column_choices=column_choices,
-        rows_per_pass=get_property(table_config, "num_rows_per_pass", int, 1),
+        rows_per_pass=get_property(table_config, "num_rows_per_pass", 1),
         unique_constraints=constraints,
     )
 
@@ -583,6 +566,7 @@ def make_vocabulary_tables(
 
 
 @dataclass
+# pylint: disable=too-many-instance-attributes
 class GenerationInfo:
     """Information for the generation of all data."""
 
@@ -618,14 +602,16 @@ def get_generation_info(
 
     :return: A string that is a valid Python module, once written to file.
     """
-    row_generator_module_name = get_property(
-        config, "row_generators_module", str | None, None
+    row_generator_module_name = get_property_or_none(
+        config, "row_generators_module", str
     )
-    story_generator_module_name = get_property(
-        config, "story_generators_module", str | None, None
+    story_generator_module_name = get_property_or_none(
+        config, "story_generators_module", str
     )
-    object_instantiation = get_property(config, "object_instantiation", dict, {})
-    tables_config = get_property(config, "tables", dict, {})
+    object_instantiation: dict[str, Any] = get_property(
+        config, "object_instantiation", {}
+    )
+    tables_config: dict[str, Any] = get_property(config, "tables", {})
 
     tables: list[TableGeneratorInfo] = []
     vocabulary_tables: list[VocabularyTableGeneratorInfo] = []
@@ -654,8 +640,8 @@ def get_generation_info(
 
     story_generators = _get_story_generators(config)
 
-    max_unique_constraint_tries = get_property(
-        config, "max-unique-constraint-tries", int | None, None
+    max_unique_constraint_tries = get_property_or_none(
+        config, "max-unique-constraint-tries", int
     )
     return GenerationInfo(
         provider_imports=PROVIDER_IMPORTS,
@@ -724,7 +710,7 @@ def make_tables_file(
     if parquet_dir is not None:
         extra_meta = get_parquet_orm(parquet_dir)
         if extra_meta:
-            md_tables = get_property(meta_dict, "tables", dict, {})
+            md_tables: dict[str, Any] = get_property(meta_dict, "tables", {})
             new_tables = {**extra_meta, **md_tables}
             meta_dict["tables"] = new_tables
 

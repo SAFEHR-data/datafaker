@@ -44,7 +44,6 @@ from datafaker.utils import (
     generated_tables,
     generators_require_stats,
     get_flag,
-    import_file,
     logger,
     read_config_file,
     sorted_non_vocabulary_tables,
@@ -263,22 +262,22 @@ def create_tables(
 
 @app.command()
 def create_generators(
-    orm_file: Path = Option(
+    _orm_file: Path = Option(
         ORM_FILENAME,
         help="The name of the ORM yaml file",
         dir_okay=False,
     ),
-    df_file: Path = Option(
+    _df_file: Path = Option(
         DF_FILENAME,
         help="Path to write Python generators to.",
         dir_okay=False,
     ),
-    config_file: Path = Option(
+    _config_file: Path = Option(
         CONFIG_FILENAME,
         help="The configuration file",
         dir_okay=False,
     ),
-    stats_file: Optional[Path] = Option(
+    _stats_file: Optional[Path] = Option(
         None,
         help=(
             "Statistics file (output of make-stats); default is src-stats.yaml if the "
@@ -287,7 +286,7 @@ def create_generators(
         show_default=False,
         dir_okay=False,
     ),
-    force: bool = Option(
+    _force: bool = Option(
         False, "--force", "-f", help="Overwrite any existing Python generators file."
     ),
 ) -> None:

@@ -2,7 +2,6 @@
 import gzip
 import os
 import random
-from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
 from io import TextIOWrapper
@@ -12,7 +11,7 @@ from typing import Any
 import yaml
 from sqlalchemy import Connection, insert
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.schema import MetaData, Table
+from sqlalchemy.schema import Table
 
 from datafaker.utils import (
     MAKE_VOCAB_PROGRESS_REPORT_EVERY,

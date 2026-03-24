@@ -27,14 +27,12 @@ from datafaker import settings
 from datafaker.create import create_db_data_into, create_db_tables_into
 from datafaker.interactive.base import DbCmd
 from datafaker.make import make_src_stats, make_tables_file
-from datafaker.populate import reset_generic
 from datafaker.utils import (
     MaybeAsyncEngine,
     T,
     create_db_engine,
     create_db_engine_dst,
     get_sync_engine,
-    import_file,
     sorted_non_vocabulary_tables,
 )
 
@@ -245,7 +243,6 @@ class DatafakerTestCase(TestCase):
         """Set up the test case with an actual orm.yaml file."""
         super().setUp()
         settings.get_settings.cache_clear()
-        reset_generic()
         if self.use_temporary_cwd:
             self.start_dir = os.getcwd()
             self.working_dir = mkdtemp("test")

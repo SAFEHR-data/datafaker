@@ -8,7 +8,12 @@ from sqlalchemy import Column, Dialect, Engine, ForeignKey, MetaData, Table
 from sqlalchemy.dialects import oracle, postgresql
 from sqlalchemy.sql import schema, sqltypes
 
-from datafaker.utils import get_property, make_foreign_key_name, split_column_full_name
+from datafaker.utils import (
+    constraint_name,
+    get_property,
+    make_foreign_key_name,
+    split_column_full_name,
+)
 
 TableT = dict[str, typing.Any]
 
@@ -244,7 +249,7 @@ def dict_to_unique(rep: dict) -> schema.UniqueConstraint:
 def unique_to_dict(constraint: schema.UniqueConstraint) -> dict:
     """Render a dict representation of a uniqueness constraint."""
     return {
-        "name": constraint.name,
+        "name": constraint_name(constraint),
         "columns": [str(col.name) for col in constraint.columns],
     }
 
@@ -315,8 +320,8 @@ def should_ignore_fk(tables_dict: dict[str, TableT], fk: str) -> bool:
     :param fk: The name of the foreign key.
     """
     (table, _column) = split_column_full_name(fk)
-    td = get_property(tables_dict, table, dict, {})
-    return get_property(td, "ignore", bool, False)
+    td: dict[str, TableT] = get_property(tables_dict, table, {})
+    return get_property(td, "ignore", False)
 
 
 def _always_false(_: str) -> bool:
