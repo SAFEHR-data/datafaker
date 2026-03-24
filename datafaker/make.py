@@ -11,6 +11,7 @@ from typing import Any, Final, Optional, Tuple, Type, Union
 
 import pandas as pd
 import snsql
+import typer
 import yaml
 from black import FileMode, format_str
 from jinja2 import Environment, FileSystemLoader, Template
@@ -31,6 +32,7 @@ from datafaker.utils import (
     create_db_engine,
     download_table,
     get_columns_assigned,
+    get_metadata,
     get_property,
     get_related_table_names,
     get_row_generators,
@@ -606,7 +608,21 @@ def make_table_generators(  # pylint: disable=too-many-locals
     :return: A string that is a valid Python module, once written to file.
     """
     row_generator_module_name: str = config.get("row_generators_module", None)
+    if row_generator_module_name and "-" in row_generator_module_name:
+        logger.error(
+            "Row generator name %s specified in %s should not contain a hyphen",
+            row_generator_module_name,
+            config_filename,
+        )
+        raise typer.Exit(1)
     story_generator_module_name = config.get("story_generators_module", None)
+    if story_generator_module_name and "-" in story_generator_module_name:
+        logger.error(
+            "Story generator name %s specified in %s should not contain a hyphen",
+            story_generator_module_name,
+            config_filename,
+        )
+        raise typer.Exit(1)
     object_instantiation: dict[str, dict] = config.get("object_instantiation", {})
     tables_config = config.get("tables", {})
 
@@ -703,8 +719,7 @@ def make_tables_file(
     """Construct the YAML file representing the schema."""
     engine = get_sync_engine(create_db_engine(db_dsn, schema_name=schema_name))
 
-    metadata = MetaData()
-    metadata.reflect(engine)
+    metadata = get_metadata(engine)
     meta_dict = metadata_to_dict(metadata, schema_name, engine, parquet_dir)
 
     if parquet_dir is not None:
