@@ -78,7 +78,7 @@ def _check_file_non_existence(file_path: Path) -> None:
     """Check that a given file does not exist. Exit with an error message if it does."""
     if file_path.exists():
         logger.error("%s should not already exist. Exiting...", file_path)
-        sys.exit(1)
+        raise Exit(1)
 
 
 def load_metadata_config(
@@ -202,6 +202,8 @@ def create_data(
         return
     except RuntimeError as e:
         logger.error(e.args[0])
+    except SettingsError as e:
+        logger.error(str(e))
     raise Exit(1)
 
 
@@ -554,7 +556,7 @@ def convert_table_names_to_tables(
                 "%s is not the name of a table in the destination database", name
             )
     if failed_count:
-        sys.exit(1)
+        raise Exit(1)
     return results
 
 
@@ -643,7 +645,7 @@ def dump_data(
                 "Must specify exactly one table if the output name is"
                 " specified, or specify an existing directory"
             )
-            sys.exit(1)
+            raise Exit(1)
     dst_dsn = get_destination_dsn()
     schema_name = get_destination_schema()
     config = read_config_file(config_file) if config_file is not None else {}
@@ -676,7 +678,7 @@ def validate_config(
         validate(config, schema_config)
     except ValidationError as e:
         logger.error(e)
-        sys.exit(1)
+        raise Exit(1) from e
     logger.debug("Config file is valid.")
 
 
@@ -772,7 +774,7 @@ def remove_tables(
             except InternalError as exc:
                 logger.error("Failed to drop tables: %s", exc)
                 logger.error("Please try again using the --all option.")
-                sys.exit(1)
+                raise Exit(1) from exc
         logger.debug("Tables dropped.")
     else:
         logger.info("Would remove tables if called with --yes.")

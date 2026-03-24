@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Mapping
 
+import yaml
 from sqlalchemy import create_engine, inspect
 from typer.testing import CliRunner, Result
 
@@ -513,6 +514,71 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
         engine = create_engine(dst_dsn)
         inspector = inspect(engine)
         self.assertTrue(inspector.has_schema(env["dst_schema"]))
+
+    def test_story_incorrect_name(self) -> None:
+        """Test we get a proper error message if the story generator module does not exist."""
+        config_file = "config_story_incorrect.yaml"
+        config = {
+            "story_generators_module": "incorrect_module",
+        }
+        with Path(config_file).open("w", encoding="utf-8") as fh:
+            fh.write(yaml.dump(config))
+        self.invoke(
+            "make-tables",
+            "--force",
+        )
+        self.invoke(
+            "create-tables",
+            "--config-file",
+            config_file,
+        )
+        completed_process = self.invoke(
+            "create-data",
+            "--config-file",
+            config_file,
+            expected_error="No module found 'incorrect_module",
+        )
+        self.assertReturnCode(completed_process, 1)
+
+    def test_story_hyphens_in_name(self) -> None:
+        """Test hyphens in story generator names cause an error to be emitted."""
+        config_file = "config_story_hyphens.yaml"
+        config = {
+            "story_generators_module": "story-generators",
+        }
+        with Path(config_file).open("w", encoding="utf-8") as fh:
+            fh.write(yaml.dump(config))
+        self.invoke(
+            "make-tables",
+            "--force",
+        )
+        completed_process = self.invoke(
+            "create-data",
+            "--config-file",
+            config_file,
+            expected_error="hyphen",
+        )
+        self.assertReturnCode(completed_process, 1)
+
+    def test_row_hyphens_in_name(self) -> None:
+        """Test hyphens in row generator names cause an error to be emitted."""
+        config_file = "config_row_hyphens.yaml"
+        config = {
+            "row_generators_module": "row-generators",
+        }
+        with Path(config_file).open("w", encoding="utf-8") as fh:
+            fh.write(yaml.dump(config))
+        self.invoke(
+            "make-tables",
+            "--force",
+        )
+        completed_process = self.invoke(
+            "create-data",
+            "--config-file",
+            config_file,
+            expected_error="hyphen",
+        )
+        self.assertReturnCode(completed_process, 1)
 
 
 class DuckDbFunctionalTestCase(DBFunctionalTestCaseBase):

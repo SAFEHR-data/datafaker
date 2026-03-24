@@ -23,6 +23,7 @@ from datafaker.create import (
 from datafaker.make import FunctionCall, StoryGeneratorInfo
 from datafaker.populate import TableGenerator
 from datafaker.serialize_metadata import dict_to_metadata, metadata_to_dict
+from datafaker.settings import SettingsError
 from datafaker.utils import sorted_non_vocabulary_tables
 from tests.utils import DatafakerTestCase, GeneratesDBTestCase, RequiresDBTestCase
 
@@ -427,6 +428,37 @@ class CreateDataTestCase(RequiresDBTestCase):
             config,
             None,
             2,
+            self.dsn,
+            self.schema_name,
+            metadata,
+        )
+
+    def test_story_incorrect_name_minimal(self) -> None:
+        """Test we get a proper error message if the story generator module does not exist."""
+        config = {
+            "story_generators_module": "incorrect_module",
+        }
+        orm = {
+            "tables": {
+                "one": {
+                    "columns": {
+                        "id": {
+                            "primary": True,
+                            "type": "INTEGER",
+                        }
+                    }
+                }
+            }
+        }
+        metadata = dict_to_metadata(orm, config)
+        create_db_tables_into(metadata, self.dsn, self.schema_name)
+        self.assertRaises(
+            SettingsError,
+            create_db_data_into,
+            sorted_non_vocabulary_tables(metadata, config),
+            config,
+            None,
+            1,
             self.dsn,
             self.schema_name,
             metadata,
