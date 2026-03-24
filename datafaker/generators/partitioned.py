@@ -445,7 +445,7 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
 
     def __init__(self, config: Mapping[str, Any]) -> None:
         """Initialize the null partitioned generator factory."""
-        tables = get_property(config, "tables", dict, {})
+        tables: dict[str, Any] = get_property(config, "tables", {})
         self._named_tables = {
             table_name: table_conf["name_column"]
             for table_name, table_conf in tables.items()
