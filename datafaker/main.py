@@ -55,7 +55,6 @@ from .serialize_metadata import dict_to_metadata
 
 ORM_FILENAME: Final[str] = "orm.yaml"
 CONFIG_FILENAME: Final[str] = "config.yaml"
-DF_FILENAME: Final[str] = "df.py"
 STATS_FILENAME: Final[str] = "src-stats.yaml"
 
 app = Typer(no_args_is_help=True)
@@ -270,7 +269,7 @@ def create_generators(
         dir_okay=False,
     ),
     _df_file: Path = Option(
-        DF_FILENAME,
+        None,
         help="Path to write Python generators to.",
         dir_okay=False,
     ),

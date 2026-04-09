@@ -42,7 +42,7 @@ class Generator(ABC):
 
     @abstractmethod
     def function_name(self) -> str:
-        """Get the name of the generator function to put into df.py."""
+        """Get the name of the generator function to call to generate the data."""
 
     def name(self) -> str:
         """

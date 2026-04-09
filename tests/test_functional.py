@@ -21,7 +21,6 @@ class DBFunctionalTestCaseBase(RequiresDBTestCase):
     examples_dir = Path("tests/examples")
 
     orm_file_path = Path("orm.yaml")
-    datafaker_file_path = Path("df.py")
 
     generator_file_paths = tuple(
         map(Path, ("story_generators.py", "row_generators.py")),

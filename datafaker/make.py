@@ -13,8 +13,6 @@ import pandas as pd
 import snsql
 import typer
 import yaml
-from black import FileMode, format_str
-from jinja2 import Environment, FileSystemLoader, Template
 from mimesis.providers.base import BaseProvider
 from sqlalchemy import CursorResult, Engine, MetaData, text
 from sqlalchemy.dialects import postgresql
@@ -58,13 +56,10 @@ for entry_name, entry in inspect.getmembers(providers, inspect.isclass):
     if issubclass(entry, BaseProvider) and entry.__module__ == "datafaker.providers":
         PROVIDER_IMPORTS.append(entry_name)
 
-TEMPLATE_DIRECTORY: Final[Path] = Path(__file__).parent / "templates/"
-DF_TEMPLATE_FILENAME: Final[str] = "df.py.j2"
-
 
 @dataclass
 class VocabularyTableGeneratorInfo:
-    """Contains the df.py content related to vocabulary tables."""
+    """Contains the vocabulary tables to be generated."""
 
     variable_name: str
     table_name: str
@@ -82,7 +77,7 @@ class FunctionCall:
 
 @dataclass
 class RowGeneratorInfo:
-    """Contains the df.py content related to row generators of a table."""
+    """Contains the row generators of a table."""
 
     variable_names: list[str]
     function_call: FunctionCall
@@ -122,7 +117,7 @@ def make_column_choices(
 
 @dataclass
 class TableGeneratorInfo:
-    """Contains the df.py content related to regular tables."""
+    """Contains the tables that need data generation."""
 
     class_name: str
     table_name: str
@@ -137,7 +132,7 @@ class TableGeneratorInfo:
 
 @dataclass
 class StoryGeneratorInfo:
-    """Contains the df.py content related to story generators."""
+    """Contains the story generators."""
 
     wrapper_name: str
     function_call: FunctionCall
@@ -667,18 +662,6 @@ def get_generation_info(
         story_generators=story_generators,
         max_unique_constraint_tries=max_unique_constraint_tries,
     )
-
-
-def generate_df_content(template_context: Mapping[str, Any]) -> str:
-    """Generate the content of the df.py file as a string."""
-    environment: Environment = Environment(
-        loader=FileSystemLoader(TEMPLATE_DIRECTORY),
-        trim_blocks=True,
-        lstrip_blocks=True,
-    )
-    df_template: Template = environment.get_template(DF_TEMPLATE_FILENAME)
-    template_output: str = df_template.render(template_context)
-    return format_str(template_output, mode=FileMode())
 
 
 def _get_generator_for_existing_vocabulary_table(
