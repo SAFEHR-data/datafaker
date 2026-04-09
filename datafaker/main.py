@@ -483,7 +483,7 @@ def configure_missing(
         return
     content = yaml.dump(config_updated)
     config_file.write_text(content, encoding="utf-8")
-    logger.debug("Generators missingness in %s.", config_file)
+    logger.debug("Missingness generators in %s.", config_file)
 
 
 @app.command()

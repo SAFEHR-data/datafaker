@@ -10,18 +10,18 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.types import Integer, Numeric
 from typing_extensions import Self
 
-from datafaker.generators.base import (
+from datafaker.proposers.base import (
     Buckets,
-    Generator,
-    GeneratorFactory,
     NumericType,
+    Proposer,
+    ProposerFactory,
     dist_gen,
     get_column_type,
 )
 from datafaker.utils import logger
 
 
-class ContinuousDistributionGenerator(Generator):
+class ContinuousDistributionGenerator(Proposer):
     """Base class for generators producing continuous distributions."""
 
     expected_buckets: Sequence[NumericType] = []
@@ -133,7 +133,7 @@ class UniformGenerator(ContinuousDistributionGenerator):
         ]
 
 
-class ContinuousDistributionGeneratorFactory(GeneratorFactory):
+class ContinuousDistributionProposerFactory(ProposerFactory):
     """All generators that want an average and standard deviation."""
 
     def _get_generators_from_buckets(
@@ -142,15 +142,15 @@ class ContinuousDistributionGeneratorFactory(GeneratorFactory):
         table_name: str,
         column_name: str,
         buckets: Buckets,
-    ) -> Sequence[Generator]:
+    ) -> Sequence[Proposer]:
         return [
             GaussianGenerator(table_name, column_name, buckets),
             UniformGenerator(table_name, column_name, buckets),
         ]
 
-    def get_generators(
+    def get_proposers(
         self, columns: list[Column], engine: Engine
-    ) -> Sequence[Generator]:
+    ) -> Sequence[Proposer]:
         """Get the generators appropriate to these columns."""
         if len(columns) != 1:
             return []
@@ -168,7 +168,7 @@ class ContinuousDistributionGeneratorFactory(GeneratorFactory):
         )
 
 
-class LogNormalGenerator(Generator):
+class LogNormalGenerator(Proposer):
     """Generator producing numbers in a log-normal distribution."""
 
     # R:
@@ -266,7 +266,7 @@ class LogNormalGenerator(Generator):
         return self.buckets.fit_from_counts(self.expected_buckets)
 
 
-class ContinuousLogDistributionGeneratorFactory(ContinuousDistributionGeneratorFactory):
+class ContinuousLogDistributionProposerFactory(ContinuousDistributionProposerFactory):
     """All generators that want an average and standard deviation of log data."""
 
     def _get_generators_from_buckets(
@@ -275,7 +275,7 @@ class ContinuousLogDistributionGeneratorFactory(ContinuousDistributionGeneratorF
         table_name: str,
         column_name: str,
         buckets: Buckets,
-    ) -> Sequence[Generator]:
+    ) -> Sequence[Proposer]:
         with engine.connect() as connection:
             result = connection.execute(
                 text(
@@ -298,7 +298,7 @@ class ContinuousLogDistributionGeneratorFactory(ContinuousDistributionGeneratorF
         ]
 
 
-class MultivariateNormalGenerator(Generator):
+class MultivariateNormalGenerator(Proposer):
     """Generator of multiple values drawn from a multivariate normal distribution."""
 
     # pylint: disable=too-many-arguments too-many-positional-arguments
@@ -356,7 +356,7 @@ class MultivariateNormalGenerator(Generator):
         return default
 
 
-class MultivariateNormalGeneratorFactoryBase(GeneratorFactory):
+class MultivariateNormalGeneratorFactoryBase(ProposerFactory):
     """Generator factory that makes distributions and maybe partitions."""
 
     @abstractmethod
@@ -592,7 +592,7 @@ class CovariateQuery:
         )
 
 
-class MultivariateNormalGeneratorFactory(MultivariateNormalGeneratorFactoryBase):
+class MultivariateNormalProposerFactory(MultivariateNormalGeneratorFactoryBase):
     """Normal distribution generator factory."""
 
     def function_name(self) -> str:
@@ -614,9 +614,9 @@ class MultivariateNormalGeneratorFactory(MultivariateNormalGeneratorFactoryBase)
             " normal distribution over the columns {columns}."
         )
 
-    def get_generators(
+    def get_proposers(
         self, columns: list[Column], engine: Engine
-    ) -> Sequence[Generator]:
+    ) -> Sequence[Proposer]:
         """Get the generators for these columns."""
         # For the case of one column we'll use GaussianGenerator
         if len(columns) < 2:
@@ -649,7 +649,7 @@ class MultivariateNormalGeneratorFactory(MultivariateNormalGeneratorFactoryBase)
             ]
 
 
-class MultivariateLogNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
+class MultivariateLogNormalProposerFactory(MultivariateNormalProposerFactory):
     """Multivariate lognormal generator factory."""
 
     def function_name(self) -> str:

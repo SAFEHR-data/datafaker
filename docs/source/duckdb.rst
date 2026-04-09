@@ -22,6 +22,13 @@ Or in Windows:
    set SRC_DSN=duckdb:///C:/path/to/file/duck.db
    set DST_DSN=duckdb:///C:/path/to/file/fake.db
 
+Or in Windows PowerShell:
+
+.. code-block::
+
+   $env:SRC_DSN='duckdb:///C:/path/to/file/duck.db'
+   $env:DST_DSN='duckdb:///C:/path/to/file/fake.db'
+
 This will use the DuckDB database in the file ``/path/to/file/duck.db`` and output to the file ``/path/to/file/fake.db``.
 
 Using Datafaker's ``create-tables`` command will create the new database file ``/path/to/file/fake.db``.
