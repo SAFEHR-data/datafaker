@@ -10,7 +10,12 @@ from typer.testing import CliRunner
 
 from datafaker.main import app
 from datafaker.settings import Settings, SettingsError
-from tests.utils import DatafakerTestCase, get_test_settings
+from tests.utils import (
+    DatafakerTestCase,
+    GeneratesDBTestCase,
+    TestDuckDb,
+    get_test_settings,
+)
 
 runner = CliRunner(mix_stderr=False)
 
@@ -499,3 +504,58 @@ class TestCliOutput(DatafakerTestCase):
                     self.load_yaml("stats_file.yaml"), {"some_stat": 0}
                 )
                 self.assertSuccess(result)
+
+
+class TestsCliCreate(GeneratesDBTestCase):
+    """Tests that use the CLI to generate output in the destination database."""
+
+    use_temporary_cwd = True
+    dst_schema_name = "fake.dstschema"
+
+    def setUp(self) -> None:
+        """Set the runner with the environment variables we need."""
+        super().setUp()
+        self.runner = CliRunner(
+            mix_stderr=False,
+            env={
+                "src_dsn": self.dsn,
+                "dst_dsn": self.dst_dsn,
+            },
+        )
+
+    def test_create_primary_key(self) -> None:
+        """Test the creation of a simple database with one primary key column."""
+        orm = {
+            "tables": {
+                "tab": {
+                    "columns": {
+                        "col": {
+                            "primary": True,
+                            # For some reason, nullable primary keys triggers a
+                            # weird corner case on DuckDB
+                            "nullable": True,
+                            "type": "INTEGER",
+                        }
+                    }
+                }
+            }
+        }
+        config: dict[str, Any] = {}
+        with Path("orm.yaml").open("w", encoding="utf-8") as fh:
+            fh.write(yaml.dump(orm))
+        with Path("config.yaml").open("w", encoding="utf-8") as fh:
+            fh.write(yaml.dump(config))
+        result = self.runner.invoke(
+            app,
+            [
+                "create-tables",
+            ],
+            catch_exceptions=False,
+        )
+        self.assertSuccess(result)
+
+
+class TestCliCreateDuckDb(TestsCliCreate):
+    """Tests that use the CLI to generate output in a DuckDB database."""
+
+    database_type = TestDuckDb

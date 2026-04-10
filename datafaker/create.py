@@ -1,4 +1,5 @@
 """Functions and classes to create and populate the target database."""
+import re
 from collections import Counter
 from pathlib import Path
 from typing import Any, Generator, Iterable, Iterator, Mapping, Sequence, Tuple
@@ -33,6 +34,8 @@ from datafaker.utils import (
 Story = Generator[Tuple[str, dict[str, Any]], dict[str, Any], None]
 RowCounts = Counter[str]
 
+serial_re = re.compile(r"\bSERIAL\b")
+
 
 @compiles(CreateColumn, "duckdb")
 def remove_serial(element: CreateColumn, compiler: Any, **kw: Any) -> str:
@@ -48,23 +51,30 @@ def remove_serial(element: CreateColumn, compiler: Any, **kw: Any) -> str:
     :return: Corrected SQL.
     """
     text: str = compiler.visit_create_column(element, **kw)
-    return text.replace(" SERIAL ", " INTEGER ")
+    return serial_re.sub("INTEGER", text)
 
 
 @compiles(CreateTable, "duckdb")
 def remove_on_delete_cascade(element: CreateTable, compiler: Any, **kw: Any) -> str:
     """
-    Intercede in compilation for column creation, removing ``ON DELETE CASCADE``.
+    Intercede in compilation for column creation.
 
     DuckDB does not understand cascades, and we don't care about
-    that in datafaker. Ideally ``duckdb_engine`` would remove this for us.
+    that in datafaker so we remove ``ON DELETE CASCASE``.
+
+    DuckDB does not understand ``SERIAL`` and we don't care
+    about autoincrementing, so we will replace it simply with
+    ``INTEGER``.
+
+    Ideally ``duckdb_engine`` would remove these for us.
     :param element: The CreateTable being executed.
     :param compiler: Actually a DDLCompiler, but that type is not exported.
     :param kw: Further arguments.
     :return: Corrected SQL.
     """
     text: str = compiler.visit_create_table(element, **kw)
-    return text.replace(" ON DELETE CASCADE", "")
+    t2 = serial_re.sub("INTEGER", text)
+    return t2.replace(" ON DELETE CASCADE", "")
 
 
 def create_db_tables(metadata: MetaData) -> None:
