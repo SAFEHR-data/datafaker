@@ -8,9 +8,9 @@ from typing import Any, Sequence, Union
 
 from sqlalchemy import Column, CursorResult, Engine, text
 
-from datafaker.generators.base import (
-    Generator,
-    GeneratorFactory,
+from datafaker.proposers.base import (
+    Proposer,
+    ProposerFactory,
     dist_gen,
     fit_from_buckets,
 )
@@ -44,7 +44,7 @@ def zipf_distribution(total: int, bins: int) -> typing.Generator[int, None, None
             yield x
 
 
-class ChoiceGenerator(Generator):
+class ChoiceGenerator(Proposer):
     """Base generator for all generators producing choices of items."""
 
     STORE_COUNTS = False
@@ -287,15 +287,15 @@ class ValueGatherer:
         self.cvs_not_suppressed = cvs_not_suppressed
 
 
-class ChoiceGeneratorFactory(GeneratorFactory):
+class ChoiceProposerFactory(ProposerFactory):
     """All generators that want an average and standard deviation."""
 
     SAMPLE_COUNT = MAXIMUM_CHOICES
     SUPPRESS_COUNT = 7
 
-    def get_generators(
+    def get_proposers(
         self, columns: list[Column], engine: Engine
-    ) -> Sequence[Generator]:
+    ) -> Sequence[Proposer]:
         """Get the generators appropriate to these columns."""
         if len(columns) != 1:
             return []

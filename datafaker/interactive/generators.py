@@ -8,9 +8,9 @@ from typing import Any, Callable, Optional, cast
 import sqlalchemy
 from sqlalchemy import Column
 
-from datafaker.generators import everything_factory
-from datafaker.generators.base import Generator, PredefinedGenerator
 from datafaker.interactive.base import DbCmd, TableEntry, fk_column_name, or_default
+from datafaker.proposers import everything_factory
+from datafaker.proposers.base import PredefinedProposer, Proposer
 from datafaker.utils import (
     get_columns_assigned,
     get_row_generators,
@@ -26,7 +26,7 @@ class GeneratorInfo:
     """A generator and the columns it assigns to."""
 
     columns: list[str]
-    gen: Generator | None
+    gen: Proposer | None
 
 
 @dataclass
@@ -120,7 +120,7 @@ information about the columns in the current table. Use 'peek',
                 new_generator_infos.append(
                     GeneratorInfo(
                         columns=actual_collist.copy(),
-                        gen=PredefinedGenerator(table_name, rg, self.config),
+                        gen=PredefinedProposer(table_name, rg, self.config),
                     )
                 )
                 columns_assigned_so_far |= colset
@@ -158,7 +158,7 @@ information about the columns in the current table. Use 'peek',
         :param config: Configuration loaded from ``config.yaml``
         """
         super().__init__(settings)
-        self.generators: list[Generator] | None = None
+        self.generators: list[Proposer] | None = None
         self.generator_index = 0
         self.generators_valid_columns: Optional[tuple[int, list[str]]] = None
         self.set_prompt()
@@ -271,7 +271,7 @@ information about the columns in the current table. Use 'peek',
         src_stats = self._remove_auto_src_stats()
         for entry in self.table_entries:
             rgs = []
-            new_gens: list[Generator] = []
+            new_gens: list[Proposer] = []
             for generator in entry.new_generators:
                 if generator.gen is not None:
                     new_gens.append(generator.gen)
@@ -316,7 +316,7 @@ information about the columns in the current table. Use 'peek',
 
     def _find_old_generator(
         self, entry: GeneratorCmdTableEntry, columns: Iterable[str]
-    ) -> Generator | None:
+    ) -> Proposer | None:
         """Find any generator that previously assigned to these exact same columns."""
         fc = frozenset(columns)
         for gen in entry.old_generators:
@@ -566,13 +566,13 @@ information about the columns in the current table. Use 'peek',
             self._get_column_names(),
         )
 
-    def _get_generator_proposals(self) -> list[Generator]:
+    def _get_generator_proposals(self) -> list[Proposer]:
         """Get a list of acceptable generators, sorted by decreasing fit to the actual data."""
         if not self._generators_valid():
             self.generators = None
         if self.generators is None:
             columns = self._column_metadata()
-            gens = everything_factory(self.config).get_generators(
+            gens = everything_factory(self.config).get_proposers(
                 columns, self.sync_engine
             )
             sorted_gens = sorted(gens, key=lambda g: g.fit(9999))
@@ -615,7 +615,7 @@ information about the columns in the current table. Use 'peek',
                 for x in self._get_column_data(limit, to_str=str)
             ]
         }
-        gens: list[Generator] = self._get_generator_proposals()
+        gens: list[Proposer] = self._get_generator_proposals()
         table_name = self.table_name()
         for argument in args:
             if argument.isdigit():
@@ -630,7 +630,7 @@ information about the columns in the current table. Use 'peek',
         """Synonym for compare."""
         self.do_compare(arg)
 
-    def _print_values_queried(self, table_name: str, n: int, gen: Generator) -> None:
+    def _print_values_queried(self, table_name: str, n: int, gen: Proposer) -> None:
         """
         Print the values queried from the database for this generator.
 
@@ -653,7 +653,7 @@ information about the columns in the current table. Use 'peek',
             self._print_select_aggregate_query(table_name, gen)
             self._print_custom_queries(gen)
 
-    def _print_custom_queries(self, gen: Generator) -> None:
+    def _print_custom_queries(self, gen: Proposer) -> None:
         """
         Print all the custom queries and all the values they get in this case.
 
@@ -700,9 +700,7 @@ information about the columns in the current table. Use 'peek',
                 if k in actual:
                     self._get_custom_queries_from(out, v, actual[k])
 
-    def _get_aggregate_query(
-        self, gens: list[Generator], table_name: str
-    ) -> str | None:
+    def _get_aggregate_query(self, gens: list[Proposer], table_name: str) -> str | None:
         clauses = [
             f'{q["clause"]} AS {n}'
             for gen in gens
@@ -712,7 +710,7 @@ information about the columns in the current table. Use 'peek',
             return None
         return f"SELECT {', '.join(clauses)} FROM {table_name}"
 
-    def _print_select_aggregate_query(self, table_name: str, gen: Generator) -> None:
+    def _print_select_aggregate_query(self, table_name: str, gen: Proposer) -> None:
         """
         Print the select aggregate query and all the values it gets in this case.
 
@@ -803,7 +801,7 @@ information about the columns in the current table. Use 'peek',
         """Synonym for propose."""
         self.do_propose(arg)
 
-    def get_proposed_generator_by_name(self, gen_name: str) -> Generator | None:
+    def get_proposed_generator_by_name(self, gen_name: str) -> Proposer | None:
         """Find a generator by name from the list of proposals."""
         for gen in self._get_generator_proposals():
             if gen.name() == gen_name:
@@ -816,7 +814,7 @@ information about the columns in the current table. Use 'peek',
             self.print("Please run 'propose' before 'set <number>'")
             return
         gens = self._get_generator_proposals()
-        new_gen: Generator | None
+        new_gen: Proposer | None
         if arg.isdigit():
             index = int(arg)
             if index < 1:
@@ -837,7 +835,7 @@ information about the columns in the current table. Use 'peek',
         self.set_generator(new_gen)
         self._go_next()
 
-    def set_generator(self, gen: Generator | None) -> None:
+    def set_generator(self, gen: Proposer | None) -> None:
         """Set the current column's generator."""
         (table, gen_info) = self._get_table_and_generator()
         if table is None:
