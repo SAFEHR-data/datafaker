@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Optional, cast
 
 import sqlalchemy
-from sqlalchemy import Column, MetaData
+from sqlalchemy import Column
 
 from datafaker.generators import everything_factory
 from datafaker.generators.base import Generator, PredefinedGenerator
@@ -147,10 +147,7 @@ information about the columns in the current table. Use 'peek',
 
     def __init__(
         self,
-        src_dsn: str,
-        src_schema: str | None,
-        metadata: MetaData,
-        config: MutableMapping[str, Any],
+        settings: DbCmd.Settings,
     ) -> None:
         """
         Initialise a ``GeneratorCmd``.
@@ -160,7 +157,7 @@ information about the columns in the current table. Use 'peek',
         :param metadata: SQLAlchemy metadata for the source database
         :param config: Configuration loaded from ``config.yaml``
         """
-        super().__init__(src_dsn, src_schema, metadata, config)
+        super().__init__(settings)
         self.generators: list[Generator] | None = None
         self.generator_index = 0
         self.generators_valid_columns: Optional[tuple[int, list[str]]] = None

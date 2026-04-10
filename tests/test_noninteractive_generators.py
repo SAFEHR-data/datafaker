@@ -5,6 +5,7 @@ from typing import Any
 from unittest.mock import MagicMock, Mock, patch
 
 from datafaker.interactive import update_config_generators
+from datafaker.interactive.base import DbCmd
 from tests.utils import RequiresDBTestCase
 
 
@@ -49,7 +50,14 @@ class NonInteractiveTests(RequiresDBTestCase):
         config: MutableMapping[str, Any] = {}
         spec_csv = Mock(return_value="mock spec.csv file")
         update_config_generators(
-            self.dsn, self.schema_name, self.metadata, config, spec_csv
+            DbCmd.Settings(
+                self.dsn,
+                self.schema_name,
+                config,
+                self.metadata,
+                None,
+            ),
+            spec_csv,
         )
         row_gens = {
             f"{table}{sorted(rg['columns_assigned'])}": rg["name"]
@@ -87,7 +95,14 @@ class NonInteractiveTests(RequiresDBTestCase):
         config: MutableMapping[str, Any] = {}
         spec_csv = Mock(return_value="mock spec.csv file")
         update_config_generators(
-            self.dsn, self.schema_name, self.metadata, config, spec_csv
+            DbCmd.Settings(
+                self.dsn,
+                self.schema_name,
+                config,
+                self.metadata,
+                None,
+            ),
+            spec_csv,
         )
         row_gens = {
             f"{table}{sorted(rg['columns_assigned'])}": rg
@@ -152,7 +167,14 @@ class NonInteractiveTests(RequiresDBTestCase):
         }
         spec_csv = Mock(return_value="mock spec.csv file")
         update_config_generators(
-            self.dsn, self.schema_name, self.metadata, config, spec_csv
+            DbCmd.Settings(
+                self.dsn,
+                self.schema_name,
+                config,
+                self.metadata,
+                None,
+            ),
+            spec_csv,
         )
         row_gens: Mapping[str, Any] = {
             f"{table}{sorted(rg['columns_assigned'])}": rg

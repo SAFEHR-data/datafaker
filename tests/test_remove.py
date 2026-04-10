@@ -24,7 +24,7 @@ class RemoveThingsTestCase(RequiresDBTestCase):
             select(func.count()).select_from(self.metadata.tables[table_name])
         ).scalar()
 
-    @patch("datafaker.remove.get_settings")
+    @patch("datafaker.settings.get_settings")
     def test_remove_data(self, mock_get_settings: MagicMock) -> None:
         """Test that data can be removed from non-vocabulary tables."""
         mock_get_settings.return_value = Settings(
@@ -47,35 +47,19 @@ class RemoveThingsTestCase(RequiresDBTestCase):
             self.assertEqual(self.count_rows(conn, "string"), 0)
             self.assertEqual(self.count_rows(conn, "signature_model"), 0)
 
-    @patch("datafaker.remove.get_settings")
-    def test_remove_data_raises(self, mock_get_settings: MagicMock) -> None:
-        """Test that remove-data raises if dst DSN is missing."""
-        mock_get_settings.return_value = Settings(
-            src_dsn=self.dsn,
-            dst_dsn=None,
-        )
-        with self.assertRaises(AssertionError) as context_manager:
-            remove_db_data(
-                self.metadata,
-                {
-                    "tables": {
-                        "manufacturer": {"vocabulary_table": True},
-                        "model": {"vocabulary_table": True},
-                    }
-                },
-            )
-        self.assertEqual(
-            context_manager.exception.args[0], "Missing destination database settings"
-        )
-
-    @patch("datafaker.remove.get_settings")
+    @patch("datafaker.settings.get_settings")
     def test_remove_vocab(self, mock_get_settings: MagicMock) -> None:
         """Test that vocabulary tables can be removed."""
         mock_get_settings.return_value = Settings(
             src_dsn=self.dsn,
             dst_dsn=self.dsn,
         )
-        meta_dict = metadata_to_dict(self.metadata, self.schema_name, self.sync_engine)
+        meta_dict = metadata_to_dict(
+            self.metadata,
+            self.schema_name,
+            self.sync_engine,
+            parquet_dir=None,
+        )
         config = {
             "tables": {
                 "manufacturer": {"vocabulary_table": True},
@@ -91,32 +75,7 @@ class RemoveThingsTestCase(RequiresDBTestCase):
             self.assertEqual(self.count_rows(conn, "string"), 0)
             self.assertEqual(self.count_rows(conn, "signature_model"), 0)
 
-    @patch("datafaker.remove.get_settings")
-    def test_remove_vocab_raises(self, mock_get_settings: MagicMock) -> None:
-        """Test that remove-vocab raises if dst DSN is missing."""
-        mock_get_settings.return_value = Settings(
-            src_dsn=self.dsn,
-            dst_dsn=None,
-        )
-        with self.assertRaises(AssertionError) as context_manager:
-            meta_dict = metadata_to_dict(
-                self.metadata, self.schema_name, self.sync_engine
-            )
-            remove_db_vocab(
-                self.metadata,
-                meta_dict,
-                {
-                    "tables": {
-                        "manufacturer": {"vocabulary_table": True},
-                        "model": {"vocabulary_table": True},
-                    }
-                },
-            )
-        self.assertEqual(
-            context_manager.exception.args[0], "Missing destination database settings"
-        )
-
-    @patch("datafaker.remove.get_settings")
+    @patch("datafaker.settings.get_settings")
     def test_remove_tables(self, mock_get_settings: MagicMock) -> None:
         """Test that destination tables can be removed."""
         mock_get_settings.return_value = Settings(
@@ -136,16 +95,3 @@ class RemoveThingsTestCase(RequiresDBTestCase):
         self.assertFalse(engine_out.has_table("player"))
         self.assertFalse(engine_out.has_table("string"))
         self.assertFalse(engine_out.has_table("signature_model"))
-
-    @patch("datafaker.remove.get_settings")
-    def test_remove_tables_raises(self, mock_get_settings: MagicMock) -> None:
-        """Test that remove-vocab raises if dst DSN is missing."""
-        mock_get_settings.return_value = Settings(
-            src_dsn=self.dsn,
-            dst_dsn=None,
-        )
-        with self.assertRaises(AssertionError) as context_manager:
-            remove_db_tables(self.metadata)
-        self.assertEqual(
-            context_manager.exception.args[0], "Missing destination database settings"
-        )

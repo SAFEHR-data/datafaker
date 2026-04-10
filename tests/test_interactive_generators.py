@@ -7,6 +7,7 @@ from typing import Any, Iterable
 from sqlalchemy import Connection, MetaData, select
 
 from datafaker.generators.choice import ChoiceGeneratorFactory
+from datafaker.interactive.base import DbCmd
 from datafaker.interactive.generators import GeneratorCmd
 from tests.utils import (
     GeneratesDBTestCase,
@@ -39,7 +40,9 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
 
     def _get_cmd(self, config: MutableMapping[str, Any]) -> TestGeneratorCmd:
         """Get the command we are using for this test case."""
-        return TestGeneratorCmd(self.dsn, self.schema_name, self.metadata, config)
+        return TestGeneratorCmd(
+            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
+        )
 
     def test_null_configuration(self) -> None:
         """Test that the tables having null configuration does not break."""
@@ -594,7 +597,9 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
         ChoiceGeneratorFactory.SUPPRESS_COUNT = 5
 
     def _get_cmd(self, config: MutableMapping[str, Any]) -> TestGeneratorCmd:
-        return TestGeneratorCmd(self.dsn, self.schema_name, self.metadata, config)
+        return TestGeneratorCmd(
+            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
+        )
 
     def _propose(self, gc: TestGeneratorCmd) -> dict[str, tuple[int, str, list[str]]]:
         gc.reset()
@@ -636,7 +641,7 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
             gc.do_quit("")
             self.generate_data(gc.config, num_passes=200)
             # all generation possibilities should be present
-            with self.sync_engine.connect() as conn:
+            with self.dst_sync_engine.connect() as conn:
                 stats = ChoiceMeasurementTableStats(self.metadata, conn)
                 self.assertSetEqual(stats.ones, {1, 4})
                 self.assertSetEqual(stats.twos, {2, 3})
@@ -654,7 +659,7 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
             gc.do_set(str(proposals["dist_gen.zipf_choice"][0]))
             gc.do_quit("")
             self.generate_data(gc.config, num_passes=200)
-        with self.sync_engine.connect() as conn:
+        with self.dst_sync_engine.connect() as conn:
             stmt = select(self.metadata.tables[table_name])
             rows = conn.execute(stmt).fetchall()
             ones = set()
@@ -733,13 +738,12 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
             gc.do_set(str(prop[0]))
             gc.do_quit("")
             self.generate_data(gc.config, num_passes=200)
-        with self.sync_engine.connect() as conn:
-            with self.sync_engine.connect() as conn:
-                stats = ChoiceMeasurementTableStats(self.metadata, conn)
-                # all generation possibilities should be present
-                self.assertSetEqual(stats.ones, {1, 4})
-                self.assertSetEqual(stats.twos, {1, 2, 3, 4, 5})
-                self.assertSetEqual(stats.threes, {1, 2, 3, 4, 5})
+        with self.dst_sync_engine.connect() as conn:
+            stats = ChoiceMeasurementTableStats(self.metadata, conn)
+            # all generation possibilities should be present
+            self.assertSetEqual(stats.ones, {1, 4})
+            self.assertSetEqual(stats.twos, {1, 2, 3, 4, 5})
+            self.assertSetEqual(stats.threes, {1, 2, 3, 4, 5})
 
 
 class GeneratorsOutputTestsDuckDb(GeneratorsOutputTests):
@@ -757,7 +761,9 @@ class GeneratorTests(GeneratesDBTestCase):
 
     def _get_cmd(self, config: MutableMapping[str, Any]) -> TestGeneratorCmd:
         """We are using configure-generators."""
-        return TestGeneratorCmd(self.dsn, self.schema_name, self.metadata, config)
+        return TestGeneratorCmd(
+            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
+        )
 
     def test_set_null(self) -> None:
         """Test that we can sample real missingness and reproduce it."""
@@ -780,7 +786,7 @@ class GeneratorTests(GeneratesDBTestCase):
             config = gc.config
             self.generate_data(config, num_passes=3)
         # Test that each missingness pattern is present in the database
-        with self.sync_engine.connect() as conn:
+        with self.dst_sync_engine.connect() as conn:
             # select(self.metadata.tables["string"].c["position", "frequency"]) would be nicer
             # but mypy doesn't like it
             stmt = select(
@@ -866,7 +872,7 @@ class GeneratorTests(GeneratesDBTestCase):
             gc.do_quit("")
             config = gc.config
             self.generate_data(config, num_passes=15)
-        with self.sync_engine.connect() as conn:
+        with self.dst_sync_engine.connect() as conn:
             stmt = select(self.metadata.tables[table].c[column])
             rows = conn.execute(stmt).scalars().fetchall()
             self.assert_are_truncated_to(rows, 20)

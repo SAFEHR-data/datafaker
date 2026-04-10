@@ -140,11 +140,14 @@ for Mac or Linux, or on Windows use:
    set SRC_DSN=duckdb:///:memory:
    set DST_DSN=duckdb:///./fake.db
 
-Now generate the ``orm.yaml``:
+Now generate the ``orm.yaml``. Here we are assuming the parquet files are
+in a directory named ``inputdir``. This directory can be ``.`` but it is better
+to put these files in a different directory so that we can be sure that the faked
+output files don't get mixed up with these source files:
 
 .. code-block:: shell
 
-   datafaker make-tables --parquet-dir .
+   datafaker make-tables --parquet-dir inputdir
 
 ... and edit the ``orm.yaml`` file as detailed above.
 

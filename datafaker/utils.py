@@ -5,6 +5,7 @@ import importlib.util
 import io
 import json
 import logging
+import os
 import random
 import re
 import string
@@ -32,7 +33,12 @@ from jsonschema.exceptions import ValidationError
 from jsonschema.validators import validate
 from sqlalchemy import Connection, Engine, ForeignKey, create_engine, event, select
 from sqlalchemy.engine.interfaces import DBAPIConnection
-from sqlalchemy.exc import IntegrityError, ProgrammingError
+from sqlalchemy.exc import (
+    IntegrityError,
+    NoSuchModuleError,
+    OperationalError,
+    ProgrammingError,
+)
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import (
@@ -42,6 +48,7 @@ from sqlalchemy.schema import (
     MetaData,
     Table,
 )
+from typer import Exit
 
 # Define some types used repeatedly in the code base
 MaybeAsyncEngine = Union[Engine, AsyncEngine]
@@ -67,7 +74,7 @@ class Empty(Generic[T]):
         return (x for x in e)
 
 
-def read_config_file(path: str) -> dict:
+def read_config_file(path: Path) -> dict:
     """Read a config file, warning if it is invalid.
 
     Args:
@@ -76,10 +83,14 @@ def read_config_file(path: str) -> dict:
     Returns:
         The config file as a dictionary.
     """
-    with open(path, "r", encoding="utf8") as f:
+    with path.open("r", encoding="utf8") as f:
         config = yaml.safe_load(f)
 
-    assert isinstance(config, dict)
+    if not isinstance(config, dict):
+        logger.error(
+            "The config file is invalid, its top level should be an associative array."
+        )
+        return {}
 
     schema_config = json.loads(CONFIG_SCHEMA_PATH.read_text(encoding="UTF-8"))
     try:
@@ -105,7 +116,11 @@ def import_file(file_path: str) -> ModuleType:
     if spec is None or spec.loader is None:
         raise ImportError(f"No loadable module at {file_path}")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    try:
+        spec.loader.exec_module(module)
+    except ModuleNotFoundError as e:
+        logger.error("Failed to load module at %s with error:", file_path)
+        logger.error(e)
     return module
 
 
@@ -184,26 +199,102 @@ def create_db_engine(
     db_dsn: str,
     schema_name: Optional[str] = None,
     use_asyncio: bool = False,
+    parquet_dir: Optional[Path] = None,
     **kwargs: Any,
 ) -> MaybeAsyncEngine:
     """Create a SQLAlchemy Engine."""
-    if use_asyncio:
-        async_dsn = db_dsn.replace("postgresql://", "postgresql+asyncpg://")
-        engine: MaybeAsyncEngine = create_async_engine(async_dsn, **kwargs)
-    else:
-        engine = create_engine(db_dsn, **kwargs)
+    try:
+        if use_asyncio:
+            async_dsn = db_dsn.replace("postgresql://", "postgresql+asyncpg://")
+            engine: MaybeAsyncEngine = create_async_engine(async_dsn, **kwargs)
+        else:
+            engine = create_engine(db_dsn, **kwargs)
+    except NoSuchModuleError as exc:
+        logger.error("Failed to connect to the database: %s", exc)
+        logger.error("Perhaps the dialect '%s' is invalid.", db_dsn.split(":")[0])
+        raise Exit(1) from exc
+    except ValueError as exc:
+        logger.error("DSN %s is malformed: %s", db_dsn, exc)
+        raise Exit(1) from exc
 
+    settings = {}
     if schema_name is not None:
+        settings["search_path"] = schema_name
+    if parquet_dir is not None:
+        joined = ",".join(_find_parquet_directories(parquet_dir))
+        # double up single quotes
+        dj = joined.replace("'", "''")
+        # enclose in single quotes
+        settings["file_search_path"] = f"'{dj}'"
+
+    if settings:
         event_engine = get_sync_engine(engine)
 
         @event.listens_for(event_engine, "connect", insert=True)
         def connect(dbapi_connection: DBAPIConnection, _: Any) -> None:
-            set_search_path(dbapi_connection, schema_name)
+            set_db_settings(dbapi_connection, settings)
 
     return engine
 
 
-def set_search_path(connection: DBAPIConnection, schema: str) -> None:
+def create_db_engine_dst(
+    db_dsn: str,
+    schema_name: Optional[str] = None,
+    use_asyncio: bool = False,
+) -> MaybeAsyncEngine:
+    """
+    Create a SQLAlchemy Engine suitable for output.
+
+    This prevents DuckDB from reading any parquet files avoiding any
+    possible leakage from existing source files into the destination database.
+    :param db_dsn: The database connection string.
+    :param schema_name: The name of the schema within the database to use.
+    :param use_asyncio: True if an asynchronous connection is required.
+    :return: The ``Engine`` or ``AsyncEngine``.
+    """
+    if db_dsn.startswith("duckdb:"):
+        return create_db_engine(
+            db_dsn,
+            schema_name,
+            use_asyncio,
+            connect_args={
+                "config": {
+                    "enable_external_access": False,
+                }
+            },
+        )
+    return create_db_engine(db_dsn, schema_name, use_asyncio)
+
+
+def get_metadata(engine: Engine) -> MetaData:
+    """Get the MetaData object associated with the engine passed."""
+    md = MetaData()
+    try:
+        md.reflect(engine)
+    except OperationalError as exc:
+        logger.error("Cannot connect to database: %s", exc)
+        raise Exit(1) from exc
+    return md
+
+
+def _find_parquet_directories(parquet_dir: Path) -> list[str]:
+    """Find all the directories under ``parquet_dir`` that contain parquet files."""
+    return [
+        path
+        for path, _, filenames in os.walk(parquet_dir)
+        if _names_include_parquet(Path(path), filenames)
+    ]
+
+
+def _names_include_parquet(path: Path, file_names: Iterable[str]) -> bool:
+    for fn in file_names:
+        entry = path / fn
+        if entry.is_file() and entry.suffix in {".parquet", ".parq"}:
+            return True
+    return False
+
+
+def set_db_settings(connection: DBAPIConnection, settings: Mapping[str, str]) -> None:
     """Set the SEARCH_PATH for a PostgreSQL connection."""
     # https://docs.sqlalchemy.org/en/20/dialects/postgresql.html#remote-schema-table-introspection-and-postgresql-search-path
     existing_autocommit = connection.autocommit
@@ -211,7 +302,8 @@ def set_search_path(connection: DBAPIConnection, schema: str) -> None:
 
     cursor = connection.cursor()
     # Parametrised queries don't work with asyncpg, hence the f-string.
-    cursor.execute(f"SET search_path TO {schema};")
+    sql = "".join(f"SET {k} TO {v};" for k, v in settings.items())
+    cursor.execute(sql)
     cursor.close()
 
     connection.autocommit = existing_autocommit
@@ -754,25 +846,26 @@ def generators_require_stats(config: Mapping) -> bool:
     stats_required = False
     for where, call in (ois | sgs | table_calls).items():
         for n, arg in enumerate(call.get("args", [])):
-            try:
-                names = (
-                    node.id
-                    for node in ast.walk(ast.parse(arg))
-                    if isinstance(node, ast.Name)
-                )
-                if any(name == "SRC_STATS" for name in names):
-                    stats_required = True
-            except SyntaxError as e:
-                errors.append(
-                    (
-                        "Syntax error in argument %d of %s: %s\n%s%s",
-                        n + 1,
-                        where,
-                        e.msg,
-                        arg,
-                        underline_error(e),
+            if isinstance(arg, str):
+                try:
+                    names = (
+                        node.id
+                        for node in ast.walk(ast.parse(arg))
+                        if isinstance(node, ast.Name)
                     )
-                )
+                    if any(name == "SRC_STATS" for name in names):
+                        stats_required = True
+                except SyntaxError as e:
+                    errors.append(
+                        (
+                            "Syntax error in argument %d of %s: %s\n%s%s",
+                            n + 1,
+                            where,
+                            e.msg,
+                            arg,
+                            underline_error(e),
+                        )
+                    )
         for k, arg in call.get("kwargs", {}).items():
             if isinstance(arg, str):
                 try:

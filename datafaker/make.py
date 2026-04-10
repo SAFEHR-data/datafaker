@@ -2,14 +2,16 @@
 import asyncio
 import decimal
 import inspect
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from types import TracebackType
-from typing import Any, Callable, Final, Mapping, Optional, Sequence, Tuple, Type, Union
+from typing import Any, Final, Optional, Tuple, Type, Union
 
 import pandas as pd
 import snsql
+import typer
 import yaml
 from black import FileMode, format_str
 from jinja2 import Environment, FileSystemLoader, Template
@@ -24,12 +26,13 @@ from typing_extensions import Self
 
 from datafaker import providers
 from datafaker.parquet2orm import get_parquet_orm
-from datafaker.settings import get_settings
+from datafaker.settings import get_source_dsn, get_source_schema
 from datafaker.utils import (
     MaybeAsyncEngine,
     create_db_engine,
     download_table,
     get_columns_assigned,
+    get_metadata,
     get_property,
     get_related_table_names,
     get_row_generators,
@@ -453,11 +456,12 @@ def _get_provider_for_column(column: Column) -> Tuple[list[str], str, dict[str, 
     if not generator_function:
         generator_function = "generic.null_provider.null"
         logger.warning(
-            "Unsupported SQLAlchemy type %s for column %s. "
+            "Unsupported SQLAlchemy type %s for column %s of table %s. "
             "Setting this column to NULL always, "
             "you may want to configure a row generator for it instead.",
             column.type,
             column.name,
+            column.table.name,
         )
 
     return variable_names, generator_function, generator_arguments
@@ -551,11 +555,12 @@ def make_vocabulary_tables(
     table_names: set[str] | None = None,
 ) -> None:
     """Extract the data from the source database for each vocabulary table."""
-    settings = get_settings()
-    src_dsn: str = settings.src_dsn or ""
-    assert src_dsn != "", "Missing SRC_DSN setting."
-
-    engine = get_sync_engine(create_db_engine(src_dsn, schema_name=settings.src_schema))
+    engine = get_sync_engine(
+        create_db_engine(
+            get_source_dsn(),
+            schema_name=get_source_schema(),
+        )
+    )
     vocab_names = get_vocabulary_table_names(config)
     if table_names is None:
         table_names = vocab_names
@@ -580,9 +585,9 @@ def make_vocabulary_tables(
 def make_table_generators(  # pylint: disable=too-many-locals
     metadata: MetaData,
     config: Mapping,
-    orm_filename: str,
-    config_filename: str,
-    src_stats_filename: Optional[str],
+    orm_filename: Path,
+    config_filename: Path,
+    src_stats_filename: Optional[Path],
 ) -> str:
     """
     Create datafaker generator classes.
@@ -603,7 +608,21 @@ def make_table_generators(  # pylint: disable=too-many-locals
     :return: A string that is a valid Python module, once written to file.
     """
     row_generator_module_name: str = config.get("row_generators_module", None)
+    if row_generator_module_name and "-" in row_generator_module_name:
+        logger.error(
+            "Row generator name %s specified in %s should not contain a hyphen",
+            row_generator_module_name,
+            config_filename,
+        )
+        raise typer.Exit(1)
     story_generator_module_name = config.get("story_generators_module", None)
+    if story_generator_module_name and "-" in story_generator_module_name:
+        logger.error(
+            "Story generator name %s specified in %s should not contain a hyphen",
+            story_generator_module_name,
+            config_filename,
+        )
+        raise typer.Exit(1)
     object_instantiation: dict[str, dict] = config.get("object_instantiation", {})
     tables_config = config.get("tables", {})
 
@@ -700,9 +719,8 @@ def make_tables_file(
     """Construct the YAML file representing the schema."""
     engine = get_sync_engine(create_db_engine(db_dsn, schema_name=schema_name))
 
-    metadata = MetaData()
-    metadata.reflect(engine)
-    meta_dict = metadata_to_dict(metadata, schema_name, engine)
+    metadata = get_metadata(engine)
+    meta_dict = metadata_to_dict(metadata, schema_name, engine, parquet_dir)
 
     if parquet_dir is not None:
         extra_meta = get_parquet_orm(parquet_dir)
@@ -798,7 +816,10 @@ def fix_types(dics: list[dict]) -> list[dict]:
 
 
 async def make_src_stats(
-    dsn: str, config: Mapping, schema_name: Optional[str] = None
+    dsn: str,
+    config: Mapping,
+    schema_name: Optional[str] = None,
+    parquet_dir: Optional[Path] = None,
 ) -> dict[str, dict[str, Any]]:
     """
     Run the src-stats queries specified by the configuration.
@@ -813,7 +834,12 @@ async def make_src_stats(
     :return: The dictionary of src-stats.
     """
     use_asyncio = config.get("use-asyncio", False)
-    engine = create_db_engine(dsn, schema_name=schema_name, use_asyncio=use_asyncio)
+    engine = create_db_engine(
+        dsn,
+        schema_name=schema_name,
+        use_asyncio=use_asyncio,
+        parquet_dir=parquet_dir,
+    )
     async with DbConnection(engine) as db_conn:
         return await make_src_stats_connection(config, db_conn)
 

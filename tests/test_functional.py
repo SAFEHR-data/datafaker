@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Mapping
 
+import yaml
 from sqlalchemy import create_engine, inspect
 from typer.testing import CliRunner, Result
 
@@ -109,15 +110,15 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
             {
                 (
                     "Unsupported SQLAlchemy type CIDR for column "
-                    "column_with_unusual_type. Setting this column to NULL "
-                    "always, you may want to configure a row generator for "
-                    "it instead."
+                    "column_with_unusual_type of table strange_type_table. "
+                    "Setting this column to NULL always, you may want to "
+                    "configure a row generator for it instead."
                 ),
                 (
                     "Unsupported SQLAlchemy type BIT for column "
-                    "column_with_unusual_type_and_length. Setting this column "
-                    "to NULL always, you may want to configure a row generator "
-                    "for it instead."
+                    "column_with_unusual_type_and_length of table "
+                    "strange_type_table. Setting this column to NULL always, "
+                    "you may want to configure a row generator for it instead."
                 ),
             },
             set(completed_process.stderr.split("\n")) - {""},
@@ -213,6 +214,7 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
         completed_process = self.invoke(
             "--verbose",
             "make-stats",
+            f"--orm-file={self.alt_orm_file_path}",
             f"--stats-file={self.stats_file_path}",
             f"--config-file={self.config_file_path}",
             "--force",
@@ -259,12 +261,12 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
         )
         self.assertEqual(
             "Unsupported SQLAlchemy type CIDR "
-            "for column column_with_unusual_type. "
+            "for column column_with_unusual_type of table strange_type_table. "
             "Setting this column to NULL always, "
             "you may want to configure a row generator for it instead.\n"
             "Unsupported SQLAlchemy type BIT "
-            "for column column_with_unusual_type_and_length. "
-            "Setting this column to NULL always, "
+            "for column column_with_unusual_type_and_length of table "
+            "strange_type_table. Setting this column to NULL always, "
             "you may want to configure a row generator for it instead.\n",
             completed_process.stderr,
         )
@@ -498,6 +500,7 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
         )
         self.invoke(
             "make-stats",
+            f"--orm-file={self.alt_orm_file_path}",
             f"--stats-file={self.stats_file_path}",
             f"--config-file={self.config_file_path}",
             "--force",
@@ -603,6 +606,81 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
         engine = create_engine(dst_dsn)
         inspector = inspect(engine)
         self.assertTrue(inspector.has_schema(env["dst_schema"]))
+
+    def test_story_incorrect_name(self) -> None:
+        """Test we get a proper error message if the story generator module does not exist."""
+        config_file = "config_story_incorrect.yaml"
+        config = {
+            "story_generators_module": "incorrect_module",
+        }
+        with Path(config_file).open("w", encoding="utf-8") as fh:
+            fh.write(yaml.dump(config))
+        self.invoke(
+            "make-tables",
+            "--force",
+        )
+        completed_process = self.invoke(
+            "create-generators",
+            "--force",
+            "--config-file",
+            config_file,
+        )
+        self.assertSuccess(completed_process)
+        self.invoke(
+            "create-tables",
+            "--config-file",
+            config_file,
+        )
+        self.assertSuccess(completed_process)
+        completed_process = self.invoke(
+            "create-data",
+            "--config-file",
+            config_file,
+            expected_error="No module named 'incorrect_module'",
+        )
+        self.assertReturnCode(completed_process, 1)
+
+    def test_story_hyphens_in_name(self) -> None:
+        """Test hyphens in story generator names cause an error to be emitted."""
+        config_file = "config_story_hyphens.yaml"
+        config = {
+            "story_generators_module": "story-generators",
+        }
+        with Path(config_file).open("w", encoding="utf-8") as fh:
+            fh.write(yaml.dump(config))
+        self.invoke(
+            "make-tables",
+            "--force",
+        )
+        completed_process = self.invoke(
+            "create-generators",
+            "--force",
+            "--config-file",
+            config_file,
+            expected_error="hyphen",
+        )
+        self.assertReturnCode(completed_process, 1)
+
+    def test_row_hyphens_in_name(self) -> None:
+        """Test hyphens in row generator names cause an error to be emitted."""
+        config_file = "config_row_hyphens.yaml"
+        config = {
+            "row_generators_module": "row-generators",
+        }
+        with Path(config_file).open("w", encoding="utf-8") as fh:
+            fh.write(yaml.dump(config))
+        self.invoke(
+            "make-tables",
+            "--force",
+        )
+        completed_process = self.invoke(
+            "create-generators",
+            "--force",
+            "--config-file",
+            config_file,
+            expected_error="hyphen",
+        )
+        self.assertReturnCode(completed_process, 1)
 
 
 class DuckDbFunctionalTestCase(DBFunctionalTestCaseBase):

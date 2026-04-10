@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import select
 
 from datafaker.interactive import MissingnessCmd
+from datafaker.interactive.base import DbCmd
 from tests.utils import GeneratesDBTestCase, RequiresDBTestCase, TestDbCmdMixin
 
 
@@ -22,7 +23,9 @@ class ConfigureMissingnessTests(RequiresDBTestCase):
 
     def _get_cmd(self, config: MutableMapping[str, Any]) -> TestMissingnessCmd:
         """We are using configure-missingness."""
-        return TestMissingnessCmd(self.dsn, self.schema_name, self.metadata, config)
+        return TestMissingnessCmd(
+            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
+        )
 
     def test_set_missingness_to_sampled(self) -> None:
         """Test that we can set one table to sampled missingness."""
@@ -74,7 +77,9 @@ class ConfigureMissingnessTestsWithGeneration(GeneratesDBTestCase):
     schema_name = "public"
 
     def _get_cmd(self, config: MutableMapping[str, Any]) -> TestMissingnessCmd:
-        return TestMissingnessCmd(self.dsn, self.schema_name, self.metadata, config)
+        return TestMissingnessCmd(
+            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
+        )
 
     def test_create_with_missingness(self) -> None:
         """Test that we can sample real missingness and reproduce it."""

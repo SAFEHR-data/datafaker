@@ -7,6 +7,7 @@ from unittest import TestCase
 from sqlalchemy import Connection, MetaData, insert, select
 
 from datafaker.generators import NullPartitionedNormalGeneratorFactory
+from datafaker.interactive.base import DbCmd
 from tests.test_interactive_generators import TestGeneratorCmd
 from tests.utils import GeneratesDBTestCase
 
@@ -140,7 +141,9 @@ class NullPartitionedTests(GeneratesDBTestCase):
 
     def _get_cmd(self, config: MutableMapping[str, Any]) -> TestGeneratorCmd:
         """Get the configure-generators object as our command."""
-        return TestGeneratorCmd(self.dsn, self.schema_name, self.metadata, config)
+        return TestGeneratorCmd(
+            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
+        )
 
     def _propose(self, gc: TestGeneratorCmd) -> dict[str, tuple[int, str, list[str]]]:
         gc.reset()
@@ -176,10 +179,10 @@ class NullPartitionedTests(GeneratesDBTestCase):
             self.set_configuration(gc.config)
             self.get_src_stats(gc.config)
             self.create_generators(gc.config)
-            self.remove_data(gc.config)
+            self.create_tables()
             self.populate_measurement_type_vocab()
             self.create_data(gc.config, num_passes=generate_count)
-        with self.sync_engine.connect() as conn:
+        with self.dst_sync_engine.connect() as conn:
             stats = EavMeasurementTableStats(conn, self.metadata, self)
         # type 1
         self.assertAlmostEqual(
@@ -224,7 +227,7 @@ class NullPartitionedTests(GeneratesDBTestCase):
     def populate_measurement_type_vocab(self) -> None:
         """Add a vocab table without messing around with files"""
         table = self.metadata.tables["measurement_type"]
-        with self.sync_engine.connect() as conn:
+        with self.dst_sync_engine.connect() as conn:
             conn.execute(insert(table).values({"id": 1, "name": "agreement"}))
             conn.execute(insert(table).values({"id": 2, "name": "acceleration"}))
             conn.execute(insert(table).values({"id": 3, "name": "velocity"}))
@@ -291,10 +294,10 @@ class NullPartitionedTests(GeneratesDBTestCase):
             self.set_configuration(gc.config)
             self.get_src_stats(gc.config)
             self.create_generators(gc.config)
-            self.remove_data(gc.config)
+            self.create_tables()
             self.populate_measurement_type_vocab()
             self.create_data(gc.config, num_passes=generate_count)
-        with self.sync_engine.connect() as conn:
+        with self.dst_sync_engine.connect() as conn:
             stats = EavMeasurementTableStats(conn, self.metadata, self)
             stmt = select(self.metadata.tables["observation"])
             rows = conn.execute(stmt).fetchall()
@@ -406,10 +409,10 @@ class NullPartitionedTests(GeneratesDBTestCase):
             self.set_configuration(gc.config)
             self.get_src_stats(gc.config)
             self.create_generators(gc.config)
-            self.remove_data(gc.config)
+            self.create_tables()
             self.populate_measurement_type_vocab()
             self.create_data(gc.config, num_passes=generate_count)
-        with self.sync_engine.connect() as conn:
+        with self.dst_sync_engine.connect() as conn:
             stmt = select(self.metadata.tables[table_name])
             rows = conn.execute(stmt).fetchall()
             self.assert_subset({row.type for row in rows}, {1, 2, 3, 4, 5})
@@ -440,10 +443,10 @@ class NullPartitionedTests(GeneratesDBTestCase):
             self.set_configuration(gc.config)
             self.get_src_stats(gc.config)
             self.create_generators(gc.config)
-            self.remove_data(gc.config)
+            self.create_tables()
             self.populate_measurement_type_vocab()
             self.create_data(gc.config, num_passes=generate_count)
-        with self.sync_engine.connect() as conn:
+        with self.dst_sync_engine.connect() as conn:
             stmt = select(self.metadata.tables[table_name])
             rows = conn.execute(stmt).fetchall()
             # we should only have one or two of "ham", "eggs" and "cheese" represented

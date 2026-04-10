@@ -1,10 +1,12 @@
 """ Tests for the configure-tables command. """
-from collections.abc import MutableMapping
+import re
+from collections.abc import MutableMapping, Sized
 from typing import Any
 
 from sqlalchemy import select
 
 from datafaker.interactive import TableCmd
+from datafaker.interactive.base import DbCmd
 from datafaker.serialize_metadata import dict_to_metadata
 from tests.utils import RequiresDBTestCase, TestDbCmdMixin
 
@@ -17,7 +19,15 @@ class ConfigureTablesTests(RequiresDBTestCase):
     """Testing configure-tables."""
 
     def _get_cmd(self, config: MutableMapping[str, Any]) -> TestTableCmd:
-        return TestTableCmd(self.dsn, self.schema_name, self.metadata, config)
+        return TestTableCmd(
+            DbCmd.Settings(
+                self.dsn,
+                self.schema_name,
+                config,
+                self.metadata,
+                None,
+            )
+        )
 
 
 class ConfigureTablesSrcTests(ConfigureTablesTests):
@@ -110,7 +120,7 @@ class ConfigureTablesSrcTests(ConfigureTablesTests):
             )
 
     def test_configure_tables(self) -> None:
-        """Test that we can change columns to ignore, vocab or generate."""
+        """Test that we can change tables to ignore, vocab or generate."""
         config = {
             "tables": {
                 "unique_constraint_test": {
@@ -383,7 +393,9 @@ class ConfigureTablesInstrumentsTests(ConfigureTablesTests):
                 },
             },
         }
-        with TestTableCmd(self.dsn, self.schema_name, self.metadata, config) as tc:
+        with TestTableCmd(
+            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
+        ) as tc:
             tc.do_next("manufacturer")
             tc.do_vocabulary("")
             tc.reset()
@@ -425,7 +437,9 @@ class ConfigureTablesInstrumentsTests(ConfigureTablesTests):
                 },
             },
         }
-        with TestTableCmd(self.dsn, self.schema_name, self.metadata, config) as tc:
+        with TestTableCmd(
+            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
+        ) as tc:
             tc.do_next("signature_model")
             tc.do_empty("")
             tc.reset()
@@ -452,7 +466,7 @@ class ConfigureTablesInstrumentsTests(ConfigureTablesTests):
 
 
 class TrickyTests(ConfigureTablesTests):
-    """Testing configure-tables with the instrument.sql database."""
+    """Testing configure-tables with arguments that could cause SQL errors."""
 
     dump_file_path = "tricky.sql"
     database_name = "tricky"
@@ -524,10 +538,13 @@ class TrickyTests(ConfigureTablesTests):
         Select with repeated fields (#70).
         """
         with TestTableCmd(
-            src_dsn=self.dsn,
-            src_schema=self.schema_name,
-            metadata=self.metadata,
-            config={},
+            DbCmd.Settings(
+                self.dsn,
+                self.schema_name,
+                config={},
+                metadata=self.metadata,
+                parquet_dir=None,
+            ),
             print_tables=True,
         ) as tc:
             tc.reset()
@@ -536,6 +553,21 @@ class TrickyTests(ConfigureTablesTests):
                 "Failed to display", "/".join(m for (m, _a, _kw) in tc.messages)
             )
 
+    def assert_message_correctly_formatted(
+        self, m: str, a: Sized, kw: dict[str, Any]
+    ) -> None:
+        """
+        Assert that the ``{...}`` interpolations in ``m`` match the arguments given.
+
+        :param m: The message.
+        :param a: List of positional arguments.
+        :param kw: Dict of keyword arguments.
+        """
+        interpolations = set(re.findall(r"\{([A-Za-z0-9_]+)\}", m))
+        positions = set(range(len(a)))
+        keywords = set(kw.keys())
+        self.assertSetEqual(interpolations, positions | keywords)
+
     def test_sql_error_does_not_throw_exception(self) -> None:
         """
         Select with a SQL error.
@@ -543,4 +575,6 @@ class TrickyTests(ConfigureTablesTests):
         with self._get_cmd({}) as tc:
             tc.reset()
             tc.do_select("+++")
-            self.assertIn("SQL query", "/".join(m for (m, a, kw) in tc.messages))
+            self.assertIn("SQL query", "/".join(m for (m, _a, _kw) in tc.messages))
+            for m, a, kw in tc.messages:
+                self.assert_message_correctly_formatted(m, a, kw)
