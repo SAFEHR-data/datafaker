@@ -1,3 +1,5 @@
+### How to run datafaker process
+
 1. Make a YAML file representing the tables in the schema
 
 `poetry run datafaker make-tables --orm-file ./examples/mimic_omop/orm.yaml`
@@ -12,7 +14,7 @@
 
 1. Create data
 
-`poetry run datafaker create-data --orm-file ./examples/mimic_omop/orm.yaml --config-file ./examples/mimic_omop/config.yaml --df-file .\examples\pollution\df.py`
+`poetry run datafaker create-data --orm-file ./examples/mimic_omop/orm.yaml --config-file ./examples/mimic_omop/config.yaml --df-file .\examples\mimic_omop\df.py`
 
 1. Remove data
 

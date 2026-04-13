@@ -119,4 +119,3 @@ tables:
 
   condition_occurrence:
     num_rows_per_pass: 0
-
