@@ -23,10 +23,9 @@ from datafaker.dump import (
     TableWriter,
     get_parquet_table_writer,
 )
-from datafaker.interactive import (
+from datafaker.interactive import (  # update_missingness,
     update_config_generators,
     update_config_tables,
-    update_missingness,
 )
 from datafaker.interactive.base import DbCmd
 from datafaker.make import (
@@ -140,7 +139,321 @@ def main(
     conf_logger(verbose)
 
 
-@app.command()
+@app.command(rich_help_panel="Configure")
+def make_tables(
+    orm_file: Path = Option(ORM_FILENAME, help="Path to write the ORM yaml file to"),
+    force: bool = Option(
+        False, "--force", "-f", help="Overwrite any existing orm yaml file."
+    ),
+    parquet_dir: Optional[Path] = Option(
+        None,
+        help=(
+            "Directory of Parquet files to consider part of the database."
+            " This can be useful when using DuckDB."
+            " Make sure you check the output!"
+        ),
+        file_okay=False,
+        dir_okay=True,
+    ),
+) -> None:
+    """Make a YAML file representing the tables in the schema.
+
+    Example:
+        $ datafaker make_tables
+    """
+    logger.debug("Creating %s.", orm_file)
+
+    orm_file_path = Path(orm_file)
+    if not force:
+        _check_file_non_existence(orm_file_path)
+
+    content = make_tables_file(
+        get_source_dsn(),
+        get_source_schema(),
+        parquet_dir,
+    )
+    orm_file_path.write_text(content, encoding="utf-8")
+    logger.debug("%s created.", orm_file)
+
+
+@app.command(rich_help_panel="Configure")
+def make_vocab(
+    orm_file: Path = Option(
+        ORM_FILENAME,
+        help="The name of the ORM yaml file",
+        dir_okay=False,
+    ),
+    config_file: Optional[Path] = Option(
+        CONFIG_FILENAME,
+        help="The configuration file",
+        dir_okay=False,
+    ),
+    force: bool = Option(
+        False,
+        "--force/--no-force",
+        "-f/+f",
+        help="Overwrite any existing vocabulary file.",
+    ),
+    compress: bool = Option(False, help="Compress file to .gz"),
+    only: list[str] = Option([], help="Only download this table."),
+) -> None:
+    """Make files of vocabulary tables.
+
+    Each table marked in the configuration file as "vocabulary_table: true"
+
+    Example:
+        $ datafaker make-vocab --config-file config.yml
+    """
+    generator_config = read_config_file(config_file) if config_file is not None else {}
+    orm_metadata = load_metadata(orm_file, generator_config)
+    make_vocabulary_tables(
+        orm_metadata,
+        generator_config,
+        overwrite_files=force,
+        compress=compress,
+        table_names=set(only) if only else None,
+    )
+
+
+@app.command(rich_help_panel="Configure")
+def configure_tables(
+    config_file: Path = Option(
+        CONFIG_FILENAME,
+        help="Path to write the configuration file to",
+        dir_okay=False,
+    ),
+    orm_file: Path = Option(
+        ORM_FILENAME,
+        help="The name of the ORM yaml file",
+        dir_okay=False,
+    ),
+) -> None:
+    """Interactively set tables to ignored, vocabulary or primary private."""
+    logger.debug("Configuring tables in %s.", config_file)
+    config = {}
+    if config_file.exists():
+        config = yaml.load(
+            config_file.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader
+        )
+    # we don't pass config here so that no tables are ignored
+    meta_dict = load_metadata_config(orm_file)
+    metadata = dict_to_metadata(meta_dict, None)
+    config_updated = update_config_tables(
+        get_source_dsn(),
+        get_source_schema(),
+        metadata,
+        config,
+        Path(meta_dict["parquet-dir"]) if "parquet-dir" in meta_dict else None,
+    )
+    if config_updated is None:
+        logger.debug("Cancelled")
+        return
+    content = yaml.dump(config_updated)
+    config_file.write_text(content, encoding="utf-8")
+    logger.debug("Tables configured in %s.", config_file)
+
+
+@app.command(rich_help_panel="Configure")
+def configure_generators(
+    config_file: Path = Option(
+        CONFIG_FILENAME,
+        help="Path of the configuration file to alter",
+        dir_okay=False,
+    ),
+    orm_file: Path = Option(
+        ORM_FILENAME,
+        help="The name of the ORM yaml file",
+        dir_okay=False,
+    ),
+    spec: Path = Option(
+        None,
+        help=(
+            "CSV file (headerless) with fields table-name,"
+            " column-name, generator-name to set non-interactively"
+        ),
+    ),
+) -> None:
+    """Interactively set generators for column data."""
+    logger.debug("Configuring generators in %s.", config_file)
+    config = {}
+    if config_file.exists():
+        config = yaml.load(
+            config_file.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader
+        )
+    meta_dict = load_metadata_config(orm_file)
+    metadata = dict_to_metadata(meta_dict, None)
+    config_updated = update_config_generators(
+        DbCmd.Settings(
+            get_source_dsn(),
+            get_source_schema(),
+            config,
+            metadata,
+            meta_dict.get("parquet-dir", None),
+        ),
+        spec_path=spec,
+    )
+    if config_updated is None:
+        logger.debug("Cancelled")
+        return
+    content = yaml.dump(config_updated)
+    config_file.write_text(content, encoding="utf-8")
+    logger.debug("Generators configured in %s.", config_file)
+
+
+@app.command(rich_help_panel="Extract")
+def make_stats(
+    orm_file: Path = Option(
+        ORM_FILENAME,
+        help="The name of the ORM yaml file",
+        dir_okay=False,
+    ),
+    config_file: Optional[Path] = Option(
+        CONFIG_FILENAME,
+        help="The configuration file",
+        dir_okay=False,
+    ),
+    stats_file: Path = Option(STATS_FILENAME),
+    force: bool = Option(
+        False, "--force", "-f", help="Overwrite any existing vocabulary file."
+    ),
+) -> None:
+    """Compute summary statistics from the source database."""
+    logger.debug("Creating %s.", stats_file)
+
+    if not force:
+        _check_file_non_existence(stats_file)
+
+    config = read_config_file(config_file) if config_file is not None else {}
+    meta_dict = load_metadata_config(orm_file, config)
+
+    src_stats = asyncio.get_event_loop().run_until_complete(
+        make_src_stats(
+            get_source_dsn(),
+            config,
+            get_source_schema(),
+            parquet_dir=meta_dict.get("parquet-dir", None),
+        )
+    )
+    stats_file.write_text(yaml.dump(src_stats), encoding="utf-8")
+    logger.debug("%s created.", stats_file)
+
+
+@app.command(rich_help_panel="Create Synthetic Database")
+def create_tables(
+    orm_file: Path = Option(
+        ORM_FILENAME,
+        help="The name of the ORM yaml file",
+        dir_okay=False,
+    ),
+    config_file: Optional[Path] = Option(
+        CONFIG_FILENAME,
+        help="The configuration file",
+        dir_okay=False,
+    ),
+) -> None:
+    """Create schema from the ORM YAML file.
+
+    This CLI command creates the destination schema using object
+    relational model declared as Python tables.
+
+    Example:
+        $ datafaker create-tables
+    """
+    logger.debug("Creating tables.")
+    config = read_config_file(config_file) if config_file is not None else {}
+    orm_metadata = load_metadata_for_output(orm_file, config)
+    create_db_tables(orm_metadata)
+    logger.debug("Tables created.")
+
+
+@app.command(rich_help_panel="Create Synthetic Database")
+def create_vocab(
+    orm_file: Path = Option(
+        ORM_FILENAME,
+        help="The name of the ORM yaml file",
+        dir_okay=False,
+    ),
+    config_file: Path = Option(
+        CONFIG_FILENAME,
+        help="The configuration file",
+        dir_okay=False,
+    ),
+) -> None:
+    """Import vocabulary data into the target database.
+
+    Example:
+        $ datafaker create-vocab
+    """
+    logger.debug("Loading vocab.")
+    config = read_config_file(config_file) if config_file is not None else {}
+    meta_dict = load_metadata_config(orm_file, config)
+    orm_metadata = dict_to_metadata(meta_dict, config)
+    vocabs_loaded = create_db_vocab(orm_metadata, meta_dict, config)
+    num_vocabs = len(vocabs_loaded)
+    logger.debug("%s %s loaded.", num_vocabs, "table" if num_vocabs == 1 else "tables")
+
+
+@app.command(rich_help_panel="Create Synthetic Database")
+def create_generators(
+    orm_file: Path = Option(
+        ORM_FILENAME,
+        help="The name of the ORM yaml file",
+        dir_okay=False,
+    ),
+    df_file: Path = Option(
+        DF_FILENAME,
+        help="Path to write Python generators to.",
+        dir_okay=False,
+    ),
+    config_file: Path = Option(
+        CONFIG_FILENAME,
+        help="The configuration file",
+        dir_okay=False,
+    ),
+    stats_file: Optional[Path] = Option(
+        None,
+        help=(
+            "Statistics file (output of make-stats); default is src-stats.yaml if the "
+            "config file references SRC_STATS, or None otherwise."
+        ),
+        show_default=False,
+        dir_okay=False,
+    ),
+    force: bool = Option(
+        False, "--force", "-f", help="Overwrite any existing Python generators file."
+    ),
+) -> None:
+    """Make a datafaker file of generator classes.
+
+    This CLI command takes an object relation model output by sqlcodegen and
+    returns a set of synthetic data generators for each attribute
+
+    Example:
+        $ datafaker create-generators
+    """
+    logger.debug("Making %s.", df_file)
+
+    if not force:
+        _check_file_non_existence(df_file)
+
+    generator_config = read_config_file(config_file) if config_file is not None else {}
+    if stats_file is None and generators_require_stats(generator_config):
+        stats_file = Path(STATS_FILENAME)
+    orm_metadata = load_metadata_for_output(orm_file, generator_config)
+    result: str = make_table_generators(
+        orm_metadata,
+        generator_config,
+        orm_file,
+        config_file,
+        stats_file,
+    )
+
+    df_file.write_text(result, encoding="utf-8")
+
+    logger.debug("%s created.", df_file)
+
+
+@app.command(rich_help_panel="Create Synthetic Database")
 def create_data(
     orm_file: Path = Option(
         ORM_FILENAME,
@@ -203,359 +516,6 @@ def create_data(
     except RuntimeError as e:
         logger.error(e.args[0])
     raise Exit(1)
-
-
-@app.command()
-def create_vocab(
-    orm_file: Path = Option(
-        ORM_FILENAME,
-        help="The name of the ORM yaml file",
-        dir_okay=False,
-    ),
-    config_file: Path = Option(
-        CONFIG_FILENAME,
-        help="The configuration file",
-        dir_okay=False,
-    ),
-) -> None:
-    """Import vocabulary data into the target database.
-
-    Example:
-        $ datafaker create-vocab
-    """
-    logger.debug("Loading vocab.")
-    config = read_config_file(config_file) if config_file is not None else {}
-    meta_dict = load_metadata_config(orm_file, config)
-    orm_metadata = dict_to_metadata(meta_dict, config)
-    vocabs_loaded = create_db_vocab(orm_metadata, meta_dict, config)
-    num_vocabs = len(vocabs_loaded)
-    logger.debug("%s %s loaded.", num_vocabs, "table" if num_vocabs == 1 else "tables")
-
-
-@app.command()
-def create_tables(
-    orm_file: Path = Option(
-        ORM_FILENAME,
-        help="The name of the ORM yaml file",
-        dir_okay=False,
-    ),
-    config_file: Optional[Path] = Option(
-        CONFIG_FILENAME,
-        help="The configuration file",
-        dir_okay=False,
-    ),
-) -> None:
-    """Create schema from the ORM YAML file.
-
-    This CLI command creates the destination schema using object
-    relational model declared as Python tables.
-
-    Example:
-        $ datafaker create-tables
-    """
-    logger.debug("Creating tables.")
-    config = read_config_file(config_file) if config_file is not None else {}
-    orm_metadata = load_metadata_for_output(orm_file, config)
-    create_db_tables(orm_metadata)
-    logger.debug("Tables created.")
-
-
-@app.command()
-def create_generators(
-    orm_file: Path = Option(
-        ORM_FILENAME,
-        help="The name of the ORM yaml file",
-        dir_okay=False,
-    ),
-    df_file: Path = Option(
-        DF_FILENAME,
-        help="Path to write Python generators to.",
-        dir_okay=False,
-    ),
-    config_file: Path = Option(
-        CONFIG_FILENAME,
-        help="The configuration file",
-        dir_okay=False,
-    ),
-    stats_file: Optional[Path] = Option(
-        None,
-        help=(
-            "Statistics file (output of make-stats); default is src-stats.yaml if the "
-            "config file references SRC_STATS, or None otherwise."
-        ),
-        show_default=False,
-        dir_okay=False,
-    ),
-    force: bool = Option(
-        False, "--force", "-f", help="Overwrite any existing Python generators file."
-    ),
-) -> None:
-    """Make a datafaker file of generator classes.
-
-    This CLI command takes an object relation model output by sqlcodegen and
-    returns a set of synthetic data generators for each attribute
-
-    Example:
-        $ datafaker create-generators
-    """
-    logger.debug("Making %s.", df_file)
-
-    if not force:
-        _check_file_non_existence(df_file)
-
-    generator_config = read_config_file(config_file) if config_file is not None else {}
-    if stats_file is None and generators_require_stats(generator_config):
-        stats_file = Path(STATS_FILENAME)
-    orm_metadata = load_metadata_for_output(orm_file, generator_config)
-    result: str = make_table_generators(
-        orm_metadata,
-        generator_config,
-        orm_file,
-        config_file,
-        stats_file,
-    )
-
-    df_file.write_text(result, encoding="utf-8")
-
-    logger.debug("%s created.", df_file)
-
-
-@app.command()
-def make_vocab(
-    orm_file: Path = Option(
-        ORM_FILENAME,
-        help="The name of the ORM yaml file",
-        dir_okay=False,
-    ),
-    config_file: Optional[Path] = Option(
-        CONFIG_FILENAME,
-        help="The configuration file",
-        dir_okay=False,
-    ),
-    force: bool = Option(
-        False,
-        "--force/--no-force",
-        "-f/+f",
-        help="Overwrite any existing vocabulary file.",
-    ),
-    compress: bool = Option(False, help="Compress file to .gz"),
-    only: list[str] = Option([], help="Only download this table."),
-) -> None:
-    """Make files of vocabulary tables.
-
-    Each table marked in the configuration file as "vocabulary_table: true"
-
-    Example:
-        $ datafaker make-vocab --config-file config.yml
-    """
-    generator_config = read_config_file(config_file) if config_file is not None else {}
-    orm_metadata = load_metadata(orm_file, generator_config)
-    make_vocabulary_tables(
-        orm_metadata,
-        generator_config,
-        overwrite_files=force,
-        compress=compress,
-        table_names=set(only) if only else None,
-    )
-
-
-@app.command()
-def make_stats(
-    orm_file: Path = Option(
-        ORM_FILENAME,
-        help="The name of the ORM yaml file",
-        dir_okay=False,
-    ),
-    config_file: Optional[Path] = Option(
-        CONFIG_FILENAME,
-        help="The configuration file",
-        dir_okay=False,
-    ),
-    stats_file: Path = Option(STATS_FILENAME),
-    force: bool = Option(
-        False, "--force", "-f", help="Overwrite any existing vocabulary file."
-    ),
-) -> None:
-    """Compute summary statistics from the source database."""
-    logger.debug("Creating %s.", stats_file)
-
-    if not force:
-        _check_file_non_existence(stats_file)
-
-    config = read_config_file(config_file) if config_file is not None else {}
-    meta_dict = load_metadata_config(orm_file, config)
-
-    src_stats = asyncio.get_event_loop().run_until_complete(
-        make_src_stats(
-            get_source_dsn(),
-            config,
-            get_source_schema(),
-            parquet_dir=meta_dict.get("parquet-dir", None),
-        )
-    )
-    stats_file.write_text(yaml.dump(src_stats), encoding="utf-8")
-    logger.debug("%s created.", stats_file)
-
-
-@app.command()
-def make_tables(
-    orm_file: Path = Option(ORM_FILENAME, help="Path to write the ORM yaml file to"),
-    force: bool = Option(
-        False, "--force", "-f", help="Overwrite any existing orm yaml file."
-    ),
-    parquet_dir: Optional[Path] = Option(
-        None,
-        help=(
-            "Directory of Parquet files to consider part of the database."
-            " This can be useful when using DuckDB."
-            " Make sure you check the output!"
-        ),
-        file_okay=False,
-        dir_okay=True,
-    ),
-) -> None:
-    """Make a YAML file representing the tables in the schema.
-
-    Example:
-        $ datafaker make_tables
-    """
-    logger.debug("Creating %s.", orm_file)
-
-    orm_file_path = Path(orm_file)
-    if not force:
-        _check_file_non_existence(orm_file_path)
-
-    content = make_tables_file(
-        get_source_dsn(),
-        get_source_schema(),
-        parquet_dir,
-    )
-    orm_file_path.write_text(content, encoding="utf-8")
-    logger.debug("%s created.", orm_file)
-
-
-@app.command()
-def configure_tables(
-    config_file: Path = Option(
-        CONFIG_FILENAME,
-        help="Path to write the configuration file to",
-        dir_okay=False,
-    ),
-    orm_file: Path = Option(
-        ORM_FILENAME,
-        help="The name of the ORM yaml file",
-        dir_okay=False,
-    ),
-) -> None:
-    """Interactively set tables to ignored, vocabulary or primary private."""
-    logger.debug("Configuring tables in %s.", config_file)
-    config = {}
-    if config_file.exists():
-        config = yaml.load(
-            config_file.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader
-        )
-    # we don't pass config here so that no tables are ignored
-    meta_dict = load_metadata_config(orm_file)
-    metadata = dict_to_metadata(meta_dict, None)
-    config_updated = update_config_tables(
-        get_source_dsn(),
-        get_source_schema(),
-        metadata,
-        config,
-        Path(meta_dict["parquet-dir"]) if "parquet-dir" in meta_dict else None,
-    )
-    if config_updated is None:
-        logger.debug("Cancelled")
-        return
-    content = yaml.dump(config_updated)
-    config_file.write_text(content, encoding="utf-8")
-    logger.debug("Tables configured in %s.", config_file)
-
-
-@app.command()
-def configure_missing(
-    config_file: Path = Option(
-        CONFIG_FILENAME,
-        help="Path to write the configuration file to",
-        dir_okay=False,
-    ),
-    orm_file: Path = Option(
-        ORM_FILENAME,
-        help="The name of the ORM yaml file",
-        dir_okay=False,
-    ),
-) -> None:
-    """Interactively set the missingness of the generated data."""
-    logger.debug("Configuring missingness in %s.", config_file)
-    config: dict[str, Any] = {}
-    if config_file.exists():
-        config_any = yaml.load(
-            config_file.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader
-        )
-        if isinstance(config_any, dict):
-            config = config_any
-    meta_dict = load_metadata_config(orm_file, config)
-    metadata = dict_to_metadata(meta_dict, None)
-    config_updated = update_missingness(
-        get_source_dsn(),
-        get_source_schema(),
-        metadata,
-        config,
-        Path(meta_dict["parquet-dir"]) if "parquet-dir" in meta_dict else None,
-    )
-    if config_updated is None:
-        logger.debug("Cancelled")
-        return
-    content = yaml.dump(config_updated)
-    config_file.write_text(content, encoding="utf-8")
-    logger.debug("Generators missingness in %s.", config_file)
-
-
-@app.command()
-def configure_generators(
-    config_file: Path = Option(
-        CONFIG_FILENAME,
-        help="Path of the configuration file to alter",
-        dir_okay=False,
-    ),
-    orm_file: Path = Option(
-        ORM_FILENAME,
-        help="The name of the ORM yaml file",
-        dir_okay=False,
-    ),
-    spec: Path = Option(
-        None,
-        help=(
-            "CSV file (headerless) with fields table-name,"
-            " column-name, generator-name to set non-interactively"
-        ),
-    ),
-) -> None:
-    """Interactively set generators for column data."""
-    logger.debug("Configuring generators in %s.", config_file)
-    config = {}
-    if config_file.exists():
-        config = yaml.load(
-            config_file.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader
-        )
-    meta_dict = load_metadata_config(orm_file)
-    metadata = dict_to_metadata(meta_dict, None)
-    config_updated = update_config_generators(
-        DbCmd.Settings(
-            get_source_dsn(),
-            get_source_schema(),
-            config,
-            metadata,
-            meta_dict.get("parquet-dir", None),
-        ),
-        spec_path=spec,
-    )
-    if config_updated is None:
-        logger.debug("Cancelled")
-        return
-    content = yaml.dump(config_updated)
-    config_file.write_text(content, encoding="utf-8")
-    logger.debug("Generators configured in %s.", config_file)
 
 
 def convert_table_names_to_tables(
@@ -627,7 +587,7 @@ def _dump_tables_to_directory(
             logger.warning("Failed to write %s", f)
 
 
-@app.command()
+@app.command(rich_help_panel="Inspect and Export")
 def dump_data(
     config_file: Optional[Path] = Option(
         CONFIG_FILENAME,
@@ -689,7 +649,7 @@ def dump_data(
     _dump_tables_to_directory(writer, directory, mtables)
 
 
-@app.command()
+@app.command(rich_help_panel="Inspect and Export")
 def validate_config(
     config_file: Path = Argument(help="The configuration file to validate"),
 ) -> None:
@@ -706,7 +666,7 @@ def validate_config(
     logger.debug("Config file is valid.")
 
 
-@app.command()
+@app.command(rich_help_panel="Remove")
 def remove_data(
     orm_file: Path = Option(
         ORM_FILENAME,
@@ -733,7 +693,7 @@ def remove_data(
         logger.info("Would truncate non-vocabulary tables if called with --yes.")
 
 
-@app.command()
+@app.command(rich_help_panel="Remove")
 def remove_vocab(
     orm_file: Path = Option(
         ORM_FILENAME,
@@ -761,7 +721,7 @@ def remove_vocab(
         logger.info("Would truncate vocabulary tables if called with --yes.")
 
 
-@app.command()
+@app.command(rich_help_panel="Remove")
 def remove_tables(
     orm_file: Path = Option(
         ORM_FILENAME,
@@ -812,7 +772,7 @@ class TableType(str, Enum):
     GENERATED = "generated"
 
 
-@app.command()
+@app.command(rich_help_panel="Inspect and Export")
 def list_tables(
     orm_file: Path = Option(
         ORM_FILENAME,
@@ -845,7 +805,7 @@ def list_tables(
         print(name)
 
 
-@app.command()
+@app.command(rich_help_panel="Inspect and Export")
 def version() -> None:
     """Display version information."""
     logger.info(
@@ -857,3 +817,42 @@ def version() -> None:
 
 if __name__ == "__main__":
     datafaker()
+
+
+# @app.command(rich_help_panel="Discovery and Configuration")
+# def configure_missing(
+#     config_file: Path = Option(
+#         CONFIG_FILENAME,
+#         help="Path to write the configuration file to",
+#         dir_okay=False,
+#     ),
+#     orm_file: Path = Option(
+#         ORM_FILENAME,
+#         help="The name of the ORM yaml file",
+#         dir_okay=False,
+#     ),
+# ) -> None:
+#     """Interactively set the missingness of the generated data."""
+#     logger.debug("Configuring missingness in %s.", config_file)
+#     config: dict[str, Any] = {}
+#     if config_file.exists():
+#         config_any = yaml.load(
+#             config_file.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader
+#         )
+#         if isinstance(config_any, dict):
+#             config = config_any
+#     meta_dict = load_metadata_config(orm_file, config)
+#     metadata = dict_to_metadata(meta_dict, None)
+#     config_updated = update_missingness(
+#         get_source_dsn(),
+#         get_source_schema(),
+#         metadata,
+#         config,
+#         Path(meta_dict["parquet-dir"]) if "parquet-dir" in meta_dict else None,
+#     )
+#     if config_updated is None:
+#         logger.debug("Cancelled")
+#         return
+#     content = yaml.dump(config_updated)
+#     config_file.write_text(content, encoding="utf-8")
+#     logger.debug("Generators missingness in %s.", config_file)
