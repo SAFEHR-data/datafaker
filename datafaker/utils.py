@@ -21,7 +21,6 @@ from typing import (
     Generic,
     Iterable,
     Optional,
-    Type,
     TypeVar,
     Union,
 )
@@ -43,12 +42,15 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import (
     AddConstraint,
+    ColumnCollectionConstraint,
     DropConstraint,
     ForeignKeyConstraint,
     MetaData,
     Table,
 )
 from typer import Exit
+
+from datafaker.settings import SettingsError
 
 # Define some types used repeatedly in the code base
 MaybeAsyncEngine = Union[Engine, AsyncEngine]
@@ -114,13 +116,15 @@ def import_file(file_path: str) -> ModuleType:
     """
     spec = importlib.util.spec_from_file_location("df", file_path)
     if spec is None or spec.loader is None:
-        raise ImportError(f"No loadable module at {file_path}")
+        raise SettingsError(f"No loadable module '{file_path}'")
     module = importlib.util.module_from_spec(spec)
     try:
         spec.loader.exec_module(module)
     except ModuleNotFoundError as e:
         logger.error("Failed to load module at %s with error:", file_path)
         logger.error(e)
+    except FileNotFoundError as e:
+        raise SettingsError(f"No module found '{file_path}'") from e
     return module
 
 
@@ -433,21 +437,36 @@ def get_flag(maybe_dict: Any, key: Any) -> bool:
     return isinstance(maybe_dict, Mapping) and maybe_dict.get(key, False)
 
 
-def get_property(maybe_dict: Any, key: Any, required_type: Type[T], default: T) -> T:
+def get_property(maybe_dict: Any, key: Any, default: T) -> T:
     """
     Get a specific property from a dict or a default if that does not exist.
 
     :param maybe_dict: A mapping, or possibly not.
     :param key: A key in ``maybe_dict``, or possibly not.
-    :param required_type: The type ``maybe_dict[key]`` needs to be an instance of.
     :param default: The return value if ``maybe_dict`` is not a mapping,
-    or if ``key`` is not a key of ``maybe_dict``.
+      or if ``key`` is not a key of ``maybe_dict``. Do not pass ``None``!
+      if you want None as the default, please use get_property_or_none
     :return: ``maybe_dict[key]`` if this makes sense, or ``default`` if not.
     """
     if not isinstance(maybe_dict, Mapping):
         return default
     v = maybe_dict.get(key, default)
-    return v if isinstance(v, required_type) else default
+    return v if isinstance(v, type(default)) else default
+
+
+def get_property_or_none(maybe_dict: Any, key: Any, type_: type[T]) -> T | None:
+    """
+    Get a specific property from a dict or None if that does not exist.
+
+    :param maybe_dict: A mapping, or possibly not.
+    :param key: A key in ``maybe_dict``, or possibly not.
+    :param type_: The type that the value retrieved should have.
+    :return: ``maybe_dict[key]`` if this makes sense, or ``default`` if not.
+    """
+    if not isinstance(maybe_dict, Mapping) or key not in maybe_dict:
+        return None
+    v = maybe_dict[key]
+    return v if isinstance(v, type_) else None
 
 
 def fk_refers_to_ignored_table(fk: ForeignKey) -> bool:
@@ -462,6 +481,16 @@ def fk_refers_to_ignored_table(fk: ForeignKey) -> bool:
     except sqlalchemy.exc.NoReferencedTableError:
         return True
     return False
+
+
+def constraint_name(constraint: ColumnCollectionConstraint) -> str:
+    """Get the constraint name, synthesising it if it does not exist explicitly."""
+    name = constraint.name
+    if isinstance(name, str):
+        return name
+    joined = "_".join(constraint.columns.keys())
+    kind = constraint.__visit_name__.split("_", 1)[0]
+    return f"{joined}_{kind}"
 
 
 def fk_constraint_refers_to_ignored_table(fk: ForeignKeyConstraint) -> bool:
@@ -575,11 +604,9 @@ def get_row_generators(
     :param table_config: The element from the ``tables:`` stanza of ``config.xml``.
     :return: Pair of (name, row generator config).
     """
-    rgs = table_config.get("row_generators", None)
-    if isinstance(rgs, str) or not hasattr(rgs, "__iter__"):
-        return
+    rgs: list[Any] = get_property(table_config, "row_generators", [])
     for rg in rgs:
-        name = rg.get("name", None)
+        name = get_property_or_none(rg, "name", str)
         if name:
             yield (name, rg)
 
@@ -826,7 +853,7 @@ def generators_require_stats(config: Mapping) -> bool:
 
     :param config: ``config.yaml`` object.
     :return: True if any of the arguments for any of the generators
-    reference ``SRC_STATS``.
+      reference ``SRC_STATS``.
     """
     ois = {
         f"object_instantiation.{k}": call

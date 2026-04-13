@@ -22,6 +22,13 @@ Or in Windows:
    set SRC_DSN=duckdb:///C:/path/to/file/duck.db
    set DST_DSN=duckdb:///C:/path/to/file/fake.db
 
+Or in Windows PowerShell:
+
+.. code-block::
+
+   $env:SRC_DSN='duckdb:///C:/path/to/file/duck.db'
+   $env:DST_DSN='duckdb:///C:/path/to/file/fake.db'
+
 This will use the DuckDB database in the file ``/path/to/file/duck.db`` and output to the file ``/path/to/file/fake.db``.
 
 Using Datafaker's ``create-tables`` command will create the new database file ``/path/to/file/fake.db``.
@@ -96,7 +103,7 @@ Using DuckDB to write fake Parquet or CSV files
 You cannot use an in-memory DuckDB for the destination database because it needs to survive multiple calls to ``datafaker``,
 but Datafaker will create the DuckDB file for you if you set the `DST_DSN` environment variable appropriately.
 
-After using ``datafaker create-tables``, ``datafaker create-generators``, and ``datafaker create-data``,
+After using ``datafaker create-tables`` and ``datafaker create-data``,
 you now have a database file containing the fake data. If you want CSV or parquet files you can use the following commands:
 
 .. code-block:: shell
@@ -166,7 +173,6 @@ and can create the fake data parquet files in a new directory called ``fake``:
 .. code-block:: shell
 
    datafaker create-tables
-   datafaker create-generators
    datafaker create-data --num-passes 100
    mkdir fake
    datafaker dump-data --parquet --output fake
