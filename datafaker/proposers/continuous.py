@@ -21,13 +21,13 @@ from datafaker.proposers.base import (
 from datafaker.utils import logger
 
 
-class ContinuousDistributionGenerator(Proposer):
+class ContinuousDistributionProposer(Proposer):
     """Base class for generators producing continuous distributions."""
 
     expected_buckets: Sequence[NumericType] = []
 
     def __init__(self, table_name: str, column_name: str, buckets: Buckets):
-        """Initialise a ContinuousDistributionGenerator."""
+        """Initialise a ContinuousDistributionProposer."""
         super().__init__()
         self.table_name = table_name
         self.column_name = column_name
@@ -77,7 +77,7 @@ class ContinuousDistributionGenerator(Proposer):
         return self.buckets.fit_from_counts(self.expected_buckets)
 
 
-class GaussianGenerator(ContinuousDistributionGenerator):
+class GaussianProposer(ContinuousDistributionProposer):
     """Generator producing numbers in a Gaussian (normal) distribution."""
 
     expected_buckets = [
@@ -105,7 +105,7 @@ class GaussianGenerator(ContinuousDistributionGenerator):
         ]
 
 
-class UniformGenerator(ContinuousDistributionGenerator):
+class UniformProposer(ContinuousDistributionProposer):
     """Generator producing numbers in a uniform distribution."""
 
     expected_buckets = [
@@ -144,8 +144,8 @@ class ContinuousDistributionProposerFactory(ProposerFactory):
         buckets: Buckets,
     ) -> Sequence[Proposer]:
         return [
-            GaussianGenerator(table_name, column_name, buckets),
-            UniformGenerator(table_name, column_name, buckets),
+            GaussianProposer(table_name, column_name, buckets),
+            UniformProposer(table_name, column_name, buckets),
         ]
 
     def get_proposers(
@@ -168,7 +168,7 @@ class ContinuousDistributionProposerFactory(ProposerFactory):
         )
 
 
-class LogNormalGenerator(Proposer):
+class LogNormalProposer(Proposer):
     """Generator producing numbers in a log-normal distribution."""
 
     # R:
@@ -199,7 +199,7 @@ class LogNormalGenerator(Proposer):
         logmean: float,
         logstddev: float,
     ):
-        """Initialise a LogNormalGenerator."""
+        """Initialise a LogNormalProposer."""
         super().__init__()
         self.table_name = table_name
         self.column_name = column_name
@@ -288,7 +288,7 @@ class ContinuousLogDistributionProposerFactory(ContinuousDistributionProposerFac
             if result is None or result.logstddev is None:
                 return []
         return [
-            LogNormalGenerator(
+            LogNormalProposer(
                 table_name,
                 column_name,
                 buckets,
@@ -298,7 +298,7 @@ class ContinuousLogDistributionProposerFactory(ContinuousDistributionProposerFac
         ]
 
 
-class MultivariateNormalGenerator(Proposer):
+class MultivariateNormalProposer(Proposer):
     """Generator of multiple values drawn from a multivariate normal distribution."""
 
     # pylint: disable=too-many-arguments too-many-positional-arguments
@@ -310,7 +310,7 @@ class MultivariateNormalGenerator(Proposer):
         covariates: RowMapping,
         function_name: str,
     ) -> None:
-        """Initialise a MultivariateNormalGenerator."""
+        """Initialise a MultivariateNormalProposer."""
         self._table = table_name
         self._columns = column_names
         self._query = query
@@ -639,7 +639,7 @@ class MultivariateNormalProposerFactory(MultivariateNormalGeneratorFactoryBase):
             if not covariates or covariates["c0_0"] is None:
                 return []
             return [
-                MultivariateNormalGenerator(
+                MultivariateNormalProposer(
                     table,
                     column_names,
                     query,

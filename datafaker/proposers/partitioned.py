@@ -181,7 +181,7 @@ class PartitionCountQuery:
         ] + [f"{nc.column.name}: {nc.bitmask}" for nc in nullable_columns]
 
 
-class NullPartitionedNormalGenerator(Proposer):
+class NullPartitionedNormalProposer(Proposer):
     """
     A generator of mixed numeric and non-numeric data.
 
@@ -495,7 +495,7 @@ class NullPartitionedNormalProposerFactory(MultivariateNormalProposerFactory):
         columns: list[Column],
         nullable_columns: list[NullableColumn],
         name_suffix: str | None = None,
-    ) -> NullPartitionedNormalGenerator | None:
+    ) -> NullPartitionedNormalProposer | None:
         where = ""
         if 1 < cov_query.suppress_count:
             where = f' WHERE {cov_query.suppress_count} < "count"'
@@ -523,7 +523,7 @@ class NullPartitionedNormalProposerFactory(MultivariateNormalProposerFactory):
         if not self._execute_partition_queries(connection, partitions):
             return None
         query = self.get_partition_count_query(nullable_columns, cov_query.table, where)
-        return NullPartitionedNormalGenerator(
+        return NullPartitionedNormalProposer(
             f"{cov_query.table}__{columns[0].name}",
             partitions,
             self.function_name(),

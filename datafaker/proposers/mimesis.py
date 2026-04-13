@@ -27,15 +27,15 @@ dist_gen = DistributionProvider()
 generic = mimesis.Generic(locale=mimesis.locales.Locale.EN_GB)
 
 
-class MimesisGeneratorBase(Proposer):
-    """Base class for a generator using Mimesis."""
+class MimesisProposerBase(Proposer):
+    """Base class for a proposer using Mimesis."""
 
     def __init__(
         self,
         function_name: str,
     ):
         """
-        Initialise a generator that uses Mimesis.
+        Initialise a proposer that uses Mimesis.
 
         :param function_name: is relative to 'generic', for example 'person.name'.
         """
@@ -64,7 +64,7 @@ class MimesisGeneratorBase(Proposer):
         return [self._generator_function() for _ in range(count)]
 
 
-class MimesisGenerator(MimesisGeneratorBase):
+class MimesisProposer(MimesisProposerBase):
     """A generator using Mimesis."""
 
     def __init__(
@@ -108,7 +108,7 @@ class MimesisGenerator(MimesisGeneratorBase):
         return default if self._fit is None else self._fit
 
 
-class MimesisGeneratorTruncated(MimesisGenerator):
+class MimesisGeneratorTruncated(MimesisProposer):
     """A string generator using Mimesis that must fit within a certain number of characters."""
 
     def __init__(
@@ -151,8 +151,8 @@ class MimesisGeneratorTruncated(MimesisGenerator):
         return [self._generator_function()[: self._length] for _ in range(count)]
 
 
-class MimesisDateTimeGenerator(MimesisGeneratorBase):
-    """DateTime generator using Mimesis."""
+class MimesisDateTimeProposer(MimesisProposerBase):
+    """DateTime proposer using Mimesis."""
 
     # pylint: disable=too-many-arguments too-many-positional-arguments
     def __init__(
@@ -165,7 +165,7 @@ class MimesisDateTimeGenerator(MimesisGeneratorBase):
         end: int,
     ) -> None:
         """
-        Initialise a MimesisDateTimeGenerator.
+        Initialise a MimesisDateTimeProposer.
 
         :param column: The column to generate into
         :param function_name: The name of the mimesis function
@@ -198,7 +198,7 @@ class MimesisDateTimeGenerator(MimesisGeneratorBase):
             if result is None or result.start is None or result.end is None:
                 return []
         return [
-            MimesisDateTimeGenerator(
+            MimesisDateTimeProposer(
                 column,
                 function_name,
                 min_year,
@@ -335,7 +335,7 @@ class MimesisStringProposerFactory(ProposerFactory):
                 buckets=buckets,
             )
         return self._get_generators_with(
-            MimesisGenerator,
+            MimesisProposer,
             value_fn=fitness_fn,
             buckets=buckets,
         )
@@ -355,7 +355,7 @@ class MimesisFloatProposerFactory(ProposerFactory):
             return []
         return list(
             map(
-                MimesisGenerator,
+                MimesisProposer,
                 [
                     "person.height",
                 ],
@@ -376,7 +376,7 @@ class MimesisDateProposerFactory(ProposerFactory):
         ct = get_column_type(column)
         if not isinstance(ct, Date):
             return []
-        return MimesisDateTimeGenerator.make_singleton(column, engine, "datetime.date")
+        return MimesisDateTimeProposer.make_singleton(column, engine, "datetime.date")
 
 
 class MimesisDateTimeProposerFactory(ProposerFactory):
@@ -392,7 +392,7 @@ class MimesisDateTimeProposerFactory(ProposerFactory):
         ct = get_column_type(column)
         if not isinstance(ct, DateTime):
             return []
-        return MimesisDateTimeGenerator.make_singleton(
+        return MimesisDateTimeProposer.make_singleton(
             column, engine, "datetime.datetime"
         )
 
@@ -410,7 +410,7 @@ class MimesisTimeProposerFactory(ProposerFactory):
         ct = get_column_type(column)
         if not isinstance(ct, Time):
             return []
-        return [MimesisGenerator("datetime.time")]
+        return [MimesisProposer("datetime.time")]
 
 
 class MimesisIntegerProposerFactory(ProposerFactory):
@@ -426,4 +426,4 @@ class MimesisIntegerProposerFactory(ProposerFactory):
         ct = get_column_type(column)
         if not isinstance(ct, Numeric) and not isinstance(ct, Integer):
             return []
-        return [MimesisGenerator("person.weight")]
+        return [MimesisProposer("person.weight")]
