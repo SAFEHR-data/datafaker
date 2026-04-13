@@ -1,4 +1,4 @@
-### How to run datafaker process
+# How to run datafaker process on omop schema
 
 1. Make a YAML file representing the tables in the schema
 
