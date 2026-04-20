@@ -572,7 +572,7 @@ information about the columns in the current table. Use 'peek',
             self.proposers = None
         if self.proposers is None:
             columns = self._column_metadata()
-            props = everything_factory(self.config).get_proposers(
+            props = everything_factory(self.config, self.metadata).get_proposers(
                 columns, self.sync_engine
             )
             sorted_props = sorted(props, key=lambda g: g.fit(9999))

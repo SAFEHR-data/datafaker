@@ -442,15 +442,26 @@ def get_property(maybe_dict: Any, key: Any, default: T) -> T:
     Get a specific property from a dict or a default if that does not exist.
 
     :param maybe_dict: A mapping, or possibly not.
-    :param key: A key in ``maybe_dict``, or possibly not.
+    :param key: A key in ``maybe_dict``, or possibly not. An iterable can
+      be passed to chain property fetches through multiple mappings.
     :param default: The return value if ``maybe_dict`` is not a mapping,
       or if ``key`` is not a key of ``maybe_dict``. Do not pass ``None``!
       if you want None as the default, please use get_property_or_none
     :return: ``maybe_dict[key]`` if this makes sense, or ``default`` if not.
     """
-    if not isinstance(maybe_dict, Mapping):
-        return default
-    v = maybe_dict.get(key, default)
+    if isinstance(key, str):
+        keys: Iterable[Any] = [key]
+    elif isinstance(key, Iterable):
+        keys = key
+    else:
+        keys = [key]
+    v = maybe_dict
+    for k in keys:
+        if not isinstance(v, Mapping):
+            return default
+        if k not in v:
+            return default
+        v = v[k]
     return v if isinstance(v, type(default)) else default
 
 

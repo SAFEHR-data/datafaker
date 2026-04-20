@@ -1,10 +1,11 @@
 """Generators using Mimesis."""
 
-from typing import Any, Callable, Sequence, Union
+from collections.abc import Callable, Sequence
+from typing import Any, Union
 
 import mimesis
 import mimesis.locales
-from sqlalchemy import Column, Engine, text
+from sqlalchemy import Column, Engine, func, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.types import Date, DateTime, Integer, Numeric, String, Time
 
@@ -316,8 +317,8 @@ class MimesisStringProposerFactory(ProposerFactory):
         try:
             buckets = Buckets.make_buckets(
                 engine,
-                column.table.name,
-                f"LENGTH({column.name})",
+                column.table,
+                func.length(column),
             )
             fitness_fn = len
         except SQLAlchemyError:

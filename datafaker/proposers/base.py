@@ -8,7 +8,7 @@ from typing import Any, Sequence, Union
 import mimesis
 import mimesis.locales
 import sqlalchemy
-from sqlalchemy import Column, Engine, text
+from sqlalchemy import Column, Engine, Join, Table, func, select, text
 from sqlalchemy.types import Integer, Numeric, String, TypeEngine
 from typing_extensions import Self
 
@@ -279,20 +279,28 @@ class Buckets:
     def __init__(
         self,
         engine: Engine,
-        table_name: str,
-        column_name: str,
+        table: Table | Join,
+        column: Any,
         mean: float,
         stddev: float,
         count: int,
     ):
         """Initialise a Buckets object."""
+        bottom = mean - 2 * stddev
+        width = stddev / 2
         with engine.connect() as connection:
             raw_buckets = connection.execute(
-                text(
-                    f"SELECT COUNT({column_name}) AS f,"
-                    f" FLOOR(({column_name} - {mean - 2 * stddev})/{stddev / 2}) AS b"
-                    f" FROM {table_name} GROUP BY b"
+                select(
+                    func.count(column).label("f"),  # pylint: disable=not-callable
+                    ((func.floor(column) - bottom) / width).label("b"),
                 )
+                .select_from(table)
+                .group_by("b")
+                # text(
+                # f"SELECT COUNT({column_name}) AS f,"
+                # f" FLOOR(({column_name} - {mean - 2 * stddev})/{stddev / 2}) AS b"
+                # f" FROM {table_name} GROUP BY b"
+                # )
             )
             self.buckets: Sequence[int] = [0] * 10
             for rb in raw_buckets:
@@ -313,7 +321,7 @@ class Buckets:
 
     @classmethod
     def make_buckets(
-        cls, engine: Engine, table_name: str, column_name: str
+        cls, engine: Engine, table: Table | Join, column: Any
     ) -> Self | None:
         """
         Construct a Buckets object.
@@ -323,13 +331,22 @@ class Buckets:
         a standard deviation wide (except for the end two that extend to
         infinity). Each bucket will be set to the count of the number of values
         in the column within that bucket.
+
+        :param engine: SQLAlchemy engine.
+        :param table: SQLAlchemy table (or joined tables) to pull data from.
+        :param column: SQLAlchemy column or expression to measure.
         """
         with engine.connect() as connection:
             result = connection.execute(
+                # select(
+                #    func.avg(column).label("mean"),
+                #    func.stddev(column).label("stddev"),
+                #    func.count(column).label("count"),  # pylint: disable=not-callable
+                # ).select_from(table)
                 text(
-                    f"SELECT AVG({column_name}) AS mean,"
-                    f" STDDEV({column_name}) AS stddev,"
-                    f" COUNT({column_name}) AS count FROM {table_name}"
+                    f"SELECT AVG({column.name}) AS mean,"
+                    f" STDDEV({column.name}) AS stddev,"
+                    f" COUNT({column.name}) AS count FROM {table.name}"
                 )
             ).first()
             if result is None or result.stddev is None or getattr(result, "count") < 2:
@@ -337,8 +354,8 @@ class Buckets:
         try:
             buckets = cls(
                 engine,
-                table_name,
-                column_name,
+                table,
+                column,
                 result.mean,
                 result.stddev,
                 getattr(result, "count"),

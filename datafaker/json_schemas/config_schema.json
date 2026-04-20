@@ -218,6 +218,23 @@
                 }
               }
             },
+            "columns": {
+              "description": "Configuration for columns.",
+              "type": "object",
+              "patternProperties": {
+                ".*": {
+                  "properties": {
+                    "roles": {
+                      "description": "Roles for this column; proposers use this for dependencies between generators.",
+                      "type": "array",
+                      "items": {
+                        "enum": ["start", "end", "copy"]
+                      }
+                    }
+                  }
+                }
+              }
+            },
             "missingness_generators": {
               "description": "Function to generate a set of nullable columns that should not be null",
               "type": "array",

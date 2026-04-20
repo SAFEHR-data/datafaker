@@ -9,7 +9,7 @@ from typing import Any, Callable, Generator, Optional, Union, cast
 import numpy as np
 from mimesis import Datetime, Text
 from mimesis.providers.base import BaseDataProvider, BaseProvider
-from sqlalchemy import Column, Connection
+from sqlalchemy import Column, Connection, MetaData
 from sqlalchemy.sql import func, functions, select
 
 from datafaker.utils import T, logger
@@ -585,3 +585,87 @@ class DistributionProvider(BaseProvider):
         if result is None:
             return None
         return result[:length]
+
+
+class AnchoredProvider(BaseProvider):
+    """A Mimesis provider of random values from the source database."""
+
+    class Meta:
+        """Meta-class for ColumnValueProvider settings."""
+
+        name = "anchored_provider"
+
+    def __init__(
+        self, *, metadata: MetaData, seed: int | None = None, **kwargs: Any
+    ) -> None:
+        """Initialise the anchored provider."""
+        super().__init__(seed=seed, **kwargs)
+        self._metadata = metadata
+
+    def normal_date(
+        self,
+        mean_seconds: float,
+        sd_seconds: float,
+        anchor: dt.datetime | str,
+    ) -> dt.datetime:
+        """
+        Generate a date based on a normally distributed interval.
+
+        The date will be a clamped normally distributed amount of time
+        after another date
+
+        :param mean_seconds: Average number of seconds the interval lasts.
+        :param sd_seconds: Standard deviation of the intervals' lengths in seconds.
+        :param anchor: The start of the interval either as a Python ``datetime``
+         object or an ISO8601 string.
+        :return: The end of the interval; will be no earlier than the start of the
+         interval. This is clamped; note that ``mean_seconds`` and
+         ``sd_seconds`` refer to the unclamped distribution.
+        """
+        if isinstance(anchor, str):
+            anchor = dt.datetime.fromisoformat(anchor)
+        interval = random.normalvariate(float(mean_seconds), float(sd_seconds))
+        if interval < 0:
+            return anchor
+        return anchor + dt.timedelta(seconds=interval)
+
+    # pylint: disable=too-many-arguments too-many-positional-arguments
+    def normal_date_fk(
+        self,
+        dst_db_conn: Connection,
+        mean_seconds: float,
+        sd_seconds: float,
+        table: str,
+        foreign_key: str,
+        on_column: str,
+        anchor_column: str,
+    ) -> dt.datetime | None:
+        """
+        Generate a date based on a normally distributed interval.
+
+        The date will be a clamped normally distributed amount of time after a
+        column in a different table related to this one.
+
+        :param dst_db_conn: Connection to the destination database.
+        :param mean_seconds: Average number of seconds the interval lasts.
+        :param sd_seconds: Standard deviation of the intervals' lengths in seconds.
+        :param table: The name of the table for the column we are generating.
+        :param foreign_key: The name of the column in ``table`` providing the
+         foreign key to the table providing the start of the interval.
+        :param on_column: The name of the column in the foreign table
+         that ``foreign_key`` must match.
+        :param anchor_column: The name of the column in the foreign table
+         providing the start of the interval.
+        :return: The end of the interval; will be no earlier than the start of the
+         interval. This is clamped; note that ``mean_seconds`` and
+         ``sd_seconds`` refer to the unclamped distribution.
+        """
+        mt = self._metadata.tables[table]
+        query = select(mt.c[anchor_column].label("out")).where(
+            mt.c[on_column] == foreign_key
+        )
+        anchor = dst_db_conn.execute(query).first()
+        out = getattr(anchor, "out", None)
+        if not isinstance(out, str):
+            return None
+        return self.normal_date(mean_seconds, sd_seconds, out)
