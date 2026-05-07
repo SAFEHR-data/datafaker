@@ -1,0 +1,1 @@
+set PATH=F:\UserProfiles\mayyong\AppData\Local\Programs\python-3.14.4-embed-amd64;F:\UserProfiles\mayyong\AppData\Local\Programs\python-3.12.7-embed-amd64;F:\UserProfiles\mayyong\AppData\Local\Programs\python-3.14.4-embed-amd64\Scripts;%PATH%
