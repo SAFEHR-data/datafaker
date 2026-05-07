@@ -156,3 +156,6 @@ docs/temp/*
 
 /examples/opiates/*
 outputs/
+
+# poetry
+poetry.lock
