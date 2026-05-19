@@ -47,9 +47,11 @@ PostgreSQL uses `SERIAL` for autoincrement columns. The code already strips `SER
 
 [datafaker/utils.py:651](../../datafaker/utils.py) catches `psycopg2.errors.UndefinedObject` to handle missing constraints gracefully. This is a PostgreSQL/psycopg2-specific exception. For MS-SQL the equivalent `pyodbc` error would need to be caught instead, or the check should be made dialect-agnostic.
 
-### 8. `autocommit` handling in `set_db_settings`
+### 8. `autocommit` handling in `set_db_settings` ([#99](https://github.com/SAFEHR-data/datafaker/issues/99))
 
 [datafaker/utils.py:297-309](../../datafaker/utils.py) toggles `connection.autocommit` directly on the DBAPI connection before executing `SET` commands. The availability and behaviour of `autocommit` differs between `psycopg2`, `pyodbc`, and `pymssql`, so this would need testing or an abstraction per driver.
+
+**Deferred.** `set_db_settings` is only ever called for DuckDB connections (`parquet_dir` source feature); MS-SQL connections never reach it. Fixing the `autocommit` toggle in isolation would also leave the `SET {k} TO {v}` SQL syntax broken for MS-SQL (which requires `SET {k} {v}`). Both issues should be addressed together if `set_db_settings` is ever extended to MS-SQL.
 
 ## Steps
 
