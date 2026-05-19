@@ -155,6 +155,14 @@ SIMPLE_TYPE_PARSER = parsy.alt(
     parsy.string("TSVECTOR").result(sqltypes.Text),        # no MS-SQL equivalent; degrade to Text
     parsy.string("BYTEA").result(sqltypes.LargeBinary),    # MS-SQL: VARBINARY(MAX)
     parsy.string("CIDR").result(sqltypes.String(43)),      # no MS-SQL equivalent; store as VARCHAR(43)
+    # PostgreSQL SERIAL pseudo-types — map to plain integers.  datafaker does
+    # not rely on server-side autoincrement; the @compiles hook in create.py
+    # strips IDENTITY from MS-SQL DDL so explicit INSERTs work without
+    # SET IDENTITY_INSERT.  BIGSERIAL/SMALLSERIAL listed before SERIAL so
+    # the common "SERIAL" prefix is tried last (defensive ordering).
+    parsy.string("BIGSERIAL").result(sqltypes.BIGINT),
+    parsy.string("SMALLSERIAL").result(sqltypes.SMALLINT),
+    parsy.string("SERIAL").result(sqltypes.INTEGER),
     numeric_type(sqltypes.NUMERIC),
     numeric_type(sqltypes.DECIMAL),
     numeric_type(postgresql.BIT),

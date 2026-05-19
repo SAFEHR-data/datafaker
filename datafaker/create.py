@@ -1,5 +1,6 @@
 """Functions and classes to create and populate the target database."""
 import pathlib
+import re
 from collections import Counter
 from types import ModuleType
 from typing import Any, Generator, Iterable, Iterator, Mapping, Sequence, Tuple
@@ -40,6 +41,20 @@ def remove_serial(element: CreateColumn, compiler: Any, **kw: Any) -> str:
     """
     text: str = compiler.visit_create_column(element, **kw)
     return text.replace(" SERIAL ", " INTEGER ")
+
+
+@compiles(CreateColumn, "mssql")
+def remove_mssql_identity(element: CreateColumn, compiler: Any, **kw: Any) -> str:
+    """
+    Strip IDENTITY from MS-SQL column DDL.
+
+    datafaker inserts explicit values for every column. MS-SQL rejects explicit
+    inserts into IDENTITY columns unless SET IDENTITY_INSERT is enabled first,
+    so we simply omit the IDENTITY modifier — the column stays an INTEGER.
+    """
+    text: str = compiler.visit_create_column(element, **kw)
+    # Handles both bare IDENTITY and parametrised IDENTITY(m,n)
+    return re.sub(r" IDENTITY(\(\d+,\s*\d+\))?", "", text)
 
 
 @compiles(CreateTable, "duckdb")

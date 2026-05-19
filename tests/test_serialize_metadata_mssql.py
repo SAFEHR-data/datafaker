@@ -106,6 +106,15 @@ class TestPostgreSQLTypeDegradation(unittest.TestCase):
         self.assertIsInstance(result, sqltypes.String)
         self.assertEqual(result.length, 43)
 
+    def test_serial_maps_to_integer(self) -> None:
+        self.assertIs(parse("SERIAL"), sqltypes.INTEGER)
+
+    def test_bigserial_maps_to_bigint(self) -> None:
+        self.assertIs(parse("BIGSERIAL"), sqltypes.BIGINT)
+
+    def test_smallserial_maps_to_smallint(self) -> None:
+        self.assertIs(parse("SMALLSERIAL"), sqltypes.SMALLINT)
+
 
 class TestExistingPostgreSQLTypesRoundTrip(unittest.TestCase):
     """Pre-existing PostgreSQL type strings still parse correctly (regression tests)."""
