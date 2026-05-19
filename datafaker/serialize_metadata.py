@@ -5,7 +5,7 @@ from pathlib import Path
 
 import parsy
 from sqlalchemy import Column, Dialect, Engine, ForeignKey, MetaData, Table
-from sqlalchemy.dialects import oracle, postgresql
+from sqlalchemy.dialects import mssql, oracle, postgresql
 from sqlalchemy.sql import schema, sqltypes
 
 from datafaker.utils import get_property, make_foreign_key_name, split_column_full_name
@@ -79,7 +79,7 @@ def string_type(type_: type) -> ParserType:
     return st_parser
 
 
-def time_type(type_: type, pg_type: type) -> ParserType:
+def time_type(type_: type, tz_type: type) -> ParserType:
     """
     Make a parser for a SQL date/time type.
 
@@ -87,10 +87,10 @@ def time_type(type_: type, pg_type: type) -> ParserType:
     or TYPE_NAME(32) WITH TIME ZONE
 
     :param type_: The SQLAlchemy type we would like to parse.
-    :param pg_type: The PostgreSQL type we would like to parse if precision
-    or timezone is provided.
+    :param tz_type: The type to instantiate when precision or timezone is
+    provided (e.g. ``postgresql.types.TIMESTAMP``).
     :return: ``type_`` if neither precision nor timezone are provided in the
-    parsed text, ``pg_type(precision, timezone)`` otherwise.
+    parsed text, ``tz_type(precision, timezone)`` otherwise.
     """
 
     @parsy.generate(type_.__name__)
@@ -108,9 +108,24 @@ def time_type(type_: type, pg_type: type) -> ParserType:
         if precision is None and not timezone:
             # normal sql type
             return type_
-        return pg_type(precision=precision, timezone=timezone)
+        return tz_type(precision=precision, timezone=timezone)
 
     return pgt_parser
+
+
+@parsy.generate("VARBINARY")
+def _mssql_varbinary_parser() -> typing.Generator[ParserType, None, typing.Any]:
+    """Parse VARBINARY, VARBINARY(n), or VARBINARY(max/MAX)."""
+    yield parsy.string("VARBINARY")
+    length: int | None = yield (
+        parsy.string("(")
+        >> (
+            (parsy.string("max") | parsy.string("MAX")).result(None)
+            | integer()
+        )
+        << parsy.string(")")
+    ).optional()
+    return mssql.VARBINARY(length=length)
 
 
 SIMPLE_TYPE_PARSER = parsy.alt(
@@ -122,6 +137,11 @@ SIMPLE_TYPE_PARSER = parsy.alt(
     simple(sqltypes.INTEGER),
     simple(sqltypes.SMALLINT),
     simple(sqltypes.BIGINT),
+    # DATETIME2 and DATETIMEOFFSET must come before DATETIME — parsy.alt() is
+    # ordered and does not backtrack once a parser has consumed input, so the
+    # longer names must be tried first.
+    numeric_type(mssql.DATETIMEOFFSET),
+    numeric_type(mssql.DATETIME2),
     simple(sqltypes.DATETIME),
     simple(sqltypes.DATE),
     simple(sqltypes.CLOB),
@@ -129,13 +149,28 @@ SIMPLE_TYPE_PARSER = parsy.alt(
     simple(sqltypes.UUID),
     simple(sqltypes.BLOB),
     simple(sqltypes.BOOLEAN),
-    simple(postgresql.TSVECTOR),
-    simple(postgresql.BYTEA),
-    simple(postgresql.CIDR),
+    # PostgreSQL-specific types — mapped to cross-dialect equivalents so that
+    # an orm.yaml produced from a PostgreSQL source can be used with MS-SQL.
+    # PostgreSQL recreates these correctly; MSSQL gets a functional fallback.
+    parsy.string("TSVECTOR").result(sqltypes.Text),        # no MS-SQL equivalent; degrade to Text
+    parsy.string("BYTEA").result(sqltypes.LargeBinary),    # MS-SQL: VARBINARY(MAX)
+    parsy.string("CIDR").result(sqltypes.String(43)),      # no MS-SQL equivalent; store as VARCHAR(43)
     numeric_type(sqltypes.NUMERIC),
     numeric_type(sqltypes.DECIMAL),
     numeric_type(postgresql.BIT),
-    numeric_type(postgresql.REAL),
+    numeric_type(sqltypes.REAL),   # was postgresql.REAL; sqltypes.REAL is cross-dialect
+    # MS-SQL-specific types
+    simple(mssql.UNIQUEIDENTIFIER),
+    _mssql_varbinary_parser,
+    numeric_type(mssql.BINARY),
+    simple(mssql.MONEY),
+    simple(mssql.SMALLMONEY),
+    simple(mssql.IMAGE),
+    simple(mssql.TINYINT),
+    simple(mssql.SMALLDATETIME),
+    simple(mssql.NTEXT),
+    simple(mssql.SQL_VARIANT),
+    simple(mssql.ROWVERSION),
     string_type(sqltypes.CHAR),
     string_type(sqltypes.NCHAR),
     string_type(sqltypes.VARCHAR),

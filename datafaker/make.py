@@ -17,7 +17,7 @@ from black import FileMode, format_str
 from jinja2 import Environment, FileSystemLoader, Template
 from mimesis.providers.base import BaseProvider
 from sqlalchemy import CursorResult, Engine, MetaData, UniqueConstraint, text
-from sqlalchemy.dialects import postgresql
+from sqlalchemy.dialects import mssql, postgresql
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from sqlalchemy.schema import Column, Table
@@ -382,6 +382,9 @@ _COLUMN_TYPE_TO_GENERATOR_INFO = {
         generator="generic.cryptographic.uuid",
     ),
     postgresql.UUID: GeneratorInfo(
+        generator="generic.cryptographic.uuid",
+    ),
+    mssql.UNIQUEIDENTIFIER: GeneratorInfo(
         generator="generic.cryptographic.uuid",
     ),
     sqltypes.String: GeneratorInfo(
