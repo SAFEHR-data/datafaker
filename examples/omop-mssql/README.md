@@ -20,7 +20,7 @@ In [datafaker/utils.py:208](../../datafaker/utils.py), the async DSN is built by
 
 When a schema name is provided, the code issues `SET search_path TO <schema>` via a connection-level event listener ([datafaker/utils.py:222, 305](../../datafaker/utils.py)). This is PostgreSQL-specific syntax. MS-SQL uses two-part `[schema].[table]` naming and does not support `SET search_path`. SQLAlchemy's `schema` argument on `MetaData` and `Table` objects is the correct cross-dialect approach.
 
-### 4. PostgreSQL-specific column types in the type parser ([#96](https://github.com/SAFEHR-data/datafaker/issues/96))
+### 4. PostgreSQL-specific column types in the type parser ([#96](https://github.com/SAFEHR-data/datafaker/issues/96), commit [76fec75](https://github.com/SAFEHR-data/datafaker/commit/76fec75))
 
 [datafaker/serialize_metadata.py](../../datafaker/serialize_metadata.py) registers parsers for several PostgreSQL-only types that have no direct MS-SQL equivalent:
 
@@ -35,7 +35,7 @@ When a schema name is provided, the code issues `SET search_path TO <schema>` vi
 | `postgresql.BIT` | MS-SQL `BIT` is boolean (0/1 only); multi-bit columns use `BINARY` |
 | `postgresql.REAL` / `TIMESTAMP` / `TIME` with timezone | Need MS-SQL dialect equivalents (`DATETIMEOFFSET` for tz-aware timestamps) |
 
-### 5. `SERIAL` autoincrement columns
+### 5. `SERIAL` autoincrement columns ([#97](https://github.com/SAFEHR-data/datafaker/issues/97), commit [da4a69b](https://github.com/SAFEHR-data/datafaker/commit/da4a69b))
 
 PostgreSQL uses `SERIAL` for autoincrement columns. The code already strips `SERIAL` for DuckDB in [datafaker/create.py:29](../../datafaker/create.py), but there is no equivalent handler for MS-SQL, which uses `IDENTITY(1,1)`.
 
