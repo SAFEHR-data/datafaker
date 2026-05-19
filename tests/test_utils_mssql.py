@@ -112,6 +112,41 @@ class TestIsUndefinedObjectError(unittest.TestCase):
 
             importlib.reload(utils_mod)
 
+    def test_pyodbc_style_error_without_pgcode_returns_false(self) -> None:
+        """A pyodbc-style error has SQLSTATE in args[0] but no pgcode attribute.
+
+        pyodbc does not set pgcode, so the current implementation cannot
+        distinguish a 'constraint does not exist' pyodbc error from any other
+        exception without pgcode.  This test documents that known limitation.
+        """
+        exc = Exception("constraint does not exist")
+        # pyodbc puts SQLSTATE in args[0]; MS-SQL error 3728 maps to SQLSTATE 42000
+        exc.args = ("42000", "[42000] [SQL Server] ... is not a constraint. (3728)")
+        self.assertFalse(self._call(exc))
+
+    def test_pgcode_none_returns_false(self) -> None:
+        """pgcode=None is not treated as a match."""
+        exc = Exception("undefined object")
+        exc.pgcode = None  # type: ignore[attr-defined]
+        self.assertFalse(self._call(exc))
+
+    def test_sqlalchemy_wrapper_not_matched_only_orig_is(self) -> None:
+        """The helper expects the unwrapped DBAPI error (e.orig), not the SQLAlchemy wrapper.
+
+        The call site in utils.py passes e.orig, not e, so the SQLAlchemy
+        ProgrammingError itself should not match even when e.orig would.
+        """
+        from sqlalchemy.exc import ProgrammingError
+
+        orig = Exception("underlying DBAPI error")
+        orig.pgcode = "42704"  # type: ignore[attr-defined]
+        sa_exc = ProgrammingError("statement", {}, orig)
+
+        # The SQLAlchemy exception itself has no pgcode.
+        self.assertFalse(self._call(sa_exc))
+        # Passing e.orig directly does match.
+        self.assertTrue(self._call(sa_exc.orig))
+
 
 class TestSchemaTranslateMap(unittest.TestCase):
     """Tests for the cross-dialect schema routing in create_db_engine."""
