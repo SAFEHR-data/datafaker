@@ -61,12 +61,13 @@ def remove_db_vocab(
 
 def remove_db_tables(metadata: Optional[MetaData]) -> None:
     """Drop the tables in the destination schema."""
+    schema_name = get_destination_schema()
     dst_engine = get_sync_engine(
         create_db_engine(
             get_destination_dsn(),
-            schema_name=get_destination_schema(),
+            schema_name=schema_name,
         )
     )
     if metadata is None:
-        metadata = get_metadata(dst_engine)
+        metadata = get_metadata(dst_engine, schema_name=schema_name)
     metadata.drop_all(dst_engine)
