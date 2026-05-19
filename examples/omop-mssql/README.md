@@ -53,6 +53,59 @@ PostgreSQL uses `SERIAL` for autoincrement columns. The code already strips `SER
 
 **Deferred.** `set_db_settings` is only ever called for DuckDB connections (`parquet_dir` source feature); MS-SQL connections never reach it. Fixing the `autocommit` toggle in isolation would also leave the `SET {k} TO {v}` SQL syntax broken for MS-SQL (which requires `SET {k} {v}`). Both issues should be addressed together if `set_db_settings` is ever extended to MS-SQL.
 
+
+## Setup
+
+### 1. Install the MS-SQL Python extras
+
+`pyodbc` and `aioodbc` are optional dependencies. Install them with:
+
+```bash
+poetry install --extras mssql
+```
+
+### 2. Install and register the ODBC driver (macOS)
+
+If you do not already have the Microsoft ODBC driver installed:
+
+```bash
+brew tap microsoft/mssql-release
+brew install unixodbc msodbcsql18 mssql-tools18
+```
+
+Then verify the driver is registered:
+
+```bash
+odbcinst -q -d
+```
+
+If the output is empty, register it manually:
+
+```bash
+cat >> /opt/homebrew/etc/odbcinst.ini <<'EOF'
+[ODBC Driver 18 for SQL Server]
+Description=Microsoft ODBC Driver 18 for SQL Server
+Driver=/opt/homebrew/lib/libmsodbcsql.18.dylib
+UsageCount=1
+EOF
+```
+
+### 3. Configure the connection
+
+Copy the example environment file and fill in your connection details:
+
+```bash
+cp examples/omop-mssql/.env.example examples/omop-mssql/.env
+```
+
+Edit `.env` with your server hostname, credentials, database name and schema names. The DSN format is:
+
+```
+mssql+pyodbc://<username>:<password>@<host>:1433/<database>?driver=ODBC+Driver+18+for+SQL+Server
+```
+
+Run datafaker commands from the `examples/omop-mssql/` directory so that the `.env` file is picked up automatically.
+
 ## Steps
 
 1. Make a YAML file representing the tables in the schema
