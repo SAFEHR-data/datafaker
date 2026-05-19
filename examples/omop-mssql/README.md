@@ -39,7 +39,7 @@ When a schema name is provided, the code issues `SET search_path TO <schema>` vi
 
 PostgreSQL uses `SERIAL` for autoincrement columns. The code already strips `SERIAL` for DuckDB in [datafaker/create.py:29](../../datafaker/create.py), but there is no equivalent handler for MS-SQL, which uses `IDENTITY(1,1)`.
 
-### 6. `postgresql.UUID` type mapping
+### 6. `postgresql.UUID` type mapping ([#98](https://github.com/SAFEHR-data/datafaker/issues/98), commit [76fec75](https://github.com/SAFEHR-data/datafaker/commit/76fec75))
 
 [datafaker/make.py:384](../../datafaker/make.py) maps `postgresql.UUID` to a generator. MS-SQL uses `UNIQUEIDENTIFIER` for UUIDs, which SQLAlchemy exposes as `sqlalchemy.dialects.mssql.UNIQUEIDENTIFIER`.
 
