@@ -43,7 +43,7 @@ PostgreSQL uses `SERIAL` for autoincrement columns. The code already strips `SER
 
 [datafaker/make.py:384](../../datafaker/make.py) maps `postgresql.UUID` to a generator. MS-SQL uses `UNIQUEIDENTIFIER` for UUIDs, which SQLAlchemy exposes as `sqlalchemy.dialects.mssql.UNIQUEIDENTIFIER`.
 
-### 7. PostgreSQL-specific error handling
+### 7. PostgreSQL-specific error handling (commits [b2f14ab](https://github.com/SAFEHR-data/datafaker/commit/b2f14ab), [39709d8](https://github.com/SAFEHR-data/datafaker/commit/39709d8))
 
 [datafaker/utils.py:651](../../datafaker/utils.py) catches `psycopg2.errors.UndefinedObject` to handle missing constraints gracefully. This is a PostgreSQL/psycopg2-specific exception. For MS-SQL the equivalent `pyodbc` error would need to be caught instead, or the check should be made dialect-agnostic.
 
