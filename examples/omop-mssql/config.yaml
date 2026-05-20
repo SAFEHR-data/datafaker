@@ -1,0 +1,9 @@
+tables:
+  # Vocab tables
+  concept:
+    # This one is a vocab, but its too big to handle the usual way
+    # ignore: true
+    vocabulary_table: true
+
+  person:
+    num_rows_per_pass: 0

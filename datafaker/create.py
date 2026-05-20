@@ -57,6 +57,21 @@ def remove_mssql_identity(element: CreateColumn, compiler: Any, **kw: Any) -> st
     return re.sub(r" IDENTITY(\(\d+,\s*\d+\))?", "", text)
 
 
+@compiles(CreateTable, "mssql")
+def remove_mssql_on_delete_cascade(element: CreateTable, compiler: Any, **kw: Any) -> str:
+    """
+    Strip ON DELETE CASCADE from MS-SQL table DDL.
+
+    MS-SQL rejects multiple cascading FK paths to the same table (error 1785).
+    OMOP-style schemas commonly have many FK columns on one table all pointing at
+    the same vocabulary table, which triggers this limit.  Dropping CASCADE is
+    safe for datafaker because referential integrity is enforced by insert order,
+    not by the database engine.
+    """
+    text: str = compiler.visit_create_table(element, **kw)
+    return text.replace(" ON DELETE CASCADE", "")
+
+
 @compiles(CreateTable, "duckdb")
 def remove_on_delete_cascade(element: CreateTable, compiler: Any, **kw: Any) -> str:
     """

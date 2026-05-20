@@ -102,6 +102,8 @@ Edit `.env` with your server hostname, credentials, database name and schema nam
 
 ```
 mssql+pyodbc://<username>:<password>@<host>:1433/<database>?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes
+
+> **Note for Docker on macOS:** use `127.0.0.1` rather than `localhost`. macOS resolves `localhost` to `::1` (IPv6) but Docker Desktop's port forwarding only reliably maps the IPv4 address.
 ```
 
 Run datafaker commands from the `examples/omop-mssql/` directory so that the `.env` file is picked up automatically.

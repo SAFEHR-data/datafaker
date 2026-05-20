@@ -4,7 +4,7 @@ import unittest
 from sqlalchemy.dialects import mssql, postgresql
 from sqlalchemy.sql import sqltypes
 
-from datafaker.serialize_metadata import type_parser
+from datafaker.serialize_metadata import _unqualify_fk_target, dict_to_metadata, type_parser
 
 
 def parse(type_str: str):
@@ -152,6 +152,28 @@ class TestExistingPostgreSQLTypesRoundTrip(unittest.TestCase):
         self.assertIsInstance(result, sqltypes.VARCHAR)
         self.assertEqual(result.length, 255)
 
+    def test_varchar_with_mssql_collation(self) -> None:
+        result = parse("VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS")
+        self.assertIsInstance(result, sqltypes.VARCHAR)
+        self.assertEqual(result.length, 50)
+        self.assertEqual(result.collation, "SQL_Latin1_General_CP1_CI_AS")
+
+    def test_nvarchar_with_mssql_collation(self) -> None:
+        result = parse("NVARCHAR(100) COLLATE Latin1_General_CI_AS")
+        self.assertIsInstance(result, sqltypes.NVARCHAR)
+        self.assertEqual(result.length, 100)
+        self.assertEqual(result.collation, "Latin1_General_CI_AS")
+
+    def test_char_with_mssql_collation(self) -> None:
+        result = parse("CHAR(10) COLLATE SQL_Latin1_General_CP1_CI_AS")
+        self.assertIsInstance(result, sqltypes.CHAR)
+        self.assertEqual(result.collation, "SQL_Latin1_General_CP1_CI_AS")
+
+    def test_varchar_with_quoted_collation_still_works(self) -> None:
+        result = parse('VARCHAR(255) COLLATE "fr"')
+        self.assertIsInstance(result, sqltypes.VARCHAR)
+        self.assertEqual(result.collation, "fr")
+
     def test_nvarchar(self) -> None:
         result = parse("NVARCHAR(100)")
         self.assertIsInstance(result, sqltypes.NVARCHAR)
@@ -234,3 +256,48 @@ class TestArrayType(unittest.TestCase):
         result = parse("INTEGER[][]")
         self.assertIsInstance(result, postgresql.ARRAY)
         self.assertEqual(result.dimensions, 2)
+
+
+class TestUnqualifyFkTarget(unittest.TestCase):
+    """Schema prefix is stripped from 3-part FK targets."""
+
+    def test_three_part_target_drops_schema(self) -> None:
+        self.assertEqual(_unqualify_fk_target("mimic100.concept.concept_id"), "concept.concept_id")
+
+    def test_two_part_target_unchanged(self) -> None:
+        self.assertEqual(_unqualify_fk_target("concept.concept_id"), "concept.concept_id")
+
+    def test_single_part_unchanged(self) -> None:
+        self.assertEqual(_unqualify_fk_target("concept_id"), "concept_id")
+
+
+class TestSchemaQualifiedFKResolution(unittest.TestCase):
+    """Schema-qualified FK targets resolve correctly when building MetaData."""
+
+    def test_schema_qualified_fk_resolves_in_metadata(self) -> None:
+        orm_dict = {
+            "tables": {
+                "concept": {
+                    "columns": {
+                        "concept_id": {"type": "BIGINT", "primary": True, "nullable": False},
+                    }
+                },
+                "person": {
+                    "columns": {
+                        "person_id": {"type": "BIGINT", "primary": True, "nullable": False},
+                        "gender_concept_id": {
+                            "type": "BIGINT",
+                            "primary": False,
+                            "nullable": False,
+                            "foreign_keys": ["myschema.concept.concept_id"],
+                        },
+                    }
+                },
+            }
+        }
+        meta = dict_to_metadata(orm_dict)
+        person = meta.tables["person"]
+        fks = list(person.c.gender_concept_id.foreign_keys)
+        self.assertEqual(len(fks), 1)
+        # FK target should resolve to the concept table without raising NoReferencedTableError
+        self.assertEqual(fks[0].column.table.name, "concept")

@@ -61,7 +61,9 @@ def string_type(type_: type) -> ParserType:
     Make a parser for a SQL string type.
 
     Parses TYPE_NAME, TYPE_NAME(32), TYPE_NAME COLLATE "fr"
-    or TYPE_NAME(32) COLLATE "fr"
+    or TYPE_NAME(32) COLLATE "fr" (PostgreSQL style, quoted collation name)
+    or TYPE_NAME(32) COLLATE SQL_Latin1_General_CP1_CI_AS
+    (MS-SQL style, unquoted collation name)
     """
 
     @parsy.generate(type_.__name__)
@@ -71,8 +73,11 @@ def string_type(type_: type) -> ParserType:
         length: int | None = yield (
             parsy.string("(") >> integer() << parsy.string(")")
         ).optional()
-        collation: str | None = yield (
-            parsy.string(' COLLATE "') >> parsy.regex(r'[^"]*') << parsy.string('"')
+        collation: str | None = yield parsy.alt(
+            # PostgreSQL: COLLATE "name" (quoted)
+            parsy.string(' COLLATE "') >> parsy.regex(r'[^"]*') << parsy.string('"'),
+            # MS-SQL: COLLATE name (unquoted identifier)
+            parsy.string(" COLLATE ") >> parsy.regex(r'\S+'),
         ).optional()
         return type_(length=length, collation=collation)
 
@@ -231,6 +236,19 @@ def column_to_dict(column: Column, dialect: Dialect) -> dict[str, typing.Any]:
     return result
 
 
+def _unqualify_fk_target(fk: str) -> str:
+    """
+    Drop the schema qualifier from a 3-part FK target.
+
+    Converts ``schema.table.column`` → ``table.column`` so that SQLAlchemy
+    can resolve the reference against a MetaData whose tables were registered
+    without a schema prefix. 2-part ``table.column`` targets are returned
+    unchanged.
+    """
+    parts = fk.split(".")
+    return ".".join(parts[-2:]) if len(parts) == 3 else fk
+
+
 def dict_to_column(
     table_name: str,
     col_name: str,
@@ -261,7 +279,7 @@ def dict_to_column(
     if "foreign_keys" in rep:
         args = [
             ForeignKey(
-                fk,
+                _unqualify_fk_target(fk),
                 name=make_foreign_key_name(table_name, col_name),
                 ondelete="CASCADE",
             )
@@ -358,7 +376,14 @@ def should_ignore_fk(tables_dict: dict[str, TableT], fk: str) -> bool:
     :param fk: The name of the foreign key.
     """
     (table, _column) = split_column_full_name(fk)
-    td = get_property(tables_dict, table, dict, {})
+    # FK targets may be schema-qualified (e.g. "mimic100.concept").
+    # Try the fully-qualified name first so users can be explicit in config
+    # (e.g. "mimic100.concept: ignore: true"); fall back to the bare table
+    # name for configs that don't include a schema prefix.
+    td = get_property(tables_dict, table, dict, None)
+    if td is None:
+        bare = table.split(".")[-1]
+        td = get_property(tables_dict, bare, dict, {})
     return get_property(td, "ignore", bool, False)
 
 
