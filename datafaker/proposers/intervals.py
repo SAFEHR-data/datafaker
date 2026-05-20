@@ -3,14 +3,16 @@ import datetime
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from sqlalchemy import Column, Engine, ForeignKey, MetaData, func, select
+from sqlalchemy import Column, Engine, ForeignKey, MetaData, dialects, func, select
 from sqlalchemy.ext.compiler import compiles
-from sqlalchemy.sql.elements import ColumnElement, coercions, roles
+from sqlalchemy.sql.elements import ColumnElement
+from sqlalchemy.sql.visitors import InternalTraversal
 from sqlalchemy.types import Date, DateTime
 
 from datafaker.proposers.base import Buckets, Proposer, ProposerFactory, get_column_type
 from datafaker.providers import AnchoredProvider
-from datafaker.utils import get_property
+from datafaker.settings import get_settings
+from datafaker.utils import get_property, get_dialect
 
 RelatedColumn = tuple[ForeignKey | None, Column]
 
@@ -20,6 +22,11 @@ class SecondsDifference(ColumnElement[int]):
 
     expr1: ColumnElement[Date | DateTime]
     expr2: ColumnElement[Date | DateTime]
+
+    _traverse_internals = [
+        ("expr1", InternalTraversal.dp_clauseelement),
+        ("expr2", InternalTraversal.dp_clauseelement),
+    ]
 
     def __init__(
         self,
@@ -34,7 +41,7 @@ class SecondsDifference(ColumnElement[int]):
 def compile(element: SecondsDifference, compiler, **kw):
     e1 = compiler.process(element.expr1, **kw)
     e2 = compiler.process(element.expr2, **kw)
-    return f"EXTRACT(EPOCH FROM ({e1})) - EXTRACT(EPOCH FROM ({e2}))"
+    return f"CAST(EXTRACT(EPOCH FROM ({e1})) - EXTRACT(EPOCH FROM ({e2})) AS FLOAT)"
 
 
 def _set_roles_for_column(
@@ -111,7 +118,8 @@ class DateAfterProposer(Proposer):
         metadata: MetaData,
         sd: float,
         mean: float,
-        column_name: str,
+        column: Column,
+        anchor: Column,
         buckets: Buckets | None = None,
     ):
         """
@@ -123,7 +131,8 @@ class DateAfterProposer(Proposer):
         super().__init__()
         self._sd = sd
         self._mean = mean
-        self._column_name = column_name
+        self._anchor = anchor
+        self._column = column
         self._provider = AnchoredProvider(metadata=metadata)
         if buckets is None:
             self._fit = None
@@ -138,14 +147,14 @@ class DateAfterProposer(Proposer):
 
     def name(self) -> str:
         """Get the name of the generator."""
-        return f"{self.function_name()} [anchored to {self._column_name}]"
+        return f"{self.function_name()} [anchored to {self._anchor.name}]"
 
     def nominal_kwargs(self) -> dict[str, Any]:
         """Get the arguments to be entered into ``config.yaml``."""
         return {
-            "mean_seconds": self._sd,
-            "sd_seconds": self._mean,
-            "anchor": f'GENERATED_ROW["{self._column_name}"]',
+            "mean_seconds": f'SRC_STATS["auto__{self._column.name}"]["results"][0]["mean__{self._column.name}"]',
+            "sd_seconds": f'SRC_STATS["auto__{self._column.name}"]["results"][0]["sd__{self._column.name}"]',
+            "anchor": f'GENERATED_ROW["{self._anchor.name}"]',
         }
 
     def actual_kwargs(self) -> dict[str, Any]:
@@ -155,6 +164,31 @@ class DateAfterProposer(Proposer):
             "sd_seconds": self._mean,
             # For now we'll use a dummy value for the dependent value
             "anchor": "1970-01-01",
+        }
+
+    def select_aggregate_clauses(self) -> dict[str, dict[str, str]]:
+        """
+        Get the query fragments the generators need to call.
+
+        This will only work for anchors in the same table.
+        """
+        dest_dsn = get_settings().dst_dsn
+        if dest_dsn:
+            dialect = get_dialect(dest_dsn)
+        else:
+            dialect = dialects.postgresql.dialect
+        mean_q = func.avg(SecondsDifference(self._column, self._anchor))
+        sd_q = func.stddev(SecondsDifference(self._column, self._anchor))
+        
+        return {
+            f"mean__{self._column.name}": {
+                "clause": mean_q.compile(dialect=dialect),
+                "comment": f"Mean of interval between {self._anchor.name} and {self._column.name} from table {self._column.table.name}",
+            },
+            f"stddev__{self._column.name}": {
+                "clause": sd_q.compile(dialect=dialect),
+                "comment": f"Standard deviation of interval between {self._anchor.name} and {self._column.name} from table {self._column.table.name}",
+            },
         }
 
     def fit(self, default: float = -1) -> float:
@@ -192,13 +226,14 @@ class DateAfterProposerFactory(ProposerFactory):
             ).first()
             if result is None or result.sd is None:
                 return []
-        buckets = Buckets.make_buckets(engine, column.table, column - anchor)
+        buckets = Buckets.make_buckets(engine, column.table, SecondsDifference(column, anchor))
         return [
             DateAfterProposer(
                 self._metadata,
                 result.sd,
                 result.mean,
-                anchor.name,
+                column,
+                anchor,
                 buckets,
             )
         ]

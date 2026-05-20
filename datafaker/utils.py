@@ -30,6 +30,7 @@ import sqlalchemy
 import yaml
 from jsonschema.exceptions import ValidationError
 from jsonschema.validators import validate
+import sqlalchemy
 from sqlalchemy import Connection, Engine, ForeignKey, create_engine, event, select
 from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.exc import (
@@ -190,6 +191,15 @@ def download_table(
                         rowcount,
                         100 * count / rowcount,
                     )
+
+
+def get_dialect(dsn: str) -> sqlalchemy.engine.interfaces.Dialect:
+    """Gets the SQLAlchemy dialect from a DSN string."""
+    url = sqlalchemy.engine.make_url(dsn)
+    backend = url.get_backend_name()
+    dialect_cls = sqlalchemy.dialects.registry.load(backend)
+    url.get_backend_name()
+    return dialect_cls()
 
 
 def get_sync_engine(engine: MaybeAsyncEngine) -> Engine:
