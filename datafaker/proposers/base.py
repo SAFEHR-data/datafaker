@@ -8,7 +8,8 @@ from typing import Any, Sequence, Union
 import mimesis
 import mimesis.locales
 import sqlalchemy
-from sqlalchemy import Column, Engine, Join, Table, func, select, text
+from sqlalchemy import Column, Engine, Join, Table, func, select
+from sqlalchemy.sql.visitors import replacement_traverse
 from sqlalchemy.types import Integer, Numeric, String, TypeEngine
 from typing_extensions import Self
 
@@ -260,6 +261,37 @@ class ProposerFactory(ABC):
         """Get the proposers appropriate to these columns."""
 
 
+class TableReplacer:
+    """
+    Replaces tables with aliased tables.
+
+    We need this to work around a DuckDB problem:
+    If we are using the ORM code to select a column ``c`` from a table
+    ``t.parquet``, then DuckDB expects the SQL
+    ``SELECT "t.parquet".c FROM "t.parquet"`` if ``t.parquet`` is an actual
+    table in the database, or ``SELECT t.c FROM "t.parquet"`` if ``t.parquet``
+    names a file. The best way around this seems to be to use an aliased table,
+    which works in both cases: ``SELECT a.c FROM "t.parquet" AS a``, and the
+    best way for that to happen seems to be to use ``replacement_traverse``.
+    """
+    def __init__(self, table: Table):
+        """Initialise with the table to be aliased."""
+        self.table = table
+        self.atable = table.alias(f"_{table.name}__alias")
+
+    def replace(self, object: Any) -> Any:
+        """Replaces columns with the same column on the aliased table."""
+        if not isinstance(object, Column):
+            return None
+        if object.table == self.table:
+            return self.atable.columns[object.name]
+        return None
+
+    def aliased_table(self):
+        """The aliased table."""
+        return self.atable
+
+
 def fit_from_buckets(xs: Sequence[NumericType], ys: Sequence[NumericType]) -> float:
     """Calculate the fit by comparing a pair of lists of buckets."""
     sum_diff_squared = sum(map(lambda t, a: (t - a) * (t - a), xs, ys))
@@ -296,11 +328,6 @@ class Buckets:
                 )
                 .select_from(table)
                 .group_by("b")
-                # text(
-                # f"SELECT COUNT({column_name}) AS f,"
-                # f" FLOOR(({column_name} - {mean - 2 * stddev})/{stddev / 2}) AS b"
-                # f" FROM {table_name} GROUP BY b"
-                # )
             )
             self.buckets: Sequence[int] = [0] * 10
             for rb in raw_buckets:
@@ -336,18 +363,15 @@ class Buckets:
         :param table: SQLAlchemy table (or joined tables) to pull data from.
         :param column: SQLAlchemy column or expression to measure.
         """
+        replacer = TableReplacer(table)
+        aliased_column = replacement_traverse(column, {}, replacer.replace)
         with engine.connect() as connection:
             result = connection.execute(
-                # select(
-                #    func.avg(column).label("mean"),
-                #    func.stddev(column).label("stddev"),
-                #    func.count(column).label("count"),  # pylint: disable=not-callable
-                # ).select_from(table)
-                text(
-                    f"SELECT AVG({column.name}) AS mean,"
-                    f" STDDEV({column.name}) AS stddev,"
-                    f" COUNT({column.name}) AS count FROM {table.name}"
-                )
+                select(
+                   func.avg(aliased_column).label("mean"),
+                   func.stddev(aliased_column).label("stddev"),
+                   func.count(aliased_column).label("count"),  # pylint: disable=not-callable
+                ).select_from(replacer.atable)
             ).first()
             if result is None or result.stddev is None or getattr(result, "count") < 2:
                 return None
