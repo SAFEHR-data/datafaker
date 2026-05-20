@@ -351,9 +351,11 @@ information about the columns in the current table. Use 'peek',
         else:
             reply = self.ask_save()
         if reply == "yes":
+            logger.debug("Changed entries copied")
             self._copy_entries()
             return True
         if reply == "no":
+            logger.debug("Configuration unchanged")
             return True
         return False
 

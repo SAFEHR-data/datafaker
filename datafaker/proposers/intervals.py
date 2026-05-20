@@ -4,6 +4,8 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from sqlalchemy import Column, Engine, ForeignKey, MetaData, func, select
+from sqlalchemy.ext.compiler import compiles
+from sqlalchemy.sql.elements import ColumnElement, coercions, roles
 from sqlalchemy.types import Date, DateTime
 
 from datafaker.proposers.base import Buckets, Proposer, ProposerFactory, get_column_type
@@ -11,6 +13,28 @@ from datafaker.providers import AnchoredProvider
 from datafaker.utils import get_property
 
 RelatedColumn = tuple[ForeignKey | None, Column]
+
+
+class SecondsDifference(ColumnElement[int]):
+    """Represent getting the difference between times in seconds."""
+
+    expr1: ColumnElement[Date | DateTime]
+    expr2: ColumnElement[Date | DateTime]
+
+    def __init__(
+        self,
+        expr1: ColumnElement[Date | DateTime],
+        expr2: ColumnElement[Date | DateTime],
+    ):
+        self.expr1 = expr1
+        self.expr2 = expr2
+
+
+@compiles(SecondsDifference)
+def compile(element: SecondsDifference, compiler, **kw):
+    e1 = compiler.process(element.expr1, **kw)
+    e2 = compiler.process(element.expr2, **kw)
+    return f"EXTRACT(EPOCH FROM ({e1})) - EXTRACT(EPOCH FROM ({e2}))"
 
 
 def _set_roles_for_column(
@@ -22,7 +46,11 @@ def _set_roles_for_column(
     """
     Set new entries in ``out`` based on the roles ``column`` has.
 
-    :param out: Mapping of role to related columns to be updated.
+    :param out: Mapping to be updated of role to related columns. A related
+        colomn is a pair ``(fk, fcol)`` where ``fcol`` is the column that has
+        that role and ``fk`` is the foreign key in the table ``column`` appears
+        in that points to the table ``fcol`` appears in, or None if ``column``
+        and ``fcol`` are in the same table.
     :param fk: Foreign key to the table ``column`` appears in (appears in
         new entries set in ``out``).
     :param column: The column to be checked for roles.
@@ -31,7 +59,7 @@ def _set_roles_for_column(
     """
     roles: list[Any] = get_property(column_config, [column.name, "roles"], [])
     for role in roles:
-        pair = (fk, column)
+        pair: RelatedColumn = (fk, column)
         if role not in out:
             out[role] = [pair]
         else:
@@ -45,7 +73,7 @@ def _get_roles(
     """
     Work out where the roles are relative to this table.
 
-    :param tables_config: The ``tables:`` section of ``config.yaml``.
+    :param config: The configuration from ``config.yaml``.
     :param columns: The list of columns we are to propose for.
     :return: dictionary of ``role_name`` -> ``(fk or None, column_name)``
         where ``fk`` is the actual foreign key from the table, and ``None``
@@ -143,7 +171,7 @@ class DateAfterProposer(Proposer):
 
 
 class DateAfterProposerFactory(ProposerFactory):
-    """All Mimesis generators that return floating point numbers."""
+    """Makes proposers for dates after another anchor date."""
 
     def __init__(self, config: Mapping, metadata: MetaData):
         """Initialize ``DateAfterProposerFactory``."""
@@ -158,9 +186,9 @@ class DateAfterProposerFactory(ProposerFactory):
         with engine.connect() as connection:
             result = connection.execute(
                 select(
-                    func.avg(column - anchor).label("mean"),
-                    func.stddev(column - anchor).label("sd"),
-                )
+                    func.avg(SecondsDifference(column, anchor)).label("mean"),
+                    func.stddev(SecondsDifference(column, anchor)).label("sd"),
+                ).select_from(column.table)
             ).first()
             if result is None or result.sd is None:
                 return []
@@ -193,9 +221,14 @@ class DateAfterProposerFactory(ProposerFactory):
         other_start_columns = [
             fk_col for fk_col in roles["start"] if fk_col[1] not in columns
         ]
+        # For the moment, only anchors in _this_ table
+        anchors = [
+            anchor
+            for fk, anchor in other_start_columns
+            if fk is None  # at the moment we can only cope with columns in the same table
+        ]
         return [
             prop
-            for fk, anchor in other_start_columns
+            for anchor in anchors
             for prop in self.make_date_after_proposers(engine, column, anchor)
-            if fk is None
         ]

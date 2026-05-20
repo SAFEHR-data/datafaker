@@ -18,6 +18,7 @@ from datafaker.utils import (
     create_db_engine,
     fk_refers_to_ignored_table,
     get_sync_engine,
+    get_property,
 )
 
 
@@ -274,8 +275,14 @@ class DbCmd(ABC, cmd.Cmd):
 
     def report_columns(self) -> None:
         """Print information about the current columns."""
+        table = self.table_metadata()
+        table_config: dict[str, Any] = get_property(
+            self.config,
+            ["tables", table.name, "columns"],
+            {},
+        )
         self.print_table(
-            ["name", "type", "primary", "nullable", "foreign key"],
+            ["name", "type", "primary", "nullable", "foreign key", "roles"],
             [
                 [
                     name,
@@ -283,8 +290,9 @@ class DbCmd(ABC, cmd.Cmd):
                     col.primary_key,
                     col.nullable,
                     ", ".join([fk_column_name(fk) for fk in col.foreign_keys]),
+                    ", ".join(get_property(table_config, [name, "roles"], [])),
                 ]
-                for name, col in self.table_metadata().columns.items()
+                for name, col in table.columns.items()
             ],
         )
 
