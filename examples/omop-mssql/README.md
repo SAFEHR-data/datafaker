@@ -108,22 +108,28 @@ Run datafaker commands from the `examples/omop-mssql/` directory so that the `.e
 
 ## Steps
 
+Run all commands from the `examples/omop-mssql/` directory so that the `.env` file is picked up automatically.
+
+```bash
+cd examples/omop-mssql
+```
+
 1. Make a YAML file representing the tables in the schema
 
-`poetry run datafaker make-tables --orm-file ./examples/omop-mssql/orm.yaml`
+`poetry run datafaker make-tables --orm-file ./orm.yaml`
 
 1. Create schema from the ORM YAML file
 
-`poetry run datafaker create-tables --orm-file ./examples/omop-mssql/orm.yaml --config-file ./examples/omop-mssql/config.yaml`
+`poetry run datafaker create-tables --orm-file ./orm.yaml --config-file ./config.yaml`
 
 1. Create generator table
 
-`poetry run datafaker create-generators --orm-file ./examples/omop-mssql/orm.yaml --config-file ./examples/omop-mssql/config.yaml --df-file ./examples/omop-mssql/df.py`
+`poetry run datafaker create-generators --orm-file ./orm.yaml --config-file ./config.yaml --df-file ./df.py`
 
 1. Create data
 
-`poetry run datafaker create-data --orm-file ./examples/omop-mssql/orm.yaml --config-file ./examples/omop-mssql/config.yaml --df-file ./examples/omop-mssql/df.py`
+`poetry run datafaker create-data --orm-file ./orm.yaml --config-file ./config.yaml --df-file ./df.py`
 
 1. Remove data
 
-`poetry run datafaker remove-data --orm-file ./examples/omop-mssql/orm.yaml --config-file ./examples/omop-mssql/config.yaml`
+`poetry run datafaker remove-data --orm-file ./orm.yaml --config-file ./config.yaml`
