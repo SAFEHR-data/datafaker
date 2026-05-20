@@ -101,7 +101,7 @@ cp examples/omop-mssql/.env.example examples/omop-mssql/.env
 Edit `.env` with your server hostname, credentials, database name and schema names. The DSN format is:
 
 ```
-mssql+pyodbc://<username>:<password>@<host>:1433/<database>?driver=ODBC+Driver+18+for+SQL+Server
+mssql+pyodbc://<username>:<password>@<host>:1433/<database>?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes
 ```
 
 Run datafaker commands from the `examples/omop-mssql/` directory so that the `.env` file is picked up automatically.
