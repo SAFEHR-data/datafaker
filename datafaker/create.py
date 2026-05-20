@@ -10,7 +10,7 @@ from sqlalchemy import Connection, insert, inspect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session
-from sqlalchemy.schema import CreateColumn, CreateSchema, CreateTable, MetaData, Table
+from sqlalchemy.schema import CreateSchema, CreateTable, MetaData, Table
 
 from datafaker.base import FileUploader
 from datafaker.make import FunctionCall, StoryGeneratorInfo, get_generation_info
