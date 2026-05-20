@@ -641,20 +641,24 @@ files = [
 all = ["adbc-driver-manager", "fsspec", "ipython", "numpy", "pandas", "pyarrow"]
 
 [[package]]
-name = "duckdb-engine"
-version = "0.17.0"
-description = "SQLAlchemy driver for duckdb"
+name = "duckdb-sqlalchemy"
+version = "1.5.2.2"
+description = "DuckDB SQLAlchemy dialect for DuckDB and MotherDuck"
 optional = false
 python-versions = "<4,>=3.9"
 files = [
-    {file = "duckdb_engine-0.17.0-py3-none-any.whl", hash = "sha256:3aa72085e536b43faab635f487baf77ddc5750069c16a2f8d9c6c3cb6083e979"},
-    {file = "duckdb_engine-0.17.0.tar.gz", hash = "sha256:396b23869754e536aa80881a92622b8b488015cf711c5a40032d05d2cf08f3cf"},
+    {file = "duckdb_sqlalchemy-1.5.2.2-py3-none-any.whl", hash = "sha256:d13fa8262acf76ebf77becb468418535371a05afa80247009c3407fc6a50fb6a"},
+    {file = "duckdb_sqlalchemy-1.5.2.2.tar.gz", hash = "sha256:a2699d1a5583659f013e48cd1b21c61fa60eec012023a95cdbef8e45d74abcea"},
 ]
 
 [package.dependencies]
 duckdb = ">=0.5.0"
 packaging = ">=21"
-sqlalchemy = ">=1.3.22"
+sqlalchemy = ">=2.0.45"
+
+[package.extras]
+dev = ["fsspec (>=2025.2.0,<2027.0.0)", "github-action-utils (>=1.1.0,<2.0.0)", "hypothesis (>=6.75.2,<7.0.0)", "jupysql (>=0.11.1,<0.12.0)", "nox (>=2026.4.10,<2027.0.0)", "numpy (>=1.24,<2.0)", "numpy (>=1.26,<3.0)", "numpy (>=2.0,<3.0)", "pandas (>=1,<2.0)", "pandas (>=2.2,<4.0)", "pyarrow (>=22.0.0)", "pytest (>=8.0.0,<10.0.0)", "pytest-cov (>=7.1.0,<8.0.0)", "pytest-remotedata (>=0.4.0,<0.5.0)", "pytest-snapshot (>=0.9.0,<1.0.0)", "pytz (>=2024.2)", "toml (>=0.10.2,<0.11.0)", "ty (==0.0.34)"]
+devtools = ["nox (>=2026.4.10,<2027.0.0)", "pdbpp (>=0.11.0,<0.13.0)", "pre-commit (>=4.6.0,<4.7.0)"]
 
 [[package]]
 name = "fastparquet"
@@ -2965,4 +2969,4 @@ docs = ["sphinx-rtd-theme", "sphinxcontrib-napoleon"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<3.14"
-content-hash = "b218123b70948061b00fe2fbd5646aa5f418edb19bdfe6be879a6a428fffc375"
+content-hash = "84f6b5407032700c20ba9af17c91e2507d2a504960ab87352ceb20cad395662e"

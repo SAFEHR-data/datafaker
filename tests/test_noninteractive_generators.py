@@ -48,7 +48,8 @@ class NonInteractiveTests(RequiresDBTestCase):
         test that we can set generators from a CSV file
         """
         config: MutableMapping[str, Any] = {}
-        spec_csv = Mock(return_value="mock spec.csv file")
+        spec_csv = MagicMock()
+        spec_csv.open.return_value.__enter__.return_value = "mock spec.csv file"
         update_config_generators(
             DbCmd.Settings(
                 self.dsn,
@@ -93,7 +94,8 @@ class NonInteractiveTests(RequiresDBTestCase):
         test that we can set multi-column generators from a CSV file
         """
         config: MutableMapping[str, Any] = {}
-        spec_csv = Mock(return_value="mock spec.csv file")
+        spec_csv = MagicMock()
+        spec_csv.open.return_value.__enter__.return_value = "mock spec.csv file"
         update_config_generators(
             DbCmd.Settings(
                 self.dsn,
@@ -165,7 +167,8 @@ class NonInteractiveTests(RequiresDBTestCase):
                 },
             },
         }
-        spec_csv = Mock(return_value="mock spec.csv file")
+        spec_csv = MagicMock()
+        spec_csv.open.return_value.__enter__.return_value = "mock spec.csv file"
         update_config_generators(
             DbCmd.Settings(
                 self.dsn,

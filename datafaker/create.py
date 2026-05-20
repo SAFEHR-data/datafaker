@@ -37,23 +37,6 @@ RowCounts = Counter[str]
 serial_re = re.compile(r"\bSERIAL\b")
 
 
-@compiles(CreateColumn, "duckdb")
-def remove_serial(element: CreateColumn, compiler: Any, **kw: Any) -> str:
-    """
-    Intercede in compilation for column creation, removing PostgreSQL's ``SERIAL``.
-
-    DuckDB does not understand ``SERIAL``, and we don't care about
-    autoincrementing in datafaker. Ideally ``duckdb_engine`` would remove
-    this for us, or DuckDB would implement ``SERIAL``
-    :param element: The CreateColumn being executed.
-    :param compiler: Actually a DDLCompiler, but that type is not exported.
-    :param kw: Further arguments.
-    :return: Corrected SQL.
-    """
-    text: str = compiler.visit_create_column(element, **kw)
-    return serial_re.sub("INTEGER", text)
-
-
 @compiles(CreateTable, "duckdb")
 def remove_on_delete_cascade(element: CreateTable, compiler: Any, **kw: Any) -> str:
     """
