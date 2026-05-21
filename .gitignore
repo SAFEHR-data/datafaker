@@ -153,3 +153,5 @@ docs/temp/*
 *.yaml.gz
 
 *_stories.py
+
+/examples/opiates/*
