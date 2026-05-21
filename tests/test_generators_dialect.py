@@ -1,5 +1,6 @@
 """Tests for dialect-correct SQL in generator classes."""
 import unittest
+import unittest.mock
 from unittest.mock import MagicMock
 
 from sqlalchemy import Column, Integer, MetaData, Table
@@ -110,7 +111,140 @@ class TestBucketsStddevDialect(unittest.TestCase):
 
     def test_mssql_uses_stdev(self) -> None:
         """MS-SQL query uses STDEV function (no trailing D)."""
-        import unittest.mock
         sql = self._get_executed_sql("mssql")
         self.assertIn("STDEV(", sql)
         self.assertNotIn("STDDEV(", sql)  # function call form only, not the alias
+
+
+class TestChoiceGeneratorStoredQuery(unittest.TestCase):
+    """ChoiceGenerator._query is compiled to dialect-correct SQL at construction time."""
+
+    def _make_gen(self, dialect, sample_count=None, suppress_count=0):
+        from datafaker.generators.choice import ZipfChoiceGenerator
+        return ZipfChoiceGenerator(
+            table_name="patient",
+            column_name="gender",
+            values=["M", "F"],
+            counts=[70, 30],
+            sample_count=sample_count,
+            suppress_count=suppress_count,
+            dialect=dialect,
+        )
+
+    def test_postgresql_sample_uses_random_and_limit(self) -> None:
+        """PostgreSQL stored query uses random() and LIMIT for sampled path."""
+        gen = self._make_gen(postgresql.dialect(), sample_count=500)
+        sql = gen._query.upper()
+        self.assertIn("RANDOM()", sql)
+        self.assertIn("LIMIT", sql)
+        self.assertNotIn("NEWID()", sql)
+        self.assertNotIn(" TOP ", sql)
+
+    def test_mssql_sample_uses_newid_and_top(self) -> None:
+        """MS-SQL stored query uses newid() and TOP for sampled path."""
+        gen = self._make_gen(mssql.dialect(), sample_count=500)
+        sql = gen._query.upper()
+        self.assertIn("NEWID()", sql)
+        self.assertIn(" TOP ", sql)
+        self.assertNotIn("RANDOM()", sql)
+        self.assertNotIn("LIMIT", sql)
+
+    def test_mssql_suppress_has_no_order_by(self) -> None:
+        """MS-SQL suppress-only path emits no ORDER BY (was rejected without TOP)."""
+        gen = self._make_gen(mssql.dialect(), suppress_count=7)
+        sql = gen._query.upper()
+        self.assertNotIn("ORDER BY", sql)
+
+    def test_mssql_sample_and_suppress_uses_newid_and_top(self) -> None:
+        """MS-SQL sample+suppress path uses newid()/TOP and no LIMIT/RANDOM."""
+        gen = self._make_gen(mssql.dialect(), sample_count=500, suppress_count=7)
+        sql = gen._query.upper()
+        self.assertIn("NEWID()", sql)
+        self.assertIn(" TOP ", sql)
+        self.assertNotIn("RANDOM()", sql)
+        self.assertNotIn("LIMIT", sql)
+
+    def test_no_sample_no_suppress_has_no_random_or_limit(self) -> None:
+        """No-sample path never includes RANDOM/LIMIT regardless of dialect."""
+        for dialect in (postgresql.dialect(), mssql.dialect()):
+            with self.subTest(dialect=dialect.name):
+                gen = self._make_gen(dialect)
+                sql = gen._query.upper()
+                self.assertNotIn("RANDOM()", sql)
+                self.assertNotIn("NEWID()", sql)
+                self.assertNotIn("LIMIT", sql)
+                self.assertNotIn(" TOP ", sql)
+
+
+class TestChoiceGeneratorFactoryLiveQueries(unittest.TestCase):
+    """ChoiceGeneratorFactory.get_generators executes dialect-correct live SQL."""
+
+    def _captured_sqls(self, dialect) -> list[str]:
+        """Run get_generators with a mocked engine and return compiled SQL strings."""
+        from datafaker.generators.choice import ChoiceGeneratorFactory
+
+        engine = MagicMock()
+        engine.dialect = dialect
+
+        # First execute (distinct count): return one row so rowcount appears <= MAXIMUM_CHOICES
+        row_count = MagicMock()
+        row_count.v = "M"
+        row_count.f = 70
+        result_count = MagicMock()
+        result_count.rowcount = 1
+        result_count.__iter__ = MagicMock(return_value=iter([row_count]))
+
+        # Second execute (random sample): return one row
+        row_sample = MagicMock()
+        row_sample.v = "M"
+        row_sample.f = 70
+        result_sample = MagicMock()
+        result_sample.__iter__ = MagicMock(return_value=iter([row_sample]))
+
+        conn = MagicMock()
+        conn.__enter__ = MagicMock(return_value=conn)
+        conn.__exit__ = MagicMock(return_value=False)
+        conn.execute.side_effect = [result_count, result_sample]
+        engine.connect.return_value = conn
+
+        executed = []
+        results_queue = [result_count, result_sample]
+
+        def capture(stmt, *args, **kwargs):
+            executed.append(stmt)
+            return results_queue[len(executed) - 1]
+
+        conn.execute.side_effect = capture
+
+        meta = MetaData()
+        tbl = Table("patient", meta, Column("gender", Integer()))
+        ChoiceGeneratorFactory().get_generators([tbl.c.gender], engine)
+
+        return [
+            str(s.compile(dialect=dialect, compile_kwargs={"literal_binds": True})).upper()
+            for s in executed
+        ]
+
+    def test_mssql_live_queries_use_top_and_newid(self) -> None:
+        """MS-SQL live queries use TOP (not LIMIT) and newid() (not random())."""
+        sqls = self._captured_sqls(mssql.dialect())
+        # Distinct-count query: TOP, no LIMIT
+        self.assertIn(" TOP ", sqls[0])
+        self.assertNotIn("LIMIT", sqls[0])
+        # Random-sample query: TOP + newid()
+        self.assertIn(" TOP ", sqls[1])
+        self.assertIn("NEWID()", sqls[1])
+        self.assertNotIn("LIMIT", sqls[1])
+        self.assertNotIn("RANDOM()", sqls[1])
+
+    def test_postgresql_live_queries_use_limit_and_random(self) -> None:
+        """PostgreSQL live queries use LIMIT and random()."""
+        sqls = self._captured_sqls(postgresql.dialect())
+        # Distinct-count query: LIMIT, no TOP
+        self.assertIn("LIMIT", sqls[0])
+        self.assertNotIn(" TOP ", sqls[0])
+        # Random-sample query: LIMIT + random()
+        self.assertIn("LIMIT", sqls[1])
+        self.assertIn("RANDOM()", sqls[1])
+        self.assertNotIn(" TOP ", sqls[1])
+        self.assertNotIn("NEWID()", sqls[1])

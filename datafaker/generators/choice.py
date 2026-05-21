@@ -6,7 +6,7 @@ import typing
 from abc import abstractmethod
 from typing import Any, Sequence, Union
 
-from sqlalchemy import Column, CursorResult, Engine, text
+from sqlalchemy import Column, CursorResult, Engine, desc, func, literal_column, select, table
 
 from datafaker.generators.base import (
     Generator,
@@ -44,6 +44,55 @@ def zipf_distribution(total: int, bins: int) -> typing.Generator[int, None, None
             yield x
 
 
+def _choice_stmt(
+    column_name: str,
+    table_name: str,
+    store_counts: bool,
+    sample_count: int | None,
+    suppress_count: int,
+    random_fn: Any,
+) -> Any:
+    """Build a SQLAlchemy SELECT for gathering choice value distributions.
+
+    Compiles to dialect-correct SQL: LIMIT/random() on PostgreSQL/DuckDB,
+    TOP/newid() on MS-SQL.  MS-SQL also forbids ORDER BY inside a subquery
+    without TOP; this function never emits such a clause.
+    """
+    col = literal_column(f'"{column_name}"')
+    tbl = table(table_name)
+    if sample_count is not None:
+        sample_sub = (
+            select(col.label("value"))
+            .where(col.isnot(None))
+            .select_from(tbl)
+            .order_by(random_fn)
+            .limit(sample_count)
+            .subquery("_inner")
+        )
+        counted_sub = (
+            select(sample_sub.c.value, func.count(sample_sub.c.value).label("count"))
+            .group_by(sample_sub.c.value)
+            .subquery("_counted")
+        )
+    else:
+        counted_sub = (
+            select(col.label("value"), func.count(col).label("count"))
+            .where(col.isnot(None))
+            .select_from(tbl)
+            .group_by(col)
+            .subquery("_counted")
+        )
+    out_cols = [counted_sub.c.value]
+    if store_counts:
+        out_cols.append(counted_sub.c["count"])
+    stmt = select(*out_cols).select_from(counted_sub)
+    if suppress_count > 0:
+        stmt = stmt.where(counted_sub.c["count"] > suppress_count)
+    else:
+        stmt = stmt.order_by(desc(counted_sub.c["count"]))
+    return stmt
+
+
 class ChoiceGenerator(Generator):
     """Base generator for all generators producing choices of items."""
 
@@ -58,6 +107,7 @@ class ChoiceGenerator(Generator):
         counts: list[int],
         sample_count: int | None = None,
         suppress_count: int = 0,
+        dialect: Any = None,
     ) -> None:
         """Initialise a ChoiceGenerator."""
         super().__init__()
@@ -67,33 +117,28 @@ class ChoiceGenerator(Generator):
         estimated_counts = self.get_estimated_counts(counts)
         self._fit = fit_from_buckets(counts, estimated_counts)
 
-        extra_results = ""
-        extra_expo = ""
-        extra_comment = ""
-        if self.STORE_COUNTS:
-            extra_results = f", COUNT({column_name}) AS count"
-            extra_expo = ", count"
-            extra_comment = " and their counts"
+        extra_comment = " and their counts" if self.STORE_COUNTS else ""
+        random_fn = (
+            func.newid()
+            if (dialect is not None and dialect.name == "mssql")
+            else func.random()
+        )
+        stmt = _choice_stmt(
+            column_name, table_name, self.STORE_COUNTS, sample_count, suppress_count, random_fn
+        )
+        compile_opts: dict[str, Any] = {"compile_kwargs": {"literal_binds": True}}
+        if dialect is not None:
+            compile_opts["dialect"] = dialect
+        self._query = str(stmt.compile(**compile_opts))
+
         if suppress_count == 0:
             if sample_count is None:
-                self._query = (
-                    f"SELECT {column_name} AS value{extra_results} FROM {table_name}"
-                    f" WHERE {column_name} IS NOT NULL GROUP BY value"
-                    f" ORDER BY COUNT({column_name}) DESC"
-                )
                 self._comment = (
                     f"All the values{extra_comment} that appear in column {column_name}"
                     f" of table {table_name}"
                 )
                 self._annotation = None
             else:
-                self._query = (
-                    f"SELECT {column_name} AS value{extra_results} FROM"
-                    f" (SELECT {column_name} FROM {table_name}"
-                    f" WHERE {column_name} IS NOT NULL"
-                    f" ORDER BY RANDOM() LIMIT {sample_count})"
-                    f" AS _inner GROUP BY value ORDER BY COUNT({column_name}) DESC"
-                )
                 self._comment = (
                     f"The values{extra_comment} that appear in column {column_name}"
                     f" of a random sample of {sample_count} rows of table {table_name}"
@@ -101,26 +146,12 @@ class ChoiceGenerator(Generator):
                 self._annotation = "sampled"
         else:
             if sample_count is None:
-                self._query = (
-                    f"SELECT value{extra_expo} FROM"
-                    f" (SELECT {column_name} AS value, COUNT({column_name}) AS count"
-                    f" FROM {table_name} WHERE {column_name} IS NOT NULL"
-                    f" GROUP BY value ORDER BY count DESC) AS _inner"
-                    f" WHERE {suppress_count} < count"
-                )
                 self._comment = (
                     f"All the values{extra_comment} that appear in column {column_name}"
                     f" of table {table_name} more than {suppress_count} times"
                 )
                 self._annotation = "suppressed"
             else:
-                self._query = (
-                    f"SELECT value{extra_expo} FROM (SELECT value, COUNT(value) AS count FROM"
-                    f" (SELECT {column_name} AS value FROM {table_name}"
-                    f" WHERE {column_name} IS NOT NULL ORDER BY RANDOM() LIMIT {sample_count})"
-                    f" AS _inner GROUP BY value ORDER BY count DESC)"
-                    f" AS _inner WHERE {suppress_count} < count"
-                )
                 self._comment = (
                     f"The values{extra_comment} that appear more than {suppress_count} times"
                     f" in column {column_name}, out of a random sample of {sample_count} rows"
@@ -302,112 +333,107 @@ class ChoiceGeneratorFactory(GeneratorFactory):
         column = columns[0]
         column_name = column.name
         table_name = column.table.name
+        dialect = engine.dialect
+        random_fn = func.newid() if dialect.name == "mssql" else func.random()
+        col = literal_column(f'"{column_name}"')
+        tbl = table(table_name)
         generators = []
         with engine.connect() as connection:
-            results = connection.execute(
-                text(
-                    f'SELECT "{column_name}" AS v, COUNT("{column_name}")'
-                    f' AS f FROM "{table_name}" GROUP BY v'
-                    f" ORDER BY f DESC LIMIT {MAXIMUM_CHOICES + 1}"
-                )
+            stmt_count = (
+                select(col.label("v"), func.count(col).label("f"))
+                .select_from(tbl)
+                .group_by(col)
+                .order_by(desc(func.count(col)))
+                .limit(MAXIMUM_CHOICES + 1)
             )
+            results = connection.execute(stmt_count)
             if results is not None and results.rowcount <= MAXIMUM_CHOICES:
                 vg = ValueGatherer(results, self.SUPPRESS_COUNT)
                 if vg.counts:
                     generators += [
                         ZipfChoiceGenerator(
-                            table_name, column_name, vg.values, vg.counts
+                            table_name, column_name, vg.values, vg.counts,
+                            dialect=dialect,
                         ),
                         UniformChoiceGenerator(
-                            table_name, column_name, vg.values, vg.counts
+                            table_name, column_name, vg.values, vg.counts,
+                            dialect=dialect,
                         ),
                         WeightedChoiceGenerator(
-                            table_name, column_name, vg.cvs, vg.counts
+                            table_name, column_name, vg.cvs, vg.counts,
+                            dialect=dialect,
                         ),
                     ]
                 if vg.counts_not_suppressed:
                     generators += [
                         ZipfChoiceGenerator(
-                            table_name,
-                            column_name,
-                            vg.values_not_suppressed,
-                            vg.counts_not_suppressed,
-                            suppress_count=self.SUPPRESS_COUNT,
+                            table_name, column_name,
+                            vg.values_not_suppressed, vg.counts_not_suppressed,
+                            suppress_count=self.SUPPRESS_COUNT, dialect=dialect,
                         ),
                         UniformChoiceGenerator(
-                            table_name,
-                            column_name,
-                            vg.values_not_suppressed,
-                            vg.counts_not_suppressed,
-                            suppress_count=self.SUPPRESS_COUNT,
+                            table_name, column_name,
+                            vg.values_not_suppressed, vg.counts_not_suppressed,
+                            suppress_count=self.SUPPRESS_COUNT, dialect=dialect,
                         ),
                         WeightedChoiceGenerator(
-                            table_name=table_name,
-                            column_name=column_name,
+                            table_name=table_name, column_name=column_name,
                             values=vg.cvs_not_suppressed,
                             counts=vg.counts_not_suppressed,
-                            suppress_count=self.SUPPRESS_COUNT,
+                            suppress_count=self.SUPPRESS_COUNT, dialect=dialect,
                         ),
                     ]
-            sampled_results = connection.execute(
-                text(
-                    f"SELECT v, COUNT(v) AS f FROM"
-                    f' (SELECT "{column_name}" as v FROM "{table_name}"'
-                    f" ORDER BY RANDOM() LIMIT {self.SAMPLE_COUNT})"
-                    f" AS _inner GROUP BY v ORDER BY f DESC"
-                )
+            inner = (
+                select(col.label("v"))
+                .select_from(tbl)
+                .order_by(random_fn)
+                .limit(self.SAMPLE_COUNT)
+                .subquery("_inner")
             )
+            stmt_sample = (
+                select(inner.c.v, func.count(inner.c.v).label("f"))
+                .select_from(inner)
+                .group_by(inner.c.v)
+                .order_by(desc(func.count(inner.c.v)))
+            )
+            sampled_results = connection.execute(stmt_sample)
             if sampled_results is not None:
                 vg = ValueGatherer(sampled_results, self.SUPPRESS_COUNT)
                 if vg.counts:
                     generators += [
                         ZipfChoiceGenerator(
-                            table_name,
-                            column_name,
-                            vg.values,
-                            vg.counts,
-                            sample_count=self.SAMPLE_COUNT,
+                            table_name, column_name, vg.values, vg.counts,
+                            sample_count=self.SAMPLE_COUNT, dialect=dialect,
                         ),
                         UniformChoiceGenerator(
-                            table_name,
-                            column_name,
-                            vg.values,
-                            vg.counts,
-                            sample_count=self.SAMPLE_COUNT,
+                            table_name, column_name, vg.values, vg.counts,
+                            sample_count=self.SAMPLE_COUNT, dialect=dialect,
                         ),
                         WeightedChoiceGenerator(
-                            table_name,
-                            column_name,
-                            vg.cvs,
-                            vg.counts,
-                            sample_count=self.SAMPLE_COUNT,
+                            table_name, column_name, vg.cvs, vg.counts,
+                            sample_count=self.SAMPLE_COUNT, dialect=dialect,
                         ),
                     ]
                 if vg.counts_not_suppressed:
                     generators += [
                         ZipfChoiceGenerator(
-                            table_name,
-                            column_name,
-                            vg.values_not_suppressed,
-                            vg.counts_not_suppressed,
+                            table_name, column_name,
+                            vg.values_not_suppressed, vg.counts_not_suppressed,
                             sample_count=self.SAMPLE_COUNT,
-                            suppress_count=self.SUPPRESS_COUNT,
+                            suppress_count=self.SUPPRESS_COUNT, dialect=dialect,
                         ),
                         UniformChoiceGenerator(
-                            table_name,
-                            column_name,
-                            vg.values_not_suppressed,
-                            vg.counts_not_suppressed,
+                            table_name, column_name,
+                            vg.values_not_suppressed, vg.counts_not_suppressed,
                             sample_count=self.SAMPLE_COUNT,
-                            suppress_count=self.SUPPRESS_COUNT,
+                            suppress_count=self.SUPPRESS_COUNT, dialect=dialect,
                         ),
                         WeightedChoiceGenerator(
-                            table_name=table_name,
-                            column_name=column_name,
+                            table_name=table_name, column_name=column_name,
                             values=vg.cvs_not_suppressed,
                             counts=vg.counts_not_suppressed,
                             sample_count=self.SAMPLE_COUNT,
-                            suppress_count=self.SUPPRESS_COUNT,
+                            suppress_count=self.SUPPRESS_COUNT, dialect=dialect,
                         ),
                     ]
         return generators
