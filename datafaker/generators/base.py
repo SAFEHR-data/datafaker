@@ -8,7 +8,7 @@ from typing import Any, Sequence, Union
 import mimesis
 import mimesis.locales
 import sqlalchemy
-from sqlalchemy import Column, Engine, text
+from sqlalchemy import Column, Engine, func, literal_column, select, table, text
 from sqlalchemy.types import Integer, Numeric, String, TypeEngine
 from typing_extensions import Self
 
@@ -319,14 +319,15 @@ class Buckets:
         infinity). Each bucket will be set to the count of the number of values
         in the column within that bucket.
         """
+        col = literal_column(column_name)
+        stddev_fn = func.stdev if engine.dialect.name == "mssql" else func.stddev
+        stmt = select(
+            func.avg(col).label("mean"),
+            stddev_fn(col).label("stddev"),
+            func.count(col).label("count"),
+        ).select_from(table(table_name))
         with engine.connect() as connection:
-            result = connection.execute(
-                text(
-                    f"SELECT AVG({column_name}) AS mean,"
-                    f" STDDEV({column_name}) AS stddev,"
-                    f" COUNT({column_name}) AS count FROM {table_name}"
-                )
-            ).first()
+            result = connection.execute(stmt).first()
             if result is None or result.stddev is None or getattr(result, "count") < 2:
                 return None
         try:

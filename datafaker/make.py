@@ -315,22 +315,13 @@ def _integer_generator(column: Column) -> tuple[str, dict[str, str]]:
     return ("generic.numeric.integer_number", {})
 
 
-_YEAR_SUMMARY_QUERY = (
-    "SELECT MIN(y) AS start, MAX(y) AS end FROM "
-    "(SELECT EXTRACT(YEAR FROM {column}) AS y FROM {table}) AS years"
-)
-
-
 @dataclass
 class GeneratorInfo:
     """Description of a generator."""
 
     # Name or function to generate random objects of this type (not using summary data)
     generator: str | Callable[[Column], tuple[str, dict[str, str]]]
-    # SQL query that gets the data to supply as arguments to the generator
-    # ({column} and {table} will be interpolated)
-    summary_query: str | None = None
-    # Dictionary of the names returned from the summary_query to arg types.
+    # Dictionary of arg types for any summary query.
     # An arg type is a callable turning the returned value into a Python type to
     # pass as an argument to the generator.
     arg_types: dict[str, Callable] = field(default_factory=dict)
@@ -367,12 +358,10 @@ _COLUMN_TYPE_TO_GENERATOR_INFO = {
     ),
     sqltypes.Date: GeneratorInfo(
         generator="generic.datetime.date",
-        summary_query=_YEAR_SUMMARY_QUERY,
         arg_types={"start": int, "end": int},
     ),
     sqltypes.DateTime: GeneratorInfo(
         generator="generic.datetime.datetime",
-        summary_query=_YEAR_SUMMARY_QUERY,
         arg_types={"start": int, "end": int},
     ),
     sqltypes.Integer: GeneratorInfo(  # must be before Numeric
