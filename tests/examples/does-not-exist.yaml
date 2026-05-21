@@ -1,0 +1,3 @@
+dsn: postgresql://postgres@localhost:5432/omop5.4
+schema: myschema
+tables: {}
