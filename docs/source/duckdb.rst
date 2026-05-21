@@ -151,7 +151,53 @@ output files don't get mixed up with these source files:
 
 ... and edit the ``orm.yaml`` file as detailed above.
 
-Now configure the tables and generators, and summary statistics:
+For example, you might see a warning like:
+``No likely primary keys found for table artwork.parquet`` if the artwork
+file does not have a column called something like ``id`` or ``artwork_id``.
+In this case you would look for the primary key in the data and update the
+``orm.yaml`` file appropriately:
+
+.. code-block:: yaml
+
+  tables:
+    #...
+    artwork.parquet:
+      columns:
+        #...
+        object_id:
+          primary: true  # add this line
+          #nullable: true  # remove this line; data does not have nulls here
+          type: INTEGER
+        #...
+
+We should also check the foreign keys; I notice here that the join table has
+not been marked as having a foreign key to the Artwork table, again
+because the name was ``object_id`` not ``artwork_id`` so ``make-tables``
+did not guess it correctly:
+
+.. code-block:: yaml
+
+  tables:
+    #...
+    artist_artwork.parquet:
+      columns:
+        artist_id:
+          foreign_keys:
+          - artist.parquet.artist_id
+          nullable: false
+          primary: true
+          type: INTEGER
+        object_id:
+          foreign_keys:  # Add this line
+          - artwork.parquet.object_id  # and this line
+          nullable: true
+          type: INTEGER
+      unique: []
+
+Also check the types and nullabilities, these are not guaranteed to be correct.
+
+Once we have the ``orm.yaml`` file correct, we configure the tables and
+generators, and summary statistics:
 
 .. code-block:: shell
 
