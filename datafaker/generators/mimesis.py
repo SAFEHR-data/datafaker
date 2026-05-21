@@ -321,6 +321,7 @@ class MimesisStringGeneratorFactory(GeneratorFactory):
                 engine,
                 column.table.name,
                 f"LENGTH({column.name})",
+                src_table=column.table,
             )
             fitness_fn = len
         except SQLAlchemyError:

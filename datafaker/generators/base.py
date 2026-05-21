@@ -8,7 +8,7 @@ from typing import Any, Sequence, Union
 import mimesis
 import mimesis.locales
 import sqlalchemy
-from sqlalchemy import Column, Engine, func, literal_column, select, table, text
+from sqlalchemy import Column, Engine, func, literal_column, select, table
 from sqlalchemy.types import Integer, Numeric, String, TypeEngine
 from typing_extensions import Self
 
@@ -279,16 +279,21 @@ class Buckets:
         mean: float,
         stddev: float,
         count: int,
+        src_table: Any = None,
     ):
         """Initialise a Buckets object."""
+        src = src_table if src_table is not None else table(table_name)
+        col = literal_column(column_name)
+        offset = mean - 2 * stddev
+        width = stddev / 2
+        floor_expr = func.floor((col - offset) / width)
+        stmt = (
+            select(func.count(col).label("f"), floor_expr.label("b"))
+            .select_from(src)
+            .group_by(floor_expr)
+        )
         with engine.connect() as connection:
-            raw_buckets = connection.execute(
-                text(
-                    f"SELECT COUNT({column_name}) AS f,"
-                    f" FLOOR(({column_name} - {mean - 2 * stddev})/{stddev / 2}) AS b"
-                    f" FROM {table_name} GROUP BY b"
-                )
-            )
+            raw_buckets = connection.execute(stmt)
             self.buckets: Sequence[int] = [0] * 10
             for rb in raw_buckets:
                 try:
@@ -303,12 +308,12 @@ class Buckets:
                     # catches errors if SQLAlchemy returns something that
                     # isn't a number for some other unknown reason.
                     pass
-            self.mean = mean
-            self.stddev = stddev
+        self.mean = mean
+        self.stddev = stddev
 
     @classmethod
     def make_buckets(
-        cls, engine: Engine, table_name: str, column_name: str
+        cls, engine: Engine, table_name: str, column_name: str, src_table: Any = None
     ) -> Self | None:
         """
         Construct a Buckets object.
@@ -319,13 +324,14 @@ class Buckets:
         infinity). Each bucket will be set to the count of the number of values
         in the column within that bucket.
         """
+        src = src_table if src_table is not None else table(table_name)
         col = literal_column(column_name)
         stddev_fn = func.stdev if engine.dialect.name == "mssql" else func.stddev
         stmt = select(
             func.avg(col).label("mean"),
             stddev_fn(col).label("stddev"),
             func.count(col).label("count"),
-        ).select_from(table(table_name))
+        ).select_from(src)
         with engine.connect() as connection:
             result = connection.execute(stmt).first()
             if result is None or result.stddev is None or getattr(result, "count") < 2:
@@ -338,6 +344,7 @@ class Buckets:
                 result.mean,
                 result.stddev,
                 getattr(result, "count"),
+                src_table=src_table,
             )
         except sqlalchemy.exc.DatabaseError as exc:
             logger.debug("Failed to instantiate Buckets object: %s", exc)

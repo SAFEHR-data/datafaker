@@ -249,3 +249,63 @@ class TestChoiceGeneratorFactoryLiveQueries(unittest.TestCase):
                 sqls = self._captured_sqls(dialect, schema="myschema")
                 for sql in sqls:
                     self.assertIn("MYSCHEMA", sql)
+
+
+class TestBucketsSchemaQualified(unittest.TestCase):
+    """Buckets.make_buckets respects the schema of the src_table argument."""
+
+    def _make_engine(self, dialect_name: str) -> MagicMock:
+        engine = MagicMock()
+        engine.dialect.name = dialect_name
+        result = MagicMock()
+        result.stddev = 5.0
+        result.mean = 42.0
+        result.configure_mock(**{"count": 100})
+        conn = MagicMock()
+        conn.__enter__ = MagicMock(return_value=conn)
+        conn.__exit__ = MagicMock(return_value=False)
+        conn.execute.return_value.first.return_value = result
+        conn.execute.return_value.__iter__ = MagicMock(return_value=iter([]))
+        engine.connect.return_value = conn
+        return engine
+
+    def _get_make_buckets_sql(self, dialect_name: str, schema: str | None) -> str:
+        from datafaker.generators.base import Buckets
+
+        engine = self._make_engine(dialect_name)
+        meta = MetaData()
+        tbl = Table("person", meta, Column("age", Integer()), schema=schema)
+
+        executed_stmts = []
+        orig_execute = engine.connect.return_value.execute
+
+        def capture_execute(stmt, *args, **kwargs):
+            executed_stmts.append(stmt)
+            return orig_execute(stmt, *args, **kwargs)
+
+        engine.connect.return_value.execute = capture_execute
+
+        with unittest.mock.patch.object(Buckets, "__init__", return_value=None):
+            Buckets.make_buckets(engine, "person", "age", src_table=tbl)
+
+        self.assertGreaterEqual(len(executed_stmts), 1)
+        dialect = mssql.dialect() if dialect_name == "mssql" else postgresql.dialect()
+        return str(executed_stmts[0].compile(
+            dialect=dialect,
+            compile_kwargs={"literal_binds": True},
+        )).upper()
+
+    def test_schema_appears_in_from_mssql(self) -> None:
+        """MS-SQL make_buckets query includes schema in FROM clause."""
+        sql = self._get_make_buckets_sql("mssql", schema="myschema")
+        self.assertIn("MYSCHEMA", sql)
+
+    def test_schema_appears_in_from_postgresql(self) -> None:
+        """PostgreSQL make_buckets query includes schema in FROM clause."""
+        sql = self._get_make_buckets_sql("postgresql", schema="myschema")
+        self.assertIn("MYSCHEMA", sql)
+
+    def test_no_schema_omits_qualifier(self) -> None:
+        """Without schema, the FROM clause has no dot-qualifier."""
+        sql = self._get_make_buckets_sql("postgresql", schema=None)
+        self.assertNotIn(".", sql)

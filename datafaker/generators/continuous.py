@@ -160,7 +160,7 @@ class ContinuousDistributionGeneratorFactory(GeneratorFactory):
             return []
         column_name = column.name
         table_name = column.table.name
-        buckets = Buckets.make_buckets(engine, table_name, column_name)
+        buckets = Buckets.make_buckets(engine, table_name, column_name, src_table=column.table)
         if buckets is None:
             return []
         return self._get_generators_from_buckets(
