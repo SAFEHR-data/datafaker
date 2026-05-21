@@ -336,12 +336,12 @@ class ChoiceGeneratorFactory(GeneratorFactory):
         dialect = engine.dialect
         random_fn = func.newid() if dialect.name == "mssql" else func.random()
         col = literal_column(f'"{column_name}"')
-        tbl = table(table_name)
+        src_table = column.table  # preserves schema for schema-qualified databases
         generators = []
         with engine.connect() as connection:
             stmt_count = (
                 select(col.label("v"), func.count(col).label("f"))
-                .select_from(tbl)
+                .select_from(src_table)
                 .group_by(col)
                 .order_by(desc(func.count(col)))
                 .limit(MAXIMUM_CHOICES + 1)
@@ -385,7 +385,7 @@ class ChoiceGeneratorFactory(GeneratorFactory):
                     ]
             inner = (
                 select(col.label("v"))
-                .select_from(tbl)
+                .select_from(src_table)
                 .order_by(random_fn)
                 .limit(self.SAMPLE_COUNT)
                 .subquery("_inner")

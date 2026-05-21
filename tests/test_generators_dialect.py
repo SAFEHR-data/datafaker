@@ -179,14 +179,13 @@ class TestChoiceGeneratorStoredQuery(unittest.TestCase):
 class TestChoiceGeneratorFactoryLiveQueries(unittest.TestCase):
     """ChoiceGeneratorFactory.get_generators executes dialect-correct live SQL."""
 
-    def _captured_sqls(self, dialect) -> list[str]:
+    def _captured_sqls(self, dialect, schema=None) -> list[str]:
         """Run get_generators with a mocked engine and return compiled SQL strings."""
         from datafaker.generators.choice import ChoiceGeneratorFactory
 
         engine = MagicMock()
         engine.dialect = dialect
 
-        # First execute (distinct count): return one row so rowcount appears <= MAXIMUM_CHOICES
         row_count = MagicMock()
         row_count.v = "M"
         row_count.f = 70
@@ -194,7 +193,6 @@ class TestChoiceGeneratorFactoryLiveQueries(unittest.TestCase):
         result_count.rowcount = 1
         result_count.__iter__ = MagicMock(return_value=iter([row_count]))
 
-        # Second execute (random sample): return one row
         row_sample = MagicMock()
         row_sample.v = "M"
         row_sample.f = 70
@@ -204,7 +202,6 @@ class TestChoiceGeneratorFactoryLiveQueries(unittest.TestCase):
         conn = MagicMock()
         conn.__enter__ = MagicMock(return_value=conn)
         conn.__exit__ = MagicMock(return_value=False)
-        conn.execute.side_effect = [result_count, result_sample]
         engine.connect.return_value = conn
 
         executed = []
@@ -217,7 +214,7 @@ class TestChoiceGeneratorFactoryLiveQueries(unittest.TestCase):
         conn.execute.side_effect = capture
 
         meta = MetaData()
-        tbl = Table("patient", meta, Column("gender", Integer()))
+        tbl = Table("patient", meta, Column("gender", Integer()), schema=schema)
         ChoiceGeneratorFactory().get_generators([tbl.c.gender], engine)
 
         return [
@@ -228,10 +225,8 @@ class TestChoiceGeneratorFactoryLiveQueries(unittest.TestCase):
     def test_mssql_live_queries_use_top_and_newid(self) -> None:
         """MS-SQL live queries use TOP (not LIMIT) and newid() (not random())."""
         sqls = self._captured_sqls(mssql.dialect())
-        # Distinct-count query: TOP, no LIMIT
         self.assertIn(" TOP ", sqls[0])
         self.assertNotIn("LIMIT", sqls[0])
-        # Random-sample query: TOP + newid()
         self.assertIn(" TOP ", sqls[1])
         self.assertIn("NEWID()", sqls[1])
         self.assertNotIn("LIMIT", sqls[1])
@@ -240,11 +235,17 @@ class TestChoiceGeneratorFactoryLiveQueries(unittest.TestCase):
     def test_postgresql_live_queries_use_limit_and_random(self) -> None:
         """PostgreSQL live queries use LIMIT and random()."""
         sqls = self._captured_sqls(postgresql.dialect())
-        # Distinct-count query: LIMIT, no TOP
         self.assertIn("LIMIT", sqls[0])
         self.assertNotIn(" TOP ", sqls[0])
-        # Random-sample query: LIMIT + random()
         self.assertIn("LIMIT", sqls[1])
         self.assertIn("RANDOM()", sqls[1])
         self.assertNotIn(" TOP ", sqls[1])
         self.assertNotIn("NEWID()", sqls[1])
+
+    def test_schema_qualified_table_appears_in_from(self) -> None:
+        """Schema-qualified table name is included in the FROM clause on both dialects."""
+        for dialect in (mssql.dialect(), postgresql.dialect()):
+            with self.subTest(dialect=dialect.name):
+                sqls = self._captured_sqls(dialect, schema="myschema")
+                for sql in sqls:
+                    self.assertIn("MYSCHEMA", sql)
