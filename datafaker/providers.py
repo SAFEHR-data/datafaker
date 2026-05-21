@@ -28,7 +28,13 @@ class ColumnValueProvider(BaseProvider):
         db_connection: Connection, orm_class: Any, column_name: str
     ) -> Any:
         """Return a random value from the column specified."""
-        query = select(orm_class).order_by(functions.random()).limit(1)
+        # MS-SQL has no random() function; NEWID() produces a per-row random GUID.
+        # RAND() is not usable here because it returns the same value for every row.
+        if db_connection.dialect.name == "mssql":
+            random_fn = func.newid()
+        else:
+            random_fn = functions.random()
+        query = select(orm_class).order_by(random_fn).limit(1)
         random_row = db_connection.execute(query).first()
 
         if random_row:

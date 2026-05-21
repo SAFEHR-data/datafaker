@@ -42,6 +42,7 @@ from datafaker.settings import (
     get_source_dsn,
     get_source_schema,
 )
+from datafaker.serialize_metadata import dict_to_metadata
 from datafaker.utils import (
     CONFIG_SCHEMA_PATH,
     conf_logger,
@@ -53,8 +54,6 @@ from datafaker.utils import (
     read_config_file,
     sorted_non_vocabulary_tables,
 )
-
-from .serialize_metadata import dict_to_metadata
 
 # pylint: disable=too-many-arguments
 

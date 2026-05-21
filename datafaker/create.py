@@ -1,6 +1,5 @@
 """Functions and classes to create and populate the target database."""
 import pathlib
-import re
 from collections import Counter
 from types import ModuleType
 from typing import Any, Generator, Iterable, Iterator, Mapping, Sequence, Tuple
@@ -42,19 +41,6 @@ def remove_serial(element: CreateColumn, compiler: Any, **kw: Any) -> str:
     text: str = compiler.visit_create_column(element, **kw)
     return text.replace(" SERIAL ", " INTEGER ")
 
-
-@compiles(CreateColumn, "mssql")
-def remove_mssql_identity(element: CreateColumn, compiler: Any, **kw: Any) -> str:
-    """
-    Strip IDENTITY from MS-SQL column DDL.
-
-    datafaker inserts explicit values for every column. MS-SQL rejects explicit
-    inserts into IDENTITY columns unless SET IDENTITY_INSERT is enabled first,
-    so we simply omit the IDENTITY modifier — the column stays an INTEGER.
-    """
-    text: str = compiler.visit_create_column(element, **kw)
-    # Handles both bare IDENTITY and parametrised IDENTITY(m,n)
-    return re.sub(r" IDENTITY(\(\d+,\s*\d+\))?", "", text)
 
 
 @compiles(CreateTable, "mssql")
@@ -207,6 +193,7 @@ def create_db_data_into(
 
     row_counts: Counter[str] = Counter()
     with dst_engine.connect() as dst_conn:
+        
         for _ in range(num_passes):
             row_counts += populate(
                 dst_conn,
@@ -363,6 +350,7 @@ def populate(
             with dst_conn.begin():
                 for _ in range(table_generator.num_rows_per_pass):
                     stmt = insert(table).values(table_generator(dst_conn, metadata))
+                    logger.debug("Executing statement: %s", stmt)
                     dst_conn.execute(stmt)
                     row_counts[table.name] = row_counts.get(table.name, 0) + 1
                 dst_conn.commit()

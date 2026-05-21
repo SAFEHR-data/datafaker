@@ -14,8 +14,13 @@ def _compile_create_table(table: Table) -> str:
     return str(CreateTable(table).compile(dialect=mssql.dialect()))
 
 
-class TestMSSQLRemoveIdentity(unittest.TestCase):
-    """@compiles(CreateColumn, 'mssql') strips IDENTITY from autoincrement columns."""
+class TestMSSQLIdentityPresent(unittest.TestCase):
+    """MS-SQL tables should have IDENTITY on autoincrement columns.
+
+    The remove_mssql_identity hook was removed (issue #104): datafaker now lets
+    the database generate single-column integer PKs rather than supplying
+    explicit values and fighting with SET IDENTITY_INSERT.
+    """
 
     def _make_table(self) -> Table:
         meta = MetaData()
@@ -26,18 +31,18 @@ class TestMSSQLRemoveIdentity(unittest.TestCase):
             Column("value", Integer(), nullable=True),
         )
 
-    def test_identity_absent_from_ddl(self) -> None:
-        """IDENTITY must be absent so explicit INSERTs succeed without SET IDENTITY_INSERT."""
+    def test_identity_present_in_ddl(self) -> None:
+        """IDENTITY must be present so the DB generates PK values automatically."""
         ddl = _compile_create_table(self._make_table())
-        self.assertNotIn("IDENTITY", ddl)
+        self.assertIn("IDENTITY", ddl)
 
     def test_integer_type_preserved(self) -> None:
-        """The INTEGER type is preserved after stripping IDENTITY."""
+        """The INTEGER type is preserved."""
         ddl = _compile_create_table(self._make_table())
         self.assertIn("INTEGER", ddl)
 
     def test_primary_key_constraint_preserved(self) -> None:
-        """PRIMARY KEY constraint is not affected by the hook."""
+        """PRIMARY KEY constraint is not affected."""
         ddl = _compile_create_table(self._make_table())
         self.assertIn("PRIMARY KEY", ddl)
 
@@ -46,32 +51,9 @@ class TestMSSQLRemoveIdentity(unittest.TestCase):
         ddl = _compile_create_table(self._make_table())
         self.assertIn("value", ddl.lower())
 
-    def test_multiple_autoincrement_columns_all_stripped(self) -> None:
-        """IDENTITY is stripped from every column that would receive it."""
-        meta = MetaData()
-        table = Table(
-            "multi",
-            meta,
-            Column("id", Integer(), primary_key=True, autoincrement=True),
-            Column("seq", Integer(), autoincrement=True),
-        )
-        ddl = _compile_create_table(table)
-        self.assertNotIn("IDENTITY", ddl)
-
     def test_duckdb_serial_hook_still_works(self) -> None:
-        """Adding the mssql hook does not break the existing DuckDB SERIAL hook (regression)."""
-        from sqlalchemy.dialects import registry
-        from sqlalchemy import create_engine
-        from sqlalchemy.schema import CreateColumn
-
-        # Compile a CreateColumn for the duckdb dialect indirectly by checking
-        # that remove_serial is still registered.
-        from sqlalchemy.ext.compiler import compiles
-
-        # If the duckdb hook were broken, datafaker.create.remove_serial would
-        # not be registered.  Verify it still exists and is callable.
+        """The DuckDB SERIAL hook is not affected by this change."""
         self.assertTrue(callable(datafaker.create.remove_serial))
-        self.assertTrue(callable(datafaker.create.remove_mssql_identity))
 
 
 class TestMSSQLRemoveOnDeleteCascade(unittest.TestCase):
