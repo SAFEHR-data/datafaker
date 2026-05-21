@@ -10,7 +10,7 @@ import random
 import re
 import string
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping, MutableSequence, Sequence
 from pathlib import Path
 from types import ModuleType
 from typing import (
@@ -868,6 +868,53 @@ def underline_error(e: SyntaxError) -> str:
     return "\n" + " " * start + "^" * (end - start)
 
 
+def gather_symbols(
+    errors: MutableSequence[str],
+    name: str,
+    value: Any
+) -> set[str]:
+    """
+    Get all the symbols from Python texts.
+
+    :param errors: Output syntax errors.
+    :param name: The name of the symbol supplied as ``value``, to be used in
+      error messages.
+    :param value: The value to be searched; either Python text (as a string),
+      a sequence of Python texts, a mapping with Python texts in the values,
+      or similar things nested to any depth.
+    :return: The set of symbols found in the Python text(s).
+    """
+    if isinstance(value, Mapping):
+        return set().union(*(
+            gather_symbols(errors, f"{name}[{repr(k)}]", v)
+            for k, v in value.items()
+        ))
+    if isinstance(value, str):
+        try:
+            return {
+                node.id
+                for node in ast.walk(ast.parse(value))
+                if isinstance(node, ast.Name)
+            }
+        except SyntaxError as e:
+            errors.append(
+                (
+                    "Syntax error in %s: %s\n%s%s",
+                    name,
+                    e.msg,
+                    value,
+                    underline_error(e),
+                )
+            )
+        return set()
+    if not isinstance(value, Sequence):
+        return set()
+    return set().union(*(
+        gather_symbols(errors, f"{name}[{i}]", v)
+        for i, v in enumerate(value)
+    ))
+
+
 def generators_require_stats(config: Mapping) -> bool:
     """
     Test if the generator references ``SRC_STATS``.
@@ -876,68 +923,35 @@ def generators_require_stats(config: Mapping) -> bool:
     :return: True if any of the arguments for any of the generators
       reference ``SRC_STATS``.
     """
-    ois = {
-        f"object_instantiation.{k}": call
-        for k, call in config.get("object_instantiation", {}).items()
-    }
-    sgs = {
-        f"story_generators[{n}]": call
-        for n, call in enumerate(config.get("story_generators", []))
-    }
-    table_calls = {
-        f"tables.{table_name}.{call_type}[{n}]": call
-        for table_name, table in config.get("tables", {}).items()
-        for call_type in ("row_generators", "missingness_generators")
-        for n, call in enumerate(table.get(call_type, []))
-    }
-    errors = []
-    stats_required = False
-    for where, call in (ois | sgs | table_calls).items():
-        for n, arg in enumerate(call.get("args", [])):
-            if isinstance(arg, str):
-                try:
-                    names = (
-                        node.id
-                        for node in ast.walk(ast.parse(arg))
-                        if isinstance(node, ast.Name)
-                    )
-                    if any(name == "SRC_STATS" for name in names):
-                        stats_required = True
-                except SyntaxError as e:
-                    errors.append(
-                        (
-                            "Syntax error in argument %d of %s: %s\n%s%s",
-                            n + 1,
-                            where,
-                            e.msg,
-                            arg,
-                            underline_error(e),
-                        )
-                    )
-        for k, arg in call.get("kwargs", {}).items():
-            if isinstance(arg, str):
-                try:
-                    names = (
-                        node.id
-                        for node in ast.walk(ast.parse(arg))
-                        if isinstance(node, ast.Name)
-                    )
-                    if any(name == "SRC_STATS" for name in names):
-                        stats_required = True
-                except SyntaxError as e:
-                    errors.append(
-                        (
-                            "Syntax error in argument %s of %s: %s\n%s%s",
-                            k,
-                            where,
-                            e.msg,
-                            arg,
-                            underline_error(e),
-                        )
-                    )
+    errors: list[str] = []
+    symbols = gather_symbols(
+        errors,
+        "object_instantiation",
+        config.get("object_instantiation", {}),
+    ).union(
+        gather_symbols(
+            errors,
+            "story_generators",
+            config.get("story_generators", []),
+        ),
+        *(
+            gather_symbols(
+                errors,
+                f"tables[{repr(table_name)}]['row_generators']",
+                table.get("row_generators", []),
+            ) for table_name, table in config.get("tables", {}).items()
+        ),
+        *(
+            gather_symbols(
+                errors,
+                f"tables[{repr(table_name)}]['missingness_generators']",
+                table.get("missingness_generators", []),
+            ) for table_name, table in config.get("tables", {}).items()
+        ),
+    )
     for error in errors:
         logger.error(*error)
-    return stats_required
+    return "SRC_STATS" in symbols
 
 
 def split_column_full_name(col_fullname: str) -> tuple[str, str]:
