@@ -1,5 +1,5 @@
-dsn: postgresql://postgres@localhost:5432/omop5.4
-schema: mimic
+dsn: mssql+pyodbc://sa:***@127.0.0.1:1433/master?TrustServerCertificate=yes&driver=ODBC+Driver+18+for+SQL+Server
+schema: mimic100
 tables:
   care_site:
     columns:
@@ -10,38 +10,34 @@ tables:
       care_site_name:
         nullable: true
         primary: false
-        type: VARCHAR(255)
+        type: VARCHAR(255) COLLATE SQL_Latin1_General_CP1_CI_AS
       care_site_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       location_id:
-        foreign_keys:
-        - location.location_id
         nullable: true
         primary: false
         type: BIGINT
       place_of_service_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       place_of_service_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
     unique: []
   cdm_source:
     columns:
       cdm_etl_reference:
         nullable: true
         primary: false
-        type: VARCHAR(255)
+        type: VARCHAR(255) COLLATE SQL_Latin1_General_CP1_CI_AS
       cdm_holder:
         nullable: false
         primary: false
-        type: VARCHAR(255)
+        type: VARCHAR(255) COLLATE SQL_Latin1_General_CP1_CI_AS
       cdm_release_date:
         nullable: false
         primary: false
@@ -49,23 +45,23 @@ tables:
       cdm_source_abbreviation:
         nullable: false
         primary: false
-        type: VARCHAR(25)
+        type: VARCHAR(25) COLLATE SQL_Latin1_General_CP1_CI_AS
       cdm_source_name:
         nullable: false
         primary: false
-        type: VARCHAR(255)
+        type: VARCHAR(255) COLLATE SQL_Latin1_General_CP1_CI_AS
       cdm_version:
         nullable: true
         primary: false
-        type: VARCHAR(10)
+        type: VARCHAR(10) COLLATE SQL_Latin1_General_CP1_CI_AS
       source_description:
         nullable: true
         primary: false
-        type: TEXT
+        type: VARCHAR(max) COLLATE SQL_Latin1_General_CP1_CI_AS
       source_documentation_reference:
         nullable: true
         primary: false
-        type: VARCHAR(255)
+        type: VARCHAR(255) COLLATE SQL_Latin1_General_CP1_CI_AS
       source_release_date:
         nullable: false
         primary: false
@@ -73,7 +69,7 @@ tables:
       vocabulary_version:
         nullable: false
         primary: false
-        type: VARCHAR(20)
+        type: VARCHAR(20) COLLATE SQL_Latin1_General_CP1_CI_AS
     unique: []
   cohort:
     columns:
@@ -99,7 +95,7 @@ tables:
       cohort_definition_description:
         nullable: true
         primary: false
-        type: TEXT
+        type: VARCHAR(max) COLLATE SQL_Latin1_General_CP1_CI_AS
       cohort_definition_id:
         nullable: false
         primary: false
@@ -107,24 +103,20 @@ tables:
       cohort_definition_name:
         nullable: false
         primary: false
-        type: VARCHAR(255)
+        type: VARCHAR(255) COLLATE SQL_Latin1_General_CP1_CI_AS
       cohort_definition_syntax:
         nullable: true
         primary: false
-        type: TEXT
+        type: VARCHAR(max) COLLATE SQL_Latin1_General_CP1_CI_AS
       cohort_initiation_date:
         nullable: true
         primary: false
         type: DATE
       definition_type_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
       subject_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
@@ -132,15 +124,13 @@ tables:
   concept:
     columns:
       concept_class_id:
-        foreign_keys:
-        - concept_class.concept_class_id
         nullable: false
         primary: false
-        type: VARCHAR(20)
+        type: VARCHAR(20) COLLATE SQL_Latin1_General_CP1_CI_AS
       concept_code:
         nullable: false
         primary: false
-        type: VARCHAR(255)
+        type: VARCHAR(255) COLLATE SQL_Latin1_General_CP1_CI_AS
       concept_id:
         nullable: false
         primary: true
@@ -148,21 +138,19 @@ tables:
       concept_name:
         nullable: false
         primary: false
-        type: VARCHAR(255)
+        type: VARCHAR(255) COLLATE SQL_Latin1_General_CP1_CI_AS
       domain_id:
-        foreign_keys:
-        - domain.domain_id
         nullable: false
         primary: false
-        type: VARCHAR(20)
+        type: VARCHAR(20) COLLATE SQL_Latin1_General_CP1_CI_AS
       invalid_reason:
         nullable: true
         primary: false
-        type: VARCHAR(1)
+        type: VARCHAR(1) COLLATE SQL_Latin1_General_CP1_CI_AS
       standard_concept:
         nullable: true
         primary: false
-        type: VARCHAR(1)
+        type: VARCHAR(1) COLLATE SQL_Latin1_General_CP1_CI_AS
       valid_end_date:
         nullable: false
         primary: false
@@ -172,11 +160,9 @@ tables:
         primary: false
         type: DATE
       vocabulary_id:
-        foreign_keys:
-        - vocabulary.vocabulary_id
         nullable: false
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
     unique: []
   concept_ancestor:
     columns:
@@ -200,19 +186,17 @@ tables:
   concept_class:
     columns:
       concept_class_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
       concept_class_id:
         nullable: false
         primary: true
-        type: VARCHAR(20)
+        type: VARCHAR(20) COLLATE SQL_Latin1_General_CP1_CI_AS
       concept_class_name:
         nullable: false
         primary: false
-        type: VARCHAR(255)
+        type: VARCHAR(255) COLLATE SQL_Latin1_General_CP1_CI_AS
     unique: []
   concept_relationship:
     columns:
@@ -227,13 +211,11 @@ tables:
       invalid_reason:
         nullable: true
         primary: false
-        type: VARCHAR(1)
+        type: VARCHAR(1) COLLATE SQL_Latin1_General_CP1_CI_AS
       relationship_id:
-        foreign_keys:
-        - relationship.relationship_id
         nullable: false
         primary: false
-        type: VARCHAR(20)
+        type: VARCHAR(20) COLLATE SQL_Latin1_General_CP1_CI_AS
       valid_end_date:
         nullable: false
         primary: false
@@ -252,10 +234,8 @@ tables:
       concept_synonym_name:
         nullable: false
         primary: false
-        type: VARCHAR(1000)
+        type: VARCHAR(1000) COLLATE SQL_Latin1_General_CP1_CI_AS
       language_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
@@ -263,8 +243,6 @@ tables:
   condition_era:
     columns:
       condition_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
@@ -285,8 +263,6 @@ tables:
         primary: false
         type: BIGINT
       person_id:
-        foreign_keys:
-        - person.person_id
         nullable: false
         primary: false
         type: BIGINT
@@ -295,7 +271,7 @@ tables:
     columns:
       condition_concept_id:
         foreign_keys:
-        - concept.concept_id
+        - mimic100.concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
@@ -306,21 +282,21 @@ tables:
       condition_end_datetime:
         nullable: true
         primary: false
-        type: TIMESTAMP WITHOUT TIME ZONE
+        type: DATETIME2
       condition_occurrence_id:
         nullable: false
         primary: true
         type: BIGINT
       condition_source_concept_id:
         foreign_keys:
-        - concept.concept_id
+        - mimic100.concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       condition_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       condition_start_date:
         nullable: false
         primary: false
@@ -328,46 +304,46 @@ tables:
       condition_start_datetime:
         nullable: true
         primary: false
-        type: TIMESTAMP WITHOUT TIME ZONE
+        type: DATETIME2
       condition_status_concept_id:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       condition_status_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       condition_type_concept_id:
         foreign_keys:
-        - concept.concept_id
+        - mimic100.concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
       person_id:
         foreign_keys:
-        - person.person_id
+        - mimic100.person.person_id
         nullable: false
         primary: false
         type: BIGINT
       provider_id:
         foreign_keys:
-        - provider.provider_id
+        - mimic100.provider.provider_id
         nullable: true
         primary: false
         type: BIGINT
       stop_reason:
         nullable: true
         primary: false
-        type: VARCHAR(20)
+        type: VARCHAR(20) COLLATE SQL_Latin1_General_CP1_CI_AS
       visit_detail_id:
         foreign_keys:
-        - visit_detail.visit_detail_id
+        - mimic100.visit_detail.visit_detail_id
         nullable: true
         primary: false
         type: BIGINT
       visit_occurrence_id:
         foreign_keys:
-        - visit_occurrence.visit_occurrence_id
+        - mimic100.visit_occurrence.visit_occurrence_id
         nullable: true
         primary: false
         type: BIGINT
@@ -377,13 +353,11 @@ tables:
       amount_allowed:
         nullable: true
         primary: false
-        type: NUMERIC
+        type: NUMERIC(18, 0)
       cost_domain_id:
-        foreign_keys:
-        - domain.domain_id
         nullable: false
         primary: false
-        type: VARCHAR(20)
+        type: VARCHAR(20) COLLATE SQL_Latin1_General_CP1_CI_AS
       cost_event_id:
         nullable: false
         primary: false
@@ -393,104 +367,92 @@ tables:
         primary: true
         type: BIGINT
       cost_type_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
       currency_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       drg_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       drg_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(3)
+        type: VARCHAR(3) COLLATE SQL_Latin1_General_CP1_CI_AS
       paid_by_patient:
         nullable: true
         primary: false
-        type: NUMERIC
+        type: NUMERIC(18, 0)
       paid_by_payer:
         nullable: true
         primary: false
-        type: NUMERIC
+        type: NUMERIC(18, 0)
       paid_by_primary:
         nullable: true
         primary: false
-        type: NUMERIC
+        type: NUMERIC(18, 0)
       paid_dispensing_fee:
         nullable: true
         primary: false
-        type: NUMERIC
+        type: NUMERIC(18, 0)
       paid_ingredient_cost:
         nullable: true
         primary: false
-        type: NUMERIC
+        type: NUMERIC(18, 0)
       paid_patient_coinsurance:
         nullable: true
         primary: false
-        type: NUMERIC
+        type: NUMERIC(18, 0)
       paid_patient_copay:
         nullable: true
         primary: false
-        type: NUMERIC
+        type: NUMERIC(18, 0)
       paid_patient_deductible:
         nullable: true
         primary: false
-        type: NUMERIC
+        type: NUMERIC(18, 0)
       payer_plan_period_id:
         nullable: true
         primary: false
         type: BIGINT
       revenue_code_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       revenue_code_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       total_charge:
         nullable: true
         primary: false
-        type: NUMERIC
+        type: NUMERIC(18, 0)
       total_cost:
         nullable: true
         primary: false
-        type: NUMERIC
+        type: NUMERIC(18, 0)
       total_paid:
         nullable: true
         primary: false
-        type: NUMERIC
+        type: NUMERIC(18, 0)
     unique: []
   death:
     columns:
       cause_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       cause_source_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       cause_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       death_date:
         nullable: false
         primary: false
@@ -498,16 +460,12 @@ tables:
       death_datetime:
         nullable: true
         primary: false
-        type: TIMESTAMP WITHOUT TIME ZONE
+        type: DATETIME2
       death_type_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       person_id:
-        foreign_keys:
-        - person.person_id
         nullable: false
         primary: false
         type: BIGINT
@@ -515,8 +473,6 @@ tables:
   device_exposure:
     columns:
       device_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
@@ -527,7 +483,7 @@ tables:
       device_exposure_end_datetime:
         nullable: true
         primary: false
-        type: TIMESTAMP WITHOUT TIME ZONE
+        type: DATETIME2
       device_exposure_id:
         nullable: false
         primary: true
@@ -539,32 +495,24 @@ tables:
       device_exposure_start_datetime:
         nullable: true
         primary: false
-        type: TIMESTAMP WITHOUT TIME ZONE
+        type: DATETIME2
       device_source_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       device_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       device_type_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
       person_id:
-        foreign_keys:
-        - person.person_id
         nullable: false
         primary: false
         type: BIGINT
       provider_id:
-        foreign_keys:
-        - provider.provider_id
         nullable: true
         primary: false
         type: BIGINT
@@ -575,16 +523,12 @@ tables:
       unique_device_id:
         nullable: true
         primary: false
-        type: VARCHAR(255)
+        type: VARCHAR(255) COLLATE SQL_Latin1_General_CP1_CI_AS
       visit_detail_id:
-        foreign_keys:
-        - visit_detail.visit_detail_id
         nullable: true
         primary: false
         type: BIGINT
       visit_occurrence_id:
-        foreign_keys:
-        - visit_occurrence.visit_occurrence_id
         nullable: true
         primary: false
         type: BIGINT
@@ -592,19 +536,17 @@ tables:
   domain:
     columns:
       domain_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
       domain_id:
         nullable: false
         primary: true
-        type: VARCHAR(20)
+        type: VARCHAR(20) COLLATE SQL_Latin1_General_CP1_CI_AS
       domain_name:
         nullable: false
         primary: false
-        type: VARCHAR(255)
+        type: VARCHAR(255) COLLATE SQL_Latin1_General_CP1_CI_AS
     unique: []
   dose_era:
     columns:
@@ -623,22 +565,16 @@ tables:
       dose_value:
         nullable: false
         primary: false
-        type: NUMERIC
+        type: NUMERIC(18, 0)
       drug_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
       person_id:
-        foreign_keys:
-        - person.person_id
         nullable: false
         primary: false
         type: BIGINT
       unit_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
@@ -646,8 +582,6 @@ tables:
   drug_era:
     columns:
       drug_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
@@ -672,8 +606,6 @@ tables:
         primary: false
         type: BIGINT
       person_id:
-        foreign_keys:
-        - person.person_id
         nullable: false
         primary: false
         type: BIGINT
@@ -687,10 +619,10 @@ tables:
       dose_unit_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       drug_concept_id:
         foreign_keys:
-        - concept.concept_id
+        - mimic100.concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
@@ -701,7 +633,7 @@ tables:
       drug_exposure_end_datetime:
         nullable: true
         primary: false
-        type: TIMESTAMP WITHOUT TIME ZONE
+        type: DATETIME2
       drug_exposure_id:
         nullable: false
         primary: true
@@ -713,78 +645,78 @@ tables:
       drug_exposure_start_datetime:
         nullable: true
         primary: false
-        type: TIMESTAMP WITHOUT TIME ZONE
+        type: DATETIME2
       drug_source_concept_id:
         foreign_keys:
-        - concept.concept_id
+        - mimic100.concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       drug_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(255)
+        type: VARCHAR(255) COLLATE SQL_Latin1_General_CP1_CI_AS
       drug_type_concept_id:
         foreign_keys:
-        - concept.concept_id
+        - mimic100.concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
       lot_number:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       person_id:
         foreign_keys:
-        - person.person_id
+        - mimic100.person.person_id
         nullable: false
         primary: false
         type: BIGINT
       provider_id:
         foreign_keys:
-        - provider.provider_id
+        - mimic100.provider.provider_id
         nullable: true
         primary: false
         type: BIGINT
       quantity:
         nullable: true
         primary: false
-        type: NUMERIC
+        type: NUMERIC(18, 0)
       refills:
         nullable: true
         primary: false
         type: BIGINT
       route_concept_id:
         foreign_keys:
-        - concept.concept_id
+        - mimic100.concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       route_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       sig:
         nullable: true
         primary: false
-        type: TEXT
+        type: VARCHAR(max) COLLATE SQL_Latin1_General_CP1_CI_AS
       stop_reason:
         nullable: true
         primary: false
-        type: VARCHAR(20)
+        type: VARCHAR(20) COLLATE SQL_Latin1_General_CP1_CI_AS
       verbatim_end_date:
         nullable: true
         primary: false
         type: DATE
       visit_detail_id:
         foreign_keys:
-        - visit_detail.visit_detail_id
+        - mimic100.visit_detail.visit_detail_id
         nullable: true
         primary: false
         type: BIGINT
       visit_occurrence_id:
         foreign_keys:
-        - visit_occurrence.visit_occurrence_id
+        - mimic100.visit_occurrence.visit_occurrence_id
         nullable: true
         primary: false
         type: BIGINT
@@ -792,55 +724,45 @@ tables:
   drug_strength:
     columns:
       amount_unit_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       amount_value:
         nullable: true
         primary: false
-        type: NUMERIC
+        type: NUMERIC(18, 0)
       box_size:
         nullable: true
         primary: false
         type: BIGINT
       denominator_unit_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       denominator_value:
         nullable: true
         primary: false
-        type: NUMERIC
+        type: NUMERIC(18, 0)
       drug_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
       ingredient_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
       invalid_reason:
         nullable: true
         primary: false
-        type: VARCHAR(1)
+        type: VARCHAR(1) COLLATE SQL_Latin1_General_CP1_CI_AS
       numerator_unit_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       numerator_value:
         nullable: true
         primary: false
-        type: NUMERIC
+        type: NUMERIC(18, 0)
       valid_end_date:
         nullable: false
         primary: false
@@ -853,8 +775,6 @@ tables:
   episode:
     columns:
       episode_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
@@ -865,7 +785,7 @@ tables:
       episode_end_datetime:
         nullable: true
         primary: false
-        type: TIMESTAMP WITHOUT TIME ZONE
+        type: DATETIME2
       episode_id:
         nullable: false
         primary: true
@@ -875,8 +795,6 @@ tables:
         primary: false
         type: BIGINT
       episode_object_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
@@ -885,15 +803,13 @@ tables:
         primary: false
         type: BIGINT
       episode_source_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       episode_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       episode_start_date:
         nullable: false
         primary: false
@@ -901,16 +817,12 @@ tables:
       episode_start_datetime:
         nullable: true
         primary: false
-        type: TIMESTAMP WITHOUT TIME ZONE
+        type: DATETIME2
       episode_type_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
       person_id:
-        foreign_keys:
-        - person.person_id
         nullable: false
         primary: false
         type: BIGINT
@@ -918,14 +830,10 @@ tables:
   episode_event:
     columns:
       episode_event_field_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
       episode_id:
-        foreign_keys:
-        - episode.episode_id
         nullable: false
         primary: false
         type: BIGINT
@@ -937,14 +845,10 @@ tables:
   fact_relationship:
     columns:
       domain_concept_id_1:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
       domain_concept_id_2:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
@@ -957,8 +861,6 @@ tables:
         primary: false
         type: BIGINT
       relationship_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
@@ -968,19 +870,19 @@ tables:
       address_1:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       address_2:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       city:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       county:
         nullable: true
         primary: false
-        type: VARCHAR(20)
+        type: VARCHAR(20) COLLATE SQL_Latin1_General_CP1_CI_AS
       location_id:
         nullable: false
         primary: true
@@ -988,21 +890,19 @@ tables:
       location_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       state:
         nullable: true
         primary: false
-        type: VARCHAR(2)
+        type: VARCHAR(2) COLLATE SQL_Latin1_General_CP1_CI_AS
       zip:
         nullable: true
         primary: false
-        type: VARCHAR(9)
+        type: VARCHAR(9) COLLATE SQL_Latin1_General_CP1_CI_AS
     unique: []
   measurement:
     columns:
       measurement_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
@@ -1013,90 +913,72 @@ tables:
       measurement_datetime:
         nullable: true
         primary: false
-        type: TIMESTAMP WITHOUT TIME ZONE
+        type: DATETIME2
       measurement_id:
         nullable: false
         primary: true
         type: BIGINT
       measurement_source_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       measurement_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       measurement_time:
         nullable: true
         primary: false
-        type: VARCHAR(10)
+        type: VARCHAR(10) COLLATE SQL_Latin1_General_CP1_CI_AS
       measurement_type_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
       operator_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       person_id:
-        foreign_keys:
-        - person.person_id
         nullable: false
         primary: false
         type: BIGINT
       provider_id:
-        foreign_keys:
-        - provider.provider_id
         nullable: true
         primary: false
         type: BIGINT
       range_high:
         nullable: true
         primary: false
-        type: NUMERIC
+        type: NUMERIC(18, 0)
       range_low:
         nullable: true
         primary: false
-        type: NUMERIC
+        type: NUMERIC(18, 0)
       unit_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       unit_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       value_as_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       value_as_number:
         nullable: true
         primary: false
-        type: NUMERIC
+        type: NUMERIC(18, 0)
       value_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       visit_detail_id:
-        foreign_keys:
-        - visit_detail.visit_detail_id
         nullable: true
         primary: false
         type: BIGINT
       visit_occurrence_id:
-        foreign_keys:
-        - visit_occurrence.visit_occurrence_id
         nullable: true
         primary: false
         type: BIGINT
@@ -1104,8 +986,6 @@ tables:
   metadata:
     columns:
       metadata_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
@@ -1116,53 +996,43 @@ tables:
       metadata_datetime:
         nullable: true
         primary: false
-        type: TIMESTAMP WITHOUT TIME ZONE
+        type: DATETIME2
       metadata_id:
         nullable: false
         primary: true
         type: BIGINT
       metadata_type_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
       name:
         nullable: false
         primary: false
-        type: VARCHAR(250)
+        type: VARCHAR(250) COLLATE SQL_Latin1_General_CP1_CI_AS
       value_as_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       value_as_number:
         nullable: true
         primary: false
-        type: NUMERIC
+        type: NUMERIC(18, 0)
       value_as_string:
         nullable: true
         primary: false
-        type: VARCHAR(250)
+        type: VARCHAR(250) COLLATE SQL_Latin1_General_CP1_CI_AS
     unique: []
   note:
     columns:
       encoding_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
       language_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
       note_class_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
@@ -1173,10 +1043,8 @@ tables:
       note_datetime:
         nullable: true
         primary: false
-        type: TIMESTAMP WITHOUT TIME ZONE
+        type: DATETIME2
       note_event_field_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
@@ -1191,42 +1059,32 @@ tables:
       note_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       note_text:
         nullable: false
         primary: false
-        type: TEXT
+        type: VARCHAR(max) COLLATE SQL_Latin1_General_CP1_CI_AS
       note_title:
         nullable: true
         primary: false
-        type: VARCHAR(250)
+        type: VARCHAR(250) COLLATE SQL_Latin1_General_CP1_CI_AS
       note_type_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
       person_id:
-        foreign_keys:
-        - person.person_id
         nullable: false
         primary: false
         type: BIGINT
       provider_id:
-        foreign_keys:
-        - provider.provider_id
         nullable: true
         primary: false
         type: BIGINT
       visit_detail_id:
-        foreign_keys:
-        - visit_detail.visit_detail_id
         nullable: true
         primary: false
         type: BIGINT
       visit_occurrence_id:
-        foreign_keys:
-        - visit_occurrence.visit_occurrence_id
         nullable: true
         primary: false
         type: BIGINT
@@ -1236,7 +1094,7 @@ tables:
       lexical_variant:
         nullable: false
         primary: false
-        type: VARCHAR(250)
+        type: VARCHAR(250) COLLATE SQL_Latin1_General_CP1_CI_AS
       nlp_date:
         nullable: false
         primary: false
@@ -1244,18 +1102,16 @@ tables:
       nlp_datetime:
         nullable: true
         primary: false
-        type: TIMESTAMP WITHOUT TIME ZONE
+        type: DATETIME2
       nlp_system:
         nullable: true
         primary: false
-        type: VARCHAR(250)
+        type: VARCHAR(250) COLLATE SQL_Latin1_General_CP1_CI_AS
       note_id:
         nullable: false
         primary: false
         type: BIGINT
       note_nlp_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
@@ -1264,43 +1120,37 @@ tables:
         primary: true
         type: BIGINT
       note_nlp_source_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       offset:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       section_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       snippet:
         nullable: true
         primary: false
-        type: VARCHAR(250)
+        type: VARCHAR(250) COLLATE SQL_Latin1_General_CP1_CI_AS
       term_exists:
         nullable: true
         primary: false
-        type: VARCHAR(1)
+        type: VARCHAR(1) COLLATE SQL_Latin1_General_CP1_CI_AS
       term_modifiers:
         nullable: true
         primary: false
-        type: VARCHAR(2000)
+        type: VARCHAR(2000) COLLATE SQL_Latin1_General_CP1_CI_AS
       term_temporal:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
     unique: []
   observation:
     columns:
       observation_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
@@ -1311,59 +1161,47 @@ tables:
       observation_datetime:
         nullable: true
         primary: false
-        type: TIMESTAMP WITHOUT TIME ZONE
+        type: DATETIME2
       observation_id:
         nullable: false
         primary: true
         type: BIGINT
       observation_source_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       observation_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       observation_type_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
       person_id:
-        foreign_keys:
-        - person.person_id
         nullable: false
         primary: false
         type: BIGINT
       provider_id:
-        foreign_keys:
-        - provider.provider_id
         nullable: true
         primary: false
         type: BIGINT
       qualifier_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       qualifier_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       unit_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       unit_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       value_as_concept_id:
         nullable: true
         primary: false
@@ -1371,20 +1209,16 @@ tables:
       value_as_number:
         nullable: true
         primary: false
-        type: NUMERIC
+        type: NUMERIC(18, 0)
       value_as_string:
         nullable: true
         primary: false
-        type: VARCHAR(120)
+        type: VARCHAR(120) COLLATE SQL_Latin1_General_CP1_CI_AS
       visit_detail_id:
-        foreign_keys:
-        - visit_detail.visit_detail_id
         nullable: true
         primary: false
         type: BIGINT
       visit_occurrence_id:
-        foreign_keys:
-        - visit_occurrence.visit_occurrence_id
         nullable: true
         primary: false
         type: BIGINT
@@ -1405,13 +1239,13 @@ tables:
         type: DATE
       period_type_concept_id:
         foreign_keys:
-        - concept.concept_id
+        - mimic100.concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
       person_id:
         foreign_keys:
-        - person.person_id
+        - mimic100.person.person_id
         nullable: false
         primary: false
         type: BIGINT
@@ -1421,10 +1255,8 @@ tables:
       family_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       payer_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
@@ -1441,79 +1273,63 @@ tables:
         primary: false
         type: DATE
       payer_source_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       payer_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       person_id:
-        foreign_keys:
-        - person.person_id
         nullable: false
         primary: false
         type: BIGINT
       plan_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       plan_source_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       plan_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       sponsor_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       sponsor_source_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       sponsor_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       stop_reason_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       stop_reason_source_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       stop_reason_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
     unique: []
   person:
     columns:
       birth_datetime:
         nullable: true
         primary: false
-        type: TIMESTAMP WITHOUT TIME ZONE
+        type: DATETIME2
       care_site_id:
         foreign_keys:
-        - care_site.care_site_id
+        - mimic100.care_site.care_site_id
         nullable: true
         primary: false
         type: BIGINT
@@ -1523,39 +1339,39 @@ tables:
         type: BIGINT
       ethnicity_concept_id:
         foreign_keys:
-        - concept.concept_id
+        - mimic100.concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
       ethnicity_source_concept_id:
         foreign_keys:
-        - concept.concept_id
+        - mimic100.concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       ethnicity_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       gender_concept_id:
         foreign_keys:
-        - concept.concept_id
+        - mimic100.concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
       gender_source_concept_id:
         foreign_keys:
-        - concept.concept_id
+        - mimic100.concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       gender_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       location_id:
         foreign_keys:
-        - location.location_id
+        - mimic100.location.location_id
         nullable: true
         primary: false
         type: BIGINT
@@ -1570,29 +1386,29 @@ tables:
       person_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       provider_id:
         foreign_keys:
-        - provider.provider_id
+        - mimic100.provider.provider_id
         nullable: true
         primary: false
         type: BIGINT
       race_concept_id:
         foreign_keys:
-        - concept.concept_id
+        - mimic100.concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
       race_source_concept_id:
         foreign_keys:
-        - concept.concept_id
+        - mimic100.concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       race_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       year_of_birth:
         nullable: false
         primary: false
@@ -1601,18 +1417,16 @@ tables:
   procedure_occurrence:
     columns:
       modifier_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       modifier_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       person_id:
         foreign_keys:
-        - person.person_id
+        - mimic100.person.person_id
         nullable: false
         primary: false
         type: BIGINT
@@ -1627,7 +1441,7 @@ tables:
       procedure_datetime:
         nullable: true
         primary: false
-        type: TIMESTAMP WITHOUT TIME ZONE
+        type: DATETIME2
       procedure_occurrence_id:
         nullable: false
         primary: true
@@ -1639,16 +1453,12 @@ tables:
       procedure_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       procedure_type_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
       provider_id:
-        foreign_keys:
-        - provider.provider_id
         nullable: true
         primary: false
         type: BIGINT
@@ -1657,14 +1467,10 @@ tables:
         primary: false
         type: BIGINT
       visit_detail_id:
-        foreign_keys:
-        - visit_detail.visit_detail_id
         nullable: true
         primary: false
         type: BIGINT
       visit_occurrence_id:
-        foreign_keys:
-        - visit_occurrence.visit_occurrence_id
         nullable: true
         primary: false
         type: BIGINT
@@ -1672,35 +1478,29 @@ tables:
   provider:
     columns:
       care_site_id:
-        foreign_keys:
-        - care_site.care_site_id
         nullable: true
         primary: false
         type: BIGINT
       dea:
         nullable: true
         primary: false
-        type: VARCHAR(20)
+        type: VARCHAR(20) COLLATE SQL_Latin1_General_CP1_CI_AS
       gender_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       gender_source_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       gender_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       npi:
         nullable: true
         primary: false
-        type: VARCHAR(20)
+        type: VARCHAR(20) COLLATE SQL_Latin1_General_CP1_CI_AS
       provider_id:
         nullable: false
         primary: true
@@ -1708,27 +1508,23 @@ tables:
       provider_name:
         nullable: true
         primary: false
-        type: VARCHAR(255)
+        type: VARCHAR(255) COLLATE SQL_Latin1_General_CP1_CI_AS
       provider_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       specialty_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       specialty_source_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       specialty_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       year_of_birth:
         nullable: true
         primary: false
@@ -1739,66 +1535,58 @@ tables:
       defines_ancestry:
         nullable: false
         primary: false
-        type: VARCHAR(1)
+        type: VARCHAR(1) COLLATE SQL_Latin1_General_CP1_CI_AS
       is_hierarchical:
         nullable: false
         primary: false
-        type: VARCHAR(1)
+        type: VARCHAR(1) COLLATE SQL_Latin1_General_CP1_CI_AS
       relationship_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
       relationship_id:
         nullable: false
         primary: true
-        type: VARCHAR(20)
+        type: VARCHAR(20) COLLATE SQL_Latin1_General_CP1_CI_AS
       relationship_name:
         nullable: false
         primary: false
-        type: VARCHAR(255)
+        type: VARCHAR(255) COLLATE SQL_Latin1_General_CP1_CI_AS
       reverse_relationship_id:
         nullable: false
         primary: false
-        type: VARCHAR(20)
+        type: VARCHAR(20) COLLATE SQL_Latin1_General_CP1_CI_AS
     unique: []
   source_to_concept_map:
     columns:
       invalid_reason:
         nullable: true
         primary: false
-        type: VARCHAR(1)
+        type: VARCHAR(1) COLLATE SQL_Latin1_General_CP1_CI_AS
       source_code:
         nullable: false
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       source_code_description:
         nullable: true
         primary: false
-        type: VARCHAR(255)
+        type: VARCHAR(255) COLLATE SQL_Latin1_General_CP1_CI_AS
       source_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
       source_vocabulary_id:
         nullable: false
         primary: false
-        type: VARCHAR(20)
+        type: VARCHAR(20) COLLATE SQL_Latin1_General_CP1_CI_AS
       target_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
       target_vocabulary_id:
-        foreign_keys:
-        - vocabulary.vocabulary_id
         nullable: false
         primary: false
-        type: VARCHAR(20)
+        type: VARCHAR(20) COLLATE SQL_Latin1_General_CP1_CI_AS
       valid_end_date:
         nullable: false
         primary: false
@@ -1811,38 +1599,30 @@ tables:
   specimen:
     columns:
       anatomic_site_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       anatomic_site_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       disease_status_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       disease_status_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       person_id:
-        foreign_keys:
-        - person.person_id
         nullable: false
         primary: false
         type: BIGINT
       quantity:
         nullable: true
         primary: false
-        type: NUMERIC
+        type: NUMERIC(18, 0)
       specimen_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
@@ -1853,7 +1633,7 @@ tables:
       specimen_datetime:
         nullable: true
         primary: false
-        type: TIMESTAMP WITHOUT TIME ZONE
+        type: DATETIME2
       specimen_id:
         nullable: false
         primary: true
@@ -1861,27 +1641,23 @@ tables:
       specimen_source_id:
         nullable: true
         primary: false
-        type: VARCHAR(255)
+        type: VARCHAR(255) COLLATE SQL_Latin1_General_CP1_CI_AS
       specimen_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       specimen_type_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
       unit_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       unit_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
     unique: []
   visit_detail:
     columns:
@@ -1892,42 +1668,44 @@ tables:
       admitting_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       care_site_id:
         foreign_keys:
-        - care_site.care_site_id
+        - mimic100.care_site.care_site_id
         nullable: true
         primary: false
         type: BIGINT
       discharge_to_concept_id:
+        foreign_keys:
+        - mimic100.concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       discharge_to_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       person_id:
         foreign_keys:
-        - person.person_id
+        - mimic100.person.person_id
         nullable: false
         primary: false
         type: BIGINT
       preceding_visit_detail_id:
         foreign_keys:
-        - visit_detail.visit_detail_id
+        - mimic100.visit_detail.visit_detail_id
         nullable: true
         primary: false
         type: BIGINT
       provider_id:
         foreign_keys:
-        - provider.provider_id
+        - mimic100.provider.provider_id
         nullable: true
         primary: false
         type: BIGINT
       visit_detail_concept_id:
         foreign_keys:
-        - concept.concept_id
+        - mimic100.concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
@@ -1938,7 +1716,7 @@ tables:
       visit_detail_end_datetime:
         nullable: true
         primary: false
-        type: TIMESTAMP WITHOUT TIME ZONE
+        type: DATETIME2
       visit_detail_id:
         nullable: false
         primary: true
@@ -1946,15 +1724,15 @@ tables:
       visit_detail_parent_id:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       visit_detail_source_concept_id:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       visit_detail_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(120)
+        type: VARCHAR(255) COLLATE SQL_Latin1_General_CP1_CI_AS
       visit_detail_start_date:
         nullable: false
         primary: false
@@ -1962,16 +1740,16 @@ tables:
       visit_detail_start_datetime:
         nullable: true
         primary: false
-        type: TIMESTAMP WITHOUT TIME ZONE
+        type: DATETIME2
       visit_detail_type_concept_id:
         foreign_keys:
-        - concept.concept_id
+        - mimic100.concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
       visit_occurrence_id:
         foreign_keys:
-        - visit_occurrence.visit_occurrence_id
+        - mimic100.visit_occurrence.visit_occurrence_id
         nullable: false
         primary: false
         type: BIGINT
@@ -1980,51 +1758,51 @@ tables:
     columns:
       admitted_from_concept_id:
         foreign_keys:
-        - concept.concept_id
+        - mimic100.concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       admitted_from_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       care_site_id:
         foreign_keys:
-        - care_site.care_site_id
+        - mimic100.care_site.care_site_id
         nullable: true
         primary: false
         type: BIGINT
       discharged_to_concept_id:
         foreign_keys:
-        - concept.concept_id
+        - mimic100.concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       discharged_to_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       person_id:
         foreign_keys:
-        - person.person_id
+        - mimic100.person.person_id
         nullable: false
         primary: false
         type: BIGINT
       preceding_visit_occurrence_id:
         foreign_keys:
-        - visit_occurrence.visit_occurrence_id
+        - mimic100.visit_occurrence.visit_occurrence_id
         nullable: true
         primary: false
         type: BIGINT
       provider_id:
         foreign_keys:
-        - provider.provider_id
+        - mimic100.provider.provider_id
         nullable: true
         primary: false
         type: BIGINT
       visit_concept_id:
         foreign_keys:
-        - concept.concept_id
+        - mimic100.concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
@@ -2035,21 +1813,21 @@ tables:
       visit_end_datetime:
         nullable: true
         primary: false
-        type: TIMESTAMP WITHOUT TIME ZONE
+        type: DATETIME2
       visit_occurrence_id:
         nullable: false
         primary: true
         type: BIGINT
       visit_source_concept_id:
         foreign_keys:
-        - concept.concept_id
+        - mimic100.concept.concept_id
         nullable: true
         primary: false
         type: BIGINT
       visit_source_value:
         nullable: true
         primary: false
-        type: VARCHAR(50)
+        type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
       visit_start_date:
         nullable: false
         primary: false
@@ -2057,10 +1835,10 @@ tables:
       visit_start_datetime:
         nullable: true
         primary: false
-        type: TIMESTAMP WITHOUT TIME ZONE
+        type: DATETIME2
       visit_type_concept_id:
         foreign_keys:
-        - concept.concept_id
+        - mimic100.concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
@@ -2068,25 +1846,23 @@ tables:
   vocabulary:
     columns:
       vocabulary_concept_id:
-        foreign_keys:
-        - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
       vocabulary_id:
         nullable: false
         primary: true
-        type: VARCHAR(30)
+        type: VARCHAR(30) COLLATE SQL_Latin1_General_CP1_CI_AS
       vocabulary_name:
         nullable: false
         primary: false
-        type: VARCHAR(255)
+        type: VARCHAR(255) COLLATE SQL_Latin1_General_CP1_CI_AS
       vocabulary_reference:
         nullable: true
         primary: false
-        type: VARCHAR(255)
+        type: VARCHAR(255) COLLATE SQL_Latin1_General_CP1_CI_AS
       vocabulary_version:
         nullable: true
         primary: false
-        type: VARCHAR(255)
+        type: VARCHAR(255) COLLATE SQL_Latin1_General_CP1_CI_AS
     unique: []

@@ -124,6 +124,8 @@ cd examples/omop-mssql
 
 `poetry run datafaker create-tables --orm-file ./orm.yaml --config-file ./config.yaml`
 
+1. Run `copy_vocabulary.sql` to copy vocabulary table rows. (I did it in DBeaver)
+
 1. Create generator table
 
 `poetry run datafaker create-generators --orm-file ./orm.yaml --config-file ./config.yaml --df-file ./df.py`
