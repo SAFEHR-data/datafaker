@@ -5,7 +5,7 @@ from abc import abstractmethod
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
-from sqlalchemy import Column, Engine, RowMapping, text
+from sqlalchemy import Column, Engine, RowMapping, Table, case, func, null, select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.types import Integer, Numeric
 from typing_extensions import Self
@@ -18,7 +18,7 @@ from datafaker.generators.base import (
     dist_gen,
     get_column_type,
 )
-from datafaker.utils import logger
+from datafaker.utils import logger, schema_qualified_name
 
 
 class ContinuousDistributionGenerator(Generator):
@@ -164,7 +164,7 @@ class ContinuousDistributionGeneratorFactory(GeneratorFactory):
         if buckets is None:
             return []
         return self._get_generators_from_buckets(
-            engine, table_name, column_name, buckets
+            engine, column.table, column_name, buckets
         )
 
 
@@ -272,24 +272,25 @@ class ContinuousLogDistributionGeneratorFactory(ContinuousDistributionGeneratorF
     def _get_generators_from_buckets(
         self,
         engine: Engine,
-        table_name: str,
+        src_table: Table,
         column_name: str,
         buckets: Buckets,
     ) -> Sequence[Generator]:
+        col = case(
+            (src_table.c[column_name] > 0, func.log(src_table.c[column_name])),
+            else_=null(),
+        )
+        stmt = select(
+            func.avg(col).label("logmean"),
+            func.stddev_samp(col).label("logstddev"),
+        ).select_from(src_table)
         with engine.connect() as connection:
-            result = connection.execute(
-                text(
-                    f"SELECT AVG(CASE WHEN 0<{column_name} THEN LN({column_name})"
-                    " ELSE NULL END) AS logmean,"
-                    f" STDDEV(CASE WHEN 0<{column_name} THEN LN({column_name}) ELSE NULL END)"
-                    f" AS logstddev FROM {table_name}"
-                )
-            ).first()
+            result = connection.execute(stmt).first()
             if result is None or result.logstddev is None:
                 return []
         return [
             LogNormalGenerator(
-                table_name,
+                src_table.name,
                 column_name,
                 buckets,
                 float(result.logmean),
@@ -636,7 +637,8 @@ class MultivariateNormalGeneratorFactory(MultivariateNormalGeneratorFactoryBase)
                 return []
         column_names = [c.name for c in columns]
         table = columns[0].table.name
-        cq = CovariateQuery(table, self, dialect_name=engine.dialect.name).columns(columns)
+        table_sql = schema_qualified_name(table, engine)
+        cq = CovariateQuery(table_sql, self, dialect_name=engine.dialect.name).columns(columns)
         query = cq.get()
         with engine.connect() as connection:
             try:

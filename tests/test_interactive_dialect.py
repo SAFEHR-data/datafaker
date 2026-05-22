@@ -175,3 +175,41 @@ class TestPrintColumnDataDialect(unittest.TestCase):
                 executed, d = self._run_print_column_data(dialect, schema="myschema")
                 sql = _compiled(executed[0], d)
                 self.assertIn("MYSCHEMA", sql)
+
+
+class TestCountsDialect(unittest.TestCase):
+    """DbCmd.do_counts() compiles a schema-qualified COUNT query."""
+
+    def _run_counts(self, dialect_instance, schema=None):
+        from datafaker.interactive.base import DbCmd
+
+        engine = _make_engine(dialect_instance)
+        tbl = _make_table(schema=schema)
+        shell = MagicMock(spec=DbCmd)
+        shell.sync_engine = engine
+        shell._table_entries = [MagicMock()]
+        shell.table_index = 0
+        shell.table_name.return_value = "person"
+        shell.get_nullable_columns.return_value = ["gender_concept_id"]
+        shell.table_metadata.return_value = tbl
+        shell.print = MagicMock()
+        shell.print_table = MagicMock()
+
+        DbCmd.do_counts(shell, "")
+        return engine._executed, dialect_instance
+
+    def test_counts_schema_appears_in_from(self) -> None:
+        """do_counts FROM clause includes the schema when one is set."""
+        for dialect in (mssql.dialect(), postgresql.dialect()):
+            with self.subTest(dialect=dialect.name):
+                executed, d = self._run_counts(dialect, schema="myschema")
+                self.assertEqual(len(executed), 1)
+                sql = _compiled(executed[0], d)
+                self.assertIn("MYSCHEMA", sql)
+
+    def test_counts_no_schema_omits_qualifier(self) -> None:
+        """do_counts FROM clause has no schema prefix when schema is None."""
+        executed, d = self._run_counts(postgresql.dialect(), schema=None)
+        sql = _compiled(executed[0], d)
+        self.assertIn("FROM PERSON", sql)
+        self.assertNotIn("FROM MYSCHEMA", sql)

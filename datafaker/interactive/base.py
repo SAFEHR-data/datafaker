@@ -349,17 +349,13 @@ class DbCmd(ABC, cmd.Cmd):
             return
         table_name = self.table_name()
         nullable_columns = self.get_nullable_columns(table_name)
-        colcounts = [f', COUNT("{nnc}") AS "{nnc}"' for nnc in nullable_columns]
+        tbl = self.table_metadata()
+        count_exprs = [func.count().label("row_count")] + [
+            func.count(tbl.c[col]).label(col) for col in nullable_columns
+        ]
+        stmt = select(*count_exprs).select_from(tbl)
         with self.sync_engine.connect() as connection:
-            result = (
-                connection.execute(
-                    sqlalchemy.text(
-                        f"SELECT COUNT(*) AS row_count{''.join(colcounts)} FROM {table_name}"
-                    )
-                )
-                .mappings()
-                .first()
-            )
+            result = connection.execute(stmt).mappings().first()
             if result is None:
                 self.print("Could not count rows in table {0}", table_name)
                 return

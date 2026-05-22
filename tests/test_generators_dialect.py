@@ -392,3 +392,56 @@ class TestMissingnessQueryDialect(unittest.TestCase):
         )
         self.assertIn("gender_concept_id IS NULL", sql)
         self.assertIn("gender_concept_id__is_null", sql)
+
+
+class TestLogNormalGeneratorSchemaQualified(unittest.TestCase):
+    """ContinuousLogDistributionGeneratorFactory respects src_table schema."""
+
+    def _get_sql(self, schema: str | None) -> str:
+        from datafaker.generators.continuous import ContinuousLogDistributionGeneratorFactory
+
+        meta = MetaData()
+        tbl = Table("person", meta, Column("age", Integer()), schema=schema)
+
+        executed_stmts = []
+        result = MagicMock()
+        result.logmean = 1.0
+        result.logstddev = 0.5
+        conn = MagicMock()
+        conn.__enter__ = MagicMock(return_value=conn)
+        conn.__exit__ = MagicMock(return_value=False)
+        orig_execute = MagicMock(return_value=MagicMock(first=MagicMock(return_value=result)))
+
+        def capture(stmt, *args, **kwargs):
+            executed_stmts.append(stmt)
+            return orig_execute(stmt, *args, **kwargs)
+
+        conn.execute.side_effect = capture
+        engine = MagicMock()
+        engine.connect.return_value = conn
+
+        from datafaker.generators.base import Buckets
+        import unittest.mock
+
+        buckets = MagicMock(spec=Buckets)
+        factory = ContinuousLogDistributionGeneratorFactory()
+        with unittest.mock.patch.object(Buckets, "make_buckets", return_value=buckets):
+            factory._get_generators_from_buckets(engine, tbl, "age", buckets)
+
+        self.assertEqual(len(executed_stmts), 1)
+        dialect = postgresql.dialect()
+        return str(executed_stmts[0].compile(
+            dialect=dialect,
+            compile_kwargs={"literal_binds": True},
+        )).upper()
+
+    def test_schema_appears_in_from(self) -> None:
+        """_get_generators_from_buckets includes schema in FROM clause."""
+        sql = self._get_sql(schema="myschema")
+        self.assertIn("MYSCHEMA", sql)
+
+    def test_no_schema_omits_qualifier(self) -> None:
+        """Without schema, FROM clause has no schema prefix."""
+        sql = self._get_sql(schema=None)
+        self.assertIn("FROM PERSON", sql)
+        self.assertNotIn("FROM MYSCHEMA", sql)

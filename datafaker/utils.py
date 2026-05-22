@@ -281,6 +281,20 @@ def create_db_engine(
     return engine
 
 
+def schema_qualified_name(table_name: str, engine: Any) -> str:
+    """Return schema-qualified table name using the engine's schema_translate_map.
+
+    When create_db_engine sets schema_translate_map={None: schema_name}, this
+    reads it back so raw SQL strings (which schema_translate_map doesn't rewrite)
+    can include the correct qualifier.
+    """
+    schema_map = engine.get_execution_options().get("schema_translate_map", {})
+    schema = schema_map.get(None)
+    if schema and "." not in table_name:
+        return f"{schema}.{table_name}"
+    return table_name
+
+
 def create_db_engine_dst(
     db_dsn: str,
     schema_name: Optional[str] = None,
