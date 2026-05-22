@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 import sqlalchemy
-from sqlalchemy import func, literal_column, select, table as sa_table, text
+from sqlalchemy import func, literal_column, select, text
 
 from datafaker.interactive.base import (
     TYPE_LETTER,
@@ -488,7 +488,7 @@ Type 'help data' for examples."""
             where_clause = col_expr.isnot(None)
         stmt = (
             select(col_expr)
-            .select_from(sa_table(self.table_name()))
+            .select_from(self.table_metadata())
             .where(where_clause)
             .order_by(random_fn)
             .limit(count)
@@ -508,7 +508,7 @@ Type 'help data' for examples."""
         )
         stmt = (
             select(text("*"))
-            .select_from(sa_table(self.table_name()))
+            .select_from(self.table_metadata())
             .order_by(random_fn)
             .limit(count)
         )

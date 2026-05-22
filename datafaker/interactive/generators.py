@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Optional, cast
 
 import sqlalchemy
-from sqlalchemy import Column, and_, func, literal_column, select, table as sa_table
+from sqlalchemy import Column, and_, func, literal_column, select
 
 from datafaker.generators import everything_factory
 from datafaker.generators.base import Generator, PredefinedGenerator
@@ -761,7 +761,7 @@ information about the columns in the current table. Use 'peek',
         nonnull_clauses = [literal_column(col).isnot(None) for col in columns]
         stmt = (
             select(*col_exprs)
-            .select_from(sa_table(self.table_name()))
+            .select_from(self.table_metadata())
             .where(and_(*nonnull_clauses))
             .order_by(random_fn)
             .limit(count)

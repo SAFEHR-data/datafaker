@@ -10,7 +10,7 @@ from typing import Any, Optional, Type
 
 import sqlalchemy
 from prettytable import PrettyTable
-from sqlalchemy import Engine, ForeignKey, MetaData, Table, func, literal_column, or_, select, table as sa_table
+from sqlalchemy import Engine, ForeignKey, MetaData, Table, func, literal_column, or_, select
 from typing_extensions import Self
 
 from datafaker.utils import (
@@ -419,7 +419,7 @@ class DbCmd(ABC, cmd.Cmd):
         nonnull_clauses = [literal_column(f'"{cn}"').isnot(None) for cn in col_names]
         stmt = (
             select(*col_exprs)
-            .select_from(sa_table(table_name))
+            .select_from(self.table_metadata())
             .where(or_(*nonnull_clauses))
             .order_by(random_fn)
             .limit(max_peek_rows)

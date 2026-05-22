@@ -2,6 +2,7 @@
 import unittest
 from unittest.mock import MagicMock
 
+from sqlalchemy import Column, Integer, MetaData, Table
 from sqlalchemy.dialects import mssql, postgresql
 
 
@@ -28,6 +29,11 @@ def _make_engine(dialect) -> MagicMock:
     return engine
 
 
+def _make_table(schema=None) -> Table:
+    meta = MetaData()
+    return Table("person", meta, Column("gender_concept_id", Integer()), schema=schema)
+
+
 def _compiled(stmt, dialect) -> str:
     return str(stmt.compile(dialect=dialect, compile_kwargs={"literal_binds": True})).upper()
 
@@ -35,7 +41,7 @@ def _compiled(stmt, dialect) -> str:
 class TestPeekDialect(unittest.TestCase):
     """DbCmd.do_peek() uses NEWID/TOP on MS-SQL and RANDOM/LIMIT on PostgreSQL."""
 
-    def _run_peek(self, dialect_instance, col_names=None):
+    def _run_peek(self, dialect_instance, col_names=None, schema=None):
         from datafaker.interactive.base import DbCmd
 
         engine = _make_engine(dialect_instance)
@@ -45,6 +51,7 @@ class TestPeekDialect(unittest.TestCase):
         shell._table_entries = [MagicMock()]
         shell.table_name.return_value = "person"
         shell._get_column_names.return_value = col_names or ["gender_concept_id"]
+        shell.table_metadata.return_value = _make_table(schema=schema)
         shell.print_table = MagicMock()
         shell.print = MagicMock()
 
@@ -71,11 +78,19 @@ class TestPeekDialect(unittest.TestCase):
         self.assertNotIn("NEWID()", sql)
         self.assertNotIn(" TOP ", sql)
 
+    def test_schema_appears_in_from(self) -> None:
+        """Schema-qualified table name appears in the FROM clause on both dialects."""
+        for dialect in (mssql.dialect(), postgresql.dialect()):
+            with self.subTest(dialect=dialect.name):
+                executed, d = self._run_peek(dialect, schema="myschema")
+                sql = _compiled(executed[0], d)
+                self.assertIn("MYSCHEMA", sql)
+
 
 class TestGetColumnDataDialect(unittest.TestCase):
     """GeneratorCmd._get_column_data() uses NEWID/TOP on MS-SQL and RANDOM/LIMIT on PostgreSQL."""
 
-    def _run_get_column_data(self, dialect_instance):
+    def _run_get_column_data(self, dialect_instance, schema=None):
         from datafaker.interactive.generators import GeneratorCmd
 
         engine = _make_engine(dialect_instance)
@@ -83,6 +98,7 @@ class TestGetColumnDataDialect(unittest.TestCase):
         shell.sync_engine = engine
         shell.table_name.return_value = "person"
         shell._get_column_names.return_value = ["gender_concept_id"]
+        shell.table_metadata.return_value = _make_table(schema=schema)
 
         GeneratorCmd._get_column_data(shell, 5)
         return engine._executed, dialect_instance
@@ -107,17 +123,26 @@ class TestGetColumnDataDialect(unittest.TestCase):
         self.assertNotIn("NEWID()", sql)
         self.assertNotIn(" TOP ", sql)
 
+    def test_schema_appears_in_from(self) -> None:
+        """Schema-qualified table name appears in the FROM clause on both dialects."""
+        for dialect in (mssql.dialect(), postgresql.dialect()):
+            with self.subTest(dialect=dialect.name):
+                executed, d = self._run_get_column_data(dialect, schema="myschema")
+                sql = _compiled(executed[0], d)
+                self.assertIn("MYSCHEMA", sql)
+
 
 class TestPrintColumnDataDialect(unittest.TestCase):
     """TableCmd.print_column_data() uses NEWID/TOP on MS-SQL and RANDOM/LIMIT on PostgreSQL."""
 
-    def _run_print_column_data(self, dialect_instance):
+    def _run_print_column_data(self, dialect_instance, schema=None):
         from datafaker.interactive.table import TableCmd
 
         engine = _make_engine(dialect_instance)
         shell = MagicMock(spec=TableCmd)
         shell.sync_engine = engine
         shell.table_name.return_value = "person"
+        shell.table_metadata.return_value = _make_table(schema=schema)
         shell.columnize = MagicMock()
 
         TableCmd.print_column_data(shell, "gender_concept_id", 10, 0)
@@ -142,3 +167,11 @@ class TestPrintColumnDataDialect(unittest.TestCase):
         self.assertIn("LIMIT", sql)
         self.assertNotIn("NEWID()", sql)
         self.assertNotIn(" TOP ", sql)
+
+    def test_schema_appears_in_from(self) -> None:
+        """Schema-qualified table name appears in the FROM clause on both dialects."""
+        for dialect in (mssql.dialect(), postgresql.dialect()):
+            with self.subTest(dialect=dialect.name):
+                executed, d = self._run_print_column_data(dialect, schema="myschema")
+                sql = _compiled(executed[0], d)
+                self.assertIn("MYSCHEMA", sql)
