@@ -23,19 +23,32 @@ class MissingnessType:
     columns: list[str]
 
     @classmethod
-    def sampled_query(cls, table: str, count: int, column_names: Iterable[str]) -> str:
+    def sampled_query(
+        cls,
+        table: str,
+        count: int,
+        column_names: Iterable[str],
+        dialect_name: str = "",
+    ) -> str:
         """
         Construct a query to make a sampling of the named rows of the table.
 
         :param table: The name of the table to sample.
         :param count: The number of samples to get.
         :param column_names: The columns to fetch.
+        :param dialect_name: The SQLAlchemy dialect name (e.g. ``"mssql"``).
         :return: The SQL query to do the sampling.
         """
         result_names = ", ".join([f"{c}__is_null" for c in column_names])
         column_is_nulls = ", ".join(
             [f"{c} IS NULL AS {c}__is_null" for c in column_names]
         )
+        if dialect_name == "mssql":
+            return (
+                f"SELECT COUNT(*) AS row_count, {result_names} FROM "
+                f"(SELECT TOP {count} {column_is_nulls} FROM {table} ORDER BY NEWID())"
+                f" AS __t GROUP BY {result_names}"
+            )
         return cls.SAMPLED_QUERY.format(
             result_names=result_names,
             column_is_nulls=column_is_nulls,
@@ -330,6 +343,7 @@ data from the database. Use 'quit' to exit this tool."""
                 entry.name,
                 count,
                 self.get_nullable_columns(entry.name),
+                dialect_name=self.sync_engine.dialect.name,
             ),
             [
                 "The missingness patterns and how often they appear in a"

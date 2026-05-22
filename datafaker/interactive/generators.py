@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Optional, cast
 
 import sqlalchemy
-from sqlalchemy import Column
+from sqlalchemy import Column, and_, func, literal_column, select, table as sa_table
 
 from datafaker.generators import everything_factory
 from datafaker.generators.base import Generator, PredefinedGenerator
@@ -754,15 +754,20 @@ information about the columns in the current table. Use 'peek',
         self, count: int, to_str: Callable[[Any], str] = repr
     ) -> list[list[str]]:
         columns = self._get_column_names()
-        columns_string = ", ".join(columns)
-        pred = " AND ".join(f"{column} IS NOT NULL" for column in columns)
+        random_fn = (
+            func.newid() if self.sync_engine.dialect.name == "mssql" else func.random()
+        )
+        col_exprs = [literal_column(col) for col in columns]
+        nonnull_clauses = [literal_column(col).isnot(None) for col in columns]
+        stmt = (
+            select(*col_exprs)
+            .select_from(sa_table(self.table_name()))
+            .where(and_(*nonnull_clauses))
+            .order_by(random_fn)
+            .limit(count)
+        )
         with self.sync_engine.connect() as connection:
-            result = connection.execute(
-                sqlalchemy.text(
-                    f"SELECT {columns_string} FROM {self.table_name()}"
-                    f" WHERE {pred} ORDER BY RANDOM() LIMIT {count}"
-                )
-            )
+            result = connection.execute(stmt)
             return [[to_str(x) for x in xs] for xs in result.all()]
 
     def do_propose(self, _arg: str) -> None:

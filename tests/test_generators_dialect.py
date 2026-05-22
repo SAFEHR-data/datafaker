@@ -309,3 +309,86 @@ class TestBucketsSchemaQualified(unittest.TestCase):
         """Without schema, the FROM clause has no dot-qualifier."""
         sql = self._get_make_buckets_sql("postgresql", schema=None)
         self.assertNotIn(".", sql)
+
+
+class TestCovariateQueryDialect(unittest.TestCase):
+    """CovariateQuery._inner_query() uses TOP/NEWID on MS-SQL and RANDOM/LIMIT elsewhere."""
+
+    def _make_factory(self) -> MagicMock:
+        factory = MagicMock()
+        factory.query_predicate.return_value = ""
+        return factory
+
+    def _inner_query(self, dialect_name: str) -> str:
+        from datafaker.generators.continuous import CovariateQuery
+
+        cq = (
+            CovariateQuery("person", self._make_factory(), dialect_name=dialect_name)
+            .sample_count(500)
+        )
+        return cq._inner_query().upper()
+
+    def test_mssql_uses_top_and_newid(self) -> None:
+        """MS-SQL inner query uses SELECT TOP n … ORDER BY NEWID()."""
+        sql = self._inner_query("mssql")
+        self.assertIn("TOP 500", sql)
+        self.assertIn("NEWID()", sql)
+        self.assertNotIn("RANDOM()", sql)
+        self.assertNotIn("LIMIT", sql)
+
+    def test_postgresql_uses_random_and_limit(self) -> None:
+        """PostgreSQL inner query uses ORDER BY RANDOM() LIMIT n."""
+        sql = self._inner_query("postgresql")
+        self.assertIn("RANDOM()", sql)
+        self.assertIn("LIMIT 500", sql)
+        self.assertNotIn("NEWID()", sql)
+        self.assertNotIn("TOP", sql)
+
+    def test_no_sample_count_has_no_random_or_limit(self) -> None:
+        """When sample_count is None no random ordering is emitted."""
+        from datafaker.generators.continuous import CovariateQuery
+
+        for dialect in ("mssql", "postgresql", ""):
+            with self.subTest(dialect=dialect):
+                cq = CovariateQuery("person", self._make_factory(), dialect_name=dialect)
+                sql = cq._inner_query().upper()
+                self.assertNotIn("RANDOM()", sql)
+                self.assertNotIn("NEWID()", sql)
+                self.assertNotIn("LIMIT", sql)
+                self.assertNotIn("TOP", sql)
+
+
+class TestMissingnessQueryDialect(unittest.TestCase):
+    """MissingnessType.sampled_query() produces dialect-correct SQL."""
+
+    def test_mssql_uses_top_and_newid(self) -> None:
+        """MS-SQL sampled query uses SELECT TOP n … ORDER BY NEWID()."""
+        from datafaker.interactive.missingness import MissingnessType
+
+        sql = MissingnessType.sampled_query(
+            "person", 1000, ["col_a", "col_b"], dialect_name="mssql"
+        ).upper()
+        self.assertIn("TOP 1000", sql)
+        self.assertIn("NEWID()", sql)
+        self.assertNotIn("RANDOM()", sql)
+        self.assertNotIn("LIMIT", sql)
+
+    def test_default_uses_random_and_limit(self) -> None:
+        """Default (no dialect) sampled query uses RANDOM() and LIMIT."""
+        from datafaker.interactive.missingness import MissingnessType
+
+        sql = MissingnessType.sampled_query("person", 1000, ["col_a"]).upper()
+        self.assertIn("RANDOM()", sql)
+        self.assertIn("LIMIT 1000", sql)
+        self.assertNotIn("NEWID()", sql)
+        self.assertNotIn("TOP", sql)
+
+    def test_mssql_result_contains_column_null_checks(self) -> None:
+        """MS-SQL sampled query retains IS NULL expressions for the named columns."""
+        from datafaker.interactive.missingness import MissingnessType
+
+        sql = MissingnessType.sampled_query(
+            "person", 500, ["gender_concept_id"], dialect_name="mssql"
+        )
+        self.assertIn("gender_concept_id IS NULL", sql)
+        self.assertIn("gender_concept_id__is_null", sql)

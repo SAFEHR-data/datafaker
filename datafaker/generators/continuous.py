@@ -396,6 +396,7 @@ class CovariateQuery:
         self,
         table: str,
         factory: MultivariateNormalGeneratorFactoryBase,
+        dialect_name: str = "",
     ) -> None:
         """
         Initialize the query for the basics for multivariate normal/lognormal parameters.
@@ -403,6 +404,7 @@ class CovariateQuery:
         :param table: The name of the table to be queried.
         :param factory: The generator factory, perhaps with overridden
         ``query_var`` and ``query_predicate`` methods.
+        :param dialect_name: The SQLAlchemy dialect name (e.g. ``"mssql"``).
         """
         self.table = table
         self._columns: Sequence[Column] = []
@@ -412,6 +414,7 @@ class CovariateQuery:
         self.suppress_count = 1
         self._sample_count: int | None = None
         self._factory = factory
+        self._dialect_name = dialect_name
         self._predicate_fn = lambda x: x + " IS NOT NULL"
 
     def get_query_comment(self) -> str:
@@ -566,6 +569,11 @@ class CovariateQuery:
             where = " WHERE " + where
         if self._sample_count is None:
             return self.table + where
+        if self._dialect_name == "mssql":
+            return (
+                f"(SELECT TOP {self._sample_count} * FROM {self.table}{where}"
+                f" ORDER BY NEWID()) AS _sampled"
+            )
         return (
             f"(SELECT * FROM {self.table}{where} ORDER BY RANDOM()"
             f" LIMIT {self._sample_count}) AS _sampled"
@@ -628,7 +636,7 @@ class MultivariateNormalGeneratorFactory(MultivariateNormalGeneratorFactoryBase)
                 return []
         column_names = [c.name for c in columns]
         table = columns[0].table.name
-        cq = CovariateQuery(table, self).columns(columns)
+        cq = CovariateQuery(table, self, dialect_name=engine.dialect.name).columns(columns)
         query = cq.get()
         with engine.connect() as connection:
             try:

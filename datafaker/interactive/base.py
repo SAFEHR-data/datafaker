@@ -10,7 +10,7 @@ from typing import Any, Optional, Type
 
 import sqlalchemy
 from prettytable import PrettyTable
-from sqlalchemy import Engine, ForeignKey, MetaData, Table
+from sqlalchemy import Engine, ForeignKey, MetaData, Table, func, literal_column, or_, select, table as sa_table
 from typing_extensions import Self
 
 from datafaker.utils import (
@@ -412,19 +412,23 @@ class DbCmd(ABC, cmd.Cmd):
         col_names = arg.split()
         if not col_names:
             col_names = self._get_column_names()
-        nonnulls = [f'"{cn}" IS NOT NULL' for cn in col_names]
+        random_fn = (
+            func.newid() if self.sync_engine.dialect.name == "mssql" else func.random()
+        )
+        col_exprs = [literal_column(f'"{cn}"') for cn in col_names]
+        nonnull_clauses = [literal_column(f'"{cn}"').isnot(None) for cn in col_names]
+        stmt = (
+            select(*col_exprs)
+            .select_from(sa_table(table_name))
+            .where(or_(*nonnull_clauses))
+            .order_by(random_fn)
+            .limit(max_peek_rows)
+        )
         with self.sync_engine.connect() as connection:
-            cols = ", ".join(f'"{cn}"' for cn in col_names)
-            where = "WHERE" if nonnulls else ""
-            nonnull = " OR ".join(nonnulls)
-            query = sqlalchemy.text(
-                f"SELECT {cols} FROM {table_name} {where} {nonnull}"
-                f" ORDER BY RANDOM() LIMIT {max_peek_rows}"
-            )
             try:
-                result = connection.execute(query)
+                result = connection.execute(stmt)
             except sqlalchemy.exc.SQLAlchemyError as exc:
-                self.print(self.ERROR_FAILED_SQL, exc=exc, query=query)
+                self.print(self.ERROR_FAILED_SQL, exc=exc, query=stmt)
                 return
             self.print_table(list(result.keys()), result.fetchmany(max_peek_rows))
 
