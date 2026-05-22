@@ -1,9 +1,34 @@
+src-stats:
+- comments:
+  - All the values and their counts that appear in column gender_concept_id of table
+    person more than 7 times
+  name: auto__person__gender_concept_id
+  query: "SELECT _counted.value, _counted.count \nFROM (SELECT \"gender_concept_id\"\
+    \ AS value, count(\"gender_concept_id\") AS count \nFROM mimic100.person \nWHERE\
+    \ \"gender_concept_id\" IS NOT NULL GROUP BY \"gender_concept_id\") AS _counted\
+    \ \nWHERE _counted.count > 7"
+- comments:
+  - The values and their counts that appear in column year_of_birth of a random sample
+    of 500 rows of table person
+  name: auto__person__year_of_birth
+  query: "SELECT _counted.value, _counted.count \nFROM (SELECT _inner.value AS value,\
+    \ count(_inner.value) AS count \nFROM (SELECT TOP 500 \"year_of_birth\" AS value\
+    \ \nFROM mimic100.person \nWHERE \"year_of_birth\" IS NOT NULL ORDER BY newid())\
+    \ AS _inner GROUP BY _inner.value) AS _counted ORDER BY _counted.count DESC"
 tables:
-  # Vocab tables
   concept:
-    # This one is a vocab, but its too big to handle the usual way
     ignore: false
     vocabulary_table: true
-
   person:
     num_rows_per_pass: 10
+    row_generators:
+    - columns_assigned:
+      - gender_concept_id
+      kwargs:
+        a: SRC_STATS["auto__person__gender_concept_id"]["results"]
+      name: dist_gen.weighted_choice
+    - columns_assigned:
+      - year_of_birth
+      kwargs:
+        a: SRC_STATS["auto__person__year_of_birth"]["results"]
+      name: dist_gen.weighted_choice

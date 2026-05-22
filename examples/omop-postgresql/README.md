@@ -7,6 +7,9 @@
 1. Interactively set generators for column data. 
 `poetry run datafaker configure-generators --orm-file ./orm.yaml --config-file ./config.yaml`
 
+1. Compute summary statistics from the source database. 
+`poetry run datafaker make-stats --orm-file ./orm.yaml --config-file ./config.yaml --stats-file ./src-stats.yaml`
+
 1. Create schema from the ORM YAML file
 
 `poetry run datafaker create-tables --orm-file ./orm.yaml --config-file ./config.yaml`
@@ -22,3 +25,5 @@
 1. Remove data
 
 `poetry run datafaker remove-data --orm-file ./orm.yaml --config-file ./config.yaml`
+
+Plan: /Users/myong/.claude/plans/cached-rolling-snowglobe.md

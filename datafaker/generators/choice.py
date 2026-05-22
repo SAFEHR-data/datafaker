@@ -6,7 +6,7 @@ import typing
 from abc import abstractmethod
 from typing import Any, Sequence, Union
 
-from sqlalchemy import Column, CursorResult, Engine, desc, func, literal_column, select, table
+from sqlalchemy import Column, CursorResult, Engine, desc, func, literal_column, select, table, text
 
 from datafaker.generators.base import (
     Generator,
@@ -14,6 +14,7 @@ from datafaker.generators.base import (
     dist_gen,
     fit_from_buckets,
 )
+from datafaker.utils import schema_qualified_name
 
 NumericType = Union[int, float]
 
@@ -51,6 +52,7 @@ def _choice_stmt(
     sample_count: int | None,
     suppress_count: int,
     random_fn: Any,
+    table_sql: str | None = None,
 ) -> Any:
     """Build a SQLAlchemy SELECT for gathering choice value distributions.
 
@@ -59,7 +61,7 @@ def _choice_stmt(
     without TOP; this function never emits such a clause.
     """
     col = literal_column(f'"{column_name}"')
-    tbl = table(table_name)
+    tbl = text(table_sql) if table_sql else table(table_name)
     if sample_count is not None:
         sample_sub = (
             select(col.label("value"))
@@ -108,6 +110,7 @@ class ChoiceGenerator(Generator):
         sample_count: int | None = None,
         suppress_count: int = 0,
         dialect: Any = None,
+        table_sql: str | None = None,
     ) -> None:
         """Initialise a ChoiceGenerator."""
         super().__init__()
@@ -124,7 +127,8 @@ class ChoiceGenerator(Generator):
             else func.random()
         )
         stmt = _choice_stmt(
-            column_name, table_name, self.STORE_COUNTS, sample_count, suppress_count, random_fn
+            column_name, table_name, self.STORE_COUNTS, sample_count, suppress_count, random_fn,
+            table_sql=table_sql,
         )
         compile_opts: dict[str, Any] = {"compile_kwargs": {"literal_binds": True}}
         if dialect is not None:
@@ -333,6 +337,8 @@ class ChoiceGeneratorFactory(GeneratorFactory):
         column = columns[0]
         column_name = column.name
         table_name = column.table.name
+        table_sql = schema_qualified_name(table_name, engine)
+        src_table = column.table
         dialect = engine.dialect
         random_fn = func.newid() if dialect.name == "mssql" else func.random()
         col = literal_column(f'"{column_name}"')
@@ -353,15 +359,15 @@ class ChoiceGeneratorFactory(GeneratorFactory):
                     generators += [
                         ZipfChoiceGenerator(
                             table_name, column_name, vg.values, vg.counts,
-                            dialect=dialect,
+                            dialect=dialect, table_sql=table_sql,
                         ),
                         UniformChoiceGenerator(
                             table_name, column_name, vg.values, vg.counts,
-                            dialect=dialect,
+                            dialect=dialect, table_sql=table_sql,
                         ),
                         WeightedChoiceGenerator(
                             table_name, column_name, vg.cvs, vg.counts,
-                            dialect=dialect,
+                            dialect=dialect, table_sql=table_sql,
                         ),
                     ]
                 if vg.counts_not_suppressed:
@@ -370,17 +376,20 @@ class ChoiceGeneratorFactory(GeneratorFactory):
                             table_name, column_name,
                             vg.values_not_suppressed, vg.counts_not_suppressed,
                             suppress_count=self.SUPPRESS_COUNT, dialect=dialect,
+                            table_sql=table_sql,
                         ),
                         UniformChoiceGenerator(
                             table_name, column_name,
                             vg.values_not_suppressed, vg.counts_not_suppressed,
                             suppress_count=self.SUPPRESS_COUNT, dialect=dialect,
+                            table_sql=table_sql,
                         ),
                         WeightedChoiceGenerator(
                             table_name=table_name, column_name=column_name,
                             values=vg.cvs_not_suppressed,
                             counts=vg.counts_not_suppressed,
                             suppress_count=self.SUPPRESS_COUNT, dialect=dialect,
+                            table_sql=table_sql,
                         ),
                     ]
             inner = (
@@ -404,14 +413,17 @@ class ChoiceGeneratorFactory(GeneratorFactory):
                         ZipfChoiceGenerator(
                             table_name, column_name, vg.values, vg.counts,
                             sample_count=self.SAMPLE_COUNT, dialect=dialect,
+                            table_sql=table_sql,
                         ),
                         UniformChoiceGenerator(
                             table_name, column_name, vg.values, vg.counts,
                             sample_count=self.SAMPLE_COUNT, dialect=dialect,
+                            table_sql=table_sql,
                         ),
                         WeightedChoiceGenerator(
                             table_name, column_name, vg.cvs, vg.counts,
                             sample_count=self.SAMPLE_COUNT, dialect=dialect,
+                            table_sql=table_sql,
                         ),
                     ]
                 if vg.counts_not_suppressed:
@@ -421,12 +433,14 @@ class ChoiceGeneratorFactory(GeneratorFactory):
                             vg.values_not_suppressed, vg.counts_not_suppressed,
                             sample_count=self.SAMPLE_COUNT,
                             suppress_count=self.SUPPRESS_COUNT, dialect=dialect,
+                            table_sql=table_sql,
                         ),
                         UniformChoiceGenerator(
                             table_name, column_name,
                             vg.values_not_suppressed, vg.counts_not_suppressed,
                             sample_count=self.SAMPLE_COUNT,
                             suppress_count=self.SUPPRESS_COUNT, dialect=dialect,
+                            table_sql=table_sql,
                         ),
                         WeightedChoiceGenerator(
                             table_name=table_name, column_name=column_name,
@@ -434,6 +448,7 @@ class ChoiceGeneratorFactory(GeneratorFactory):
                             counts=vg.counts_not_suppressed,
                             sample_count=self.SAMPLE_COUNT,
                             suppress_count=self.SUPPRESS_COUNT, dialect=dialect,
+                            table_sql=table_sql,
                         ),
                     ]
         return generators

@@ -497,12 +497,9 @@ class TestPredefinedGeneratorSchemaQualified(unittest.TestCase):
 
 
 class TestAggregateQuerySchemaQualified(unittest.TestCase):
-    """_copy_entries writes schema-qualified table names into src-stats SQL."""
+    """_get_aggregate_query qualifies table names using the engine's schema_translate_map."""
 
-    def test_aggregate_query_includes_schema(self) -> None:
-        """_get_aggregate_query uses the schema-qualified name when engine has schema map."""
-        from unittest.mock import MagicMock, patch
-
+    def _make_shell(self, schema: str | None):
         from datafaker.interactive.generators import GeneratorCmd
         from datafaker.generators.base import Generator
 
@@ -512,28 +509,28 @@ class TestAggregateQuerySchemaQualified(unittest.TestCase):
         }
 
         engine = MagicMock()
-        engine.get_execution_options.return_value = {"schema_translate_map": {None: "myschema"}}
+        schema_map = {None: schema} if schema else {}
+        engine.get_execution_options.return_value = {"schema_translate_map": schema_map}
 
         shell = MagicMock(spec=GeneratorCmd)
         shell.sync_engine = engine
+        return shell, gen
 
-        result = GeneratorCmd._get_aggregate_query(shell, [gen], "myschema.person")
+    def test_aggregate_query_includes_schema(self) -> None:
+        """_get_aggregate_query qualifies the bare table name when engine has a schema map."""
+        from datafaker.interactive.generators import GeneratorCmd
+
+        shell, gen = self._make_shell("myschema")
+        result = GeneratorCmd._get_aggregate_query(shell, [gen], "person")
         self.assertIsNotNone(result)
         self.assertIn("myschema.person", result)
-        self.assertNotIn("FROM person", result.replace("myschema.person", ""))
 
     def test_aggregate_query_no_schema(self) -> None:
         """_get_aggregate_query uses the bare name when no schema is set."""
-        from unittest.mock import MagicMock
-
         from datafaker.interactive.generators import GeneratorCmd
-        from datafaker.generators.base import Generator
 
-        gen = MagicMock(spec=Generator)
-        gen.select_aggregate_clauses.return_value = {
-            "mean__age": {"clause": "AVG(age)", "comment": None}
-        }
-
-        result = GeneratorCmd._get_aggregate_query(None, [gen], "person")
+        shell, gen = self._make_shell(None)
+        result = GeneratorCmd._get_aggregate_query(shell, [gen], "person")
         self.assertIsNotNone(result)
         self.assertIn("FROM person", result)
+        self.assertNotIn(".", result.split("FROM ")[-1])

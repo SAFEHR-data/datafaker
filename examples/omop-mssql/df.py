@@ -35,6 +35,12 @@ generic.add_provider(TimespanProvider)
 generic.add_provider(WeightedBooleanProvider)
 
 
+import yaml
+
+with open("src-stats.yaml", "r", encoding="utf-8") as f:
+    SRC_STATS = yaml.unsafe_load(f)
+
+
 class PersonGenerator(TableGenerator):
     num_rows_per_pass = 10
 
@@ -45,75 +51,16 @@ class PersonGenerator(TableGenerator):
         if not self.initialized:
             self.initialized = True
         result = {}
-        columns_to_generate = set(
-            {
-                "birth_datetime",
-                "ethnicity_source_value",
-                "ethnicity_source_concept_id",
-                "ethnicity_concept_id",
-                "person_source_value",
-                "race_concept_id",
-                "month_of_birth",
-                "race_source_value",
-                "gender_source_value",
-                "day_of_birth",
-                "gender_concept_id",
-                "race_source_concept_id",
-                "gender_source_concept_id",
-                "year_of_birth",
-            }
-        )
+        columns_to_generate = set({"gender_concept_id", "year_of_birth"})
         while columns_to_generate:
-            if "birth_datetime" in columns_to_generate:
-                result["birth_datetime"] = generic.datetime.datetime()
-            if "day_of_birth" in columns_to_generate:
-                result["day_of_birth"] = generic.numeric.integer_number()
-            if "ethnicity_concept_id" in columns_to_generate:
-                result[
-                    "ethnicity_concept_id"
-                ] = generic.column_value_provider.column_value(
-                    dst_db_conn, metadata.tables["concept"], "concept_id"
-                )
-            if "ethnicity_source_concept_id" in columns_to_generate:
-                result[
-                    "ethnicity_source_concept_id"
-                ] = generic.column_value_provider.column_value(
-                    dst_db_conn, metadata.tables["concept"], "concept_id"
-                )
-            if "ethnicity_source_value" in columns_to_generate:
-                result["ethnicity_source_value"] = generic.person.password(length=50)
             if "gender_concept_id" in columns_to_generate:
-                result[
-                    "gender_concept_id"
-                ] = generic.column_value_provider.column_value(
-                    dst_db_conn, metadata.tables["concept"], "concept_id"
+                result["gender_concept_id"] = dist_gen.weighted_choice(
+                    a=SRC_STATS["auto__person__gender_concept_id"]["results"]
                 )
-            if "gender_source_concept_id" in columns_to_generate:
-                result[
-                    "gender_source_concept_id"
-                ] = generic.column_value_provider.column_value(
-                    dst_db_conn, metadata.tables["concept"], "concept_id"
-                )
-            if "gender_source_value" in columns_to_generate:
-                result["gender_source_value"] = generic.person.password(length=50)
-            if "month_of_birth" in columns_to_generate:
-                result["month_of_birth"] = generic.numeric.integer_number()
-            if "person_source_value" in columns_to_generate:
-                result["person_source_value"] = generic.person.password(length=50)
-            if "race_concept_id" in columns_to_generate:
-                result["race_concept_id"] = generic.column_value_provider.column_value(
-                    dst_db_conn, metadata.tables["concept"], "concept_id"
-                )
-            if "race_source_concept_id" in columns_to_generate:
-                result[
-                    "race_source_concept_id"
-                ] = generic.column_value_provider.column_value(
-                    dst_db_conn, metadata.tables["concept"], "concept_id"
-                )
-            if "race_source_value" in columns_to_generate:
-                result["race_source_value"] = generic.person.password(length=50)
             if "year_of_birth" in columns_to_generate:
-                result["year_of_birth"] = generic.numeric.integer_number()
+                result["year_of_birth"] = dist_gen.weighted_choice(
+                    a=SRC_STATS["auto__person__year_of_birth"]["results"]
+                )
             columns_to_generate = set()
         return result
 
