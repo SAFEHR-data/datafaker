@@ -49,7 +49,7 @@ from datafaker.utils import (
     sorted_non_vocabulary_tables,
 )
 
-from .serialize_metadata import dict_to_metadata
+from .serialize_metadata import dict_to_metadata, should_ignore_fk
 
 # pylint: disable=too-many-arguments
 
@@ -98,10 +98,21 @@ def load_metadata_config(
             return {}
         tables_dict = meta_dict.get("tables", {})
         if config is not None and "tables" in config:
+            tables_config = config["tables"]
             # Remove ignored tables
-            for name, table_config in config.get("tables", {}).items():
+            for name, table_config in tables_config.items():
                 if get_flag(table_config, "ignore"):
                     tables_dict.pop(name, None)
+            # Remove foreign keys to ignored tables
+            for table_meta in tables_dict.values():
+                for column_meta in table_meta.get("columns", {}).values():
+                    if isinstance(column_meta, dict) and "foreign_keys" in column_meta:
+                        filtered_fks = [
+                            fk
+                            for fk in column_meta["foreign_keys"]
+                            if not should_ignore_fk(tables_config, fk)
+                        ]
+                        column_meta["foreign_keys"] = filtered_fks
         return meta_dict
 
 

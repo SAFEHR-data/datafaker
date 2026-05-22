@@ -202,6 +202,7 @@ def create_db_data_into(
         src_stats,
         metadata,
     )
+    context["sum"] = sum
     row_counts: Counter[str] = Counter()
     with dst_engine.connect() as dst_conn:
         context["dst_db_conn"] = dst_conn

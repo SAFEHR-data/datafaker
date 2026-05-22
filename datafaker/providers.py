@@ -385,8 +385,10 @@ class DistributionProvider(BaseProvider):
         :param a: a list of dicts, each with a ``value`` key
             holding the value to be returned and a ``count`` key holding the
             number of that value found in the original dataset
-        :return: The chosen ``value``.
+        :return: The chosen ``value``, or None if ``a`` is an empty list.
         """
+        if not a:
+            return None
         vs = []
         counts = []
         for vc in a:
@@ -522,7 +524,7 @@ class DistributionProvider(BaseProvider):
     def alternatives(
         self,
         alternative_configs: list[dict[str, Any]],
-        counts: list[dict[str, int]] | None,
+        counts: list[dict[str, int]] | None = None,
     ) -> Any:
         """
         Pick between other generators.

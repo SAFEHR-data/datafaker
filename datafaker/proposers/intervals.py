@@ -143,7 +143,7 @@ class DateAfterProposer(Proposer):
 
     def function_name(self) -> str:
         """Get the name of the generator function to call."""
-        return "anchored_provider.normal_date"
+        return "generic.anchored_provider.normal_date"
 
     def name(self) -> str:
         """Get the name of the generator."""
@@ -152,8 +152,8 @@ class DateAfterProposer(Proposer):
     def nominal_kwargs(self) -> dict[str, Any]:
         """Get the arguments to be entered into ``config.yaml``."""
         return {
-            "mean_seconds": f'SRC_STATS["auto__{self._column.name}"]["results"][0]["mean__{self._column.name}"]',
-            "sd_seconds": f'SRC_STATS["auto__{self._column.name}"]["results"][0]["sd__{self._column.name}"]',
+            "mean_seconds": f'SRC_STATS["auto__{self._column.table.name}"]["results"][0]["mean__{self._column.name}"]',
+            "sd_seconds": f'SRC_STATS["auto__{self._column.table.name}"]["results"][0]["stddev__{self._column.name}"]',
             "anchor": f'GENERATED_ROW["{self._anchor.name}"]',
         }
 
@@ -176,7 +176,7 @@ class DateAfterProposer(Proposer):
         if dest_dsn:
             dialect = get_dialect(dest_dsn)
         else:
-            dialect = dialects.postgresql.dialect
+            dialect = dialects.postgresql.dialect()
         mean_q = func.avg(SecondsDifference(self._column, self._anchor))
         sd_q = func.stddev(SecondsDifference(self._column, self._anchor))
         

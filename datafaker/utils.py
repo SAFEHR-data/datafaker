@@ -868,13 +868,15 @@ def underline_error(e: SyntaxError) -> str:
     return "\n" + " " * start + "^" * (end - start)
 
 
-def gather_symbols(
+def gather_from_ast(
     errors: MutableSequence[str],
     name: str,
-    value: Any
+    value: Any,
+    is_for_capture: Callable[[ast.AST], bool],
+    node_to_str: Callable[[ast.AST], str],
 ) -> set[str]:
     """
-    Get all the symbols from Python texts.
+    Get strings from some part of a Python string.
 
     :param errors: Output syntax errors.
     :param name: The name of the symbol supplied as ``value``, to be used in
@@ -882,19 +884,23 @@ def gather_symbols(
     :param value: The value to be searched; either Python text (as a string),
       a sequence of Python texts, a mapping with Python texts in the values,
       or similar things nested to any depth.
+    :param is_for_capture: If this returns True for a particular AST node, it
+      will be passed to ``node_to_str`` to provide one string of the output.
+    :param node_to_str: Turns each node that passes ``is_for_capture``
+      into a string for output.
     :return: The set of symbols found in the Python text(s).
     """
     if isinstance(value, Mapping):
         return set().union(*(
-            gather_symbols(errors, f"{name}[{repr(k)}]", v)
+            gather_from_ast(errors, f"{name}[{repr(k)}]", v, is_for_capture, node_to_str)
             for k, v in value.items()
         ))
     if isinstance(value, str):
         try:
             return {
-                node.id
+                node_to_str(node)
                 for node in ast.walk(ast.parse(value))
-                if isinstance(node, ast.Name)
+                if is_for_capture(node)
             }
         except SyntaxError as e:
             errors.append(
@@ -910,9 +916,70 @@ def gather_symbols(
     if not isinstance(value, Sequence):
         return set()
     return set().union(*(
-        gather_symbols(errors, f"{name}[{i}]", v)
+        gather_from_ast(errors, f"{name}[{i}]", v, is_for_capture, node_to_str)
         for i, v in enumerate(value)
     ))
+
+
+def gather_keys_from_mapping(
+    errors: MutableSequence[str],
+    name: str,
+    value: Any,
+    name_of_mapping: str,
+):
+    """
+    Get all the literal keys from a mapping in Python texts.
+
+    :param errors: Output syntax errors.
+    :param name: The name of the symbol supplied as ``value``, to be used in
+      error messages.
+    :param value: The value to be searched; either Python text (as a string),
+      a sequence of Python texts, a mapping with Python texts in the values,
+      or similar things nested to any depth.
+    :param name_of_mapping: The mapping to search for.
+    :return: The set of symbols found in the Python text(s).
+    """
+    def is_wanted(node):
+        """Returns True if this node is name_of_mapping["string"]."""
+        return (
+            isinstance(node, ast.Subscript)
+            and isinstance(node.value, ast.Name)
+            and node.value.id == name_of_mapping
+            and isinstance(node.slice, ast.Constant)
+            and isinstance(node.slice.value, str)
+        )
+    return gather_from_ast(
+        errors,
+        name,
+        value,
+        is_wanted,
+        lambda node: node.slice.value,
+    )
+
+
+def gather_symbols(
+    errors: MutableSequence[str],
+    name: str,
+    value: Any,
+) -> set[str]:
+    """
+    Get all the symbols from Python texts.
+
+    :param errors: Output syntax errors.
+    :param name: The name of the symbol supplied as ``value``, to be used in
+      error messages.
+    :param value: The value to be searched; either Python text (as a string),
+      a sequence of Python texts, a mapping with Python texts in the values,
+      or similar things nested to any depth.
+    :return: The set of symbols found in the Python text(s).
+    """
+    return gather_from_ast(
+        errors,
+        name,
+        value,
+        lambda node: isinstance(node, ast.Name),
+        lambda node: node.id,
+    )
 
 
 def generators_require_stats(config: Mapping) -> bool:
