@@ -16,6 +16,7 @@ from datafaker.utils import (
     get_row_generators,
     logger,
     primary_private_fks,
+    schema_qualified_name,
     split_column_full_name,
     table_is_private,
 )
@@ -292,7 +293,8 @@ information about the columns in the current table. Use 'peek',
                     if kwn:
                         rg["kwargs"] = kwn
                     rgs.append(rg)
-            aq = self._get_aggregate_query(new_gens, entry.name)
+            aq_table = schema_qualified_name(entry.name, self.sync_engine)
+            aq = self._get_aggregate_query(new_gens, aq_table)
             if aq:
                 src_stats.append(
                     {
@@ -747,7 +749,9 @@ information about the columns in the current table. Use 'peek',
                     table_name,
                     n,
                 )
-        select_q = self._get_aggregate_query([gen], table_name)
+        select_q = self._get_aggregate_query(
+            [gen], schema_qualified_name(table_name, self.sync_engine)
+        )
         self.print("{0}; providing the following values: {1}", select_q, vals)
 
     def _get_column_data(

@@ -131,7 +131,9 @@ class Generator(ABC):
 class PredefinedGenerator(Generator):
     """Generator built from an existing config.yaml."""
 
-    SELECT_AGGREGATE_RE = re.compile(r"SELECT (.*) FROM ([A-Za-z_][A-Za-z0-9_]*)")
+    SELECT_AGGREGATE_RE = re.compile(
+        r"SELECT (.*) FROM ((?:[A-Za-z_][A-Za-z0-9_]*\.)?[A-Za-z_][A-Za-z0-9_]*)"
+    )
     AS_CLAUSE_RE = re.compile(r" *(.+) +AS +([A-Za-z_][A-Za-z0-9_]*) *")
     SRC_STAT_NAME_RE = re.compile(r'\bSRC_STATS\["([^]]*)"\].*')
 
@@ -189,7 +191,7 @@ class PredefinedGenerator(Generator):
                 # This query is one that this generator is interested in
                 sam = None if query is None else self.SELECT_AGGREGATE_RE.match(query)
                 # sam.group(2) is the table name from the FROM clause of the query
-                if sam and name == f"auto__{sam.group(2)}":
+                if sam and name == f"auto__{sam.group(2).split('.')[-1]}":
                     # name is auto__{table_name}, so it's a select_aggregate,
                     # so we split up its clauses
                     sacs = [

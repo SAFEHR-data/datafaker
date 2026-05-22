@@ -445,3 +445,95 @@ class TestLogNormalGeneratorSchemaQualified(unittest.TestCase):
         sql = self._get_sql(schema=None)
         self.assertIn("FROM PERSON", sql)
         self.assertNotIn("FROM MYSCHEMA", sql)
+
+
+class TestPredefinedGeneratorSchemaQualified(unittest.TestCase):
+    """PredefinedGenerator parses aggregate clauses from schema-qualified SQL."""
+
+    def _make_config(self, table_sql_name: str) -> dict:
+        return {
+            "tables": {
+                "person": {
+                    "row_generators": [
+                        {
+                            "name": "dist_gen.gaussian",
+                            "columns_assigned": ["age"],
+                            "kwargs": {
+                                "mean": f'SRC_STATS["auto__person"]["results"][0]["mean__age"]',
+                                "sd": f'SRC_STATS["auto__person"]["results"][0]["sd__age"]',
+                            },
+                        }
+                    ]
+                }
+            },
+            "src-stats": [
+                {
+                    "name": "auto__person",
+                    "query": f"SELECT AVG(age) AS mean__age, STDDEV(age) AS sd__age FROM {table_sql_name}",
+                    "comments": [],
+                }
+            ],
+        }
+
+    def test_unqualified_name_parses_clauses(self) -> None:
+        """PredefinedGenerator parses select_aggregate_clauses from unqualified FROM."""
+        from datafaker.generators.base import PredefinedGenerator
+
+        config = self._make_config("person")
+        rg = config["tables"]["person"]["row_generators"][0]
+        gen = PredefinedGenerator("person", rg, config)
+        self.assertIn("mean__age", gen.select_aggregate_clauses())
+        self.assertIn("sd__age", gen.select_aggregate_clauses())
+
+    def test_schema_qualified_name_parses_clauses(self) -> None:
+        """PredefinedGenerator parses select_aggregate_clauses from schema-qualified FROM."""
+        from datafaker.generators.base import PredefinedGenerator
+
+        config = self._make_config("myschema.person")
+        rg = config["tables"]["person"]["row_generators"][0]
+        gen = PredefinedGenerator("person", rg, config)
+        self.assertIn("mean__age", gen.select_aggregate_clauses())
+        self.assertIn("sd__age", gen.select_aggregate_clauses())
+
+
+class TestAggregateQuerySchemaQualified(unittest.TestCase):
+    """_copy_entries writes schema-qualified table names into src-stats SQL."""
+
+    def test_aggregate_query_includes_schema(self) -> None:
+        """_get_aggregate_query uses the schema-qualified name when engine has schema map."""
+        from unittest.mock import MagicMock, patch
+
+        from datafaker.interactive.generators import GeneratorCmd
+        from datafaker.generators.base import Generator
+
+        gen = MagicMock(spec=Generator)
+        gen.select_aggregate_clauses.return_value = {
+            "mean__age": {"clause": "AVG(age)", "comment": None}
+        }
+
+        engine = MagicMock()
+        engine.get_execution_options.return_value = {"schema_translate_map": {None: "myschema"}}
+
+        shell = MagicMock(spec=GeneratorCmd)
+        shell.sync_engine = engine
+
+        result = GeneratorCmd._get_aggregate_query(shell, [gen], "myschema.person")
+        self.assertIsNotNone(result)
+        self.assertIn("myschema.person", result)
+        self.assertNotIn("FROM person", result.replace("myschema.person", ""))
+
+    def test_aggregate_query_no_schema(self) -> None:
+        """_get_aggregate_query uses the bare name when no schema is set."""
+        from unittest.mock import MagicMock
+
+        from datafaker.interactive.generators import GeneratorCmd
+        from datafaker.generators.base import Generator
+
+        gen = MagicMock(spec=Generator)
+        gen.select_aggregate_clauses.return_value = {
+            "mean__age": {"clause": "AVG(age)", "comment": None}
+        }
+
+        result = GeneratorCmd._get_aggregate_query(None, [gen], "person")
+        self.assertIsNotNone(result)
+        self.assertIn("FROM person", result)
