@@ -21,7 +21,6 @@ After :ref:`Installation <page-installation>`, we can run ``datafaker`` to see t
       configure-missing     Interactively set the missingness of the...
       configure-tables      Interactively set tables to ignored, vocabulary...
       create-data           Populate the schema in the target directory with...
-      create-generators     Make a datafaker file of generator classes.
       create-tables         Create schema from the ORM YAML file.
       create-vocab          Import vocabulary data into the target database.
       list-tables           List the names of tables
@@ -561,13 +560,11 @@ Whichever we chose, now we can create the generators Python file and generate th
 
    $ datafaker create-tables
    $ datafaker create-vocab
-   $ datafaker create-generators
    $ datafaker create-data --num-passes 10
 
 The first of these uses ``orm.yaml`` to create the destination database.
 The second uses all the ``.yaml.gz`` (or ``.yaml``) files representing the vocabulary tables (this can take hours, too).
-The third uses ``config.yaml`` to create a file ``df.py`` file containing code to call the generators as configured.
-The last one actually generates the data. ``--num-passes`` controls how many rows are generated.
+The third actually generates the data. ``--num-passes`` controls how many rows are generated.
 At present the only ways to generate different numbers of rows for different tables is to configure ``num_rows_per_pass`` in ``config.yaml``:
 
 .. code-block:: yaml
@@ -575,7 +572,7 @@ At present the only ways to generate different numbers of rows for different tab
    observation:
       num_rows_per_pass: 50
 
-This makes every call to ``create-data`` produce 50 rows in the ``observation`` table (each time you change ``config.yaml` you need to re-run ``create-generators``).
+This makes every call to ``create-data`` produce 50 rows in the ``observation`` table.
 If you call ``create-data`` multiple times you get more data added to whatever already exists. Call ``remove-data`` to remove all rows from all non-vocabulary tables.
 
 You can call ``remove-vocab`` to remove all rows from all vocabulary tables, and you can call ``remove-tables`` to empty the database completely.

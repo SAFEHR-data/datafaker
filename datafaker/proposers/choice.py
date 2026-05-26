@@ -8,9 +8,9 @@ from typing import Any, Sequence, Union
 
 from sqlalchemy import Column, CursorResult, Engine, text
 
-from datafaker.generators.base import (
-    Generator,
-    GeneratorFactory,
+from datafaker.proposers.base import (
+    Proposer,
+    ProposerFactory,
     dist_gen,
     fit_from_buckets,
 )
@@ -44,8 +44,8 @@ def zipf_distribution(total: int, bins: int) -> typing.Generator[int, None, None
             yield x
 
 
-class ChoiceGenerator(Generator):
-    """Base generator for all generators producing choices of items."""
+class ChoiceProposer(Proposer):
+    """Base proposer for all proposers producing choices of items."""
 
     STORE_COUNTS = False
 
@@ -59,7 +59,7 @@ class ChoiceGenerator(Generator):
         sample_count: int | None = None,
         suppress_count: int = 0,
     ) -> None:
-        """Initialise a ChoiceGenerator."""
+        """Initialise a ChoiceProposer."""
         super().__init__()
         self.table_name = table_name
         self.column_name = column_name
@@ -167,7 +167,7 @@ class ChoiceGenerator(Generator):
         return default if self._fit is None else self._fit
 
 
-class ZipfChoiceGenerator(ChoiceGenerator):
+class ZipfChoiceProposer(ChoiceProposer):
     """Generator producing items in a Zipf distribution."""
 
     def get_estimated_counts(self, counts: list[int]) -> list[int]:
@@ -201,8 +201,8 @@ def uniform_distribution(total: int, bins: int) -> typing.Generator[int, None, N
         yield p
 
 
-class UniformChoiceGenerator(ChoiceGenerator):
-    """A generator producing values, each roughly as frequently as each other."""
+class UniformChoiceProposer(ChoiceProposer):
+    """A proposer producing values, each roughly as frequently as each other."""
 
     def get_estimated_counts(self, counts: list[int]) -> list[int]:
         """Get the counts that we would expect if this distribution was the correct one."""
@@ -217,8 +217,8 @@ class UniformChoiceGenerator(ChoiceGenerator):
         return [dist_gen.choice_direct(self.values) for _ in range(count)]
 
 
-class WeightedChoiceGenerator(ChoiceGenerator):
-    """Choice generator that matches the source data's frequency."""
+class WeightedChoiceProposer(ChoiceProposer):
+    """Choice proposer that matches the source data's frequency."""
 
     STORE_COUNTS = True
 
@@ -287,15 +287,15 @@ class ValueGatherer:
         self.cvs_not_suppressed = cvs_not_suppressed
 
 
-class ChoiceGeneratorFactory(GeneratorFactory):
+class ChoiceProposerFactory(ProposerFactory):
     """All generators that want an average and standard deviation."""
 
     SAMPLE_COUNT = MAXIMUM_CHOICES
     SUPPRESS_COUNT = 7
 
-    def get_generators(
+    def get_proposers(
         self, columns: list[Column], engine: Engine
-    ) -> Sequence[Generator]:
+    ) -> Sequence[Proposer]:
         """Get the generators appropriate to these columns."""
         if len(columns) != 1:
             return []
@@ -315,33 +315,33 @@ class ChoiceGeneratorFactory(GeneratorFactory):
                 vg = ValueGatherer(results, self.SUPPRESS_COUNT)
                 if vg.counts:
                     generators += [
-                        ZipfChoiceGenerator(
+                        ZipfChoiceProposer(
                             table_name, column_name, vg.values, vg.counts
                         ),
-                        UniformChoiceGenerator(
+                        UniformChoiceProposer(
                             table_name, column_name, vg.values, vg.counts
                         ),
-                        WeightedChoiceGenerator(
+                        WeightedChoiceProposer(
                             table_name, column_name, vg.cvs, vg.counts
                         ),
                     ]
                 if vg.counts_not_suppressed:
                     generators += [
-                        ZipfChoiceGenerator(
+                        ZipfChoiceProposer(
                             table_name,
                             column_name,
                             vg.values_not_suppressed,
                             vg.counts_not_suppressed,
                             suppress_count=self.SUPPRESS_COUNT,
                         ),
-                        UniformChoiceGenerator(
+                        UniformChoiceProposer(
                             table_name,
                             column_name,
                             vg.values_not_suppressed,
                             vg.counts_not_suppressed,
                             suppress_count=self.SUPPRESS_COUNT,
                         ),
-                        WeightedChoiceGenerator(
+                        WeightedChoiceProposer(
                             table_name=table_name,
                             column_name=column_name,
                             values=vg.cvs_not_suppressed,
@@ -361,21 +361,21 @@ class ChoiceGeneratorFactory(GeneratorFactory):
                 vg = ValueGatherer(sampled_results, self.SUPPRESS_COUNT)
                 if vg.counts:
                     generators += [
-                        ZipfChoiceGenerator(
+                        ZipfChoiceProposer(
                             table_name,
                             column_name,
                             vg.values,
                             vg.counts,
                             sample_count=self.SAMPLE_COUNT,
                         ),
-                        UniformChoiceGenerator(
+                        UniformChoiceProposer(
                             table_name,
                             column_name,
                             vg.values,
                             vg.counts,
                             sample_count=self.SAMPLE_COUNT,
                         ),
-                        WeightedChoiceGenerator(
+                        WeightedChoiceProposer(
                             table_name,
                             column_name,
                             vg.cvs,
@@ -385,7 +385,7 @@ class ChoiceGeneratorFactory(GeneratorFactory):
                     ]
                 if vg.counts_not_suppressed:
                     generators += [
-                        ZipfChoiceGenerator(
+                        ZipfChoiceProposer(
                             table_name,
                             column_name,
                             vg.values_not_suppressed,
@@ -393,7 +393,7 @@ class ChoiceGeneratorFactory(GeneratorFactory):
                             sample_count=self.SAMPLE_COUNT,
                             suppress_count=self.SUPPRESS_COUNT,
                         ),
-                        UniformChoiceGenerator(
+                        UniformChoiceProposer(
                             table_name,
                             column_name,
                             vg.values_not_suppressed,
@@ -401,7 +401,7 @@ class ChoiceGeneratorFactory(GeneratorFactory):
                             sample_count=self.SAMPLE_COUNT,
                             suppress_count=self.SUPPRESS_COUNT,
                         ),
-                        WeightedChoiceGenerator(
+                        WeightedChoiceProposer(
                             table_name=table_name,
                             column_name=column_name,
                             values=vg.cvs_not_suppressed,

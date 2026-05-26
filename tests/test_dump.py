@@ -175,8 +175,6 @@ class EndToEndParquetTestCase(DatafakerTestCase):
         # Generate the fake data
         result = runner.invoke(app, ["create-tables"])
         self.assertSuccess(result)
-        result = runner.invoke(app, ["create-generators"])
-        self.assertSuccess(result)
         num_passes = 70
         result = runner.invoke(app, ["create-data", "--num-passes", str(num_passes)])
         self.assertSuccess(result)

@@ -319,7 +319,6 @@ as the sensitive data is no longer accessed by Datafaker.
 The remaining commands are:
 
 - ``datafaker create-tables`` creates the structure of the destination database to match (as much as is requested) the structure of the source database
-- ``datafaker create-generators`` creates Python code files that will actually generate the data (this phase might be removed in a future version of Datafaker)
 - ``datafaker create-data`` writes fake data into the destination database.
 
 As these operations require no access to the sensitive data, this phase can be
