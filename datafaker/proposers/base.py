@@ -9,7 +9,7 @@ import mimesis
 import mimesis.locales
 import sqlalchemy
 from sqlalchemy import Column, Engine, Join, Table, func, select
-from sqlalchemy.sql.visitors import replacement_traverse
+from sqlalchemy.sql.visitors import replacement_traverse, traverse
 from sqlalchemy.types import Integer, Numeric, String, TypeEngine
 from typing_extensions import Self
 
@@ -281,15 +281,31 @@ class TableReplacer:
 
     def replace(self, object: Any) -> Any:
         """Replaces columns with the same column on the aliased table."""
-        if not isinstance(object, Column):
-            return None
-        if object.table == self.table:
-            return self.atable.columns[object.name]
+        if isinstance(object, Column):
+            if object.table == self.table:
+                return self.atable.columns[object.name]
+        elif isinstance(object, Table):
+            return self.atable
         return None
 
     def aliased_table(self):
         """The aliased table."""
         return self.atable
+
+
+def duckdb_workaround(stmt: Any) -> Any:
+    """
+    Transform a SQLAlchemy ORM statement to work around DuckDB issues.
+
+    :param stmt: An ORM statement, such as the return value of ``select``.
+    :return: An ORM statement, transformed if necessary.
+    """
+    tables: list[Table] = []
+    traverse(stmt, {}, {"table": tables.append})
+    for t in tables:
+        tr = TableReplacer(t)
+        stmt = replacement_traverse(stmt, {}, tr.replace)
+    return stmt
 
 
 def fit_from_buckets(xs: Sequence[NumericType], ys: Sequence[NumericType]) -> float:
@@ -363,15 +379,13 @@ class Buckets:
         :param table: SQLAlchemy table (or joined tables) to pull data from.
         :param column: SQLAlchemy column or expression to measure.
         """
-        replacer = TableReplacer(table)
-        aliased_column = replacement_traverse(column, {}, replacer.replace)
         with engine.connect() as connection:
             result = connection.execute(
-                select(
-                   func.avg(aliased_column).label("mean"),
-                   func.stddev(aliased_column).label("stddev"),
-                   func.count(aliased_column).label("count"),  # pylint: disable=not-callable
-                ).select_from(replacer.atable)
+                duckdb_workaround(select(
+                   func.avg(column).label("mean"),
+                   func.stddev(column).label("stddev"),
+                   func.count(column).label("count"),  # pylint: disable=not-callable
+                ).select_from(table))
             ).first()
             if result is None or result.stddev is None or getattr(result, "count") < 2:
                 return None
