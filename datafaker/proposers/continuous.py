@@ -158,13 +158,12 @@ class ContinuousDistributionProposerFactory(ProposerFactory):
         ct = get_column_type(column)
         if not isinstance(ct, Numeric) and not isinstance(ct, Integer):
             return []
-        column_name = column.name
-        table_name = column.table.name
-        buckets = Buckets.make_buckets(engine, table_name, column_name)
+        table = column.table
+        buckets = Buckets.make_buckets(engine, table, column)
         if buckets is None:
             return []
         return self._get_generators_from_buckets(
-            engine, table_name, column_name, buckets
+            engine, table.name, column.name, buckets
         )
 
 

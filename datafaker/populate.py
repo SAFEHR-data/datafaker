@@ -1,5 +1,6 @@
 """Put the generated values into the database, obeying other restrictions."""
 from collections.abc import Iterable, Mapping, MutableMapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 import sqlalchemy
@@ -7,8 +8,9 @@ from mimesis import Generic
 from mimesis.locales import Locale
 
 from datafaker.base import ColumnPresence
-from datafaker.make import FunctionCall, TableGeneratorInfo
+from datafaker.make import FunctionCall, TableGeneratorInfo, RowGeneratorInfo
 from datafaker.providers import (
+    AnchoredProvider,
     BytesProvider,
     ColumnValueProvider,
     DistributionProvider,
@@ -18,10 +20,15 @@ from datafaker.providers import (
     TimespanProvider,
     WeightedBooleanProvider,
 )
-from datafaker.utils import constraint_name, import_file
+from datafaker.utils import (
+    constraint_name,
+    import_file,
+    gather_keys_from_mapping,
+    logger,
+)
 
 
-def make_generic() -> Generic:
+def make_generic(metadata=sqlalchemy.MetaData) -> Generic:
     """Make the generic provider instance."""
     g = Generic(locale=Locale.EN_GB)
     g.add_providers(
@@ -34,6 +41,7 @@ def make_generic() -> Generic:
         TimespanProvider,
         WeightedBooleanProvider,
     )
+    g.add_provider(AnchoredProvider, metadata=metadata)
     return g
 
 
@@ -48,9 +56,11 @@ def _eval_structure(config: Any, context: Mapping) -> Any:
         try:
             # pylint: disable=eval-used
             return eval(config, None, context)
-        except SyntaxError as exc:
+        except KeyError as exc:
+            logger.error("Python Error in %s: %s", config, exc)
             raise exc
-        except NameError as exc:
+        except Exception as exc:
+            logger.error("Failed to parse Python: %s", config)
             raise exc
     if isinstance(config, Mapping):
         return {k: _eval_structure(v, context) for k, v in config.items()}
@@ -118,7 +128,7 @@ def get_symbols(
     metadata: sqlalchemy.MetaData,
 ) -> dict[str, Any]:
     """Get the symbols that may be referred to by various configuration settings."""
-    generic = make_generic()
+    generic = make_generic(metadata)
     symbols = {
         "metadata": metadata,
         "generic": generic,
@@ -170,6 +180,12 @@ def _get_symbols_instantiation(symbols: dict[str, Any], objs: dict[str, Any]) ->
             symbols[name] = _call_from_context(clbl, [], kwargs, symbols)
 
 
+@dataclass
+class RowGenAndRelated:
+    row_gen: RowGeneratorInfo
+    related_columns: set[str]
+
+
 class TableGenerator:
     """Puts generated values into a destination table."""
 
@@ -201,6 +217,18 @@ class TableGenerator:
                 self.existing_constraint_hashes[constraint_name(constraint)] = {
                     hash(tuple(result)) for result in query_result
                 }
+        errors = []
+        self.row_gens = [RowGenAndRelated(rg,
+            gather_keys_from_mapping(
+                errors,
+                f"table['{table_data.table_name}']['row_generators']",
+                {"args": rg.function_call.args, "kwargs": rg.function_call.kwargs},
+                "GENERATED_ROW",
+            ))
+            for rg in table_data.row_gens
+        ]
+        for error in errors:
+            logger.warning(error)
 
     @property
     def num_rows_per_pass(self) -> int:
@@ -214,11 +242,12 @@ class TableGenerator:
 
     def set_context(self, context: Mapping) -> None:
         """Set all the Python symbols that must be known to the configuration."""
-        self.context = context
+        self.context = {**context}
 
     def __call__(self, db_conn: sqlalchemy.Connection) -> dict[str, Any]:
         """Generate some rows of the relevant table in the database."""
         result: dict[str, Any] = {}
+        self.context["GENERATED_ROW"] = result
         columns_to_generate = set(self.table_data.nonnull_columns)
         # Which missingness patterns do we want?
         for choice in self.table_data.column_choices:
@@ -237,8 +266,14 @@ class TableGenerator:
                 )
             if max_tries is not None:
                 max_tries -= 1
-            for row_gen in self.table_data.row_gens:
-                if set(row_gen.variable_names) & columns_to_generate:
+            for rg in self.row_gens:
+                row_gen = rg.row_gen
+                if (
+                    # if we need to generate at least one column this generator generates
+                    set(row_gen.variable_names) & columns_to_generate
+                    # and if we no longer need to generate any related columns
+                    and not (rg.related_columns & columns_to_generate)
+                ):
                     values = call_function(
                         row_gen.function_call,
                         self.context,
@@ -248,7 +283,7 @@ class TableGenerator:
                     else:
                         for index, variable_name in enumerate(row_gen.variable_names):
                             result[variable_name] = values[index]
-            columns_to_generate = set()
+                    columns_to_generate -= set(row_gen.variable_names)
             for constraint in self.table_data.unique_constraints:
                 cf_hash = hash(tuple(result[col.name] for col in constraint.columns))
                 if (

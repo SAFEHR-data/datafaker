@@ -10,7 +10,7 @@ import random
 import re
 import string
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping, MutableSequence, Sequence
 from pathlib import Path
 from types import ModuleType
 from typing import (
@@ -30,6 +30,7 @@ import sqlalchemy
 import yaml
 from jsonschema.exceptions import ValidationError
 from jsonschema.validators import validate
+import sqlalchemy
 from sqlalchemy import Connection, Engine, ForeignKey, create_engine, event, select
 from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.exc import (
@@ -190,6 +191,15 @@ def download_table(
                         rowcount,
                         100 * count / rowcount,
                     )
+
+
+def get_dialect(dsn: str) -> sqlalchemy.engine.interfaces.Dialect:
+    """Gets the SQLAlchemy dialect from a DSN string."""
+    url = sqlalchemy.engine.make_url(dsn)
+    backend = url.get_backend_name()
+    dialect_cls = sqlalchemy.dialects.registry.load(backend)
+    url.get_backend_name()
+    return dialect_cls()
 
 
 def get_sync_engine(engine: MaybeAsyncEngine) -> Engine:
@@ -442,15 +452,26 @@ def get_property(maybe_dict: Any, key: Any, default: T) -> T:
     Get a specific property from a dict or a default if that does not exist.
 
     :param maybe_dict: A mapping, or possibly not.
-    :param key: A key in ``maybe_dict``, or possibly not.
+    :param key: A key in ``maybe_dict``, or possibly not. An iterable can
+      be passed to chain property fetches through multiple mappings.
     :param default: The return value if ``maybe_dict`` is not a mapping,
       or if ``key`` is not a key of ``maybe_dict``. Do not pass ``None``!
       if you want None as the default, please use get_property_or_none
     :return: ``maybe_dict[key]`` if this makes sense, or ``default`` if not.
     """
-    if not isinstance(maybe_dict, Mapping):
-        return default
-    v = maybe_dict.get(key, default)
+    if isinstance(key, str):
+        keys: Iterable[Any] = [key]
+    elif isinstance(key, Iterable):
+        keys = key
+    else:
+        keys = [key]
+    v = maybe_dict
+    for k in keys:
+        if not isinstance(v, Mapping):
+            return default
+        if k not in v:
+            return default
+        v = v[k]
     return v if isinstance(v, type(default)) else default
 
 
@@ -847,6 +868,120 @@ def underline_error(e: SyntaxError) -> str:
     return "\n" + " " * start + "^" * (end - start)
 
 
+def gather_from_ast(
+    errors: MutableSequence[str],
+    name: str,
+    value: Any,
+    is_for_capture: Callable[[ast.AST], bool],
+    node_to_str: Callable[[ast.AST], str],
+) -> set[str]:
+    """
+    Get strings from some part of a Python string.
+
+    :param errors: Output syntax errors.
+    :param name: The name of the symbol supplied as ``value``, to be used in
+      error messages.
+    :param value: The value to be searched; either Python text (as a string),
+      a sequence of Python texts, a mapping with Python texts in the values,
+      or similar things nested to any depth.
+    :param is_for_capture: If this returns True for a particular AST node, it
+      will be passed to ``node_to_str`` to provide one string of the output.
+    :param node_to_str: Turns each node that passes ``is_for_capture``
+      into a string for output.
+    :return: The set of symbols found in the Python text(s).
+    """
+    if isinstance(value, Mapping):
+        return set().union(*(
+            gather_from_ast(errors, f"{name}[{repr(k)}]", v, is_for_capture, node_to_str)
+            for k, v in value.items()
+        ))
+    if isinstance(value, str):
+        try:
+            return {
+                node_to_str(node)
+                for node in ast.walk(ast.parse(value))
+                if is_for_capture(node)
+            }
+        except SyntaxError as e:
+            errors.append(
+                (
+                    "Syntax error in %s: %s\n%s%s",
+                    name,
+                    e.msg,
+                    value,
+                    underline_error(e),
+                )
+            )
+        return set()
+    if not isinstance(value, Sequence):
+        return set()
+    return set().union(*(
+        gather_from_ast(errors, f"{name}[{i}]", v, is_for_capture, node_to_str)
+        for i, v in enumerate(value)
+    ))
+
+
+def gather_keys_from_mapping(
+    errors: MutableSequence[str],
+    name: str,
+    value: Any,
+    name_of_mapping: str,
+):
+    """
+    Get all the literal keys from a mapping in Python texts.
+
+    :param errors: Output syntax errors.
+    :param name: The name of the symbol supplied as ``value``, to be used in
+      error messages.
+    :param value: The value to be searched; either Python text (as a string),
+      a sequence of Python texts, a mapping with Python texts in the values,
+      or similar things nested to any depth.
+    :param name_of_mapping: The mapping to search for.
+    :return: The set of symbols found in the Python text(s).
+    """
+    def is_wanted(node):
+        """Returns True if this node is name_of_mapping["string"]."""
+        return (
+            isinstance(node, ast.Subscript)
+            and isinstance(node.value, ast.Name)
+            and node.value.id == name_of_mapping
+            and isinstance(node.slice, ast.Constant)
+            and isinstance(node.slice.value, str)
+        )
+    return gather_from_ast(
+        errors,
+        name,
+        value,
+        is_wanted,
+        lambda node: node.slice.value,
+    )
+
+
+def gather_symbols(
+    errors: MutableSequence[str],
+    name: str,
+    value: Any,
+) -> set[str]:
+    """
+    Get all the symbols from Python texts.
+
+    :param errors: Output syntax errors.
+    :param name: The name of the symbol supplied as ``value``, to be used in
+      error messages.
+    :param value: The value to be searched; either Python text (as a string),
+      a sequence of Python texts, a mapping with Python texts in the values,
+      or similar things nested to any depth.
+    :return: The set of symbols found in the Python text(s).
+    """
+    return gather_from_ast(
+        errors,
+        name,
+        value,
+        lambda node: isinstance(node, ast.Name),
+        lambda node: node.id,
+    )
+
+
 def generators_require_stats(config: Mapping) -> bool:
     """
     Test if the generator references ``SRC_STATS``.
@@ -855,68 +990,35 @@ def generators_require_stats(config: Mapping) -> bool:
     :return: True if any of the arguments for any of the generators
       reference ``SRC_STATS``.
     """
-    ois = {
-        f"object_instantiation.{k}": call
-        for k, call in config.get("object_instantiation", {}).items()
-    }
-    sgs = {
-        f"story_generators[{n}]": call
-        for n, call in enumerate(config.get("story_generators", []))
-    }
-    table_calls = {
-        f"tables.{table_name}.{call_type}[{n}]": call
-        for table_name, table in config.get("tables", {}).items()
-        for call_type in ("row_generators", "missingness_generators")
-        for n, call in enumerate(table.get(call_type, []))
-    }
-    errors = []
-    stats_required = False
-    for where, call in (ois | sgs | table_calls).items():
-        for n, arg in enumerate(call.get("args", [])):
-            if isinstance(arg, str):
-                try:
-                    names = (
-                        node.id
-                        for node in ast.walk(ast.parse(arg))
-                        if isinstance(node, ast.Name)
-                    )
-                    if any(name == "SRC_STATS" for name in names):
-                        stats_required = True
-                except SyntaxError as e:
-                    errors.append(
-                        (
-                            "Syntax error in argument %d of %s: %s\n%s%s",
-                            n + 1,
-                            where,
-                            e.msg,
-                            arg,
-                            underline_error(e),
-                        )
-                    )
-        for k, arg in call.get("kwargs", {}).items():
-            if isinstance(arg, str):
-                try:
-                    names = (
-                        node.id
-                        for node in ast.walk(ast.parse(arg))
-                        if isinstance(node, ast.Name)
-                    )
-                    if any(name == "SRC_STATS" for name in names):
-                        stats_required = True
-                except SyntaxError as e:
-                    errors.append(
-                        (
-                            "Syntax error in argument %s of %s: %s\n%s%s",
-                            k,
-                            where,
-                            e.msg,
-                            arg,
-                            underline_error(e),
-                        )
-                    )
+    errors: list[str] = []
+    symbols = gather_symbols(
+        errors,
+        "object_instantiation",
+        config.get("object_instantiation", {}),
+    ).union(
+        gather_symbols(
+            errors,
+            "story_generators",
+            config.get("story_generators", []),
+        ),
+        *(
+            gather_symbols(
+                errors,
+                f"tables[{repr(table_name)}]['row_generators']",
+                table.get("row_generators", []),
+            ) for table_name, table in config.get("tables", {}).items()
+        ),
+        *(
+            gather_symbols(
+                errors,
+                f"tables[{repr(table_name)}]['missingness_generators']",
+                table.get("missingness_generators", []),
+            ) for table_name, table in config.get("tables", {}).items()
+        ),
+    )
     for error in errors:
         logger.error(*error)
-    return stats_required
+    return "SRC_STATS" in symbols
 
 
 def split_column_full_name(col_fullname: str) -> tuple[str, str]:

@@ -2,6 +2,8 @@
 
 from collections.abc import Mapping
 
+from sqlalchemy import MetaData
+
 from datafaker.proposers.base import (
     ConstantProposerFactory,
     MultiProposerFactory,
@@ -14,6 +16,7 @@ from datafaker.proposers.continuous import (
     MultivariateLogNormalProposerFactory,
     MultivariateNormalProposerFactory,
 )
+from datafaker.proposers.intervals import DateAfterProposerFactory
 from datafaker.proposers.mimesis import (
     MimesisDateProposerFactory,
     MimesisDateTimeProposerFactory,
@@ -28,7 +31,7 @@ from datafaker.proposers.partitioned import (
 )
 
 
-def everything_factory(config: Mapping) -> ProposerFactory:
+def everything_factory(config: Mapping, metadata: MetaData) -> ProposerFactory:
     """
     Get a factory that encapsulates all the other factories.
 
@@ -49,4 +52,5 @@ def everything_factory(config: Mapping) -> ProposerFactory:
         MultivariateLogNormalProposerFactory(),
         NullPartitionedNormalProposerFactory(config),
         NullPartitionedLogNormalProposerFactory(config),
+        DateAfterProposerFactory(config, metadata),
     )

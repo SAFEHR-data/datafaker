@@ -316,17 +316,15 @@ class TestUtils(DatafakerTestCase):
         logger.error.assert_has_calls(
             [
                 call(
-                    "Syntax error in argument %s of %s: %s\n%s%s",
-                    "b",
-                    "story_generators[0]",
+                    "Syntax error in %s: %s\n%s%s",
+                    "story_generators[0]['kwargs']['b']",
                     "unterminated string literal (detected at line 1)",
                     "'unclosed",
                     "\n ^",
                 ),
                 call(
-                    "Syntax error in argument %d of %s: %s\n%s%s",
-                    1,
-                    "tables.things.row_generators[0]",
+                    "Syntax error in %s: %s\n%s%s",
+                    "tables['things']['row_generators'][0]['args'][0]",
                     "invalid syntax",
                     "1 2",
                     "\n   ^",

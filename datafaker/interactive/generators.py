@@ -351,9 +351,11 @@ information about the columns in the current table. Use 'peek',
         else:
             reply = self.ask_save()
         if reply == "yes":
+            logger.debug("Changed entries copied")
             self._copy_entries()
             return True
         if reply == "no":
+            logger.debug("Configuration unchanged")
             return True
         return False
 
@@ -440,35 +442,49 @@ information about the columns in the current table. Use 'peek',
                 return n
         return None
 
+    def _get_table_and_column(self, target) -> tuple[str | None, str | None]:
+        """
+        Turn a table or column name into a table and column index.
+
+        :param target: Either a table name, a column name or a table and
+          a column name separated by a dot.
+        :return: (None, None) if ``target`` did not refer to a table
+          or a column. (None, index) refers to a column in the current table.
+          (table_index, column_index) refers to a column within a different
+          table.
+        """
+        table_index = self._get_table_index(target)
+        if table_index is not None:
+            return (table_index, 0)
+        # The whole thing is not a table
+        prop_index = self._get_proposer_index(self.table_index, target)
+        if prop_index is not None:
+            return (None, prop_index)
+        # The whole thing isn't a column either, so let's split it:
+        (first_part, last_part) = split_column_full_name(target)
+        if not first_part:
+            # It doesn't split, so that's the end
+            self.print(self.ERROR_NO_SUCH_TABLE_OR_COLUMN, last_part)
+            return (None, None)
+        table_index = self._get_table_index(first_part)
+        if table_index is None:
+            self.print(self.ERROR_NO_SUCH_TABLE, first_part)
+            return (None, None)
+        prop_index = self._get_proposer_index(table_index, last_part)
+        if prop_index is None:
+            self.print(self.ERROR_NO_SUCH_COLUMN, last_part)
+            return (None, None)
+        return (table_index, prop_index)
+
     def go_to(self, target: str) -> bool:
         """
         Go to a particular column.
 
         :return: True on success.
         """
-        (first_part, last_part) = split_column_full_name(target)
-        prop_index: int | None = None
-        if first_part:
-            # target == table.column
-            table_index = self._get_table_index(first_part)
-            if table_index is None:
-                self.print(self.ERROR_NO_SUCH_TABLE, first_part)
-                return False
-            prop_index = self._get_proposer_index(table_index, last_part)
-            if prop_index is None:
-                self.print(self.ERROR_NO_SUCH_COLUMN, last_part)
-                return False
-        else:
-            # target == table or target == column
-            table_index = self._get_table_index(last_part)
-            prop_index = 0
-            if table_index is None:
-                # not table, perhaps it's column
-                prop_index = self._get_proposer_index(self.table_index, last_part)
-                if prop_index is None:
-                    # it's neither
-                    self.print(self.ERROR_NO_SUCH_TABLE_OR_COLUMN, last_part)
-                    return False
+        (table_index, prop_index) = self._get_table_and_column(target)
+        if prop_index is None:
+            return False
         if table_index is not None:
             self._set_table_index(table_index)
         self.proposer_index = prop_index
@@ -572,7 +588,7 @@ information about the columns in the current table. Use 'peek',
             self.proposers = None
         if self.proposers is None:
             columns = self._column_metadata()
-            props = everything_factory(self.config).get_proposers(
+            props = everything_factory(self.config, self.metadata).get_proposers(
                 columns, self.sync_engine
             )
             sorted_props = sorted(props, key=lambda g: g.fit(9999))
