@@ -5,7 +5,7 @@ from abc import abstractmethod
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
-from sqlalchemy import Column, Engine, RowMapping, text
+from sqlalchemy import Column, Engine, RowMapping, Table, case, func, null, select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.types import Integer, Numeric
 from typing_extensions import Self
@@ -18,7 +18,7 @@ from datafaker.generators.base import (
     dist_gen,
     get_column_type,
 )
-from datafaker.utils import logger
+from datafaker.utils import logger, schema_qualified_name
 
 
 class ContinuousDistributionGenerator(Generator):
@@ -160,11 +160,11 @@ class ContinuousDistributionGeneratorFactory(GeneratorFactory):
             return []
         column_name = column.name
         table_name = column.table.name
-        buckets = Buckets.make_buckets(engine, table_name, column_name)
+        buckets = Buckets.make_buckets(engine, table_name, column_name, src_table=column.table)
         if buckets is None:
             return []
         return self._get_generators_from_buckets(
-            engine, table_name, column_name, buckets
+            engine, column.table, column_name, buckets
         )
 
 
@@ -272,24 +272,25 @@ class ContinuousLogDistributionGeneratorFactory(ContinuousDistributionGeneratorF
     def _get_generators_from_buckets(
         self,
         engine: Engine,
-        table_name: str,
+        src_table: Table,
         column_name: str,
         buckets: Buckets,
     ) -> Sequence[Generator]:
+        col = case(
+            (src_table.c[column_name] > 0, func.log(src_table.c[column_name])),
+            else_=null(),
+        )
+        stmt = select(
+            func.avg(col).label("logmean"),
+            func.stddev_samp(col).label("logstddev"),
+        ).select_from(src_table)
         with engine.connect() as connection:
-            result = connection.execute(
-                text(
-                    f"SELECT AVG(CASE WHEN 0<{column_name} THEN LN({column_name})"
-                    " ELSE NULL END) AS logmean,"
-                    f" STDDEV(CASE WHEN 0<{column_name} THEN LN({column_name}) ELSE NULL END)"
-                    f" AS logstddev FROM {table_name}"
-                )
-            ).first()
+            result = connection.execute(stmt).first()
             if result is None or result.logstddev is None:
                 return []
         return [
             LogNormalGenerator(
-                table_name,
+                src_table.name,
                 column_name,
                 buckets,
                 float(result.logmean),
@@ -396,6 +397,7 @@ class CovariateQuery:
         self,
         table: str,
         factory: MultivariateNormalGeneratorFactoryBase,
+        dialect_name: str = "",
     ) -> None:
         """
         Initialize the query for the basics for multivariate normal/lognormal parameters.
@@ -403,6 +405,7 @@ class CovariateQuery:
         :param table: The name of the table to be queried.
         :param factory: The generator factory, perhaps with overridden
         ``query_var`` and ``query_predicate`` methods.
+        :param dialect_name: The SQLAlchemy dialect name (e.g. ``"mssql"``).
         """
         self.table = table
         self._columns: Sequence[Column] = []
@@ -412,6 +415,7 @@ class CovariateQuery:
         self.suppress_count = 1
         self._sample_count: int | None = None
         self._factory = factory
+        self._dialect_name = dialect_name
         self._predicate_fn = lambda x: x + " IS NOT NULL"
 
     def get_query_comment(self) -> str:
@@ -566,6 +570,11 @@ class CovariateQuery:
             where = " WHERE " + where
         if self._sample_count is None:
             return self.table + where
+        if self._dialect_name == "mssql":
+            return (
+                f"(SELECT TOP {self._sample_count} * FROM {self.table}{where}"
+                f" ORDER BY NEWID()) AS _sampled"
+            )
         return (
             f"(SELECT * FROM {self.table}{where} ORDER BY RANDOM()"
             f" LIMIT {self._sample_count}) AS _sampled"
@@ -628,7 +637,8 @@ class MultivariateNormalGeneratorFactory(MultivariateNormalGeneratorFactoryBase)
                 return []
         column_names = [c.name for c in columns]
         table = columns[0].table.name
-        cq = CovariateQuery(table, self).columns(columns)
+        table_sql = schema_qualified_name(table, engine)
+        cq = CovariateQuery(table_sql, self, dialect_name=engine.dialect.name).columns(columns)
         query = cq.get()
         with engine.connect() as connection:
             try:

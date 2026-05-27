@@ -42,6 +42,22 @@ def remove_serial(element: CreateColumn, compiler: Any, **kw: Any) -> str:
     return text.replace(" SERIAL ", " INTEGER ")
 
 
+
+@compiles(CreateTable, "mssql")
+def remove_mssql_on_delete_cascade(element: CreateTable, compiler: Any, **kw: Any) -> str:
+    """
+    Strip ON DELETE CASCADE from MS-SQL table DDL.
+
+    MS-SQL rejects multiple cascading FK paths to the same table (error 1785).
+    OMOP-style schemas commonly have many FK columns on one table all pointing at
+    the same vocabulary table, which triggers this limit.  Dropping CASCADE is
+    safe for datafaker because referential integrity is enforced by insert order,
+    not by the database engine.
+    """
+    text: str = compiler.visit_create_table(element, **kw)
+    return text.replace(" ON DELETE CASCADE", "")
+
+
 @compiles(CreateTable, "duckdb")
 def remove_on_delete_cascade(element: CreateTable, compiler: Any, **kw: Any) -> str:
     """
@@ -177,6 +193,7 @@ def create_db_data_into(
 
     row_counts: Counter[str] = Counter()
     with dst_engine.connect() as dst_conn:
+        
         for _ in range(num_passes):
             row_counts += populate(
                 dst_conn,
@@ -333,6 +350,7 @@ def populate(
             with dst_conn.begin():
                 for _ in range(table_generator.num_rows_per_pass):
                     stmt = insert(table).values(table_generator(dst_conn, metadata))
+                    logger.debug("Executing statement: %s", stmt)
                     dst_conn.execute(stmt)
                     row_counts[table.name] = row_counts.get(table.name, 0) + 1
                 dst_conn.commit()

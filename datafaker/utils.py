@@ -26,12 +26,12 @@ from typing import (
     Union,
 )
 
-import psycopg2
 import sqlalchemy
 import yaml
 from jsonschema.exceptions import ValidationError
 from jsonschema.validators import validate
 from sqlalchemy import Connection, Engine, ForeignKey, create_engine, event, select
+from sqlalchemy.engine import make_url
 from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.exc import (
     IntegrityError,
@@ -195,6 +195,48 @@ def get_sync_engine(engine: MaybeAsyncEngine) -> Engine:
     return engine
 
 
+_ASYNC_DRIVER_MAP: dict[str, str] = {
+    "postgresql": "postgresql+asyncpg",
+    "mssql": "mssql+aioodbc",
+}
+
+
+def make_async_dsn(db_dsn: str) -> str:
+    """Return an async-driver DSN for the given sync DSN.
+
+    Replaces the driver component based on the dialect so that both PostgreSQL
+    and MS-SQL connections can be made async without hardcoding dialect names at
+    each call site.  Raises ``ValueError`` for dialects with no known async driver.
+    """
+    url = make_url(db_dsn)
+    dialect = url.drivername.split("+")[0]
+    async_driver = _ASYNC_DRIVER_MAP.get(dialect)
+    if async_driver is None:
+        raise ValueError(
+            f"No async driver is registered for dialect '{dialect}'. "
+            f"Add an entry to _ASYNC_DRIVER_MAP in datafaker/utils.py."
+        )
+    return str(url.set(drivername=async_driver))
+
+
+def _is_undefined_object_error(exc: Exception) -> bool:
+    """Return True if *exc* represents a 'constraint does not exist' error.
+
+    Checks for psycopg2's UndefinedObject when psycopg2 is installed, and falls
+    back to inspecting the SQLSTATE pgcode attribute so the function works without
+    psycopg2 (e.g. in an MS-SQL environment).
+    """
+    try:
+        import psycopg2.errors  # type: ignore[import]
+
+        if isinstance(exc, psycopg2.errors.UndefinedObject):
+            return True
+    except ImportError:
+        pass
+    # SQLSTATE 42704 = undefined_object — present on psycopg2 and pyodbc errors
+    return getattr(exc, "pgcode", None) == "42704"
+
+
 def create_db_engine(
     db_dsn: str,
     schema_name: Optional[str] = None,
@@ -205,8 +247,7 @@ def create_db_engine(
     """Create a SQLAlchemy Engine."""
     try:
         if use_asyncio:
-            async_dsn = db_dsn.replace("postgresql://", "postgresql+asyncpg://")
-            engine: MaybeAsyncEngine = create_async_engine(async_dsn, **kwargs)
+            engine: MaybeAsyncEngine = create_async_engine(make_async_dsn(db_dsn), **kwargs)
         else:
             engine = create_engine(db_dsn, **kwargs)
     except NoSuchModuleError as exc:
@@ -217,24 +258,41 @@ def create_db_engine(
         logger.error("DSN %s is malformed: %s", db_dsn, exc)
         raise Exit(1) from exc
 
-    settings = {}
-    if schema_name is not None:
-        settings["search_path"] = schema_name
+    # DuckDB needs file_search_path set at connection level via a SET command.
+    # schema_name is handled cross-dialect via schema_translate_map below.
     if parquet_dir is not None:
         joined = ",".join(_find_parquet_directories(parquet_dir))
         # double up single quotes
         dj = joined.replace("'", "''")
         # enclose in single quotes
-        settings["file_search_path"] = f"'{dj}'"
-
-    if settings:
+        duckdb_settings = {"file_search_path": f"'{dj}'"}
         event_engine = get_sync_engine(engine)
 
         @event.listens_for(event_engine, "connect", insert=True)
         def connect(dbapi_connection: DBAPIConnection, _: Any) -> None:
-            set_db_settings(dbapi_connection, settings)
+            set_db_settings(dbapi_connection, duckdb_settings)
+
+    # Route unqualified table references to the target schema in a
+    # dialect-neutral way. This replaces the PostgreSQL-only search_path
+    # approach and works for MS-SQL, PostgreSQL, and DuckDB alike.
+    if schema_name is not None:
+        engine = engine.execution_options(schema_translate_map={None: schema_name})
 
     return engine
+
+
+def schema_qualified_name(table_name: str, engine: Any) -> str:
+    """Return schema-qualified table name using the engine's schema_translate_map.
+
+    When create_db_engine sets schema_translate_map={None: schema_name}, this
+    reads it back so raw SQL strings (which schema_translate_map doesn't rewrite)
+    can include the correct qualifier.
+    """
+    schema_map = engine.get_execution_options().get("schema_translate_map", {})
+    schema = schema_map.get(None)
+    if schema and "." not in table_name:
+        return f"{schema}.{table_name}"
+    return table_name
 
 
 def create_db_engine_dst(
@@ -266,11 +324,11 @@ def create_db_engine_dst(
     return create_db_engine(db_dsn, schema_name, use_asyncio)
 
 
-def get_metadata(engine: Engine) -> MetaData:
+def get_metadata(engine: Engine, schema_name: Optional[str] = None) -> MetaData:
     """Get the MetaData object associated with the engine passed."""
     md = MetaData()
     try:
-        md.reflect(engine)
+        md.reflect(engine, schema=schema_name)
     except OperationalError as exc:
         logger.error("Cannot connect to database: %s", exc)
         raise Exit(1) from exc
@@ -295,8 +353,7 @@ def _names_include_parquet(path: Path, file_names: Iterable[str]) -> bool:
 
 
 def set_db_settings(connection: DBAPIConnection, settings: Mapping[str, str]) -> None:
-    """Set the SEARCH_PATH for a PostgreSQL connection."""
-    # https://docs.sqlalchemy.org/en/20/dialects/postgresql.html#remote-schema-table-introspection-and-postgresql-search-path
+    """Issue SET commands on a raw DBAPI connection (currently used for DuckDB only)."""
     existing_autocommit = connection.autocommit
     connection.autocommit = True
 
@@ -647,8 +704,7 @@ def remove_vocab_foreign_key_constraints(
                     )
                 except ProgrammingError as e:
                     session.rollback()
-                    # pylint: disable=no-member
-                    if isinstance(e.orig, psycopg2.errors.UndefinedObject):
+                    if _is_undefined_object_error(e.orig):
                         logger.debug("Constraint does not exist")
                     else:
                         raise e

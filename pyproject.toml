@@ -17,7 +17,9 @@ homepage = "https://github.com/SAFEHR-data/datafaker"
 [tool.poetry.dependencies]
 python = ">=3.10,<3.14"
 pydantic = {extras = ["dotenv"], version = "^1.10.2"}
-psycopg2-binary = "^2.9.5"
+psycopg2-binary = {version = "^2.9.5", optional = true}
+pyodbc = {version = "^5.0.0", optional = true}
+aioodbc = {version = "^0.5.0", optional = true}
 sqlalchemy-utils = "^0.41.2"
 mimesis = "^18.0.0"
 typer = "^0.15.4"
@@ -54,12 +56,15 @@ duckdb = "^1.4.3"
 sphinx-rtd-theme = "^1.2.0"
 sphinxcontrib-napoleon = "^0.7"
 sphinxcontrib-mermaid = "^2.0.0"
+pytest = "^9.0.3"
 
 [tool.poetry.group.extras.dependencies]
 tqdm = "^4.65.0"
 
 [tool.poetry.extras]
 docs = ["sphinx-rtd-theme", "sphinxcontrib-napoleon", "sphinxcontrib-mermaid"]
+mssql = ["pyodbc", "aioodbc"]
+postgres = ["psycopg2-binary"]
 
 [build-system]
 requires = ["poetry-core"]

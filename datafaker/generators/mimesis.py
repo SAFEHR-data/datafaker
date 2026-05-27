@@ -4,7 +4,7 @@ from typing import Any, Callable, Sequence, Union
 
 import mimesis
 import mimesis.locales
-from sqlalchemy import Column, Engine, text
+from sqlalchemy import Column, Engine, cast, extract, func, literal_column, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.types import Date, DateTime, Integer, Numeric, String, Time
 
@@ -186,17 +186,20 @@ class MimesisDateTimeGenerator(MimesisGeneratorBase):
         cls, column: Column, engine: Engine, function_name: str
     ) -> Sequence[Generator]:
         """Make the appropriate generation configuration for this column."""
-        extract_year = f"CAST(EXTRACT(YEAR FROM {column.name}) AS INT)"
-        max_year = f"MAX({extract_year})"
-        min_year = f"MIN({extract_year})"
+        col_expr = literal_column(column.name)
+        year_expr = cast(extract("year", col_expr), Integer())
+        min_expr = func.min(year_expr)
+        max_expr = func.max(year_expr)
+        stmt = select(min_expr.label("start"), max_expr.label("end")).select_from(
+            column.table
+        )
         with engine.connect() as connection:
-            result = connection.execute(
-                text(
-                    f"SELECT {min_year} AS start, {max_year} AS end FROM {column.table.name}"
-                )
-            ).first()
+            result = connection.execute(stmt).first()
             if result is None or result.start is None or result.end is None:
                 return []
+        dialect = engine.dialect
+        min_year = str(min_expr.compile(dialect=dialect, compile_kwargs={"literal_binds": True}))
+        max_year = str(max_expr.compile(dialect=dialect, compile_kwargs={"literal_binds": True}))
         return [
             MimesisDateTimeGenerator(
                 column,
@@ -318,6 +321,7 @@ class MimesisStringGeneratorFactory(GeneratorFactory):
                 engine,
                 column.table.name,
                 f"LENGTH({column.name})",
+                src_table=column.table,
             )
             fitness_fn = len
         except SQLAlchemyError:

@@ -10,7 +10,7 @@ from typing import Any, Optional, Type
 
 import sqlalchemy
 from prettytable import PrettyTable
-from sqlalchemy import Engine, ForeignKey, MetaData, Table
+from sqlalchemy import Engine, ForeignKey, MetaData, Table, func, literal_column, or_, select
 from typing_extensions import Self
 
 from datafaker.utils import (
@@ -349,17 +349,13 @@ class DbCmd(ABC, cmd.Cmd):
             return
         table_name = self.table_name()
         nullable_columns = self.get_nullable_columns(table_name)
-        colcounts = [f', COUNT("{nnc}") AS "{nnc}"' for nnc in nullable_columns]
+        tbl = self.table_metadata()
+        count_exprs = [func.count().label("row_count")] + [
+            func.count(tbl.c[col]).label(col) for col in nullable_columns
+        ]
+        stmt = select(*count_exprs).select_from(tbl)
         with self.sync_engine.connect() as connection:
-            result = (
-                connection.execute(
-                    sqlalchemy.text(
-                        f"SELECT COUNT(*) AS row_count{''.join(colcounts)} FROM {table_name}"
-                    )
-                )
-                .mappings()
-                .first()
-            )
+            result = connection.execute(stmt).mappings().first()
             if result is None:
                 self.print("Could not count rows in table {0}", table_name)
                 return
@@ -412,19 +408,23 @@ class DbCmd(ABC, cmd.Cmd):
         col_names = arg.split()
         if not col_names:
             col_names = self._get_column_names()
-        nonnulls = [f'"{cn}" IS NOT NULL' for cn in col_names]
+        random_fn = (
+            func.newid() if self.sync_engine.dialect.name == "mssql" else func.random()
+        )
+        col_exprs = [literal_column(f'"{cn}"') for cn in col_names]
+        nonnull_clauses = [literal_column(f'"{cn}"').isnot(None) for cn in col_names]
+        stmt = (
+            select(*col_exprs)
+            .select_from(self.table_metadata())
+            .where(or_(*nonnull_clauses))
+            .order_by(random_fn)
+            .limit(max_peek_rows)
+        )
         with self.sync_engine.connect() as connection:
-            cols = ", ".join(f'"{cn}"' for cn in col_names)
-            where = "WHERE" if nonnulls else ""
-            nonnull = " OR ".join(nonnulls)
-            query = sqlalchemy.text(
-                f"SELECT {cols} FROM {table_name} {where} {nonnull}"
-                f" ORDER BY RANDOM() LIMIT {max_peek_rows}"
-            )
             try:
-                result = connection.execute(query)
+                result = connection.execute(stmt)
             except sqlalchemy.exc.SQLAlchemyError as exc:
-                self.print(self.ERROR_FAILED_SQL, exc=exc, query=query)
+                self.print(self.ERROR_FAILED_SQL, exc=exc, query=stmt)
                 return
             self.print_table(list(result.keys()), result.fetchmany(max_peek_rows))
 

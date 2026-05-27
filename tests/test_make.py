@@ -2,18 +2,75 @@
 import asyncio
 import os
 import tempfile
+import unittest
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import yaml
-from sqlalchemy import BigInteger, Column, String, select
+from sqlalchemy import BigInteger, Column, ForeignKey, Integer, MetaData, String, Table, select
 from sqlalchemy.dialects.mysql.types import INTEGER
 from sqlalchemy.dialects.postgresql import UUID
 
-from datafaker.make import _get_provider_for_column, make_src_stats
+from datafaker.make import _get_default_generator, _get_provider_for_column, make_src_stats
 from tests.utils import DatafakerTestCase, GeneratesDBTestCase, RequiresDBTestCase
+
+
+class TestGetDefaultGenerator(unittest.TestCase):
+    """Unit tests for _get_default_generator."""
+
+    def _make_table(self, *columns: Column) -> Table:
+        meta = MetaData()
+        return Table("t", meta, *columns)
+
+    def test_simple_integer_pk_returns_none(self) -> None:
+        """Single-column INTEGER PK with no FK → DB generates it, skip in df.py."""
+        table = self._make_table(
+            Column("id", Integer(), primary_key=True),
+            Column("val", String()),
+        )
+        self.assertIsNone(_get_default_generator(table.c.id))
+
+    def test_simple_biginteger_pk_returns_none(self) -> None:
+        """BigInteger (BIGINT) single-column PK is also DB-generated."""
+        table = self._make_table(
+            Column("id", BigInteger(), primary_key=True),
+            Column("val", String()),
+        )
+        self.assertIsNone(_get_default_generator(table.c.id))
+
+    def test_composite_pk_not_skipped(self) -> None:
+        """Columns in a composite PK are not DB-generated and must have a generator."""
+        table = self._make_table(
+            Column("a", Integer(), primary_key=True),
+            Column("b", Integer(), primary_key=True),
+        )
+        self.assertIsNotNone(_get_default_generator(table.c.a))
+        self.assertIsNotNone(_get_default_generator(table.c.b))
+
+    def test_fk_pk_not_skipped(self) -> None:
+        """A column that is both PK and FK gets a FK generator, not skipped."""
+        meta = MetaData()
+        parent = Table("parent", meta, Column("id", Integer(), primary_key=True))
+        child = Table(
+            "child",
+            meta,
+            Column("parent_id", Integer(), ForeignKey("parent.id"), primary_key=True),
+        )
+        result = _get_default_generator(child.c.parent_id)
+        self.assertIsNotNone(result)
+        self.assertIn("column_value", result.function_call.function_name)
+
+    def test_non_pk_integer_returns_generator(self) -> None:
+        """Plain INTEGER column (not a PK) gets a numeric generator."""
+        table = self._make_table(
+            Column("id", Integer(), primary_key=True),
+            Column("count", Integer()),
+        )
+        result = _get_default_generator(table.c.count)
+        self.assertIsNotNone(result)
+        self.assertIn("integer_number", result.function_call.function_name)
 
 
 class TestMakeGenerators(GeneratesDBTestCase):
