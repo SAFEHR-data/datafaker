@@ -52,74 +52,74 @@ tables:
     unique: []
   person:
     columns:
-      birth_datetime:
-        nullable: true
-        primary: false
-        type: TIMESTAMP WITHOUT TIME ZONE
-      day_of_birth:
-        nullable: true
-        primary: false
-        type: BIGINT
+      # birth_datetime:
+      #   nullable: true
+      #   primary: false
+      #   type: TIMESTAMP WITHOUT TIME ZONE
+      # day_of_birth:
+      #   nullable: true
+      #   primary: false
+      #   type: BIGINT
       ethnicity_concept_id:
         foreign_keys:
         - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
-      ethnicity_source_concept_id:
-        foreign_keys:
-        - concept.concept_id
-        nullable: true
-        primary: false
-        type: BIGINT
-      ethnicity_source_value:
-        nullable: true
-        primary: false
-        type: VARCHAR(50)
+      # ethnicity_source_concept_id:
+      #   foreign_keys:
+      #   - concept.concept_id
+      #   nullable: true
+      #   primary: false
+      #   type: BIGINT
+      # ethnicity_source_value:
+      #   nullable: true
+      #   primary: false
+      #   type: VARCHAR(50)
       gender_concept_id:
         foreign_keys:
         - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
-      gender_source_concept_id:
-        foreign_keys:
-        - concept.concept_id
-        nullable: true
-        primary: false
-        type: BIGINT
-      gender_source_value:
-        nullable: true
-        primary: false
-        type: VARCHAR(50)
-      month_of_birth:
-        nullable: true
-        primary: false
-        type: BIGINT
+      # gender_source_concept_id:
+      #   foreign_keys:
+      #   - concept.concept_id
+      #   nullable: true
+      #   primary: false
+      #   type: BIGINT
+      # gender_source_value:
+      #   nullable: true
+      #   primary: false
+      #   type: VARCHAR(50)
+      # month_of_birth:
+      #   nullable: true
+      #   primary: false
+      #   type: BIGINT
       person_id:
         nullable: false
         primary: true
         type: BIGINT
-      person_source_value:
-        nullable: true
-        primary: false
-        type: VARCHAR(50)
+      # person_source_value:
+      #   nullable: true
+      #   primary: false
+      #   type: VARCHAR(50)
       race_concept_id:
         foreign_keys:
         - concept.concept_id
         nullable: false
         primary: false
         type: BIGINT
-      race_source_concept_id:
-        foreign_keys:
-        - concept.concept_id
-        nullable: true
-        primary: false
-        type: BIGINT
-      race_source_value:
-        nullable: true
-        primary: false
-        type: VARCHAR(50)
+      # race_source_concept_id:
+      #   foreign_keys:
+      #   - concept.concept_id
+      #   nullable: true
+      #   primary: false
+      #   type: BIGINT
+      # race_source_value:
+      #   nullable: true
+      #   primary: false
+      #   type: VARCHAR(50)
       year_of_birth:
         nullable: false
         primary: false

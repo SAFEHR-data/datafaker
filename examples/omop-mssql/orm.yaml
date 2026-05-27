@@ -98,12 +98,12 @@ tables:
       #   nullable: true
       #   primary: false
       #   type: VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS
-      # race_concept_id:
-      #   foreign_keys:
-      #   - mimic100.concept.concept_id
-      #   nullable: false
-      #   primary: false
-      #   type: BIGINT
+      race_concept_id:
+        foreign_keys:
+        - mimic100.concept.concept_id
+        nullable: false
+        primary: false
+        type: BIGINT
       # race_source_concept_id:
       #   foreign_keys:
       #   - mimic100.concept.concept_id

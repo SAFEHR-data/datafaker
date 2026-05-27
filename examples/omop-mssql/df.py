@@ -51,15 +51,30 @@ class PersonGenerator(TableGenerator):
         if not self.initialized:
             self.initialized = True
         result = {}
-        columns_to_generate = set({"gender_concept_id", "year_of_birth"})
+        columns_to_generate = set(
+            {
+                "ethnicity_concept_id",
+                "race_concept_id",
+                "gender_concept_id",
+                "year_of_birth",
+            }
+        )
         while columns_to_generate:
             if "gender_concept_id" in columns_to_generate:
                 result["gender_concept_id"] = dist_gen.weighted_choice(
                     a=SRC_STATS["auto__person__gender_concept_id"]["results"]
                 )
             if "year_of_birth" in columns_to_generate:
-                result["year_of_birth"] = dist_gen.weighted_choice(
+                result["year_of_birth"] = dist_gen.choice(
                     a=SRC_STATS["auto__person__year_of_birth"]["results"]
+                )
+            if "ethnicity_concept_id" in columns_to_generate:
+                result["ethnicity_concept_id"] = dist_gen.choice(
+                    a=SRC_STATS["auto__person__ethnicity_concept_id"]["results"]
+                )
+            if "race_concept_id" in columns_to_generate:
+                result["race_concept_id"] = generic.column_value_provider.column_value(
+                    dst_db_conn, metadata.tables["concept"], "concept_id"
                 )
             columns_to_generate = set()
         return result
