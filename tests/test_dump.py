@@ -88,7 +88,7 @@ class EndToEndParquetTestCase(DatafakerTestCase):
     """Read in parquet, make some generators, output parquet."""
 
     database_type = TestDuckDb
-    examples_dir = Path("tests/examples/duckdb")
+    examples_dir = Path("examples/duckdb")
 
     def set_working_dir(self) -> None:
         """Change to our working directory."""
@@ -101,8 +101,8 @@ class EndToEndParquetTestCase(DatafakerTestCase):
         super().setUp()
         # Grab all the files
         self.parquet_dir = Path(tempfile.mkdtemp("parq"))
-        for fname in os.listdir(self.examples_dir):
-            shutil.copy(self.examples_dir / fname, self.parquet_dir / fname)
+        for fname in os.listdir(self.get_abs_example_dir()):
+            shutil.copy(self.get_abs_example_dir() / fname, self.parquet_dir / fname)
         self.start_dir = os.getcwd()
         self.set_working_dir()
 

@@ -67,6 +67,12 @@ class Proposer(ABC):
         to the generator function.
         """
 
+    def nominal_args(self) -> list[str]:
+        """
+        Get the args the generator wants to be called with.
+        """
+        return []
+
     def select_aggregate_clauses(self) -> dict[str, dict[str, str]]:
         """
         Get the SQL clauses to add to a SELECT ... FROM {table} query.
@@ -178,6 +184,7 @@ class PredefinedProposer(Proposer):
         self._table_name = table_name
         self._name: str = generator_object["name"]
         self._kwn: dict[str, str] = generator_object.get("kwargs", {})
+        self._asn: dict[str, str] = generator_object.get("args", {})
         self._src_stats_mentioned = self._get_src_stats_mentioned(self._kwn)
         # Need to deal with this somehow (or remove it from the schema)
         self._argn: list[str] = generator_object.get("args", [])
@@ -223,8 +230,12 @@ class PredefinedProposer(Proposer):
         return self._name
 
     def nominal_kwargs(self) -> dict[str, str]:
-        """Get the arguments to be entered into ``config.yaml``."""
+        """Get the keyword arguments to be entered into ``config.yaml``."""
         return self._kwn
+
+    def nominal_args(self) -> list[str]:
+        """Get the position arguments to be entered into ``config.yaml``."""
+        return self._asn
 
     def select_aggregate_clauses(self) -> dict[str, dict[str, str]]:
         """Get the query fragments the generators need to call."""

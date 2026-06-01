@@ -178,7 +178,7 @@ class NullPartitionedTests(GeneratesDBTestCase):
             gc.do_quit("")
             self.set_configuration(gc.config)
             self.get_src_stats(gc.config)
-            self.create_tables()
+            self.create_tables(gc.config)
             self.populate_measurement_type_vocab()
             self.create_data(gc.config, num_passes=generate_count)
         with self.dst_sync_engine.connect() as conn:
@@ -292,7 +292,7 @@ class NullPartitionedTests(GeneratesDBTestCase):
             gc.do_quit("")
             self.set_configuration(gc.config)
             self.get_src_stats(gc.config)
-            self.create_tables()
+            self.create_tables(gc.config)
             self.populate_measurement_type_vocab()
             self.create_data(gc.config, num_passes=generate_count)
         with self.dst_sync_engine.connect() as conn:
@@ -406,7 +406,7 @@ class NullPartitionedTests(GeneratesDBTestCase):
             gc.do_quit("")
             self.set_configuration(gc.config)
             self.get_src_stats(gc.config)
-            self.create_tables()
+            self.create_tables(gc.config)
             self.populate_measurement_type_vocab()
             self.create_data(gc.config, num_passes=generate_count)
         with self.dst_sync_engine.connect() as conn:
@@ -439,7 +439,7 @@ class NullPartitionedTests(GeneratesDBTestCase):
             gc.do_quit("")
             self.set_configuration(gc.config)
             self.get_src_stats(gc.config)
-            self.create_tables()
+            self.create_tables(gc.config)
             self.populate_measurement_type_vocab()
             self.create_data(gc.config, num_passes=generate_count)
         with self.dst_sync_engine.connect() as conn:

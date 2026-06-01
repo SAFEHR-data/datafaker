@@ -2,13 +2,18 @@
 import copy
 import re
 from collections.abc import MutableMapping
+from importlib import resources
+from pathlib import Path
+import sys
 from typing import Any, Iterable
+import yaml
 
-from sqlalchemy import Connection, MetaData, select
+from sqlalchemy import Connection, MetaData, select, func
 
 from datafaker.interactive.base import DbCmd
 from datafaker.interactive.generators import GeneratorCmd
 from datafaker.proposers.choice import ChoiceProposerFactory
+from datafaker.proposers.intervals import SecondsDifference
 from tests.utils import (
     GeneratesDBTestCase,
     RequiresDBTestCase,
@@ -546,7 +551,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             gc.do_next(f"string.{column}")
             gc.do_propose("")
             proposals = gc.get_proposals()
-            gc.do_set(str(proposals[f"{generator}"][0]))
+            gc.do_set(str(proposals[generator][0]))
             gc.do_quit("")
             src_stats = {stat["name"]: stat["query"] for stat in gc.config["src-stats"]}
             self.assertEqual(src_stats["kraken"], config["src-stats"][0]["query"])
@@ -566,6 +571,75 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             table_names = {m[1][0] for m in gc.messages}
             self.assertIn("model", table_names)
             self.assertNotIn("string", table_names)
+
+class ConfigureGeneratorsWithSrc2Tests(GeneratesDBTestCase):
+    """Test `configure-generators` with the `src2.dump` database."""
+
+    dump_file_path = "src2.dump"
+    database_name = "src"
+    schema_name = "public"
+    use_temporary_cwd = True
+    copy_files = ["row_generators.py", "story_generators.py"]
+    copy_from_directory = Path("examples")
+
+    def _get_cmd(self, config: MutableMapping[str, Any]) -> TestGeneratorCmd:
+        """Get the command we are using for this test case."""
+        return TestGeneratorCmd(
+            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
+        )
+
+    def _get_config(self) -> dict[str, Any]:
+        test_module = resources.files(sys.modules["tests"])
+        with open(
+            test_module / "examples" / "example_config2.yaml",
+            encoding="utf-8",
+        ) as config_fh:
+            return yaml.load(config_fh, yaml.SafeLoader)
+
+    def test_intervals_end_to_end(self) -> None:
+        """Test that if an interval end is applicable it gets proposed and works."""
+        table = "hospital_visit"
+        column = "visit_end"
+        config = self._get_config()
+        # let's not test the uniqueness failures!
+        config["tables"]["unique_constraint_test"]["num_rows_per_pass"] = 0
+        config["tables"]["unique_constraint_test2"]["num_rows_per_pass"] = 0
+        with self._get_cmd(config) as gc:
+            # set up our interval proposer
+            gc.do_next(f"{table}.{column}")
+            gc.do_unmerge("visit_start")
+            gc.reset()
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            provider_name = "generic.anchored_provider.normal_date [anchored to visit_start]"
+            self.assertIn(provider_name, proposals)
+            proposals = gc.get_proposals()
+            gc.do_set(str(proposals[provider_name][0]))
+            gc.do_quit("")
+            self.generate_data(config, num_passes=15)
+        with self.sync_engine.connect() as conn:
+            src_diff = SecondsDifference(
+                self.metadata.tables[table].c[column],
+                self.metadata.tables[table].c["visit_start"],
+            )
+            src_result = conn.execute(select(
+                func.avg(src_diff).label("mean"), func.stddev(src_diff).label("sd")
+            ).select_from(self.metadata.tables[table])).one()
+        with self.dst_sync_engine.connect() as conn:
+            dst_diff = SecondsDifference(
+                self.dst_metadata.tables[table].c[column],
+                self.dst_metadata.tables[table].c["visit_start"],
+            )
+            dst_result = conn.execute(select(
+                func.avg(dst_diff).label("mean"), func.stddev(dst_diff).label("sd")
+            ).select_from(self.dst_metadata.tables[table])).one()
+        self.assertAlmostEqual(src_result.mean, dst_result.mean, delta=src_result.mean * 0.3)
+        self.assertAlmostEqual(src_result.sd, dst_result.sd, delta=src_result.sd * 0.5)
+
+
+class ConfigureGeneratorsWithSrc2DuckDbTests(ConfigureGeneratorsWithSrc2Tests):
+    """Test `configure-generators` with `src2.dump` with DuckDB."""
+    database_type = TestDuckDb
 
 
 class ChoiceMeasurementTableStats:

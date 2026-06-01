@@ -223,7 +223,7 @@ class CreateReadsNoParquetTestCase(DatafakerTestCase):
     Otherwise there is a risk of leakage of source data.
     """
 
-    examples_dir = Path("tests/examples/duckdb")
+    examples_dir = Path("examples/duckdb")
     parquet_name = "fruit.parquet"
 
     def setUp(self) -> None:

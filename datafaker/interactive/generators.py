@@ -291,6 +291,9 @@ information about the columns in the current table. Use 'peek',
                     kwn = proposer.proposer.nominal_kwargs()
                     if kwn:
                         rg["kwargs"] = kwn
+                    asn = proposer.proposer.nominal_args()
+                    if asn:
+                        rg["args"] = asn
                     rgs.append(rg)
             aq = self._get_aggregate_query(new_gens, entry.name)
             if aq:

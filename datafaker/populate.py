@@ -81,7 +81,7 @@ def _get_object(class_name: str, context: Mapping) -> Any:
     """
     parts = class_name.split(".")
     if parts[0] not in context:
-        raise ValueError(f'No such object "{parts[0]}"')
+        raise ValueError(f'No such object "{parts[0]}" (symbols available are {", ".join(context.keys())})')
     value = context[parts[0]]
     so_far = parts[0]
     for part in parts[1:]:
@@ -175,9 +175,10 @@ def _get_symbols_instantiation(symbols: dict[str, Any], objs: dict[str, Any]) ->
     """
     for name, inst in objs.items():
         clbl = inst.get("class", None)
+        args = inst.get("args", [])
         kwargs = inst.get("kwargs", {})
-        if isinstance(clbl, str) and isinstance(kwargs, dict):
-            symbols[name] = _call_from_context(clbl, [], kwargs, symbols)
+        if isinstance(clbl, str) and isinstance(kwargs, dict) and isinstance(args, list):
+            symbols[name] = _call_from_context(clbl, args, kwargs, symbols)
 
 
 @dataclass

@@ -22,11 +22,13 @@ import duckdb
 import testing.postgresql
 import yaml
 from sqlalchemy import Engine, MetaData
+from sqlalchemy_utils import create_database
 
 from datafaker import settings
 from datafaker.create import create_db_data_into, create_db_tables_into
 from datafaker.interactive.base import DbCmd
 from datafaker.make import make_src_stats, make_tables_file
+from datafaker.serialize_metadata import dict_to_metadata, metadata_to_dict
 from datafaker.utils import (
     MaybeAsyncEngine,
     T,
@@ -81,6 +83,12 @@ class TestDatabaseBase(ABC):
     @abstractmethod
     def run_sql(self, sql_file: Path) -> None:
         """Run the provided SQL file on the test database."""
+
+    def create_empty(self, name: str) -> str:
+        """Create an empty database and return the DSN string."""
+        dsn = self.get_dsn(name)
+        create_database(dsn)
+        return dsn
 
 
 class TestPostgres(TestDatabaseBase):
@@ -161,7 +169,7 @@ class TestDuckDb(TestDatabaseBase):
     """Test DuckDB database."""
 
     SQL_REMOVALS_RE = re.compile(
-        r"^(CREATE DATABASE .*;)|(\\.*)|(ALTER [^;]*;)", re.MULTILINE
+        r"^(CREATE DATABASE .*;)|(\\.*)|(ALTER [^;]*;)|(\bUSING\s+btree)", re.MULTILINE
     )
     # Postgres' default stupid time format, ingoring time zone for now
     TIME_FORMAT_RE = re.compile(
@@ -222,18 +230,32 @@ class TestDuckDb(TestDatabaseBase):
         duckdb_con.execute(sanitized)
         duckdb_con.close()
 
+    def create_empty(self, name: str) -> str:
+        """
+        The standard SQLAlchemy database creation tool doesn't work for DuckDB.
+
+        Thankfully, it is not necessary either.
+        """
+        return self.get_dsn(name)
+
+
 
 class DatafakerTestCase(TestCase):
     """Parent class for all TestCases in datafaker."""
 
     schema_name: str | None = None
     use_asyncio = False
-    examples_dir = Path("tests/examples")
+    examples_dir = Path("examples")
     dump_file_path: str | None = None
     database_name: str | None = None
     use_temporary_cwd = False
     copy_files: list[str] = []
     copy_from_directory: Path = Path(".")
+
+    def get_abs_example_dir(self):
+        """Get an absolute path to the examples directory."""
+        test_module = resources.files(sys.modules["tests"])
+        return test_module / self.examples_dir
 
     def setUp(self) -> None:
         """Set up the test case with an actual orm.yaml file."""
@@ -345,6 +367,7 @@ class RequiresDBTestCase(DatafakerTestCase):
     """
 
     database_type: type[TestDatabaseBase] = TestPostgres
+    dst_schema_name: str | None = None
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -366,6 +389,16 @@ class RequiresDBTestCase(DatafakerTestCase):
         self.metadata = MetaData()
         self.engine: MaybeAsyncEngine
         self.sync_engine: Engine
+        self.dst_name: str | None = None
+        self.dst_database: TestDatabaseBase | None = None
+        self.dst_metadata = MetaData()
+        self.dst_engine: Engine | None = None
+
+    @property
+    def dst_dsn(self) -> str:
+        """Get the database connection string."""
+        assert self.dst_database is not None
+        return self.dst_database.get_dsn(self.dst_name)
 
     def setUp(self) -> None:
         super().setUp()
@@ -374,7 +407,7 @@ class RequiresDBTestCase(DatafakerTestCase):
         else:
             self.database.open()
         if self.dump_file_path is not None:
-            self.database.run_sql(Path(self.examples_dir) / Path(self.dump_file_path))
+            self.database.run_sql(self.get_abs_example_dir() / self.dump_file_path)
         self.engine = create_db_engine(
             self.database.get_dsn(self.database_name),
             schema_name=self.schema_name,
@@ -383,9 +416,28 @@ class RequiresDBTestCase(DatafakerTestCase):
         self.sync_engine = get_sync_engine(self.engine)
         self.metadata.reflect(self.sync_engine)
 
+    def make_destination_database(self, name: str) -> str:
+        """Make an empty destination database."""
+        self.dst_name = name
+        if self.dst_database is None:
+            self.dst_database = self.database_type()
+        else:
+            self.dst_database.open()
+        dsn = self.dst_database.create_empty(name)
+        # Check that our programmatic way of getting the DSN works
+        assert dsn == self.dst_dsn
+        self.dst_engine = create_db_engine_dst(
+            self.dst_dsn,
+            schema_name=self.dst_schema_name,
+            use_asyncio=self.use_asyncio,
+        )
+        self.dst_sync_engine = get_sync_engine(self.dst_engine)
+
     def tearDown(self) -> None:
         assert self.database is not None
         self.database.close()
+        if self.dst_database is not None:
+            self.dst_database.close()
         super().tearDown()
 
     @property
@@ -399,8 +451,6 @@ class RequiresDBTestCase(DatafakerTestCase):
 class GeneratesDBTestCase(RequiresDBTestCase):
     """A test case for which a database is generated."""
 
-    dst_schema_name: str | None = None
-
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         """Initialise a GeneratedDB test case."""
         super().__init__(*args, **kwargs)
@@ -413,29 +463,15 @@ class GeneratesDBTestCase(RequiresDBTestCase):
         self.dst_engine: MaybeAsyncEngine
         self.dst_sync_engine: Engine
 
-    @property
-    def dst_dsn(self) -> str:
-        """Get the database connection string."""
-        assert self.dst_database is not None
-        return self.dst_database.get_dsn(None)
-
     def setUp(self) -> None:
         """Set up the test case with an actual orm.yaml file."""
         super().setUp()
-        if self.dst_database is None:
-            self.dst_database = self.database_type()
-        else:
-            self.dst_database.open()
-        self.dst_engine = create_db_engine_dst(
-            self.dst_dsn,
-            schema_name=self.dst_schema_name,
-            use_asyncio=self.use_asyncio,
-        )
-        self.dst_sync_engine = get_sync_engine(self.dst_engine)
         # Generate the `orm.yaml` from the database
         (self.orm_fd, self.orm_file_path) = mkstemp(".yaml", "orm_", text=True)
         with os.fdopen(self.orm_fd, "w", encoding="utf-8") as orm_fh:
             orm_fh.write(make_tables_file(self.dsn, self.schema_name))
+        # Create a separate empty destination database
+        self.make_destination_database("dst")
 
     def set_configuration(self, config: Mapping[str, Any]) -> None:
         """Accepts a configuration file, writes it out."""
@@ -461,9 +497,11 @@ class GeneratesDBTestCase(RequiresDBTestCase):
             stats_fh.write(yaml.dump(src_stats))
         return src_stats
 
-    def create_tables(self) -> None:
+    def create_tables(self, config: Mapping[str, Any]) -> None:
         """Create tables in the output DB."""
-        create_db_tables_into(self.metadata, self.dst_dsn, self.dst_schema_name)
+        dm = metadata_to_dict(self.metadata, None, self.dst_engine, None)
+        self.dst_metadata = dict_to_metadata(dm, config)
+        create_db_tables_into(self.dst_metadata, self.dst_dsn, self.dst_schema_name)
 
     def create_data(self, config: Mapping[str, Any], num_passes: int = 1) -> None:
         """Create fake data in the DB."""
@@ -473,14 +511,15 @@ class GeneratesDBTestCase(RequiresDBTestCase):
         else:
             with Path(self.stats_file_path).open(encoding="utf-8") as fh:
                 src_stats = yaml.load(fh, yaml.SafeLoader)
+        metadata = self.metadata if self.dst_engine is None else self.dst_metadata
         create_db_data_into(
-            sorted_non_vocabulary_tables(self.metadata, config),
+            sorted_non_vocabulary_tables(metadata, config),
             config,
             src_stats,
             num_passes,
             self.dst_dsn,
             self.dst_schema_name,
-            self.metadata,
+            metadata,
         )
 
     def generate_data(
@@ -492,7 +531,7 @@ class GeneratesDBTestCase(RequiresDBTestCase):
         """
         self.set_configuration(config)
         src_stats = self.get_src_stats(config)
-        self.create_tables()
+        self.create_tables(config)
         self.create_data(config, num_passes)
         return src_stats
 

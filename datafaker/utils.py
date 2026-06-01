@@ -583,7 +583,7 @@ def get_vocabulary_table_names(config: Mapping) -> set[str]:
     return {
         table_name
         for (table_name, table_config) in config.get("tables", {}).items()
-        if get_flag(table_config, "vocabulary_table")
+        if get_flag(table_config, "vocabulary_table") and not get_flag(table_config, "ignore")
     }
 
 
@@ -818,15 +818,16 @@ def topological_sort(
 
 def sorted_non_vocabulary_tables(metadata: MetaData, config: Mapping) -> list[Table]:
     """
-    Get the list of non-vocabulary tables, topologically sorted.
+    Get the list of non-vocabulary non-ignored tables, topologically sorted.
 
     :param metadata: SQLAlchemy database description.
     :param config: The ``config.yaml`` object.
-    :return: The list of non-vocabulary tables, ordered such that the targets
-    of all the foreign keys come before their sources.
+    :return: The list of non-vocabulary non-ignored tables, ordered such that
+      the targets of all the foreign keys come before their sources.
     """
     table_names = set(metadata.tables.keys()).difference(
         get_vocabulary_table_names(config)
+        | get_ignored_table_names(config)
     )
     (sorted_tables, cycles) = topological_sort(
         table_names, lambda tn: get_related_table_names(metadata.tables[tn])
