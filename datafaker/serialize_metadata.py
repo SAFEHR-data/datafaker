@@ -2,18 +2,15 @@
 import typing
 from functools import partial
 from pathlib import Path
+from typing import Any, Mapping
 
 import parsy
 from sqlalchemy import Column, Dialect, Engine, ForeignKey, MetaData, Table
 from sqlalchemy.dialects import oracle, postgresql
 from sqlalchemy.sql import schema, sqltypes
 
-from datafaker.utils import (
-    constraint_name,
-    get_property,
-    make_foreign_key_name,
-    split_column_full_name,
-)
+from datafaker.db_utils import constraint_name
+from datafaker.utils import get_property, make_foreign_key_name, split_column_full_name
 
 TableT = dict[str, typing.Any]
 
@@ -328,7 +325,9 @@ def _always_false(_: str) -> bool:
     return False
 
 
-def dict_to_metadata(obj: dict, config_for_output: dict | None = None) -> MetaData:
+def dict_to_metadata(
+    obj: dict, config_for_output: Mapping[Any, Any] | None = None
+) -> MetaData:
     """
     Convert a dict to a SQL Alchemy MetaData object.
 

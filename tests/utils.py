@@ -12,6 +12,7 @@ from abc import ABC, abstractmethod
 from collections.abc import MutableSequence, Sequence
 from functools import lru_cache
 from importlib import resources
+from importlib.resources.abc import Traversable
 from pathlib import Path
 from subprocess import run
 from tempfile import mkdtemp, mkstemp
@@ -26,17 +27,17 @@ from sqlalchemy_utils import create_database
 
 from datafaker import settings
 from datafaker.create import create_db_data_into, create_db_tables_into
-from datafaker.interactive.base import DbCmd
-from datafaker.make import make_src_stats, make_tables_file
-from datafaker.serialize_metadata import dict_to_metadata, metadata_to_dict
-from datafaker.utils import (
+from datafaker.db_utils import (
     MaybeAsyncEngine,
-    T,
     create_db_engine,
     create_db_engine_dst,
     get_sync_engine,
     sorted_non_vocabulary_tables,
 )
+from datafaker.interactive.base import DbCmd
+from datafaker.make import make_src_stats, make_tables_file
+from datafaker.serialize_metadata import dict_to_metadata, metadata_to_dict
+from datafaker.utils import T
 
 
 @lru_cache(1)
@@ -239,7 +240,6 @@ class TestDuckDb(TestDatabaseBase):
         return self.get_dsn(name)
 
 
-
 class DatafakerTestCase(TestCase):
     """Parent class for all TestCases in datafaker."""
 
@@ -252,10 +252,10 @@ class DatafakerTestCase(TestCase):
     copy_files: list[str] = []
     copy_from_directory: Path = Path(".")
 
-    def get_abs_example_dir(self):
+    def get_abs_example_dir(self) -> Traversable:  # type: ignore
         """Get an absolute path to the examples directory."""
         test_module = resources.files(sys.modules["tests"])
-        return test_module / self.examples_dir
+        return test_module.joinpath(str(self.examples_dir))
 
     def setUp(self) -> None:
         """Set up the test case with an actual orm.yaml file."""
@@ -355,7 +355,9 @@ class DatafakerTestCase(TestCase):
         self.fail(self._formatMessage(msg, standard_msg))
 
 
-class RequiresDBTestCase(DatafakerTestCase):
+class RequiresDBTestCase(
+    DatafakerTestCase
+):  # pylint: disable=too-many-instance-attributes
     """
     A test case that only runs if a database (PostgreSQL or DuckDB) is installed.
 
@@ -416,7 +418,7 @@ class RequiresDBTestCase(DatafakerTestCase):
         self.sync_engine = get_sync_engine(self.engine)
         self.metadata.reflect(self.sync_engine)
 
-    def make_destination_database(self, name: str) -> str:
+    def make_destination_database(self, name: str) -> None:
         """Make an empty destination database."""
         self.dst_name = name
         if self.dst_database is None:
@@ -426,12 +428,13 @@ class RequiresDBTestCase(DatafakerTestCase):
         dsn = self.dst_database.create_empty(name)
         # Check that our programmatic way of getting the DSN works
         assert dsn == self.dst_dsn
-        self.dst_engine = create_db_engine_dst(
-            self.dst_dsn,
-            schema_name=self.dst_schema_name,
-            use_asyncio=self.use_asyncio,
+        self.dst_engine = get_sync_engine(
+            create_db_engine_dst(
+                self.dst_dsn,
+                schema_name=self.dst_schema_name,
+                use_asyncio=self.use_asyncio,
+            )
         )
-        self.dst_sync_engine = get_sync_engine(self.dst_engine)
 
     def tearDown(self) -> None:
         assert self.database is not None
@@ -460,8 +463,6 @@ class GeneratesDBTestCase(RequiresDBTestCase):
         self.config_file_path = ""
         self.config_fd = 0
         self.dst_database: TestDatabaseBase | None = None
-        self.dst_engine: MaybeAsyncEngine
-        self.dst_sync_engine: Engine
 
     def setUp(self) -> None:
         """Set up the test case with an actual orm.yaml file."""
@@ -499,6 +500,7 @@ class GeneratesDBTestCase(RequiresDBTestCase):
 
     def create_tables(self, config: Mapping[str, Any]) -> None:
         """Create tables in the output DB."""
+        assert self.dst_engine is not None
         dm = metadata_to_dict(self.metadata, None, self.dst_engine, None)
         self.dst_metadata = dict_to_metadata(dm, config)
         create_db_tables_into(self.dst_metadata, self.dst_dsn, self.dst_schema_name)

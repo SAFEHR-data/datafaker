@@ -9,12 +9,8 @@ from unittest.mock import MagicMock, call, patch
 from sqlalchemy import Column, Integer, insert
 from sqlalchemy.orm import declarative_base
 
-from datafaker.utils import (
-    download_table,
-    generators_require_stats,
-    import_file,
-    read_config_file,
-)
+from datafaker.db_utils import download_table
+from datafaker.utils import generators_require_stats, import_file, read_config_file
 from tests.utils import DatafakerTestCase, RequiresDBTestCase
 
 # pylint: disable=invalid-name

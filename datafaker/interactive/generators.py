@@ -8,6 +8,7 @@ from typing import Any, Callable, Optional, cast
 import sqlalchemy
 from sqlalchemy import Column
 
+from datafaker.db_utils import primary_private_fks, table_is_private
 from datafaker.interactive.base import DbCmd, TableEntry, fk_column_name, or_default
 from datafaker.proposers import everything_factory
 from datafaker.proposers.base import PredefinedProposer, Proposer
@@ -15,9 +16,7 @@ from datafaker.utils import (
     get_columns_assigned,
     get_row_generators,
     logger,
-    primary_private_fks,
     split_column_full_name,
-    table_is_private,
 )
 
 
@@ -152,10 +151,7 @@ information about the columns in the current table. Use 'peek',
         """
         Initialise a ``GeneratorCmd``.
 
-        :param src_dsn: connection address for source database
-        :param src_schema: database schema name
-        :param metadata: SQLAlchemy metadata for the source database
-        :param config: Configuration loaded from ``config.yaml``
+        :param settings: Settings for the source database.
         """
         super().__init__(settings)
         self.proposers: list[Proposer] | None = None
@@ -445,7 +441,7 @@ information about the columns in the current table. Use 'peek',
                 return n
         return None
 
-    def _get_table_and_column(self, target) -> tuple[str | None, str | None]:
+    def _get_table_and_column(self, target: str) -> tuple[int | None, int | None]:
         """
         Turn a table or column name into a table and column index.
 

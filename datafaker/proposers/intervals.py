@@ -9,15 +9,16 @@ from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.visitors import InternalTraversal
 from sqlalchemy.types import Date, DateTime
 
+from datafaker.db_utils import get_dialect
 from datafaker.proposers.base import Buckets, Proposer, ProposerFactory, get_column_type
 from datafaker.providers import AnchoredProvider
 from datafaker.settings import get_settings
-from datafaker.utils import get_property, get_dialect
+from datafaker.utils import get_property
 
 RelatedColumn = tuple[ForeignKey | None, Column]
 
 
-class SecondsDifference(ColumnElement[int]):
+class SecondsDifference(ColumnElement[int]):  # pylint: disable=too-many-ancestors
     """Represent getting the difference between times in seconds."""
 
     expr1: ColumnElement[Date | DateTime]
@@ -33,12 +34,22 @@ class SecondsDifference(ColumnElement[int]):
         expr1: ColumnElement[Date | DateTime],
         expr2: ColumnElement[Date | DateTime],
     ):
+        """
+        Get a clause for the number of seconds between two times.
+
+        The interval is from ``expr2`` to ``expr1``.
+        """
         self.expr1 = expr1
         self.expr2 = expr2
 
+    __sa_operate__ = ColumnElement.operate
+
 
 @compiles(SecondsDifference)
-def compile(element: SecondsDifference, compiler, **kw):
+def compile_seconds_difference(
+    element: SecondsDifference, compiler: Any, **kw: Any
+) -> str:
+    """Create SQL for the difference between two datetimes in seconds."""
     e1 = compiler.process(element.expr1, **kw)
     e2 = compiler.process(element.expr2, **kw)
     return f"CAST(EXTRACT(EPOCH FROM ({e1})) - EXTRACT(EPOCH FROM ({e2})) AS FLOAT)"
@@ -152,8 +163,20 @@ class DateAfterProposer(Proposer):
     def nominal_kwargs(self) -> dict[str, Any]:
         """Get the arguments to be entered into ``config.yaml``."""
         return {
-            "mean_seconds": f'SRC_STATS["auto__{self._column.table.name}"]["results"][0]["mean__{self._column.name}"]',
-            "sd_seconds": f'SRC_STATS["auto__{self._column.table.name}"]["results"][0]["stddev__{self._column.name}"]',
+            "mean_seconds": (
+                'SRC_STATS["auto__'
+                + self._column.table.name
+                + '"]["results"][0]["mean__'
+                + self._column.name
+                + '"]'
+            ),
+            "sd_seconds": (
+                'SRC_STATS["auto__'
+                + self._column.table.name
+                + '"]["results"][0]["stddev__'
+                + self._column.name
+                + '"]'
+            ),
             "anchor": f'GENERATED_ROW["{self._anchor.name}"]',
         }
 
@@ -176,18 +199,32 @@ class DateAfterProposer(Proposer):
         if dest_dsn:
             dialect = get_dialect(dest_dsn)
         else:
-            dialect = dialects.postgresql.dialect()
+            dialect = dialects.postgresql.dialect()  # type: ignore
         mean_q = func.avg(SecondsDifference(self._column, self._anchor))
         sd_q = func.stddev(SecondsDifference(self._column, self._anchor))
-        
+
         return {
             f"mean__{self._column.name}": {
-                "clause": mean_q.compile(dialect=dialect),
-                "comment": f"Mean of interval between {self._anchor.name} and {self._column.name} from table {self._column.table.name}",
+                "clause": str(mean_q.compile(dialect=dialect)),
+                "comment": (
+                    "Mean of interval between "
+                    + self._anchor.name
+                    + " and "
+                    + self._column.name
+                    + " from table "
+                    + self._column.table.name
+                ),
             },
             f"stddev__{self._column.name}": {
-                "clause": sd_q.compile(dialect=dialect),
-                "comment": f"Standard deviation of interval between {self._anchor.name} and {self._column.name} from table {self._column.table.name}",
+                "clause": str(sd_q.compile(dialect=dialect)),
+                "comment": (
+                    "Standard deviation of interval between "
+                    + self._anchor.name
+                    + " and "
+                    + self._column.name
+                    + " from table "
+                    + self._column.table.name
+                ),
             },
         }
 
@@ -226,7 +263,9 @@ class DateAfterProposerFactory(ProposerFactory):
             ).first()
             if result is None or result.sd is None:
                 return []
-        buckets = Buckets.make_buckets(engine, column.table, SecondsDifference(column, anchor))
+        buckets = Buckets.make_buckets(
+            engine, column.table, SecondsDifference(column, anchor)
+        )
         return [
             DateAfterProposer(
                 self._metadata,
@@ -260,7 +299,8 @@ class DateAfterProposerFactory(ProposerFactory):
         anchors = [
             anchor
             for fk, anchor in other_start_columns
-            if fk is None  # at the moment we can only cope with columns in the same table
+            if fk
+            is None  # at the moment we can only cope with columns in the same table
         ]
         return [
             prop

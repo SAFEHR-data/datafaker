@@ -13,6 +13,13 @@ from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema, CreateTable, MetaData, Table
 
 from datafaker.base import FileUploader
+from datafaker.db_utils import (
+    create_db_engine_dst,
+    get_sync_engine,
+    get_vocabulary_table_names,
+    reinstate_vocab_foreign_key_constraints,
+    remove_vocab_foreign_key_constraints,
+)
 from datafaker.make import FunctionCall, StoryGeneratorInfo, get_generation_info
 from datafaker.populate import (
     TableGenerator,
@@ -21,15 +28,7 @@ from datafaker.populate import (
     get_table_generator_dict,
 )
 from datafaker.settings import get_destination_dsn, get_destination_schema, get_settings
-from datafaker.utils import (
-    create_db_engine_dst,
-    get_property,
-    get_sync_engine,
-    get_vocabulary_table_names,
-    logger,
-    reinstate_vocab_foreign_key_constraints,
-    remove_vocab_foreign_key_constraints,
-)
+from datafaker.utils import get_property, logger
 
 Story = Generator[Tuple[str, dict[str, Any]], dict[str, Any], None]
 RowCounts = Counter[str]

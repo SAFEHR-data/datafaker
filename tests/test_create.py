@@ -20,11 +20,11 @@ from datafaker.create import (
     create_db_vocab,
     populate,
 )
+from datafaker.db_utils import sorted_non_vocabulary_tables
 from datafaker.make import FunctionCall, StoryGeneratorInfo
 from datafaker.populate import TableGenerator
 from datafaker.serialize_metadata import dict_to_metadata, metadata_to_dict
 from datafaker.settings import SettingsError
-from datafaker.utils import sorted_non_vocabulary_tables
 from tests.utils import DatafakerTestCase, GeneratesDBTestCase, RequiresDBTestCase
 
 
@@ -55,7 +55,8 @@ class TestCreate(GeneratesDBTestCase):
             )
             create_db_tables(self.metadata)
             create_db_vocab(self.metadata, meta_dict, config, Path("./tests/examples"))
-        with self.dst_sync_engine.connect() as conn:
+        assert self.dst_engine is not None
+        with self.dst_engine.connect() as conn:
             stmt = select(self.metadata.tables["player"])
             rows = list(conn.execute(stmt).mappings().fetchall())
             self.assertEqual(len(rows), 3)
@@ -74,7 +75,8 @@ class TestCreate(GeneratesDBTestCase):
         random.seed(56)
         config: Mapping[str, Any] = {}
         self.generate_data(config, num_passes=2)
-        with self.dst_sync_engine.connect() as conn:
+        assert self.dst_engine is not None
+        with self.dst_engine.connect() as conn:
             stmt = select(self.metadata.tables["string"])
             rows = list(conn.execute(stmt).mappings().fetchall())
             a = rows[0]

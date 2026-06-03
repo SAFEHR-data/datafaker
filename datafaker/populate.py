@@ -8,7 +8,8 @@ from mimesis import Generic
 from mimesis.locales import Locale
 
 from datafaker.base import ColumnPresence
-from datafaker.make import FunctionCall, TableGeneratorInfo, RowGeneratorInfo
+from datafaker.db_utils import constraint_name
+from datafaker.make import FunctionCall, RowGeneratorInfo, TableGeneratorInfo
 from datafaker.providers import (
     AnchoredProvider,
     BytesProvider,
@@ -20,15 +21,10 @@ from datafaker.providers import (
     TimespanProvider,
     WeightedBooleanProvider,
 )
-from datafaker.utils import (
-    constraint_name,
-    import_file,
-    gather_keys_from_mapping,
-    logger,
-)
+from datafaker.utils import gather_keys_from_mapping, import_file, logger
 
 
-def make_generic(metadata=sqlalchemy.MetaData) -> Generic:
+def make_generic(metadata: sqlalchemy.MetaData) -> Generic:
     """Make the generic provider instance."""
     g = Generic(locale=Locale.EN_GB)
     g.add_providers(
@@ -81,7 +77,9 @@ def _get_object(class_name: str, context: Mapping) -> Any:
     """
     parts = class_name.split(".")
     if parts[0] not in context:
-        raise ValueError(f'No such object "{parts[0]}" (symbols available are {", ".join(context.keys())})')
+        raise ValueError(
+            f'No such object "{parts[0]}" (symbols available are {", ".join(context.keys())})'
+        )
     value = context[parts[0]]
     so_far = parts[0]
     for part in parts[1:]:
@@ -177,12 +175,23 @@ def _get_symbols_instantiation(symbols: dict[str, Any], objs: dict[str, Any]) ->
         clbl = inst.get("class", None)
         args = inst.get("args", [])
         kwargs = inst.get("kwargs", {})
-        if isinstance(clbl, str) and isinstance(kwargs, dict) and isinstance(args, list):
+        if (
+            isinstance(clbl, str)
+            and isinstance(kwargs, dict)
+            and isinstance(args, list)
+        ):
             symbols[name] = _call_from_context(clbl, args, kwargs, symbols)
 
 
 @dataclass
 class RowGenAndRelated:
+    """
+    A ``RowGeneratorInfo`` together with all the columns related to it.
+
+    The columns related are indices to ``ROW_GENERATORS`` found in the
+    ``args`` and ``kwargs`` attributes for the row generator.
+    """
+
     row_gen: RowGeneratorInfo
     related_columns: set[str]
 
@@ -210,7 +219,7 @@ class TableGenerator:
         self.table_data = table_data
         self.max_unique_constraint_tries = max_unique_constraint_tries
         self.existing_constraint_hashes: MutableMapping[str, set[int]] = {}
-        self.context: Mapping = {}
+        self.context: MutableMapping = {}
         with dst_db_conn.begin():
             for constraint in table_data.unique_constraints:
                 expr = sqlalchemy.select(*constraint.columns)
@@ -218,14 +227,17 @@ class TableGenerator:
                 self.existing_constraint_hashes[constraint_name(constraint)] = {
                     hash(tuple(result)) for result in query_result
                 }
-        errors = []
-        self.row_gens = [RowGenAndRelated(rg,
-            gather_keys_from_mapping(
-                errors,
-                f"table['{table_data.table_name}']['row_generators']",
-                {"args": rg.function_call.args, "kwargs": rg.function_call.kwargs},
-                "GENERATED_ROW",
-            ))
+        errors: list[tuple] = []
+        self.row_gens = [
+            RowGenAndRelated(
+                rg,
+                gather_keys_from_mapping(
+                    errors,
+                    f"table['{table_data.table_name}']['row_generators']",
+                    {"args": rg.function_call.args, "kwargs": rg.function_call.kwargs},
+                    "GENERATED_ROW",
+                ),
+            )
             for rg in table_data.row_gens
         ]
         for error in errors:

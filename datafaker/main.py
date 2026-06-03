@@ -17,6 +17,7 @@ from sqlalchemy.exc import InternalError, OperationalError
 from typer import Argument, Exit, Option, Typer
 
 from datafaker.create import create_db_data, create_db_tables, create_db_vocab
+from datafaker.db_utils import generated_tables, sorted_non_vocabulary_tables
 from datafaker.dump import (
     CsvTableWriter,
     ParquetTableWriter,
@@ -41,12 +42,10 @@ from datafaker.settings import (
 from datafaker.utils import (
     CONFIG_SCHEMA_PATH,
     conf_logger,
-    generated_tables,
     generators_require_stats,
     get_flag,
     logger,
     read_config_file,
-    sorted_non_vocabulary_tables,
 )
 
 from .serialize_metadata import dict_to_metadata, should_ignore_fk

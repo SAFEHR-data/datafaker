@@ -13,12 +13,8 @@ from sqlalchemy import Connection, insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.schema import Table
 
-from datafaker.utils import (
-    MAKE_VOCAB_PROGRESS_REPORT_EVERY,
-    logger,
-    stream_yaml,
-    table_row_count,
-)
+from datafaker.db_utils import MAKE_VOCAB_PROGRESS_REPORT_EVERY, table_row_count
+from datafaker.utils import logger, stream_yaml
 
 
 @dataclass

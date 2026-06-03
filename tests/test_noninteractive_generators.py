@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping, MutableMapping
 from typing import Any
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, patch
 
 from datafaker.interactive import update_config_generators
 from datafaker.interactive.base import DbCmd

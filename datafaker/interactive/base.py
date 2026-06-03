@@ -13,13 +13,12 @@ from prettytable import PrettyTable
 from sqlalchemy import Engine, ForeignKey, MetaData, Table
 from typing_extensions import Self
 
-from datafaker.utils import (
-    T,
+from datafaker.db_utils import (
     create_db_engine,
     fk_refers_to_ignored_table,
     get_sync_engine,
-    get_property,
 )
+from datafaker.utils import T, get_property
 
 
 def or_default(v: T | None, d: T) -> T:
@@ -140,12 +139,7 @@ class DbCmd(ABC, cmd.Cmd):
         """
         Initialise a DbCmd.
 
-        :param src_dsn: The database connection string for the source database.
-        :param src_schema: The name of the schema name for the source database.
-        :param metadata: The metadata for the source database.
-        :param config: The ``config.xml`` object.
-        :param parquet_dir: The directory where parquet files are stored that
-          are to be considered part of the source database (only for DuckDB).
+        :param src_dsn: Settings for the source database.
         """
         super().__init__()
         self.config: MutableMapping[str, Any] = settings.config

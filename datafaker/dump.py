@@ -8,7 +8,8 @@ import pandas as pd
 import sqlalchemy
 from sqlalchemy.schema import MetaData
 
-from datafaker.utils import create_db_engine, get_sync_engine, logger
+from datafaker.db_utils import create_db_engine, get_sync_engine
+from datafaker.utils import logger
 
 
 class TableWriter(ABC):

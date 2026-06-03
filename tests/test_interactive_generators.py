@@ -1,14 +1,14 @@
 """ Tests for the configure-generators command. """
 import copy
 import re
+import sys
 from collections.abc import MutableMapping
 from importlib import resources
 from pathlib import Path
-import sys
 from typing import Any, Iterable
-import yaml
 
-from sqlalchemy import Connection, MetaData, select, func
+import yaml
+from sqlalchemy import Connection, MetaData, func, select
 
 from datafaker.interactive.base import DbCmd
 from datafaker.interactive.generators import GeneratorCmd
@@ -572,6 +572,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertIn("model", table_names)
             self.assertNotIn("string", table_names)
 
+
 class ConfigureGeneratorsWithSrc2Tests(GeneratesDBTestCase):
     """Test `configure-generators` with the `src2.dump` database."""
 
@@ -588,13 +589,14 @@ class ConfigureGeneratorsWithSrc2Tests(GeneratesDBTestCase):
             DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
         )
 
-    def _get_config(self) -> dict[str, Any]:
+    def _get_config(self) -> dict[Any, Any]:
         test_module = resources.files(sys.modules["tests"])
-        with open(
-            test_module / "examples" / "example_config2.yaml",
+        with test_module.joinpath("examples/example_config2.yaml").open(
             encoding="utf-8",
         ) as config_fh:
-            return yaml.load(config_fh, yaml.SafeLoader)
+            cy = yaml.load(config_fh, yaml.SafeLoader)
+            assert isinstance(cy, dict)
+            return cy
 
     def test_intervals_end_to_end(self) -> None:
         """Test that if an interval end is applicable it gets proposed and works."""
@@ -611,7 +613,9 @@ class ConfigureGeneratorsWithSrc2Tests(GeneratesDBTestCase):
             gc.reset()
             gc.do_propose("")
             proposals = gc.get_proposals()
-            provider_name = "generic.anchored_provider.normal_date [anchored to visit_start]"
+            provider_name = (
+                "generic.anchored_provider.normal_date [anchored to visit_start]"
+            )
             self.assertIn(provider_name, proposals)
             proposals = gc.get_proposals()
             gc.do_set(str(proposals[provider_name][0]))
@@ -622,23 +626,31 @@ class ConfigureGeneratorsWithSrc2Tests(GeneratesDBTestCase):
                 self.metadata.tables[table].c[column],
                 self.metadata.tables[table].c["visit_start"],
             )
-            src_result = conn.execute(select(
-                func.avg(src_diff).label("mean"), func.stddev(src_diff).label("sd")
-            ).select_from(self.metadata.tables[table])).one()
-        with self.dst_sync_engine.connect() as conn:
+            src_result = conn.execute(
+                select(
+                    func.avg(src_diff).label("mean"), func.stddev(src_diff).label("sd")
+                ).select_from(self.metadata.tables[table])
+            ).one()
+        assert self.dst_engine is not None
+        with self.dst_engine.connect() as conn:
             dst_diff = SecondsDifference(
                 self.dst_metadata.tables[table].c[column],
                 self.dst_metadata.tables[table].c["visit_start"],
             )
-            dst_result = conn.execute(select(
-                func.avg(dst_diff).label("mean"), func.stddev(dst_diff).label("sd")
-            ).select_from(self.dst_metadata.tables[table])).one()
-        self.assertAlmostEqual(src_result.mean, dst_result.mean, delta=src_result.mean * 0.3)
+            dst_result = conn.execute(
+                select(
+                    func.avg(dst_diff).label("mean"), func.stddev(dst_diff).label("sd")
+                ).select_from(self.dst_metadata.tables[table])
+            ).one()
+        self.assertAlmostEqual(
+            src_result.mean, dst_result.mean, delta=src_result.mean * 0.3
+        )
         self.assertAlmostEqual(src_result.sd, dst_result.sd, delta=src_result.sd * 0.5)
 
 
 class ConfigureGeneratorsWithSrc2DuckDbTests(ConfigureGeneratorsWithSrc2Tests):
     """Test `configure-generators` with `src2.dump` with DuckDB."""
+
     database_type = TestDuckDb
 
 
@@ -715,7 +727,8 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
             gc.do_quit("")
             self.generate_data(gc.config, num_passes=200)
             # all generation possibilities should be present
-            with self.dst_sync_engine.connect() as conn:
+            assert self.dst_engine is not None
+            with self.dst_engine.connect() as conn:
                 stats = ChoiceMeasurementTableStats(self.metadata, conn)
                 self.assertSetEqual(stats.ones, {1, 4})
                 self.assertSetEqual(stats.twos, {2, 3})
@@ -733,7 +746,8 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
             gc.do_set(str(proposals["dist_gen.zipf_choice"][0]))
             gc.do_quit("")
             self.generate_data(gc.config, num_passes=200)
-        with self.dst_sync_engine.connect() as conn:
+        assert self.dst_engine is not None
+        with self.dst_engine.connect() as conn:
             stmt = select(self.metadata.tables[table_name])
             rows = conn.execute(stmt).fetchall()
             ones = set()
@@ -812,7 +826,8 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
             gc.do_set(str(prop[0]))
             gc.do_quit("")
             self.generate_data(gc.config, num_passes=200)
-        with self.dst_sync_engine.connect() as conn:
+        assert self.dst_engine is not None
+        with self.dst_engine.connect() as conn:
             stats = ChoiceMeasurementTableStats(self.metadata, conn)
             # all generation possibilities should be present
             self.assertSetEqual(stats.ones, {1, 4})
@@ -860,7 +875,8 @@ class GeneratorTests(GeneratesDBTestCase):
             config = gc.config
             self.generate_data(config, num_passes=3)
         # Test that each missingness pattern is present in the database
-        with self.dst_sync_engine.connect() as conn:
+        assert self.dst_engine is not None
+        with self.dst_engine.connect() as conn:
             # select(self.metadata.tables["string"].c["position", "frequency"]) would be nicer
             # but mypy doesn't like it
             stmt = select(
@@ -946,7 +962,8 @@ class GeneratorTests(GeneratesDBTestCase):
             gc.do_quit("")
             config = gc.config
             self.generate_data(config, num_passes=15)
-        with self.dst_sync_engine.connect() as conn:
+        assert self.dst_engine is not None
+        with self.dst_engine.connect() as conn:
             stmt = select(self.metadata.tables[table].c[column])
             rows = conn.execute(stmt).scalars().fetchall()
             self.assert_are_truncated_to(rows, 20)

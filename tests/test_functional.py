@@ -406,7 +406,8 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
                 "Restoring foreign key constraint concept_type_mitigation_type_id_fkey",
             }
         self.assertSetEqual(
-            constraint_messages | {
+            constraint_messages
+            | {
                 "Loading vocab.",
                 "Loading vocabulary table empty_vocabulary",
                 "Loading vocabulary table mitigation_type",
@@ -440,7 +441,7 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
                 "Generating data for table 'hospital_visit'",
                 "Data created in 2 passes.",
                 f"person: {2*(3+1+2)} rows created.",
-                f"hospital_visit: 6 rows created.",
+                "hospital_visit: 6 rows created.",
                 "data_type_test: 2 rows created.",
                 "no_pk_test: 2 rows created.",
                 "unique_constraint_test: 2 rows created.",
@@ -484,7 +485,8 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
         self.assertEqual("", completed_process.stderr)
         self.assertSuccess(completed_process)
         self.assertEqual(
-            constraint_messages | {
+            constraint_messages
+            | {
                 "Truncating vocabulary tables.",
                 'Truncating vocabulary table "concept_type".',
                 'Truncating vocabulary table "ref_to_unignorable_table".',

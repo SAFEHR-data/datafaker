@@ -29,21 +29,23 @@ from sqlalchemy.sql import Executable, sqltypes
 from typing_extensions import Self
 
 from datafaker import providers
-from datafaker.parquet2orm import get_parquet_orm
-from datafaker.settings import get_source_dsn, get_source_schema
-from datafaker.utils import (
+from datafaker.db_utils import (
     MaybeAsyncEngine,
     constraint_name,
     create_db_engine,
     download_table,
-    get_columns_assigned,
     get_metadata,
-    get_property,
-    get_property_or_none,
     get_related_table_names,
-    get_row_generators,
     get_sync_engine,
     get_vocabulary_table_names,
+)
+from datafaker.parquet2orm import get_parquet_orm
+from datafaker.settings import get_source_dsn, get_source_schema
+from datafaker.utils import (
+    get_columns_assigned,
+    get_property,
+    get_property_or_none,
+    get_row_generators,
     logger,
     make_primary_key_name,
     split_column_full_name,

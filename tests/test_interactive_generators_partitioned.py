@@ -181,7 +181,8 @@ class NullPartitionedTests(GeneratesDBTestCase):
             self.create_tables(gc.config)
             self.populate_measurement_type_vocab()
             self.create_data(gc.config, num_passes=generate_count)
-        with self.dst_sync_engine.connect() as conn:
+        assert self.dst_engine is not None
+        with self.dst_engine.connect() as conn:
             stats = EavMeasurementTableStats(conn, self.metadata, self)
         # type 1
         self.assertAlmostEqual(
@@ -226,7 +227,8 @@ class NullPartitionedTests(GeneratesDBTestCase):
     def populate_measurement_type_vocab(self) -> None:
         """Add a vocab table without messing around with files"""
         table = self.metadata.tables["measurement_type"]
-        with self.dst_sync_engine.connect() as conn:
+        assert self.dst_engine is not None
+        with self.dst_engine.connect() as conn:
             conn.execute(insert(table).values({"id": 1, "name": "agreement"}))
             conn.execute(insert(table).values({"id": 2, "name": "acceleration"}))
             conn.execute(insert(table).values({"id": 3, "name": "velocity"}))
@@ -295,7 +297,8 @@ class NullPartitionedTests(GeneratesDBTestCase):
             self.create_tables(gc.config)
             self.populate_measurement_type_vocab()
             self.create_data(gc.config, num_passes=generate_count)
-        with self.dst_sync_engine.connect() as conn:
+        assert self.dst_engine is not None
+        with self.dst_engine.connect() as conn:
             stats = EavMeasurementTableStats(conn, self.metadata, self)
             stmt = select(self.metadata.tables["observation"])
             rows = conn.execute(stmt).fetchall()
@@ -409,7 +412,8 @@ class NullPartitionedTests(GeneratesDBTestCase):
             self.create_tables(gc.config)
             self.populate_measurement_type_vocab()
             self.create_data(gc.config, num_passes=generate_count)
-        with self.dst_sync_engine.connect() as conn:
+        assert self.dst_engine is not None
+        with self.dst_engine.connect() as conn:
             stmt = select(self.metadata.tables[table_name])
             rows = conn.execute(stmt).fetchall()
             self.assert_subset({row.type for row in rows}, {1, 2, 3, 4, 5})
@@ -442,7 +446,8 @@ class NullPartitionedTests(GeneratesDBTestCase):
             self.create_tables(gc.config)
             self.populate_measurement_type_vocab()
             self.create_data(gc.config, num_passes=generate_count)
-        with self.dst_sync_engine.connect() as conn:
+        assert self.dst_engine is not None
+        with self.dst_engine.connect() as conn:
             stmt = select(self.metadata.tables[table_name])
             rows = conn.execute(stmt).fetchall()
             # we should only have one or two of "ham", "eggs" and "cheese" represented

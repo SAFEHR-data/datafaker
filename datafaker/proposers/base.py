@@ -9,7 +9,12 @@ import mimesis
 import mimesis.locales
 import sqlalchemy
 from sqlalchemy import Column, Engine, Join, Table, func, select
-from sqlalchemy.sql.visitors import replacement_traverse, traverse
+from sqlalchemy.sql.selectable import NamedFromClause
+from sqlalchemy.sql.visitors import (
+    ExternallyTraversible,
+    replacement_traverse,
+    traverse,
+)
 from sqlalchemy.types import Integer, Numeric, String, TypeEngine
 from typing_extensions import Self
 
@@ -68,9 +73,7 @@ class Proposer(ABC):
         """
 
     def nominal_args(self) -> list[str]:
-        """
-        Get the args the generator wants to be called with.
-        """
+        """Get the args the generator wants to be called with."""
         return []
 
     def select_aggregate_clauses(self) -> dict[str, dict[str, str]]:
@@ -184,10 +187,8 @@ class PredefinedProposer(Proposer):
         self._table_name = table_name
         self._name: str = generator_object["name"]
         self._kwn: dict[str, str] = generator_object.get("kwargs", {})
-        self._asn: dict[str, str] = generator_object.get("args", {})
+        self._asn: list[str] = generator_object.get("args", [])
         self._src_stats_mentioned = self._get_src_stats_mentioned(self._kwn)
-        # Need to deal with this somehow (or remove it from the schema)
-        self._argn: list[str] = generator_object.get("args", [])
         self._select_aggregate_clauses: dict[str, dict[str, str | Any]] = {}
         self._custom_queries = {}
         for sstat in config.get("src-stats", []):
@@ -285,26 +286,29 @@ class TableReplacer:
     which works in both cases: ``SELECT a.c FROM "t.parquet" AS a``, and the
     best way for that to happen seems to be to use ``replacement_traverse``.
     """
-    def __init__(self, table: Table):
+
+    def __init__(self, table: Table) -> None:
         """Initialise with the table to be aliased."""
         self.table = table
         self.atable = table.alias(f"_{table.name}__alias")
 
-    def replace(self, object: Any) -> Any:
-        """Replaces columns with the same column on the aliased table."""
-        if isinstance(object, Column):
-            if object.table == self.table:
-                return self.atable.columns[object.name]
-        elif isinstance(object, Table):
+    def replace(
+        self, obj: ExternallyTraversible, **_kw: Any
+    ) -> ExternallyTraversible | None:
+        """Replace columns with the same column on the aliased table."""
+        if isinstance(obj, Column):
+            if obj.table == self.table:
+                return self.atable.columns[obj.name]
+        elif isinstance(obj, Table):
             return self.atable
         return None
 
-    def aliased_table(self):
-        """The aliased table."""
+    def aliased_table(self) -> NamedFromClause:
+        """Get the aliased table."""
         return self.atable
 
 
-def duckdb_workaround(stmt: Any) -> Any:
+def duckdb_workaround(stmt: ExternallyTraversible) -> Any:
     """
     Transform a SQLAlchemy ORM statement to work around DuckDB issues.
 
@@ -315,7 +319,8 @@ def duckdb_workaround(stmt: Any) -> Any:
     traverse(stmt, {}, {"table": tables.append})
     for t in tables:
         tr = TableReplacer(t)
-        stmt = replacement_traverse(stmt, {}, tr.replace)
+        opts: Mapping[str, Any] = {}
+        stmt = replacement_traverse(stmt, opts, tr.replace)  # type: ignore
     return stmt
 
 
@@ -392,11 +397,15 @@ class Buckets:
         """
         with engine.connect() as connection:
             result = connection.execute(
-                duckdb_workaround(select(
-                   func.avg(column).label("mean"),
-                   func.stddev(column).label("stddev"),
-                   func.count(column).label("count"),  # pylint: disable=not-callable
-                ).select_from(table))
+                duckdb_workaround(
+                    select(
+                        func.avg(column).label("mean"),
+                        func.stddev(column).label("stddev"),
+                        func.count(column).label(  # pylint: disable=not-callable
+                            "count"
+                        ),
+                    ).select_from(table)
+                )
             ).first()
             if result is None or result.stddev is None or getattr(result, "count") < 2:
                 return None
