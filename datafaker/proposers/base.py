@@ -2,8 +2,8 @@
 
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
-from typing import Any, Sequence, Union
+from collections.abc import Mapping, Sequence
+from typing import Any, Union
 
 import mimesis
 import mimesis.locales
@@ -113,6 +113,23 @@ class Proposer(ABC):
 
         Keys should be chosen to minimize the chances of clashing with other queries,
         for example "auto__{table}__{column}__{queryname}"
+
+        In order for your query to work for all database types, alias each table
+        referenced in both FROM and SELECT clauses, only use the aliased value,
+        and double quote all table names.
+
+        The following are OK:
+
+        - SELECT AVG(column) FROM "table" WHERE column > 3
+        - SELECT AVG(a.column) FROM "table" AS a WHERE a.column > 3
+
+        The following are not OK:
+
+        - SELECT AVG("table".column) FROM "table" WHERE "table".column > 3
+        - SELECT AVG(a.column) FROM table AS a WHERE a.column > 3
+
+        Or, if you are using the SQLAlchemy ORM, pass the query through
+          ``duckdb_workaround`` before compiling it.
         """
         return {}
 

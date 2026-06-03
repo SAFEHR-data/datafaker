@@ -193,7 +193,7 @@ class MimesisDateTimeProposer(MimesisProposerBase):
         with engine.connect() as connection:
             result = connection.execute(
                 text(
-                    f"SELECT {min_year} AS start, {max_year} AS end FROM {column.table.name}"
+                    f'SELECT {min_year} AS start, {max_year} AS end FROM "{column.table.name}"'
                 )
             ).first()
             if result is None or result.start is None or result.end is None:

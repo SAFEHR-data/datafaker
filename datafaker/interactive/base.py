@@ -356,7 +356,7 @@ class DbCmd(ABC, cmd.Cmd):
             result = (
                 connection.execute(
                     sqlalchemy.text(
-                        f"SELECT COUNT(*) AS row_count{''.join(colcounts)} FROM {table_name}"
+                        f'SELECT COUNT(*) AS row_count{"".join(colcounts)} FROM "{table_name}"'
                     )
                 )
                 .mappings()
@@ -420,7 +420,7 @@ class DbCmd(ABC, cmd.Cmd):
             where = "WHERE" if nonnulls else ""
             nonnull = " OR ".join(nonnulls)
             query = sqlalchemy.text(
-                f"SELECT {cols} FROM {table_name} {where} {nonnull}"
+                f'SELECT {cols} FROM "{table_name}" {where} {nonnull}'
                 f" ORDER BY RANDOM() LIMIT {max_peek_rows}"
             )
             try:

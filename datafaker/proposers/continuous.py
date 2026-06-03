@@ -281,7 +281,7 @@ class ContinuousLogDistributionProposerFactory(ContinuousDistributionProposerFac
                     f"SELECT AVG(CASE WHEN 0<{column_name} THEN LN({column_name})"
                     " ELSE NULL END) AS logmean,"
                     f" STDDEV(CASE WHEN 0<{column_name} THEN LN({column_name}) ELSE NULL END)"
-                    f" AS logstddev FROM {table_name}"
+                    f' AS logstddev FROM "{table_name}"'
                 )
             ).first()
             if result is None or result.logstddev is None:
@@ -564,9 +564,9 @@ class CovariateQuery:
         if where:
             where = " WHERE " + where
         if self._sample_count is None:
-            return self.table + where
+            return f'"{self.table}"{where}'
         return (
-            f"(SELECT * FROM {self.table}{where} ORDER BY RANDOM()"
+            f'(SELECT * FROM "{self.table}"{where} ORDER BY RANDOM()'
             f" LIMIT {self._sample_count}) AS _sampled"
         )
 

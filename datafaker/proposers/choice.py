@@ -77,7 +77,7 @@ class ChoiceProposer(Proposer):
         if suppress_count == 0:
             if sample_count is None:
                 self._query = (
-                    f"SELECT {column_name} AS value{extra_results} FROM {table_name}"
+                    f'SELECT {column_name} AS value{extra_results} FROM "{table_name}"'
                     f" WHERE {column_name} IS NOT NULL GROUP BY value"
                     f" ORDER BY COUNT({column_name}) DESC"
                 )
@@ -89,7 +89,7 @@ class ChoiceProposer(Proposer):
             else:
                 self._query = (
                     f"SELECT {column_name} AS value{extra_results} FROM"
-                    f" (SELECT {column_name} FROM {table_name}"
+                    f' (SELECT {column_name} FROM "{table_name}"'
                     f" WHERE {column_name} IS NOT NULL"
                     f" ORDER BY RANDOM() LIMIT {sample_count})"
                     f" AS _inner GROUP BY value ORDER BY COUNT({column_name}) DESC"
@@ -104,7 +104,7 @@ class ChoiceProposer(Proposer):
                 self._query = (
                     f"SELECT value{extra_expo} FROM"
                     f" (SELECT {column_name} AS value, COUNT({column_name}) AS count"
-                    f" FROM {table_name} WHERE {column_name} IS NOT NULL"
+                    f' FROM "{table_name}" WHERE {column_name} IS NOT NULL'
                     f" GROUP BY value ORDER BY count DESC) AS _inner"
                     f" WHERE {suppress_count} < count"
                 )
@@ -116,7 +116,7 @@ class ChoiceProposer(Proposer):
             else:
                 self._query = (
                     f"SELECT value{extra_expo} FROM (SELECT value, COUNT(value) AS count FROM"
-                    f" (SELECT {column_name} AS value FROM {table_name}"
+                    f' (SELECT {column_name} AS value FROM "{table_name}"'
                     f" WHERE {column_name} IS NOT NULL ORDER BY RANDOM() LIMIT {sample_count})"
                     f" AS _inner GROUP BY value ORDER BY count DESC)"
                     f" AS _inner WHERE {suppress_count} < count"

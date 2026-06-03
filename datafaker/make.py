@@ -302,7 +302,7 @@ def _integer_generator(column: Column) -> tuple[str, dict[str, str]]:
 
 _YEAR_SUMMARY_QUERY = (
     "SELECT MIN(y) AS start, MAX(y) AS end FROM "
-    "(SELECT EXTRACT(YEAR FROM {column}) AS y FROM {table}) AS years"
+    '(SELECT EXTRACT(YEAR FROM {column}) AS y FROM "{table}") AS years'
 )
 
 
@@ -756,7 +756,7 @@ class DbConnection:
     async def table_row_count(self, table_name: str) -> int:
         """Count the number of rows in the named table."""
         with await self.execute_raw_query(
-            text(f"SELECT COUNT(*) FROM {table_name}")
+            text(f'SELECT COUNT(*) FROM "{table_name}"')
         ) as result:
             return int(result.scalar_one())
 

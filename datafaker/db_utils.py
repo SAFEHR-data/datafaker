@@ -5,17 +5,11 @@ import os
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from types import ModuleType
-from typing import (
-    Any,
-    Iterable,
-    Optional,
-    Union,
-)
+from typing import Any, Iterable, Optional, Union
 
 import psycopg2
 import sqlalchemy
 import yaml
-from jsonschema.validators import validate
 from sqlalchemy import Connection, Engine, ForeignKey, create_engine, event, select
 from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.exc import (
@@ -37,11 +31,11 @@ from sqlalchemy.schema import (
 from typer import Exit
 
 from datafaker.utils import (
+    T,
+    get_ignored_table_names,
+    get_vocabulary_table_names,
     logger,
     make_foreign_key_name,
-    get_vocabulary_table_names,
-    get_ignored_table_names,
-    T,
 )
 
 # Define some types used repeatedly in the code base
@@ -50,7 +44,6 @@ MaybeAsyncEngine = Union[Engine, AsyncEngine]
 # After every how many rows of vocab table downloading do we see a
 # progres update
 MAKE_VOCAB_PROGRESS_REPORT_EVERY = 10000
-
 
 
 def table_row_count(table: Table, conn: Connection) -> int:

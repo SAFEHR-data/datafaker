@@ -167,7 +167,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
                 gc.config["src-stats"][0]["query"],
                 (
                     f"SELECT AVG({column}) AS mean__{column}, STDDEV({column})"
-                    f" AS stddev__{column} FROM {table}"
+                    f' AS stddev__{column} FROM "{table}"'
                 ),
             )
 
@@ -191,7 +191,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
                 gc.config["src-stats"][0]["query"],
                 (
                     f"SELECT AVG({column}) AS mean__{column}, STDDEV({column})"
-                    f" AS stddev__{column} FROM {table}"
+                    f' AS stddev__{column} FROM "{table}"'
                 ),
             )
 
@@ -227,7 +227,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertEqual(
                 gc.config["src-stats"][0]["query"],
                 (
-                    f"SELECT {column} AS value FROM {table}"
+                    f'SELECT {column} AS value FROM "{table}"'
                     f" WHERE {column} IS NOT NULL"
                     f" GROUP BY value ORDER BY COUNT({column}) DESC"
                 ),
@@ -391,7 +391,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
                 gc.config["src-stats"][0]["query"],
                 (
                     "SELECT AVG(frequency) AS mean__frequency,"
-                    " STDDEV(frequency) AS stddev__frequency FROM string"
+                    ' STDDEV(frequency) AS stddev__frequency FROM "string"'
                 ),
             )
 
@@ -459,7 +459,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertEqual(len(gc.config["src-stats"]), 1)
             self.assertEqual(gc.config["src-stats"][0]["name"], "auto__string")
             select_match = re.match(
-                r"SELECT (.*) FROM string", gc.config["src-stats"][0]["query"]
+                r'SELECT (.*) FROM "string"', gc.config["src-stats"][0]["query"]
             )
             assert (
                 select_match is not None

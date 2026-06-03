@@ -45,7 +45,7 @@ class UniqueGenerator:
         Returns:
             keys (set): A set of existing keys retrieved from the database.
         """
-        query_text = f"SELECT {','.join(self.column_names)} FROM {self.table_name}"
+        query_text = f'SELECT {", ".join(self.column_names)} FROM "{self.table_name}"'
         query_result = dst_db_conn.execute(sqla.text(query_text)).fetchall()
         keys = set(query_result)
         return keys

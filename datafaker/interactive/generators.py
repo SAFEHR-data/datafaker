@@ -8,7 +8,7 @@ from typing import Any, Callable, Optional, cast
 import sqlalchemy
 from sqlalchemy import Column
 
-from datafaker.db_utils import primary_private_fks, table_is_private
+from datafaker.db_utils import MaybeAsyncEngine, primary_private_fks, table_is_private
 from datafaker.interactive.base import DbCmd, TableEntry, fk_column_name, or_default
 from datafaker.proposers import everything_factory
 from datafaker.proposers.base import PredefinedProposer, Proposer
@@ -39,6 +39,30 @@ class GeneratorCmdTableEntry(TableEntry):
 
     old_proposers: list[ProposerInfo]
     new_proposers: list[ProposerInfo]
+
+
+def get_aggregate_query(
+    proposers: Sequence[Proposer], table_name: str, engine: MaybeAsyncEngine
+) -> str | None:
+    """
+    Get a SQL query from a list of proposers.
+
+    :param proposers: List of proposers.
+    :param table_name: The name of the table the proposers are operating on.
+    :param engine: The engine that needs to be queried (it won't be queried
+      during this call).
+    :return: A string representing the query to be executed, or None if no
+      query is required.
+    """
+    clauses = [
+        f'{q["clause"]} AS {n}'
+        for proposer in proposers
+        for n, q in or_default(proposer.select_aggregate_clauses(), {}).items()
+    ]
+    if not clauses:
+        return None
+    alias = f' AS "{table_name}"' if engine.dialect.name == "duckdb" else ""
+    return f'SELECT {", ".join(clauses)} FROM "{table_name}"{alias}'
 
 
 # pylint: disable=too-many-public-methods
@@ -291,7 +315,7 @@ information about the columns in the current table. Use 'peek',
                     if asn:
                         rg["args"] = asn
                     rgs.append(rg)
-            aq = self._get_aggregate_query(new_gens, entry.name)
+            aq = get_aggregate_query(new_gens, entry.name, self.engine)
             if aq:
                 src_stats.append(
                     {
@@ -715,16 +739,6 @@ information about the columns in the current table. Use 'peek',
                 if k in actual:
                     self._get_custom_queries_from(out, v, actual[k])
 
-    def _get_aggregate_query(self, gens: list[Proposer], table_name: str) -> str | None:
-        clauses = [
-            f'{q["clause"]} AS {n}'
-            for gen in gens
-            for n, q in or_default(gen.select_aggregate_clauses(), {}).items()
-        ]
-        if not clauses:
-            return None
-        return f"SELECT {', '.join(clauses)} FROM {table_name}"
-
     def _print_select_aggregate_query(self, table_name: str, prop: Proposer) -> None:
         """
         Print the select aggregate query and all the values it gets in this case.
@@ -760,7 +774,7 @@ information about the columns in the current table. Use 'peek',
                     table_name,
                     n,
                 )
-        select_q = self._get_aggregate_query([prop], table_name)
+        select_q = get_aggregate_query([prop], table_name, self.engine)
         self.print("{0}; providing the following values: {1}", select_q, vals)
 
     def _get_column_data(
@@ -772,7 +786,7 @@ information about the columns in the current table. Use 'peek',
         with self.sync_engine.connect() as connection:
             result = connection.execute(
                 sqlalchemy.text(
-                    f"SELECT {columns_string} FROM {self.table_name()}"
+                    f'SELECT {columns_string} FROM "{self.table_name()}"'
                     f" WHERE {pred} ORDER BY RANDOM() LIMIT {count}"
                 )
             )
