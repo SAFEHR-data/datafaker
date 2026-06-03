@@ -41,7 +41,7 @@ duckdb-sqlalchemy = "^1.5.2.2"
 [tool.poetry.group.dev.dependencies]
 isort = "^5.10.1"
 pylint = "^3"
-mypy = "^1.5"
+mypy = "^2.1.0"
 types-pyyaml = "^6.0.12.4"
 pydocstyle = "^6.3.0"
 restructuredtext-lint = "^1.4.0"
