@@ -12,7 +12,6 @@ from abc import ABC, abstractmethod
 from collections.abc import MutableSequence, Sequence
 from functools import lru_cache
 from importlib import resources
-from importlib.resources.abc import Traversable
 from pathlib import Path
 from subprocess import run
 from tempfile import mkdtemp, mkstemp
@@ -252,10 +251,12 @@ class DatafakerTestCase(TestCase):
     copy_files: list[str] = []
     copy_from_directory: Path = Path(".")
 
-    def get_abs_example_dir(self) -> Traversable:  # type: ignore
+    def get_abs_example_dir(self) -> Path:
         """Get an absolute path to the examples directory."""
         test_module = resources.files(sys.modules["tests"])
-        return test_module.joinpath(str(self.examples_dir))
+        trav = test_module.joinpath(str(self.examples_dir))
+        assert isinstance(trav, Path)
+        return trav
 
     def setUp(self) -> None:
         """Set up the test case with an actual orm.yaml file."""

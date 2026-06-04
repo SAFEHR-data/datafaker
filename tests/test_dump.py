@@ -101,8 +101,9 @@ class EndToEndParquetTestCase(DatafakerTestCase):
         super().setUp()
         # Grab all the files
         self.parquet_dir = Path(tempfile.mkdtemp("parq"))
-        for fname in os.listdir(self.get_abs_example_dir()):
-            shutil.copy(self.get_abs_example_dir() / fname, self.parquet_dir / fname)
+        example_dir = self.get_abs_example_dir()
+        for fname in os.listdir(example_dir):
+            shutil.copy(example_dir / fname, self.parquet_dir / fname)
         self.start_dir = os.getcwd()
         self.set_working_dir()
 
