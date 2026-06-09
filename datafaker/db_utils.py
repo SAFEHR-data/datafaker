@@ -7,13 +7,16 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, Iterable, Optional, Union
 
-import psycopg2
-import sqlalchemy
+import sqlalchemy.dialects
 import yaml
+
+# pylint: disable=no-name-in-module
+from psycopg2.errors import UndefinedObject  # ty: ignore[unresolved-import]
 from sqlalchemy import Connection, Engine, ForeignKey, create_engine, event, select
 from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.exc import (
     IntegrityError,
+    NoReferencedTableError,
     NoSuchModuleError,
     OperationalError,
     ProgrammingError,
@@ -268,7 +271,7 @@ def fk_refers_to_ignored_table(fk: ForeignKey) -> bool:
     """
     try:
         fk.column
-    except sqlalchemy.exc.NoReferencedTableError:
+    except NoReferencedTableError:
         return True
     return False
 
@@ -292,7 +295,7 @@ def fk_constraint_refers_to_ignored_table(fk: ForeignKeyConstraint) -> bool:
     """
     try:
         fk.referred_table
-    except sqlalchemy.exc.NoReferencedTableError:
+    except NoReferencedTableError:
         return True
     return False
 
@@ -384,7 +387,7 @@ def remove_vocab_foreign_key_constraints(
                 except ProgrammingError as e:
                     session.rollback()
                     # pylint: disable=no-member
-                    if isinstance(e.orig, psycopg2.errors.UndefinedObject):
+                    if isinstance(e.orig, UndefinedObject):
                         logger.debug("Constraint does not exist")
                     else:
                         raise e

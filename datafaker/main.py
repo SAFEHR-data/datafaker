@@ -1,6 +1,6 @@
 """Entrypoint for the datafaker package."""
 import asyncio
-import importlib
+import importlib.metadata
 import io
 import json
 import sys
@@ -833,6 +833,7 @@ def list_tables(
 @app.command()
 def version() -> None:
     """Display version information."""
+    assert __package__ is not None
     logger.info(
         "%s version %s",
         __package__,

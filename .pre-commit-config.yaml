@@ -69,9 +69,9 @@ repos:
           tests/|
           examples/
           )
-      - id: mypy
-        name: mypy
-        entry: poetry run mypy --follow-imports=silent --show-traceback
+      - id: ty
+        name: ty
+        entry: poetry run ty check .
         language: system
         exclude: (?x)(
           tests/examples|

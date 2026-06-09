@@ -227,7 +227,8 @@ def empty_story_generator() -> (
 ):
     """Get a story generator that generates no values."""
     empt: list[tuple[str, dict[str, Any]]] = []
-    yield from empt
+    for e in empt:
+        _ = yield e
 
 
 # pylint: disable=too-many-instance-attributes

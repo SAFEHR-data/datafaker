@@ -7,8 +7,8 @@ from typing import Any, Union
 
 import mimesis
 import mimesis.locales
-import sqlalchemy
 from sqlalchemy import Column, Engine, Join, Table, func, select
+from sqlalchemy.exc import DatabaseError
 from sqlalchemy.sql.selectable import NamedFromClause
 from sqlalchemy.sql.visitors import (
     ExternallyTraversible,
@@ -435,7 +435,7 @@ class Buckets:
                 result.stddev,
                 getattr(result, "count"),
             )
-        except sqlalchemy.exc.DatabaseError as exc:
+        except DatabaseError as exc:
             logger.debug("Failed to instantiate Buckets object: %s", exc)
             return None
         return buckets
@@ -512,7 +512,7 @@ class ConstantProposerFactory(ProposerFactory):
     """Propose just the null generator."""
 
     def get_proposers(
-        self, columns: list[Column], _engine: Engine
+        self, columns: list[Column], engine: Engine
     ) -> Sequence[Proposer]:
         """Get the generators appropriate for these columns."""
         if len(columns) != 1:

@@ -7,6 +7,7 @@ from typing import Any, Union
 
 import sqlalchemy
 from sqlalchemy import Column, Connection, Engine, RowMapping, text
+from sqlalchemy.exc import DatabaseError
 from sqlalchemy.types import Integer, Numeric
 
 from datafaker.proposers.base import Proposer, dist_gen, get_column_type
@@ -595,7 +596,7 @@ class NullPartitionedNormalProposerFactory(MultivariateNormalProposerFactory):
                         name_suffix="sampled and suppressed",
                     )
                 )
-        except sqlalchemy.exc.DatabaseError as exc:
+        except DatabaseError as exc:
             logger.debug("SQL query failed with error %s [%s]", exc, exc.statement)
             return []
         return [gen for gen in gens if gen]

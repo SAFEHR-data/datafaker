@@ -352,9 +352,8 @@ information about the columns in the current table. Use 'peek',
         count = 0
         for entry in self.table_entries:
             header_shown = False
-            g_entry = cast(GeneratorCmdTableEntry, entry)
-            for gen in g_entry.new_proposers:
-                old_gen = self._find_old_proposer(g_entry, gen.columns)
+            for gen in entry.new_proposers:
+                old_gen = self._find_old_proposer(entry, gen.columns)
                 new_gen = None if gen is None else gen.proposer
                 if old_gen != new_gen:
                     if not header_shown:
@@ -384,8 +383,7 @@ information about the columns in the current table. Use 'peek',
 
     def do_tables(self, _arg: str) -> None:
         """List the tables."""
-        for t_entry in self.table_entries:
-            entry = cast(GeneratorCmdTableEntry, t_entry)
+        for entry in self.table_entries:
             gen_count = len(entry.new_proposers)
             how_many = "one generator" if gen_count == 1 else f"{gen_count} generators"
             self.print("{0} ({1})", entry.name, how_many)
@@ -395,7 +393,7 @@ information about the columns in the current table. Use 'peek',
         if len(self.table_entries) <= self.table_index:
             self.print("Error: no table {0}", self.table_index)
             return
-        g_entry = cast(GeneratorCmdTableEntry, self.table_entries[self.table_index])
+        g_entry = self.table_entries[self.table_index]
         table = self.table_metadata()
         for gen in g_entry.new_proposers:
             old_gen = self._find_old_proposer(g_entry, gen.columns)

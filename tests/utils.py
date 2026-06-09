@@ -40,15 +40,22 @@ from datafaker.utils import T
 
 
 @lru_cache(1)
-def get_test_settings() -> settings.Settings:
+def get_test_settings(
+    src_dsn="postgresql://suser:spassword@shost:5432/sdbname",
+    dst_dsn="postgresql://duser:dpassword@dhost:5432/ddbname",
+    src_schema=None,
+    dst_schema=None,
+) -> settings.Settings:
     """Get a Settings object that ignores .env files and environment variables."""
 
     return settings.Settings(
-        src_dsn="postgresql://suser:spassword@shost:5432/sdbname",
-        dst_dsn="postgresql://duser:dpassword@dhost:5432/ddbname",
+        src_dsn=src_dsn,
+        dst_dsn=dst_dsn,
+        src_schema=src_schema,
+        dst_schema=dst_schema,
         # To stop any local .env files influencing the test
         # The mypy ignore can be removed once we upgrade to pydantic 2.
-        _env_file=None,  # type: ignore[call-arg]
+        _env_file=None,  # ty: ignore[unknown-argument]
     )
 
 
@@ -205,7 +212,7 @@ class TestDuckDb(TestDatabaseBase):
             self._duckdb_con.close()
             self._duckdb_con = None
 
-    def get_dsn(self, _database_name: str | None) -> str:
+    def get_dsn(self, database_name: str | None) -> str:
         """Get the DSN for the test database."""
         return f"duckdb:///{self._db_path}"
 
@@ -574,10 +581,14 @@ class TestDbCmdMixin(DbCmd):
         self.columns = columns
 
     # pylint: disable=arguments-renamed
-    def columnize(self, items: Sequence[str] | None, _displaywidth: int = 80) -> None:
+    def columnize(
+        self,
+        list: list[str] | None,  # pylint: disable=redefined-builtin
+        displaywidth: int = 80,
+    ) -> None:
         """Capture the printed table."""
-        if items is not None:
-            self.column_items.append(items)
+        if list is not None:
+            self.column_items.append(list)
 
     def ask_save(self) -> str:
         """Quitting always works without needing to ask the user."""

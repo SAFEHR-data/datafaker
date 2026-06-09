@@ -138,7 +138,7 @@ class ContinuousDistributionProposerFactory(ProposerFactory):
 
     def _get_generators_from_buckets(
         self,
-        _engine: Engine,
+        engine: Engine,  # pylint: disable=unused-argument
         table_name: str,
         column_name: str,
         buckets: Buckets,

@@ -22,13 +22,15 @@ class DumpTests(RequiresDBTestCase):
     schema_name = "public"
 
     def assert_timestamps_equal(  # type: ignore[no-any-unimported]
-        self, ts1: pd.Timestamp, ts2: pd.Timestamp
+        self, ts1s: pd.Timestamp | str, ts2s: pd.Timestamp | str
     ) -> None:
         """
         Assert that the timestamps are equal.
 
         Timezone-naive timestamps are put into UTC.
         """
+        ts1 = pd.Timestamp(ts1s) if isinstance(ts1s, str) else ts1s
+        ts2 = pd.Timestamp(ts2s) if isinstance(ts2s, str) else ts2s
         if ts1.tz is None:
             if ts2.tz is not None:
                 self.assertEqual(ts1.tz_localize("UTC"), ts2)
@@ -71,10 +73,12 @@ class DumpTests(RequiresDBTestCase):
         self.assertListEqual(df["name"].to_list(), ["Blender", "Gibbs"])
         self.assertEqual(len(df["founded"]), 2)
         self.assert_timestamps_equal(
-            df["founded"][0], pd.Timestamp("1951-01-08 12:05:06+00:00")
+            df["founded"][0],
+            "1951-01-08 12:05:06+00:00",
         )
         self.assert_timestamps_equal(
-            df["founded"][1], pd.Timestamp("1959-03-04 15:08:09+00:00")
+            df["founded"][1],
+            "1959-03-04 15:08:09+00:00",
         )
 
 
@@ -223,6 +227,6 @@ class CurrentDirEndToEndParquetTestCase(EndToEndParquetTestCase):
         """Change to our working directory."""
         os.chdir(self.parquet_dir)
 
-    def make_orm_yaml(self, _runner: CliRunner) -> None:
+    def make_orm_yaml(self, runner: CliRunner) -> None:
         """Make the orm.yaml file, if necessary."""
         # not necessary, we already have an orm.yaml

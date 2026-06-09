@@ -345,7 +345,7 @@ def get_result_mappings(
     return kw
 
 
-_COLUMN_TYPE_TO_GENERATOR_INFO = {
+_COLUMN_TYPE_TO_GENERATOR_INFO: dict[Any, GeneratorInfo] = {
     sqltypes.Boolean: GeneratorInfo(
         generator="generic.development.boolean",
         choice=True,
@@ -430,6 +430,9 @@ def _get_generator_and_arguments(column: Column) -> tuple[str | None, dict[str, 
 
     generator_arguments: dict[str, str] = {}
     if callable(generator_function):
+        # These assertions persuade ty that the call is OK
+        assert generator_function is not None
+        assert not isinstance(generator_function, str)
         (generator_function, generator_arguments) = generator_function(column)
     return generator_function, generator_arguments
 

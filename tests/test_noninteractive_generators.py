@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from datafaker.interactive import update_config_generators
 from datafaker.interactive.base import DbCmd
+from datafaker.utils import get_property
 from tests.utils import RequiresDBTestCase
 
 
@@ -185,20 +186,42 @@ class NonInteractiveTests(RequiresDBTestCase):
             for rg in tables.get("row_generators", [])
         }
         self.assertEqual(
-            row_gens[
-                "observation['first_value', 'second_value', 'third_value', 'type']"
-            ]["name"],
+            get_property(
+                row_gens,
+                [
+                    "observation['first_value', 'second_value', 'third_value', 'type']",
+                    "name",
+                ],
+                "",
+            ),
             "dist_gen.alternatives",
         )
         self.assertEqual(
-            row_gens[
-                "observation['first_value', 'second_value', 'third_value', 'type']"
-            ]["kwargs"]["alternative_configs"][0]["name"],
+            get_property(
+                row_gens,
+                [
+                    "observation['first_value', 'second_value', 'third_value', 'type']",
+                    "kwargs",
+                    "alternative_configs",
+                    0,
+                    "name",
+                ],
+                "",
+            ),
             '"with_constants_at"',
         )
         self.assertEqual(
-            row_gens[
-                "observation['first_value', 'second_value', 'third_value', 'type']"
-            ]["kwargs"]["alternative_configs"][0]["params"]["subgen"],
+            get_property(
+                row_gens,
+                [
+                    "observation['first_value', 'second_value', 'third_value', 'type']",
+                    "kwargs",
+                    "alternative_configs",
+                    0,
+                    "params",
+                    "subgen",
+                ],
+                "",
+            ),
             '"grouped_multivariate_lognormal"',
         )

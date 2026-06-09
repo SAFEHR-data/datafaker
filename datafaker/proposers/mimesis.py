@@ -54,7 +54,7 @@ class MimesisProposerBase(Proposer):
                 " so cannot be used as a generator"
             )
         self._name = "generic." + function_name
-        self._generator_function = f
+        self._generator_function: Callable[..., Any] = f
 
     def function_name(self) -> str:
         """Get the name of the generator function to call."""
@@ -346,7 +346,7 @@ class MimesisFloatProposerFactory(ProposerFactory):
     """All Mimesis generators that return floating point numbers."""
 
     def get_proposers(
-        self, columns: list[Column], _engine: Engine
+        self, columns: list[Column], engine: Engine
     ) -> Sequence[Proposer]:
         """Get the generators appropriate to these columns."""
         if len(columns) != 1:
@@ -402,7 +402,7 @@ class MimesisTimeProposerFactory(ProposerFactory):
     """All Mimesis generators that return times."""
 
     def get_proposers(
-        self, columns: list[Column], _engine: Engine
+        self, columns: list[Column], engine: Engine
     ) -> Sequence[Proposer]:
         """Get the generators appropriate to these columns."""
         if len(columns) != 1:
@@ -418,7 +418,7 @@ class MimesisIntegerProposerFactory(ProposerFactory):
     """All Mimesis generators that return integers."""
 
     def get_proposers(
-        self, columns: list[Column], _engine: Engine
+        self, columns: list[Column], engine: Engine
     ) -> Sequence[Proposer]:
         """Get the generators appropriate to these columns."""
         if len(columns) != 1:

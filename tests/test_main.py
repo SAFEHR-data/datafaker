@@ -202,13 +202,10 @@ class TestCLI(DatafakerTestCase):
         mock_path: MagicMock,
     ) -> None:
         """Test the make-tables sub-command, when the force option is activated."""
-        mock_get_settings.return_value = Settings(
+        mock_get_settings.return_value = get_test_settings(
             # postgres: not postgresql: will cause sqlalchemy to fail to connect
             src_dsn="postgres://suser:spassword@shost:5432/sdbname",
             dst_dsn="postgresql://duser:dpassword@dhost:5432/ddbname",
-            # To stop any local .env files influencing the test
-            # The mypy ignore can be removed once we upgrade to pydantic 2.
-            _env_file=None,  # type: ignore[call-arg]
         )
         mock_path.return_value.exists.return_value = True
 
@@ -230,13 +227,10 @@ class TestCLI(DatafakerTestCase):
         mock_path: MagicMock,
     ) -> None:
         """Test the make-tables sub-command, when the force option is activated."""
-        mock_get_settings.return_value = Settings(
+        mock_get_settings.return_value = get_test_settings(
             # postgres: not postgresql: will cause sqlalchemy to fail to connect
             src_dsn="postgresql://suser:spassword@invalid_host:5432/sdbname",
             dst_dsn="postgresql://duser:dpassword@dhost:5432/ddbname",
-            # To stop any local .env files influencing the test
-            # The mypy ignore can be removed once we upgrade to pydantic 2.
-            _env_file=None,  # type: ignore[call-arg]
         )
         mock_path.return_value.exists.return_value = True
 
@@ -258,13 +252,10 @@ class TestCLI(DatafakerTestCase):
         mock_path: MagicMock,
     ) -> None:
         """Test the make-tables sub-command, when the force option is activated."""
-        mock_get_settings.return_value = Settings(
+        mock_get_settings.return_value = get_test_settings(
             # postgres: not postgresql: will cause sqlalchemy to fail to connect
             src_dsn="postgresql://suser:spassword:localhost:5432/sdbname",
             dst_dsn="postgresql://duser:dpassword@dhost:5432/ddbname",
-            # To stop any local .env files influencing the test
-            # The mypy ignore can be removed once we upgrade to pydantic 2.
-            _env_file=None,  # type: ignore[call-arg]
         )
         mock_path.return_value.exists.return_value = True
 

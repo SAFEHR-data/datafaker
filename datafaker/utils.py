@@ -8,7 +8,7 @@ import random
 import re
 import string
 import sys
-from collections.abc import Mapping, MutableSequence, Sequence
+from collections.abc import Mapping, MutableSequence, Sequence, Sized
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Callable, Final, Generator, Generic, Iterable, TypeVar
@@ -214,9 +214,13 @@ def get_property(maybe_dict: Any, key: Any, default: T) -> T:
         keys = [key]
     v = maybe_dict
     for k in keys:
-        if not isinstance(v, Mapping):
-            return default
-        if k not in v:
+        if isinstance(v, Sequence) and isinstance(v, Sized) and isinstance(k, int):
+            if len(v) <= k:
+                return default
+        elif isinstance(v, Mapping):
+            if k not in v:
+                return default
+        else:
             return default
         v = v[k]
     return v if isinstance(v, type(default)) else default

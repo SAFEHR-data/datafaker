@@ -13,7 +13,7 @@ Base = declarative_base()
 metadata = Base.metadata
 
 
-class TestTable(Base):  # type: ignore
+class TestTable(Base):
     """A test SQLAlchemy table."""
 
     __tablename__ = "test_table"

@@ -127,7 +127,7 @@ def get_symbols(
 ) -> dict[str, Any]:
     """Get the symbols that may be referred to by various configuration settings."""
     generic = make_generic(metadata)
-    symbols = {
+    symbols: dict[str, Any] = {
         "metadata": metadata,
         "generic": generic,
         "numeric": generic.numeric,

@@ -13,10 +13,10 @@ from sqlalchemy import (
     String,
     Table,
     Text,
-    dialects,
     select,
     text,
 )
+from sqlalchemy.dialects import postgresql
 
 from datafaker.db_utils import create_db_engine, get_sync_engine
 from datafaker.interactive.generators import get_aggregate_query
@@ -43,7 +43,7 @@ class ProposerUnitTests(DatafakerTestCase):
         table.append_column(column)
         stmt = select(column)
         stmt_a = duckdb_workaround(stmt)
-        pgd = dialects.postgresql.dialect()
+        pgd = postgresql.dialect()
         sql = stmt_a.compile(dialect=pgd)
         grps = select_re.match(str(sql))
         assert grps is not None
