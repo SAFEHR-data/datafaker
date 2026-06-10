@@ -482,7 +482,7 @@ def _get_generator_for_table(
     constraints: Sequence[ColumnCollectionConstraint] = unique_constraints
     if 1 < len(primary_keys):
         primary_constraint = PrimaryKeyConstraint(
-            columns=primary_keys, name=make_primary_key_name(table.name)
+            *primary_keys, name=make_primary_key_name(table.name)
         )
         constraints = unique_constraints + [primary_constraint]
     column_choices = make_column_choices(table_config)

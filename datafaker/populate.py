@@ -310,31 +310,17 @@ class TableGenerator:
         return result
 
 
-def _make_table_generator(
-    dst_db_conn: sqlalchemy.Connection,
-    table_data: TableGeneratorInfo,
-    max_unique_constraint_tries: int | None,
-    context: Mapping,
-) -> TableGenerator:
-    """Make a ``TableGenerator`` with context attached."""
-    gen = TableGenerator(dst_db_conn, table_data, max_unique_constraint_tries)
-    gen.set_context(context)
-    return gen
-
-
 def get_table_generator_dict(
     dst_db_conn: sqlalchemy.Connection,
     tables_data: Iterable[TableGeneratorInfo],
     max_unique_constraint_tries: int | None,
-    context: Mapping,
 ) -> dict[str, TableGenerator]:
     """Get a dict of table names to row generators that generate rows for that table."""
     return {
-        table_data.table_name: _make_table_generator(
+        table_data.table_name: TableGenerator(
             dst_db_conn,
             table_data,
             max_unique_constraint_tries,
-            context,
         )
         for table_data in tables_data
     }

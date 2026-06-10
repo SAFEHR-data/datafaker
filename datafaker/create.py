@@ -213,7 +213,6 @@ def create_db_data_into(
                     dst_conn,
                     gen_info.tables,
                     gen_info.max_unique_constraint_tries,
-                    context,
                 ),
                 gen_info.story_generators,
                 context,
@@ -380,6 +379,10 @@ def populate(
         dst_conn,
         context,
     )
+
+    # Set the context for each row generator
+    for tg in table_generator_dict.values():
+        tg.set_context(context)
 
     # Generate individual rows, table by table.
     for table in tables:
