@@ -73,9 +73,9 @@ repos:
         name: ty
         entry: poetry run ty check .
         language: system
-        exclude: (?x)(
-          ^tests/examples/|
-          ^examples/|
-          /\.
+        exclude: (?x)^(
+          tests/examples/|
+          examples/|
+          .*/\..*/
           )
         types: ['python']
