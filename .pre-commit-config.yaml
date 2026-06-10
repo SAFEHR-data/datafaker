@@ -76,6 +76,6 @@ repos:
         exclude: (?x)^(
           tests/examples/|
           examples/|
-          \..*
+          ~\.
           )
         types: ['python']
