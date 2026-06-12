@@ -1,4 +1,4 @@
-"""Basic Generators and factories."""
+"""Basic Proposers and their factories."""
 
 import re
 from abc import ABC, abstractmethod
@@ -22,18 +22,18 @@ dist_gen = DistributionProvider()
 generic = mimesis.Generic(locale=mimesis.locales.Locale.EN_GB)
 
 
-class GeneratorError(Exception):
-    """Error thrown from Datafaker Generators."""
+class ProposerError(Exception):
+    """Error thrown from Datafaker Proposers."""
 
 
-class Generator(ABC):
+class Proposer(ABC):
     """
-    Random data generator.
+    Random data generator proposer.
 
-    A generator is specific to a particular column in a particular table in
-    a particluar database.
+    A proposer is specific to a particular column (set) in a particular table
+    in a particluar database.
 
-    A generator knows how to fetch its summary data from the database, how to calculate
+    A proposer knows how to fetch its summary data from the database, how to calculate
     its fit (if apropriate) and which function actually does the generation.
 
     It also knows these summary statistics for the column it was instantiated on,
@@ -42,14 +42,14 @@ class Generator(ABC):
 
     @abstractmethod
     def function_name(self) -> str:
-        """Get the name of the generator function to put into df.py."""
+        """Get the name of the generator function to call to generate the data."""
 
     def name(self) -> str:
         """
-        Get the name of the generator.
+        Get the name of the proposer.
 
         Usually the same as the function name, but can be different to distinguish
-        between generators that have the same function but different queries.
+        between proposers that have the same function but different queries.
         """
         return self.function_name()
 
@@ -128,8 +128,13 @@ class Generator(ABC):
         return default
 
 
-class PredefinedGenerator(Generator):
-    """Generator built from an existing config.yaml."""
+class PredefinedProposer(Proposer):
+    """
+    Proposer built from an existing config.yaml.
+
+    Does not actually propose, it just represents generators
+    that have been defined previously.
+    """
 
     SELECT_AGGREGATE_RE = re.compile(r"SELECT (.*) FROM ([A-Za-z_][A-Za-z0-9_]*)")
     AS_CLAUSE_RE = re.compile(r" *(.+) +AS +([A-Za-z_][A-Za-z0-9_]*) *")
@@ -159,13 +164,13 @@ class PredefinedGenerator(Generator):
         config: Mapping[str, Any],
     ):
         """
-        Initialise a generator from a config.yaml.
+        Initialise a proposer from a config.yaml.
 
         :param config: The entire configuration.
         :param generator_object: The part of the configuration at tables.*.row_generators
         """
         logger.debug(
-            "Creating a PredefinedGenerator %s from table %s",
+            "Creating a PredefinedProposer %s from table %s",
             generator_object["name"],
             table_name,
         )
@@ -232,27 +237,27 @@ class PredefinedGenerator(Generator):
         """Get the kwargs (summary statistics) this generator was instantiated with."""
         # Run the queries from nominal_kwargs
         # ...
-        logger.error("PredefinedGenerator.actual_kwargs not implemented yet")
+        logger.error("PredefinedProposer.actual_kwargs not implemented yet")
         return {}
 
     def generate_data(self, count: int) -> list[Any]:
         """Generate ``count`` random data points for this column."""
         # Call the function if we can. This could be tricky...
         # ...
-        logger.error("PredefinedGenerator.generate_data not implemented yet")
+        logger.error("PredefinedProposer.generate_data not implemented yet")
         return []
 
 
-class GeneratorFactory(ABC):
-    """A factory for making generators appropriate for a database column."""
+class ProposerFactory(ABC):
+    """A factory for making proposers appropriate for a database column."""
 
     @abstractmethod
-    def get_generators(
+    def get_proposers(
         self,
         columns: list[Column],
         engine: Engine,
-    ) -> Sequence[Generator]:
-        """Get the generators appropriate to these columns."""
+    ) -> Sequence[Proposer]:
+        """Get the proposers appropriate to these columns."""
 
 
 def fit_from_buckets(xs: Sequence[NumericType], ys: Sequence[NumericType]) -> float:
@@ -358,22 +363,22 @@ class Buckets:
         return self.fit_from_counts(buckets)
 
 
-class MultiGeneratorFactory(GeneratorFactory):
+class MultiProposerFactory(ProposerFactory):
     """A composite factory."""
 
-    def __init__(self, *factories: GeneratorFactory):
-        """Initialise a MultiGeneratorFactory."""
+    def __init__(self, *factories: ProposerFactory):
+        """Initialise a MultiProposerFactory."""
         super().__init__()
         self.factories = factories
 
-    def get_generators(
+    def get_proposers(
         self, columns: list[Column], engine: Engine
-    ) -> Sequence[Generator]:
-        """Get the generators appropriate to these columns."""
+    ) -> Sequence[Proposer]:
+        """Get the proposers appropriate to these columns."""
         return [
             generator
             for factory in self.factories
-            for generator in factory.get_generators(columns, engine)
+            for generator in factory.get_proposers(columns, engine)
         ]
 
 
@@ -385,11 +390,11 @@ def get_column_type(column: Column) -> TypeEngine:
         return column.type
 
 
-class ConstantGenerator(Generator):
-    """Generator that always produces the same value."""
+class ConstantProposer(Proposer):
+    """Proposer for a generator that always produces the same value."""
 
     def __init__(self, value: Any) -> None:
-        """Initialise the ConstantGenerator."""
+        """Initialise the ConstantProposer."""
         super().__init__()
         self.value = value
         self.repr = repr(value)
@@ -411,23 +416,23 @@ class ConstantGenerator(Generator):
         return [self.value for _ in range(count)]
 
 
-class ConstantGeneratorFactory(GeneratorFactory):
-    """Just the null generator."""
+class ConstantProposerFactory(ProposerFactory):
+    """Propose just the null generator."""
 
-    def get_generators(
+    def get_proposers(
         self, columns: list[Column], _engine: Engine
-    ) -> Sequence[Generator]:
+    ) -> Sequence[Proposer]:
         """Get the generators appropriate for these columns."""
         if len(columns) != 1:
             return []
         column = columns[0]
         if column.nullable:
-            return [ConstantGenerator(None)]
+            return [ConstantProposer(None)]
         c_type = get_column_type(column)
         if isinstance(c_type, String):
-            return [ConstantGenerator("")]
+            return [ConstantProposer("")]
         if isinstance(c_type, Numeric):
-            return [ConstantGenerator(0.0)]
+            return [ConstantProposer(0.0)]
         if isinstance(c_type, Integer):
-            return [ConstantGenerator(0)]
+            return [ConstantProposer(0)]
         return []

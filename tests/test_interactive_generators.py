@@ -6,9 +6,9 @@ from typing import Any, Iterable
 
 from sqlalchemy import Connection, MetaData, select
 
-from datafaker.generators.choice import ChoiceGeneratorFactory
 from datafaker.interactive.base import DbCmd
 from datafaker.interactive.generators import GeneratorCmd
+from datafaker.proposers.choice import ChoiceProposerFactory
 from tests.utils import (
     GeneratesDBTestCase,
     RequiresDBTestCase,
@@ -593,8 +593,8 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        ChoiceGeneratorFactory.SAMPLE_COUNT = 500
-        ChoiceGeneratorFactory.SUPPRESS_COUNT = 5
+        ChoiceProposerFactory.SAMPLE_COUNT = 500
+        ChoiceProposerFactory.SUPPRESS_COUNT = 5
 
     def _get_cmd(self, config: MutableMapping[str, Any]) -> TestGeneratorCmd:
         return TestGeneratorCmd(

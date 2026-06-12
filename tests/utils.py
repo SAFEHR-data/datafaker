@@ -26,14 +26,13 @@ from sqlalchemy import Engine, MetaData
 from datafaker import settings
 from datafaker.create import create_db_data_into, create_db_tables_into
 from datafaker.interactive.base import DbCmd
-from datafaker.make import make_src_stats, make_table_generators, make_tables_file
+from datafaker.make import make_src_stats, make_tables_file
 from datafaker.utils import (
     MaybeAsyncEngine,
     T,
     create_db_engine,
     create_db_engine_dst,
     get_sync_engine,
-    import_file,
     sorted_non_vocabulary_tables,
 )
 
@@ -237,6 +236,7 @@ class DatafakerTestCase(TestCase):
     copy_from_directory: Path = Path(".")
 
     def setUp(self) -> None:
+        """Set up the test case with an actual orm.yaml file."""
         super().setUp()
         settings.get_settings.cache_clear()
         if self.use_temporary_cwd:
@@ -461,19 +461,6 @@ class GeneratesDBTestCase(RequiresDBTestCase):
             stats_fh.write(yaml.dump(src_stats))
         return src_stats
 
-    def create_generators(self, config: Mapping[str, Any]) -> None:
-        """``create-generators`` with ``src-stats.yaml`` and the rest, producing ``df.py``"""
-        datafaker_content = make_table_generators(
-            self.metadata,
-            config,
-            Path(self.orm_file_path),
-            Path(self.config_file_path),
-            Path(self.stats_file_path),
-        )
-        (generators_fd, self.generators_file_path) = mkstemp(".py", "dfgen_", text=True)
-        with os.fdopen(generators_fd, "w", encoding="utf-8") as datafaker_fh:
-            datafaker_fh.write(datafaker_content)
-
     def create_tables(self) -> None:
         """Create tables in the output DB."""
         create_db_tables_into(self.metadata, self.dst_dsn, self.dst_schema_name)
@@ -481,10 +468,15 @@ class GeneratesDBTestCase(RequiresDBTestCase):
     def create_data(self, config: Mapping[str, Any], num_passes: int = 1) -> None:
         """Create fake data in the DB."""
         # `create-data` with all this stuff
-        datafaker_module = import_file(self.generators_file_path)
+        if self.stats_file_path is None:
+            src_stats = None
+        else:
+            with Path(self.stats_file_path).open(encoding="utf-8") as fh:
+                src_stats = yaml.load(fh, yaml.SafeLoader)
         create_db_data_into(
             sorted_non_vocabulary_tables(self.metadata, config),
-            datafaker_module,
+            config,
+            src_stats,
             num_passes,
             self.dst_dsn,
             self.dst_schema_name,
@@ -500,7 +492,6 @@ class GeneratesDBTestCase(RequiresDBTestCase):
         """
         self.set_configuration(config)
         src_stats = self.get_src_stats(config)
-        self.create_generators(config)
         self.create_tables()
         self.create_data(config, num_passes)
         return src_stats

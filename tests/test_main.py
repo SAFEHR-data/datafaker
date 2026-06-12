@@ -10,165 +10,18 @@ from typer.testing import CliRunner
 
 from datafaker.main import app
 from datafaker.settings import Settings, SettingsError
-from tests.utils import DatafakerTestCase, get_test_settings
+from tests.utils import (
+    DatafakerTestCase,
+    GeneratesDBTestCase,
+    TestDuckDb,
+    get_test_settings,
+)
 
 runner = CliRunner(mix_stderr=False)
 
 
-class TestCliGeneratorOutput(DatafakerTestCase):
-    """Tests for the command-line interface."""
-
-    use_temporary_cwd = True
-    example_conf = "example_config.yaml"
-    copy_files = [example_conf, "orm.yaml"]
-    copy_from_directory = Path("examples")
-
-    @patch("datafaker.main.read_config_file")
-    @patch("datafaker.main.load_metadata_for_output")
-    @patch("datafaker.settings.get_settings")
-    @patch("datafaker.main.make_table_generators")
-    @patch("datafaker.main.generators_require_stats")
-    # pylint: disable=too-many-positional-arguments,too-many-arguments
-    def test_create_generators(
-        self,
-        mock_require_stats: MagicMock,
-        mock_make: MagicMock,
-        mock_settings: MagicMock,
-        mock_load_meta: MagicMock,
-        mock_config: MagicMock,
-    ) -> None:
-        """Test the create-generators sub-command."""
-        mock_require_stats.return_value = False
-        mock_make.return_value = "some text"
-        mock_settings.return_value.src_postges_dsn = ""
-
-        result = runner.invoke(
-            app,
-            [
-                "create-generators",
-                "--config-file",
-                self.example_conf,
-            ],
-            catch_exceptions=False,
-        )
-        self.assertSuccess(result)
-
-        mock_make.assert_called_once_with(
-            mock_load_meta.return_value,
-            mock_config.return_value,
-            Path("orm.yaml"),
-            Path(self.example_conf),
-            None,
-        )
-        with Path("df.py").open(encoding="utf-8") as dfh:
-            self.assertEqual(dfh.read(), "some text")
-
-    @patch("datafaker.main.read_config_file")
-    @patch("datafaker.main.load_metadata_for_output")
-    @patch("datafaker.settings.get_settings")
-    @patch("datafaker.main.make_table_generators")
-    @patch("datafaker.main.generators_require_stats")
-    # pylint: disable=too-many-positional-arguments,too-many-arguments
-    def test_create_generators_uses_default_stats_file_if_necessary(
-        self,
-        mock_require_stats: MagicMock,
-        mock_make: MagicMock,
-        mock_settings: MagicMock,
-        mock_load_meta: MagicMock,
-        mock_config: MagicMock,
-    ) -> None:
-        """Test the create-generators sub-command."""
-        mock_require_stats.return_value = True
-        mock_make.return_value = "some text"
-        mock_settings.return_value.src_postges_dsn = ""
-
-        result = runner.invoke(
-            app,
-            [
-                "create-generators",
-                "--config-file",
-                self.example_conf,
-            ],
-            catch_exceptions=False,
-        )
-
-        mock_make.assert_called_once_with(
-            mock_load_meta.return_value,
-            mock_config.return_value,
-            Path("orm.yaml"),
-            Path(self.example_conf),
-            Path("src-stats.yaml"),
-        )
-        self.assertSuccess(result)
-        with Path("df.py").open(encoding="utf-8") as dfh:
-            self.assertEqual(dfh.read(), "some text")
-
-    @patch("datafaker.main.logger")
-    def test_create_generators_errors_if_file_exists(
-        self,
-        mock_logger: MagicMock,
-    ) -> None:
-        """Test the create-generators sub-command doesn't overwrite."""
-        df_path = Path("df.py")
-
-        with df_path.open(mode="w", encoding="utf-8") as dfh:
-            dfh.write("already exists!\n")
-
-        result = runner.invoke(
-            app,
-            [
-                "create-generators",
-                "--config-file",
-                self.example_conf,
-            ],
-            catch_exceptions=False,
-        )
-        mock_logger.error.assert_called_once_with(
-            "%s should not already exist. Exiting...",
-            df_path,
-        )
-        self.assertEqual(1, result.exit_code)
-
-
 class TestCLI(DatafakerTestCase):
     """Tests for the command-line interface."""
-
-    @patch("datafaker.main.read_config_file")
-    @patch("datafaker.main.load_metadata_for_output")
-    @patch("datafaker.settings.get_settings")
-    @patch("datafaker.main.make_table_generators")
-    # pylint: disable=too-many-positional-arguments,too-many-arguments
-    def test_create_generators_with_force_enabled(
-        self,
-        mock_make: MagicMock,
-        mock_settings: MagicMock,
-        mock_load_meta: MagicMock,
-        mock_config: MagicMock,
-    ) -> None:
-        """Tests the create-generators sub-commands overwrite files when instructed."""
-
-        mock_make.return_value = "make result"
-        mock_settings.return_value.src_postges_dsn = ""
-
-        for force_option in ["--force", "-f"]:
-            with self.subTest(f"Using option {force_option}"):
-                result: Result = runner.invoke(
-                    app,
-                    [
-                        "create-generators",
-                        force_option,
-                    ],
-                )
-
-                self.assertSuccess(result)
-                mock_make.assert_called_once_with(
-                    mock_load_meta.return_value,
-                    mock_config.return_value,
-                    Path("orm.yaml"),
-                    Path("config.yaml"),
-                    None,
-                )
-                mock_make.reset_mock()
 
     @patch("datafaker.main.create_db_tables")
     @patch("datafaker.main.read_config_file")
@@ -191,15 +44,15 @@ class TestCLI(DatafakerTestCase):
 
     @patch("datafaker.main.sorted_non_vocabulary_tables")
     @patch("datafaker.main.logger")
-    @patch("datafaker.main.import_file")
     @patch("datafaker.main.create_db_data")
     @patch("datafaker.main.load_metadata_for_output")
+    @patch("datafaker.main.read_config_file")
     # pylint: disable=too-many-arguments too-many-positional-arguments
     def test_create_data(
         self,
+        mock_read_config: MagicMock,
         mock_load_metadata: MagicMock,
         mock_create: MagicMock,
-        mock_import: MagicMock,
         mock_logger: MagicMock,
         mock_tables: MagicMock,
     ) -> None:
@@ -215,11 +68,11 @@ class TestCLI(DatafakerTestCase):
             ],
             catch_exceptions=False,
         )
-        self.assertListEqual([call("df.py")], mock_import.call_args_list)
 
         mock_create.assert_called_once_with(
             mock_tables.return_value,
-            mock_import.return_value,
+            mock_read_config.return_value,
+            None,
             1,
             mock_load_metadata.return_value,
         )
@@ -651,3 +504,58 @@ class TestCliOutput(DatafakerTestCase):
                     self.load_yaml("stats_file.yaml"), {"some_stat": 0}
                 )
                 self.assertSuccess(result)
+
+
+class TestsCliCreate(GeneratesDBTestCase):
+    """Tests that use the CLI to generate output in the destination database."""
+
+    use_temporary_cwd = True
+    dst_schema_name = "fake.dstschema"
+
+    def setUp(self) -> None:
+        """Set the runner with the environment variables we need."""
+        super().setUp()
+        self.runner = CliRunner(
+            mix_stderr=False,
+            env={
+                "src_dsn": self.dsn,
+                "dst_dsn": self.dst_dsn,
+            },
+        )
+
+    def test_create_primary_key(self) -> None:
+        """Test the creation of a simple database with one primary key column."""
+        orm = {
+            "tables": {
+                "tab": {
+                    "columns": {
+                        "col": {
+                            "primary": True,
+                            # For some reason, nullable primary keys triggers a
+                            # weird corner case on DuckDB
+                            "nullable": True,
+                            "type": "INTEGER",
+                        }
+                    }
+                }
+            }
+        }
+        config: dict[str, Any] = {}
+        with Path("orm.yaml").open("w", encoding="utf-8") as fh:
+            fh.write(yaml.dump(orm))
+        with Path("config.yaml").open("w", encoding="utf-8") as fh:
+            fh.write(yaml.dump(config))
+        result = self.runner.invoke(
+            app,
+            [
+                "create-tables",
+            ],
+            catch_exceptions=False,
+        )
+        self.assertSuccess(result)
+
+
+class TestCliCreateDuckDb(TestsCliCreate):
+    """Tests that use the CLI to generate output in a DuckDB database."""
+
+    database_type = TestDuckDb

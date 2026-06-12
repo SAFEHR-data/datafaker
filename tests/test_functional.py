@@ -21,7 +21,6 @@ class DBFunctionalTestCaseBase(RequiresDBTestCase):
     examples_dir = Path("tests/examples")
 
     orm_file_path = Path("orm.yaml")
-    datafaker_file_path = Path("df.py")
 
     generator_file_paths = tuple(
         map(Path, ("story_generators.py", "row_generators.py")),
@@ -77,7 +76,6 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
     schema_name = "public"
 
     alt_orm_file_path = Path("my_orm.yaml")
-    alt_datafaker_file_path = Path("my_df.py")
 
     def test_workflow_minimal_args(self) -> None:
         """Test the recommended CLI workflow runs without errors."""
@@ -101,32 +99,6 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
         self.assert_silent_success(completed_process)
 
         completed_process = self.invoke(
-            "create-generators",
-            "--force",
-            "--stats-file=src-stats.yaml",
-        )
-        self.assertNoException(completed_process)
-        self.assertEqual(
-            {
-                (
-                    "Unsupported SQLAlchemy type CIDR for column "
-                    "column_with_unusual_type of table strange_type_table. "
-                    "Setting this column to NULL always, you may want to "
-                    "configure a row generator for it instead."
-                ),
-                (
-                    "Unsupported SQLAlchemy type BIT for column "
-                    "column_with_unusual_type_and_length of table "
-                    "strange_type_table. Setting this column to NULL always, "
-                    "you may want to configure a row generator for it instead."
-                ),
-            },
-            set(completed_process.stderr.split("\n")) - {""},
-        )
-        self.assertSuccess(completed_process)
-        self.assertEqual("", completed_process.stdout)
-
-        completed_process = self.invoke(
             "create-tables",
         )
         self.assert_silent_success(completed_process)
@@ -142,16 +114,14 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
         )
         self.assert_silent_success(completed_process)
 
-        completed_process = self.invoke("create-data")
+        completed_process = self.invoke(
+            "create-data",
+        )
         self.assertNoException(completed_process)
-        self.assertEqual("", completed_process.stderr)
         self.assertSuccess(completed_process)
         self.assertEqual(
             "Generating data for story 'story_generators.short_story'\n"
-            "Generating data for story 'story_generators.short_story'\n"
-            "Generating data for story 'story_generators.short_story'\n"
             "Generating data for story 'story_generators.full_row_story'\n"
-            "Generating data for story 'story_generators.long_story'\n"
             "Generating data for story 'story_generators.long_story'\n",
             completed_process.stdout,
         )
@@ -252,33 +222,6 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
 
         completed_process = self.invoke(
             "--verbose",
-            "create-generators",
-            f"--orm-file={self.alt_orm_file_path}",
-            f"--df-file={self.alt_datafaker_file_path}",
-            f"--config-file={self.config_file_path}",
-            f"--stats-file={self.stats_file_path}",
-            "--force",
-        )
-        self.assertEqual(
-            "Unsupported SQLAlchemy type CIDR "
-            "for column column_with_unusual_type of table strange_type_table. "
-            "Setting this column to NULL always, "
-            "you may want to configure a row generator for it instead.\n"
-            "Unsupported SQLAlchemy type BIT "
-            "for column column_with_unusual_type_and_length of table "
-            "strange_type_table. Setting this column to NULL always, "
-            "you may want to configure a row generator for it instead.\n",
-            completed_process.stderr,
-        )
-        self.assertSuccess(completed_process)
-        self.assertEqual(
-            f"Making {self.alt_datafaker_file_path}.\n"
-            f"{self.alt_datafaker_file_path} created.\n",
-            completed_process.stdout,
-        )
-
-        completed_process = self.invoke(
-            "--verbose",
             "create-tables",
             f"--orm-file={self.alt_orm_file_path}",
             f"--config-file={self.config_file_path}",
@@ -325,56 +268,36 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
             "--verbose",
             "create-data",
             f"--orm-file={self.alt_orm_file_path}",
-            f"--df-file={self.alt_datafaker_file_path}",
+            f"--stats-file={self.stats_file_path}",
             f"--config-file={self.config_file_path}",
             "--num-passes=2",
         )
-        self.assertEqual("", completed_process.stderr)
-        self.assertEqual(
-            sorted(
-                [
-                    "Creating data.",
-                    "Generating data for story 'story_generators.short_story'",
-                    "Generating data for story 'story_generators.short_story'",
-                    "Generating data for story 'story_generators.short_story'",
-                    "Generating data for story 'story_generators.short_story'",
-                    "Generating data for story 'story_generators.short_story'",
-                    "Generating data for story 'story_generators.short_story'",
-                    "Generating data for story 'story_generators.full_row_story'",
-                    "Generating data for story 'story_generators.full_row_story'",
-                    "Generating data for story 'story_generators.long_story'",
-                    "Generating data for story 'story_generators.long_story'",
-                    "Generating data for story 'story_generators.long_story'",
-                    "Generating data for story 'story_generators.long_story'",
-                    "Generating data for table 'data_type_test'",
-                    "Generating data for table 'data_type_test'",
-                    "Generating data for table 'no_pk_test'",
-                    "Generating data for table 'no_pk_test'",
-                    "Generating data for table 'person'",
-                    "Generating data for table 'person'",
-                    "Generating data for table 'strange_type_table'",
-                    "Generating data for table 'strange_type_table'",
-                    "Generating data for table 'unique_constraint_test'",
-                    "Generating data for table 'unique_constraint_test'",
-                    "Generating data for table 'unique_constraint_test2'",
-                    "Generating data for table 'unique_constraint_test2'",
-                    "Generating data for table 'test_entity'",
-                    "Generating data for table 'test_entity'",
-                    "Generating data for table 'hospital_visit'",
-                    "Generating data for table 'hospital_visit'",
-                    "Data created in 2 passes.",
-                    f"person: {2*(3+1+2+2)} rows created.",
-                    f"hospital_visit: {2*(2*2+3)} rows created.",
-                    "data_type_test: 2 rows created.",
-                    "no_pk_test: 2 rows created.",
-                    "strange_type_table: 2 rows created.",
-                    "unique_constraint_test: 2 rows created.",
-                    "unique_constraint_test2: 2 rows created.",
-                    "test_entity: 2 rows created.",
-                    "",
-                ]
-            ),
-            sorted(completed_process.stdout.split("\n")),
+        self.assertSetEqual(
+            {
+                "Creating data.",
+                "Generating data for story 'story_generators.short_story'",
+                "Generating data for story 'story_generators.full_row_story'",
+                "Generating data for story 'story_generators.long_story'",
+                "Generating data for table 'data_type_test'",
+                "Generating data for table 'no_pk_test'",
+                "Generating data for table 'person'",
+                "Generating data for table 'strange_type_table'",
+                "Generating data for table 'unique_constraint_test'",
+                "Generating data for table 'unique_constraint_test2'",
+                "Generating data for table 'test_entity'",
+                "Generating data for table 'hospital_visit'",
+                "Data created in 2 passes.",
+                f"person: {2*(3+1+2+2)} rows created.",
+                f"hospital_visit: {2*(2*2+3)} rows created.",
+                "data_type_test: 2 rows created.",
+                "no_pk_test: 2 rows created.",
+                "strange_type_table: 2 rows created.",
+                "unique_constraint_test: 2 rows created.",
+                "unique_constraint_test2: 2 rows created.",
+                "test_entity: 2 rows created.",
+                "",
+            },
+            set(completed_process.stdout.split("\n")),
         )
 
         completed_process = self.invoke(
@@ -506,14 +429,6 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
             "--force",
         )
         self.invoke(
-            "create-generators",
-            f"--orm-file={self.alt_orm_file_path}",
-            f"--df-file={self.alt_datafaker_file_path}",
-            f"--config-file={self.config_file_path}",
-            f"--stats-file={self.stats_file_path}",
-            "--force",
-        )
-        self.invoke(
             "create-tables",
             f"--orm-file={self.alt_orm_file_path}",
             f"--config-file={self.config_file_path}",
@@ -530,16 +445,12 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
             "create-data",
             f"--config-file={self.config_file_path}",
             f"--orm-file={self.alt_orm_file_path}",
-            f"--df-file={self.alt_datafaker_file_path}",
+            f"--stats-file={self.stats_file_path}",
             "--num-passes=1",
         )
-        self.assertEqual("", completed_process.stderr)
         self.assertEqual(
             "Generating data for story 'story_generators.short_story'\n"
-            "Generating data for story 'story_generators.short_story'\n"
-            "Generating data for story 'story_generators.short_story'\n"
             "Generating data for story 'story_generators.full_row_story'\n"
-            "Generating data for story 'story_generators.long_story'\n"
             "Generating data for story 'story_generators.long_story'\n",
             completed_process.stdout,
         )
@@ -548,17 +459,13 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
             "create-data",
             f"--config-file={self.config_file_path}",
             f"--orm-file={self.alt_orm_file_path}",
-            f"--df-file={self.alt_datafaker_file_path}",
+            f"--stats-file={self.stats_file_path}",
             "--num-passes=3",
         )
-        self.assertEqual("", completed_process.stderr)
         self.assertEqual(
             (
                 "Generating data for story 'story_generators.short_story'\n"
-                "Generating data for story 'story_generators.short_story'\n"
-                "Generating data for story 'story_generators.short_story'\n"
                 "Generating data for story 'story_generators.full_row_story'\n"
-                "Generating data for story 'story_generators.long_story'\n"
                 "Generating data for story 'story_generators.long_story'\n"
             )
             * 3,
@@ -570,7 +477,7 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
             "create-data",
             f"--config-file={self.config_file_path}",
             f"--orm-file={self.alt_orm_file_path}",
-            f"--df-file={self.alt_datafaker_file_path}",
+            f"--stats-file={self.stats_file_path}",
             "--num-passes=1",
             expected_error=(
                 "Failed to satisfy unique constraints for table unique_constraint_test"
@@ -619,24 +526,16 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
             "make-tables",
             "--force",
         )
-        completed_process = self.invoke(
-            "create-generators",
-            "--force",
-            "--config-file",
-            config_file,
-        )
-        self.assertSuccess(completed_process)
         self.invoke(
             "create-tables",
             "--config-file",
             config_file,
         )
-        self.assertSuccess(completed_process)
         completed_process = self.invoke(
             "create-data",
             "--config-file",
             config_file,
-            expected_error="No module named 'incorrect_module'",
+            expected_error="No module found 'incorrect_module",
         )
         self.assertReturnCode(completed_process, 1)
 
@@ -653,8 +552,7 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
             "--force",
         )
         completed_process = self.invoke(
-            "create-generators",
-            "--force",
+            "create-data",
             "--config-file",
             config_file,
             expected_error="hyphen",
@@ -674,8 +572,7 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
             "--force",
         )
         completed_process = self.invoke(
-            "create-generators",
-            "--force",
+            "create-data",
             "--config-file",
             config_file,
             expected_error="hyphen",

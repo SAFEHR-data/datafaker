@@ -6,8 +6,8 @@ from unittest import TestCase
 
 from sqlalchemy import Connection, MetaData, insert, select
 
-from datafaker.generators import NullPartitionedNormalGeneratorFactory
 from datafaker.interactive.base import DbCmd
+from datafaker.proposers import NullPartitionedNormalProposerFactory
 from tests.test_interactive_generators import TestGeneratorCmd
 from tests.utils import GeneratesDBTestCase
 
@@ -136,8 +136,8 @@ class NullPartitionedTests(GeneratesDBTestCase):
     def setUp(self) -> None:
         """Set up the test with specific sample and suppress counts."""
         super().setUp()
-        NullPartitionedNormalGeneratorFactory.SAMPLE_COUNT = 8
-        NullPartitionedNormalGeneratorFactory.SUPPRESS_COUNT = 2
+        NullPartitionedNormalProposerFactory.SAMPLE_COUNT = 8
+        NullPartitionedNormalProposerFactory.SUPPRESS_COUNT = 2
 
     def _get_cmd(self, config: MutableMapping[str, Any]) -> TestGeneratorCmd:
         """Get the configure-generators object as our command."""
@@ -178,7 +178,6 @@ class NullPartitionedTests(GeneratesDBTestCase):
             gc.do_quit("")
             self.set_configuration(gc.config)
             self.get_src_stats(gc.config)
-            self.create_generators(gc.config)
             self.create_tables()
             self.populate_measurement_type_vocab()
             self.create_data(gc.config, num_passes=generate_count)
@@ -293,7 +292,6 @@ class NullPartitionedTests(GeneratesDBTestCase):
             gc.do_quit("")
             self.set_configuration(gc.config)
             self.get_src_stats(gc.config)
-            self.create_generators(gc.config)
             self.create_tables()
             self.populate_measurement_type_vocab()
             self.create_data(gc.config, num_passes=generate_count)
@@ -408,7 +406,6 @@ class NullPartitionedTests(GeneratesDBTestCase):
             gc.do_quit("")
             self.set_configuration(gc.config)
             self.get_src_stats(gc.config)
-            self.create_generators(gc.config)
             self.create_tables()
             self.populate_measurement_type_vocab()
             self.create_data(gc.config, num_passes=generate_count)
@@ -428,7 +425,7 @@ class NullPartitionedTests(GeneratesDBTestCase):
         """
         # five will ensure that at least one group will have two elements in it,
         # but all three cannot.
-        NullPartitionedNormalGeneratorFactory.SAMPLE_COUNT = 5
+        NullPartitionedNormalProposerFactory.SAMPLE_COUNT = 5
         table_name = "observation"
         generate_count = 100
         with self._get_cmd({}) as gc:
@@ -442,7 +439,6 @@ class NullPartitionedTests(GeneratesDBTestCase):
             gc.do_quit("")
             self.set_configuration(gc.config)
             self.get_src_stats(gc.config)
-            self.create_generators(gc.config)
             self.create_tables()
             self.populate_measurement_type_vocab()
             self.create_data(gc.config, num_passes=generate_count)
