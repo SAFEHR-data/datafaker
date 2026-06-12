@@ -14,11 +14,8 @@ src-stats:
       FROM person
   - name: count_opt_outs
     query: >
-      SELECT person_id, research_opt_out
-      FROM person
-    dp-query: >
       SELECT count(person_id) AS num, research_opt_out
-      FROM query_result
+      FROM person
       GROUP BY research_opt_out
     epsilon: 0.1
     delta: 0.0001
@@ -43,6 +40,13 @@ src-stats:
       research_opt_out:
         type: boolean
         private_id: False
+  - name: auto__hospital_visit__visit_type_concept_id
+    comments:
+      - All the values and their counts that appear in column visit_type_concept_id of table hospital_visit
+    query: >
+      SELECT visit_type_concept_id AS value, COUNT(visit_type_concept_id) AS count FROM hospital_visit
+      WHERE visit_type_concept_id IS NOT NULL GROUP BY value
+      ORDER BY COUNT(visit_type_concept_id) DESC
 
 max-unique-constraint-tries: 50
 
@@ -69,6 +73,10 @@ tables:
         columns_assigned: research_opt_out
 
   hospital_visit:
+    columns:
+      visit_start:
+        roles:
+          - start
     num_rows_per_pass: 3
     row_generators:
       - name: uct.timespan_generator
@@ -79,7 +87,11 @@ tables:
         columns_assigned:
           - visit_start
           - visit_end
-          - visit_duration_seconds
+      - name: dist_gen.weighted_choice
+        kwargs:
+          a: SRC_STATS["auto__hospital_visit__visit_type_concept_id"]["results"]
+        columns_assigned:
+          - visit_type_concept_id
 
   unique_constraint_test:
     num_rows_per_pass: 1
@@ -113,6 +125,7 @@ tables:
 
   concept:
     vocabulary_table: true
+    ignore: true
   concept_type:
     vocabulary_table: true
   mitigation_type:
@@ -130,9 +143,3 @@ story_generators:
     args:
       - generic
     num_stories_per_pass: 1
-  - name: story_generators.long_story
-    kwargs:
-      dst_db_conn: dst_db_conn
-      generic: generic
-      count_opt_outs: 'SRC_STATS["count_opt_outs"]["results"]'
-    num_stories_per_pass: 2

@@ -138,7 +138,7 @@ class ContinuousDistributionProposerFactory(ProposerFactory):
 
     def _get_generators_from_buckets(
         self,
-        _engine: Engine,
+        engine: Engine,  # pylint: disable=unused-argument
         table_name: str,
         column_name: str,
         buckets: Buckets,
@@ -158,13 +158,12 @@ class ContinuousDistributionProposerFactory(ProposerFactory):
         ct = get_column_type(column)
         if not isinstance(ct, Numeric) and not isinstance(ct, Integer):
             return []
-        column_name = column.name
-        table_name = column.table.name
-        buckets = Buckets.make_buckets(engine, table_name, column_name)
+        table = column.table
+        buckets = Buckets.make_buckets(engine, table, column)
         if buckets is None:
             return []
         return self._get_generators_from_buckets(
-            engine, table_name, column_name, buckets
+            engine, table.name, column.name, buckets
         )
 
 
@@ -282,7 +281,7 @@ class ContinuousLogDistributionProposerFactory(ContinuousDistributionProposerFac
                     f"SELECT AVG(CASE WHEN 0<{column_name} THEN LN({column_name})"
                     " ELSE NULL END) AS logmean,"
                     f" STDDEV(CASE WHEN 0<{column_name} THEN LN({column_name}) ELSE NULL END)"
-                    f" AS logstddev FROM {table_name}"
+                    f' AS logstddev FROM "{table_name}"'
                 )
             ).first()
             if result is None or result.logstddev is None:
@@ -565,9 +564,9 @@ class CovariateQuery:
         if where:
             where = " WHERE " + where
         if self._sample_count is None:
-            return self.table + where
+            return f'"{self.table}"{where}'
         return (
-            f"(SELECT * FROM {self.table}{where} ORDER BY RANDOM()"
+            f'(SELECT * FROM "{self.table}"{where} ORDER BY RANDOM()'
             f" LIMIT {self._sample_count}) AS _sampled"
         )
 

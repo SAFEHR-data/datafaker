@@ -1,10 +1,11 @@
 """Generators using Mimesis."""
 
-from typing import Any, Callable, Sequence, Union
+from collections.abc import Callable, Sequence
+from typing import Any, Union
 
 import mimesis
 import mimesis.locales
-from sqlalchemy import Column, Engine, text
+from sqlalchemy import Column, Engine, func, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.types import Date, DateTime, Integer, Numeric, String, Time
 
@@ -53,7 +54,7 @@ class MimesisProposerBase(Proposer):
                 " so cannot be used as a generator"
             )
         self._name = "generic." + function_name
-        self._generator_function = f
+        self._generator_function: Callable[..., Any] = f
 
     def function_name(self) -> str:
         """Get the name of the generator function to call."""
@@ -192,7 +193,7 @@ class MimesisDateTimeProposer(MimesisProposerBase):
         with engine.connect() as connection:
             result = connection.execute(
                 text(
-                    f"SELECT {min_year} AS start, {max_year} AS end FROM {column.table.name}"
+                    f'SELECT {min_year} AS start, {max_year} AS end FROM "{column.table.name}"'
                 )
             ).first()
             if result is None or result.start is None or result.end is None:
@@ -316,8 +317,8 @@ class MimesisStringProposerFactory(ProposerFactory):
         try:
             buckets = Buckets.make_buckets(
                 engine,
-                column.table.name,
-                f"LENGTH({column.name})",
+                column.table,
+                func.length(column),
             )
             fitness_fn = len
         except SQLAlchemyError:
@@ -345,7 +346,7 @@ class MimesisFloatProposerFactory(ProposerFactory):
     """All Mimesis generators that return floating point numbers."""
 
     def get_proposers(
-        self, columns: list[Column], _engine: Engine
+        self, columns: list[Column], engine: Engine
     ) -> Sequence[Proposer]:
         """Get the generators appropriate to these columns."""
         if len(columns) != 1:
@@ -401,7 +402,7 @@ class MimesisTimeProposerFactory(ProposerFactory):
     """All Mimesis generators that return times."""
 
     def get_proposers(
-        self, columns: list[Column], _engine: Engine
+        self, columns: list[Column], engine: Engine
     ) -> Sequence[Proposer]:
         """Get the generators appropriate to these columns."""
         if len(columns) != 1:
@@ -417,7 +418,7 @@ class MimesisIntegerProposerFactory(ProposerFactory):
     """All Mimesis generators that return integers."""
 
     def get_proposers(
-        self, columns: list[Column], _engine: Engine
+        self, columns: list[Column], engine: Engine
     ) -> Sequence[Proposer]:
         """Get the generators appropriate to these columns."""
         if len(columns) != 1:

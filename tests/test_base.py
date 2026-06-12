@@ -14,7 +14,7 @@ Base = declarative_base()
 metadata = Base.metadata
 
 
-class BaseTable(Base):  # type: ignore
+class BaseTable(Base):
     """A SQLAlchemy table."""
 
     __tablename__ = "basetable"
