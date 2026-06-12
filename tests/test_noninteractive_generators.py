@@ -2,10 +2,11 @@
 
 from collections.abc import Mapping, MutableMapping
 from typing import Any
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, patch
 
 from datafaker.interactive import update_config_generators
 from datafaker.interactive.base import DbCmd
+from datafaker.utils import get_property
 from tests.utils import RequiresDBTestCase
 
 
@@ -48,7 +49,8 @@ class NonInteractiveTests(RequiresDBTestCase):
         test that we can set generators from a CSV file
         """
         config: MutableMapping[str, Any] = {}
-        spec_csv = Mock(return_value="mock spec.csv file")
+        spec_csv = MagicMock()
+        spec_csv.open.return_value.__enter__.return_value = "mock spec.csv file"
         update_config_generators(
             DbCmd.Settings(
                 self.dsn,
@@ -93,7 +95,8 @@ class NonInteractiveTests(RequiresDBTestCase):
         test that we can set multi-column generators from a CSV file
         """
         config: MutableMapping[str, Any] = {}
-        spec_csv = Mock(return_value="mock spec.csv file")
+        spec_csv = MagicMock()
+        spec_csv.open.return_value.__enter__.return_value = "mock spec.csv file"
         update_config_generators(
             DbCmd.Settings(
                 self.dsn,
@@ -165,7 +168,8 @@ class NonInteractiveTests(RequiresDBTestCase):
                 },
             },
         }
-        spec_csv = Mock(return_value="mock spec.csv file")
+        spec_csv = MagicMock()
+        spec_csv.open.return_value.__enter__.return_value = "mock spec.csv file"
         update_config_generators(
             DbCmd.Settings(
                 self.dsn,
@@ -182,20 +186,42 @@ class NonInteractiveTests(RequiresDBTestCase):
             for rg in tables.get("row_generators", [])
         }
         self.assertEqual(
-            row_gens[
-                "observation['first_value', 'second_value', 'third_value', 'type']"
-            ]["name"],
+            get_property(
+                row_gens,
+                [
+                    "observation['first_value', 'second_value', 'third_value', 'type']",
+                    "name",
+                ],
+                "",
+            ),
             "dist_gen.alternatives",
         )
         self.assertEqual(
-            row_gens[
-                "observation['first_value', 'second_value', 'third_value', 'type']"
-            ]["kwargs"]["alternative_configs"][0]["name"],
+            get_property(
+                row_gens,
+                [
+                    "observation['first_value', 'second_value', 'third_value', 'type']",
+                    "kwargs",
+                    "alternative_configs",
+                    0,
+                    "name",
+                ],
+                "",
+            ),
             '"with_constants_at"',
         )
         self.assertEqual(
-            row_gens[
-                "observation['first_value', 'second_value', 'third_value', 'type']"
-            ]["kwargs"]["alternative_configs"][0]["params"]["subgen"],
+            get_property(
+                row_gens,
+                [
+                    "observation['first_value', 'second_value', 'third_value', 'type']",
+                    "kwargs",
+                    "alternative_configs",
+                    0,
+                    "params",
+                    "subgen",
+                ],
+                "",
+            ),
             '"grouped_multivariate_lognormal"',
         )

@@ -10,9 +10,16 @@ from sqlalchemy import Connection, insert, inspect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session
-from sqlalchemy.schema import CreateColumn, CreateSchema, CreateTable, MetaData, Table
+from sqlalchemy.schema import CreateSchema, CreateTable, MetaData, Table
 
 from datafaker.base import FileUploader
+from datafaker.db_utils import (
+    create_db_engine_dst,
+    get_sync_engine,
+    get_vocabulary_table_names,
+    reinstate_vocab_foreign_key_constraints,
+    remove_vocab_foreign_key_constraints,
+)
 from datafaker.make import FunctionCall, StoryGeneratorInfo, get_generation_info
 from datafaker.populate import (
     TableGenerator,
@@ -21,37 +28,12 @@ from datafaker.populate import (
     get_table_generator_dict,
 )
 from datafaker.settings import get_destination_dsn, get_destination_schema, get_settings
-from datafaker.utils import (
-    create_db_engine_dst,
-    get_property,
-    get_sync_engine,
-    get_vocabulary_table_names,
-    logger,
-    reinstate_vocab_foreign_key_constraints,
-    remove_vocab_foreign_key_constraints,
-)
+from datafaker.utils import get_property, logger
 
 Story = Generator[Tuple[str, dict[str, Any]], dict[str, Any], None]
 RowCounts = Counter[str]
 
 serial_re = re.compile(r"\bSERIAL\b")
-
-
-@compiles(CreateColumn, "duckdb")
-def remove_serial(element: CreateColumn, compiler: Any, **kw: Any) -> str:
-    """
-    Intercede in compilation for column creation, removing PostgreSQL's ``SERIAL``.
-
-    DuckDB does not understand ``SERIAL``, and we don't care about
-    autoincrementing in datafaker. Ideally ``duckdb_engine`` would remove
-    this for us, or DuckDB would implement ``SERIAL``
-    :param element: The CreateColumn being executed.
-    :param compiler: Actually a DDLCompiler, but that type is not exported.
-    :param kw: Further arguments.
-    :return: Corrected SQL.
-    """
-    text: str = compiler.visit_create_column(element, **kw)
-    return serial_re.sub("INTEGER", text)
 
 
 @compiles(CreateTable, "duckdb")
@@ -219,6 +201,7 @@ def create_db_data_into(
         src_stats,
         metadata,
     )
+    context["sum"] = sum
     row_counts: Counter[str] = Counter()
     with dst_engine.connect() as dst_conn:
         context["dst_db_conn"] = dst_conn
@@ -230,7 +213,6 @@ def create_db_data_into(
                     dst_conn,
                     gen_info.tables,
                     gen_info.max_unique_constraint_tries,
-                    context,
                 ),
                 gen_info.story_generators,
                 context,
@@ -244,7 +226,8 @@ def empty_story_generator() -> (
 ):
     """Get a story generator that generates no values."""
     empt: list[tuple[str, dict[str, Any]]] = []
-    yield from empt
+    for e in empt:
+        _ = yield e
 
 
 # pylint: disable=too-many-instance-attributes
@@ -396,6 +379,10 @@ def populate(
         dst_conn,
         context,
     )
+
+    # Set the context for each row generator
+    for tg in table_generator_dict.values():
+        tg.set_context(context)
 
     # Generate individual rows, table by table.
     for table in tables:

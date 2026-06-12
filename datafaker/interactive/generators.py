@@ -8,6 +8,7 @@ from typing import Any, Callable, Optional, cast
 import sqlalchemy
 from sqlalchemy import Column
 
+from datafaker.db_utils import MaybeAsyncEngine, primary_private_fks, table_is_private
 from datafaker.interactive.base import DbCmd, TableEntry, fk_column_name, or_default
 from datafaker.proposers import everything_factory
 from datafaker.proposers.base import PredefinedProposer, Proposer
@@ -15,9 +16,7 @@ from datafaker.utils import (
     get_columns_assigned,
     get_row_generators,
     logger,
-    primary_private_fks,
     split_column_full_name,
-    table_is_private,
 )
 
 
@@ -40,6 +39,30 @@ class GeneratorCmdTableEntry(TableEntry):
 
     old_proposers: list[ProposerInfo]
     new_proposers: list[ProposerInfo]
+
+
+def get_aggregate_query(
+    proposers: Sequence[Proposer], table_name: str, engine: MaybeAsyncEngine
+) -> str | None:
+    """
+    Get a SQL query from a list of proposers.
+
+    :param proposers: List of proposers.
+    :param table_name: The name of the table the proposers are operating on.
+    :param engine: The engine that needs to be queried (it won't be queried
+      during this call).
+    :return: A string representing the query to be executed, or None if no
+      query is required.
+    """
+    clauses = [
+        f'{q["clause"]} AS {n}'
+        for proposer in proposers
+        for n, q in or_default(proposer.select_aggregate_clauses(), {}).items()
+    ]
+    if not clauses:
+        return None
+    alias = f' AS "{table_name}"' if engine.dialect.name == "duckdb" else ""
+    return f'SELECT {", ".join(clauses)} FROM "{table_name}"{alias}'
 
 
 # pylint: disable=too-many-public-methods
@@ -152,10 +175,7 @@ information about the columns in the current table. Use 'peek',
         """
         Initialise a ``GeneratorCmd``.
 
-        :param src_dsn: connection address for source database
-        :param src_schema: database schema name
-        :param metadata: SQLAlchemy metadata for the source database
-        :param config: Configuration loaded from ``config.yaml``
+        :param settings: Settings for the source database.
         """
         super().__init__(settings)
         self.proposers: list[Proposer] | None = None
@@ -291,8 +311,11 @@ information about the columns in the current table. Use 'peek',
                     kwn = proposer.proposer.nominal_kwargs()
                     if kwn:
                         rg["kwargs"] = kwn
+                    asn = proposer.proposer.nominal_args()
+                    if asn:
+                        rg["args"] = asn
                     rgs.append(rg)
-            aq = self._get_aggregate_query(new_gens, entry.name)
+            aq = get_aggregate_query(new_gens, entry.name, self.engine)
             if aq:
                 src_stats.append(
                     {
@@ -329,9 +352,8 @@ information about the columns in the current table. Use 'peek',
         count = 0
         for entry in self.table_entries:
             header_shown = False
-            g_entry = cast(GeneratorCmdTableEntry, entry)
-            for gen in g_entry.new_proposers:
-                old_gen = self._find_old_proposer(g_entry, gen.columns)
+            for gen in entry.new_proposers:
+                old_gen = self._find_old_proposer(entry, gen.columns)
                 new_gen = None if gen is None else gen.proposer
                 if old_gen != new_gen:
                     if not header_shown:
@@ -351,16 +373,17 @@ information about the columns in the current table. Use 'peek',
         else:
             reply = self.ask_save()
         if reply == "yes":
+            logger.debug("Changed entries copied")
             self._copy_entries()
             return True
         if reply == "no":
+            logger.debug("Configuration unchanged")
             return True
         return False
 
     def do_tables(self, _arg: str) -> None:
         """List the tables."""
-        for t_entry in self.table_entries:
-            entry = cast(GeneratorCmdTableEntry, t_entry)
+        for entry in self.table_entries:
             gen_count = len(entry.new_proposers)
             how_many = "one generator" if gen_count == 1 else f"{gen_count} generators"
             self.print("{0} ({1})", entry.name, how_many)
@@ -370,7 +393,7 @@ information about the columns in the current table. Use 'peek',
         if len(self.table_entries) <= self.table_index:
             self.print("Error: no table {0}", self.table_index)
             return
-        g_entry = cast(GeneratorCmdTableEntry, self.table_entries[self.table_index])
+        g_entry = self.table_entries[self.table_index]
         table = self.table_metadata()
         for gen in g_entry.new_proposers:
             old_gen = self._find_old_proposer(g_entry, gen.columns)
@@ -440,35 +463,49 @@ information about the columns in the current table. Use 'peek',
                 return n
         return None
 
+    def _get_table_and_column(self, target: str) -> tuple[int | None, int | None]:
+        """
+        Turn a table or column name into a table and column index.
+
+        :param target: Either a table name, a column name or a table and
+          a column name separated by a dot.
+        :return: (None, None) if ``target`` did not refer to a table
+          or a column. (None, index) refers to a column in the current table.
+          (table_index, column_index) refers to a column within a different
+          table.
+        """
+        table_index = self._get_table_index(target)
+        if table_index is not None:
+            return (table_index, 0)
+        # The whole thing is not a table
+        prop_index = self._get_proposer_index(self.table_index, target)
+        if prop_index is not None:
+            return (None, prop_index)
+        # The whole thing isn't a column either, so let's split it:
+        (first_part, last_part) = split_column_full_name(target)
+        if not first_part:
+            # It doesn't split, so that's the end
+            self.print(self.ERROR_NO_SUCH_TABLE_OR_COLUMN, last_part)
+            return (None, None)
+        table_index = self._get_table_index(first_part)
+        if table_index is None:
+            self.print(self.ERROR_NO_SUCH_TABLE, first_part)
+            return (None, None)
+        prop_index = self._get_proposer_index(table_index, last_part)
+        if prop_index is None:
+            self.print(self.ERROR_NO_SUCH_COLUMN, last_part)
+            return (None, None)
+        return (table_index, prop_index)
+
     def go_to(self, target: str) -> bool:
         """
         Go to a particular column.
 
         :return: True on success.
         """
-        (first_part, last_part) = split_column_full_name(target)
-        prop_index: int | None = None
-        if first_part:
-            # target == table.column
-            table_index = self._get_table_index(first_part)
-            if table_index is None:
-                self.print(self.ERROR_NO_SUCH_TABLE, first_part)
-                return False
-            prop_index = self._get_proposer_index(table_index, last_part)
-            if prop_index is None:
-                self.print(self.ERROR_NO_SUCH_COLUMN, last_part)
-                return False
-        else:
-            # target == table or target == column
-            table_index = self._get_table_index(last_part)
-            prop_index = 0
-            if table_index is None:
-                # not table, perhaps it's column
-                prop_index = self._get_proposer_index(self.table_index, last_part)
-                if prop_index is None:
-                    # it's neither
-                    self.print(self.ERROR_NO_SUCH_TABLE_OR_COLUMN, last_part)
-                    return False
+        (table_index, prop_index) = self._get_table_and_column(target)
+        if prop_index is None:
+            return False
         if table_index is not None:
             self._set_table_index(table_index)
         self.proposer_index = prop_index
@@ -572,7 +609,7 @@ information about the columns in the current table. Use 'peek',
             self.proposers = None
         if self.proposers is None:
             columns = self._column_metadata()
-            props = everything_factory(self.config).get_proposers(
+            props = everything_factory(self.config, self.metadata).get_proposers(
                 columns, self.sync_engine
             )
             sorted_props = sorted(props, key=lambda g: g.fit(9999))
@@ -700,16 +737,6 @@ information about the columns in the current table. Use 'peek',
                 if k in actual:
                     self._get_custom_queries_from(out, v, actual[k])
 
-    def _get_aggregate_query(self, gens: list[Proposer], table_name: str) -> str | None:
-        clauses = [
-            f'{q["clause"]} AS {n}'
-            for gen in gens
-            for n, q in or_default(gen.select_aggregate_clauses(), {}).items()
-        ]
-        if not clauses:
-            return None
-        return f"SELECT {', '.join(clauses)} FROM {table_name}"
-
     def _print_select_aggregate_query(self, table_name: str, prop: Proposer) -> None:
         """
         Print the select aggregate query and all the values it gets in this case.
@@ -745,7 +772,7 @@ information about the columns in the current table. Use 'peek',
                     table_name,
                     n,
                 )
-        select_q = self._get_aggregate_query([prop], table_name)
+        select_q = get_aggregate_query([prop], table_name, self.engine)
         self.print("{0}; providing the following values: {1}", select_q, vals)
 
     def _get_column_data(
@@ -757,7 +784,7 @@ information about the columns in the current table. Use 'peek',
         with self.sync_engine.connect() as connection:
             result = connection.execute(
                 sqlalchemy.text(
-                    f"SELECT {columns_string} FROM {self.table_name()}"
+                    f'SELECT {columns_string} FROM "{self.table_name()}"'
                     f" WHERE {pred} ORDER BY RANDOM() LIMIT {count}"
                 )
             )

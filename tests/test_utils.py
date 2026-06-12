@@ -9,12 +9,8 @@ from unittest.mock import MagicMock, call, patch
 from sqlalchemy import Column, Integer, insert
 from sqlalchemy.orm import declarative_base
 
-from datafaker.utils import (
-    download_table,
-    generators_require_stats,
-    import_file,
-    read_config_file,
-)
+from datafaker.db_utils import download_table
+from datafaker.utils import generators_require_stats, import_file, read_config_file
 from tests.utils import DatafakerTestCase, RequiresDBTestCase
 
 # pylint: disable=invalid-name
@@ -23,7 +19,7 @@ Base = declarative_base()
 metadata = Base.metadata
 
 
-class MyTable(Base):  # type: ignore
+class MyTable(Base):
     """A SQLAlchemy model."""
 
     __tablename__ = "mytable"
@@ -316,17 +312,15 @@ class TestUtils(DatafakerTestCase):
         logger.error.assert_has_calls(
             [
                 call(
-                    "Syntax error in argument %s of %s: %s\n%s%s",
-                    "b",
-                    "story_generators[0]",
+                    "Syntax error in %s: %s\n%s%s",
+                    "story_generators[0]['kwargs']['b']",
                     "unterminated string literal (detected at line 1)",
                     "'unclosed",
                     "\n ^",
                 ),
                 call(
-                    "Syntax error in argument %d of %s: %s\n%s%s",
-                    1,
-                    "tables.things.row_generators[0]",
+                    "Syntax error in %s: %s\n%s%s",
+                    "tables['things']['row_generators'][0]['args'][0]",
                     "invalid syntax",
                     "1 2",
                     "\n   ^",

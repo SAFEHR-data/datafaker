@@ -2,13 +2,19 @@
 
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
-from typing import Any, Sequence, Union
+from collections.abc import Mapping, Sequence
+from typing import Any, Union
 
 import mimesis
 import mimesis.locales
-import sqlalchemy
-from sqlalchemy import Column, Engine, text
+from sqlalchemy import Column, Engine, Join, Table, func, select
+from sqlalchemy.exc import DatabaseError
+from sqlalchemy.sql.selectable import NamedFromClause
+from sqlalchemy.sql.visitors import (
+    ExternallyTraversible,
+    replacement_traverse,
+    traverse,
+)
 from sqlalchemy.types import Integer, Numeric, String, TypeEngine
 from typing_extensions import Self
 
@@ -66,6 +72,10 @@ class Proposer(ABC):
         to the generator function.
         """
 
+    def nominal_args(self) -> list[str]:
+        """Get the args the generator wants to be called with."""
+        return []
+
     def select_aggregate_clauses(self) -> dict[str, dict[str, str]]:
         """
         Get the SQL clauses to add to a SELECT ... FROM {table} query.
@@ -103,6 +113,23 @@ class Proposer(ABC):
 
         Keys should be chosen to minimize the chances of clashing with other queries,
         for example "auto__{table}__{column}__{queryname}"
+
+        In order for your query to work for all database types, alias each table
+        referenced in both FROM and SELECT clauses, only use the aliased value,
+        and double quote all table names.
+
+        The following are OK:
+
+        - SELECT AVG(column) FROM "table" WHERE column > 3
+        - SELECT AVG(a.column) FROM "table" AS a WHERE a.column > 3
+
+        The following are not OK:
+
+        - SELECT AVG("table".column) FROM "table" WHERE "table".column > 3
+        - SELECT AVG(a.column) FROM table AS a WHERE a.column > 3
+
+        Or, if you are using the SQLAlchemy ORM, pass the query through
+          ``duckdb_workaround`` before compiling it.
         """
         return {}
 
@@ -177,9 +204,8 @@ class PredefinedProposer(Proposer):
         self._table_name = table_name
         self._name: str = generator_object["name"]
         self._kwn: dict[str, str] = generator_object.get("kwargs", {})
+        self._asn: list[str] = generator_object.get("args", [])
         self._src_stats_mentioned = self._get_src_stats_mentioned(self._kwn)
-        # Need to deal with this somehow (or remove it from the schema)
-        self._argn: list[str] = generator_object.get("args", [])
         self._select_aggregate_clauses: dict[str, dict[str, str | Any]] = {}
         self._custom_queries = {}
         for sstat in config.get("src-stats", []):
@@ -222,8 +248,12 @@ class PredefinedProposer(Proposer):
         return self._name
 
     def nominal_kwargs(self) -> dict[str, str]:
-        """Get the arguments to be entered into ``config.yaml``."""
+        """Get the keyword arguments to be entered into ``config.yaml``."""
         return self._kwn
+
+    def nominal_args(self) -> list[str]:
+        """Get the position arguments to be entered into ``config.yaml``."""
+        return self._asn
 
     def select_aggregate_clauses(self) -> dict[str, dict[str, str]]:
         """Get the query fragments the generators need to call."""
@@ -260,6 +290,57 @@ class ProposerFactory(ABC):
         """Get the proposers appropriate to these columns."""
 
 
+class TableReplacer:
+    """
+    Replaces tables with aliased tables.
+
+    We need this to work around a DuckDB problem:
+    If we are using the ORM code to select a column ``c`` from a table
+    ``t.parquet``, then DuckDB expects the SQL
+    ``SELECT "t.parquet".c FROM "t.parquet"`` if ``t.parquet`` is an actual
+    table in the database, or ``SELECT t.c FROM "t.parquet"`` if ``t.parquet``
+    names a file. The best way around this seems to be to use an aliased table,
+    which works in both cases: ``SELECT a.c FROM "t.parquet" AS a``, and the
+    best way for that to happen seems to be to use ``replacement_traverse``.
+    """
+
+    def __init__(self, table: Table) -> None:
+        """Initialise with the table to be aliased."""
+        self.table = table
+        self.atable = table.alias(f"_{table.name}__alias")
+
+    def replace(
+        self, obj: ExternallyTraversible, **_kw: Any
+    ) -> ExternallyTraversible | None:
+        """Replace columns with the same column on the aliased table."""
+        if isinstance(obj, Column):
+            if obj.table == self.table:
+                return self.atable.columns[obj.name]
+        elif isinstance(obj, Table):
+            return self.atable
+        return None
+
+    def aliased_table(self) -> NamedFromClause:
+        """Get the aliased table."""
+        return self.atable
+
+
+def duckdb_workaround(stmt: ExternallyTraversible) -> Any:
+    """
+    Transform a SQLAlchemy ORM statement to work around DuckDB issues.
+
+    :param stmt: An ORM statement, such as the return value of ``select``.
+    :return: An ORM statement, transformed if necessary.
+    """
+    tables: list[Table] = []
+    traverse(stmt, {}, {"table": tables.append})
+    for t in tables:
+        tr = TableReplacer(t)
+        opts: Mapping[str, Any] = {}
+        stmt = replacement_traverse(stmt, opts, tr.replace)  # type: ignore
+    return stmt
+
+
 def fit_from_buckets(xs: Sequence[NumericType], ys: Sequence[NumericType]) -> float:
     """Calculate the fit by comparing a pair of lists of buckets."""
     sum_diff_squared = sum(map(lambda t, a: (t - a) * (t - a), xs, ys))
@@ -279,20 +360,23 @@ class Buckets:
     def __init__(
         self,
         engine: Engine,
-        table_name: str,
-        column_name: str,
+        table: Table | Join,
+        column: Any,
         mean: float,
         stddev: float,
         count: int,
     ):
         """Initialise a Buckets object."""
+        bottom = mean - 2 * stddev
+        width = stddev / 2
         with engine.connect() as connection:
             raw_buckets = connection.execute(
-                text(
-                    f"SELECT COUNT({column_name}) AS f,"
-                    f" FLOOR(({column_name} - {mean - 2 * stddev})/{stddev / 2}) AS b"
-                    f" FROM {table_name} GROUP BY b"
+                select(
+                    func.count(column).label("f"),  # pylint: disable=not-callable
+                    ((func.floor(column) - bottom) / width).label("b"),
                 )
+                .select_from(table)
+                .group_by("b")
             )
             self.buckets: Sequence[int] = [0] * 10
             for rb in raw_buckets:
@@ -313,7 +397,7 @@ class Buckets:
 
     @classmethod
     def make_buckets(
-        cls, engine: Engine, table_name: str, column_name: str
+        cls, engine: Engine, table: Table | Join, column: Any
     ) -> Self | None:
         """
         Construct a Buckets object.
@@ -323,13 +407,21 @@ class Buckets:
         a standard deviation wide (except for the end two that extend to
         infinity). Each bucket will be set to the count of the number of values
         in the column within that bucket.
+
+        :param engine: SQLAlchemy engine.
+        :param table: SQLAlchemy table (or joined tables) to pull data from.
+        :param column: SQLAlchemy column or expression to measure.
         """
         with engine.connect() as connection:
             result = connection.execute(
-                text(
-                    f"SELECT AVG({column_name}) AS mean,"
-                    f" STDDEV({column_name}) AS stddev,"
-                    f" COUNT({column_name}) AS count FROM {table_name}"
+                duckdb_workaround(
+                    select(
+                        func.avg(column).label("mean"),
+                        func.stddev(column).label("stddev"),
+                        func.count(column).label(  # pylint: disable=not-callable
+                            "count"
+                        ),
+                    ).select_from(table)
                 )
             ).first()
             if result is None or result.stddev is None or getattr(result, "count") < 2:
@@ -337,13 +429,13 @@ class Buckets:
         try:
             buckets = cls(
                 engine,
-                table_name,
-                column_name,
+                table,
+                column,
                 result.mean,
                 result.stddev,
                 getattr(result, "count"),
             )
-        except sqlalchemy.exc.DatabaseError as exc:
+        except DatabaseError as exc:
             logger.debug("Failed to instantiate Buckets object: %s", exc)
             return None
         return buckets
@@ -420,7 +512,7 @@ class ConstantProposerFactory(ProposerFactory):
     """Propose just the null generator."""
 
     def get_proposers(
-        self, columns: list[Column], _engine: Engine
+        self, columns: list[Column], engine: Engine
     ) -> Sequence[Proposer]:
         """Get the generators appropriate for these columns."""
         if len(columns) != 1:

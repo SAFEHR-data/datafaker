@@ -29,21 +29,23 @@ from sqlalchemy.sql import Executable, sqltypes
 from typing_extensions import Self
 
 from datafaker import providers
-from datafaker.parquet2orm import get_parquet_orm
-from datafaker.settings import get_source_dsn, get_source_schema
-from datafaker.utils import (
+from datafaker.db_utils import (
     MaybeAsyncEngine,
     constraint_name,
     create_db_engine,
     download_table,
-    get_columns_assigned,
     get_metadata,
-    get_property,
-    get_property_or_none,
     get_related_table_names,
-    get_row_generators,
     get_sync_engine,
     get_vocabulary_table_names,
+)
+from datafaker.parquet2orm import get_parquet_orm
+from datafaker.settings import get_source_dsn, get_source_schema
+from datafaker.utils import (
+    get_columns_assigned,
+    get_property,
+    get_property_or_none,
+    get_row_generators,
     logger,
     make_primary_key_name,
     split_column_full_name,
@@ -300,7 +302,7 @@ def _integer_generator(column: Column) -> tuple[str, dict[str, str]]:
 
 _YEAR_SUMMARY_QUERY = (
     "SELECT MIN(y) AS start, MAX(y) AS end FROM "
-    "(SELECT EXTRACT(YEAR FROM {column}) AS y FROM {table}) AS years"
+    '(SELECT EXTRACT(YEAR FROM {column}) AS y FROM "{table}") AS years'
 )
 
 
@@ -343,7 +345,7 @@ def get_result_mappings(
     return kw
 
 
-_COLUMN_TYPE_TO_GENERATOR_INFO = {
+_COLUMN_TYPE_TO_GENERATOR_INFO: dict[Any, GeneratorInfo] = {
     sqltypes.Boolean: GeneratorInfo(
         generator="generic.development.boolean",
         choice=True,
@@ -428,6 +430,9 @@ def _get_generator_and_arguments(column: Column) -> tuple[str | None, dict[str, 
 
     generator_arguments: dict[str, str] = {}
     if callable(generator_function):
+        # These assertions persuade ty that the call is OK
+        assert generator_function is not None
+        assert not isinstance(generator_function, str)
         (generator_function, generator_arguments) = generator_function(column)
     return generator_function, generator_arguments
 
@@ -477,7 +482,7 @@ def _get_generator_for_table(
     constraints: Sequence[ColumnCollectionConstraint] = unique_constraints
     if 1 < len(primary_keys):
         primary_constraint = PrimaryKeyConstraint(
-            columns=primary_keys, name=make_primary_key_name(table.name)
+            *primary_keys, name=make_primary_key_name(table.name)
         )
         constraints = unique_constraints + [primary_constraint]
     column_choices = make_column_choices(table_config)
@@ -754,7 +759,7 @@ class DbConnection:
     async def table_row_count(self, table_name: str) -> int:
         """Count the number of rows in the named table."""
         with await self.execute_raw_query(
-            text(f"SELECT COUNT(*) FROM {table_name}")
+            text(f'SELECT COUNT(*) FROM "{table_name}"')
         ) as result:
             return int(result.scalar_one())
 

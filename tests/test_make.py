@@ -48,7 +48,8 @@ class TestMakeGenerators(GeneratesDBTestCase):
             },
         }
         self.generate_data(config, num_passes=3)
-        with self.dst_sync_engine.connect() as conn:
+        assert self.dst_engine is not None
+        with self.dst_engine.connect() as conn:
             stmt = select(self.metadata.tables["player"])
             rows = conn.execute(stmt).mappings().fetchall()
             for row in rows:

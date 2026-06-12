@@ -483,7 +483,7 @@ Type 'help data' for examples."""
         with self.sync_engine.connect() as connection:
             result = connection.execute(
                 sqlalchemy.text(
-                    f"SELECT {column} FROM {self.table_name()}"
+                    f'SELECT {column} FROM "{self.table_name()}"'
                     f" {where} ORDER BY RANDOM() LIMIT {count}"
                 )
             )
@@ -498,7 +498,7 @@ Type 'help data' for examples."""
         with self.sync_engine.connect() as connection:
             result = connection.execute(
                 sqlalchemy.text(
-                    f"SELECT * FROM {self.table_name()} ORDER BY RANDOM() LIMIT {count}"
+                    f'SELECT * FROM "{self.table_name()}" ORDER BY RANDOM() LIMIT {count}'
                 )
             )
             if result is None:

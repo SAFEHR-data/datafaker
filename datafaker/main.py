@@ -1,6 +1,6 @@
 """Entrypoint for the datafaker package."""
 import asyncio
-import importlib
+import importlib.metadata
 import io
 import json
 import sys
@@ -17,6 +17,7 @@ from sqlalchemy.exc import InternalError, OperationalError
 from typer import Argument, Exit, Option, Typer
 
 from datafaker.create import create_db_data, create_db_tables, create_db_vocab
+from datafaker.db_utils import generated_tables, sorted_non_vocabulary_tables
 from datafaker.dump import (
     CsvTableWriter,
     ParquetTableWriter,
@@ -41,15 +42,13 @@ from datafaker.settings import (
 from datafaker.utils import (
     CONFIG_SCHEMA_PATH,
     conf_logger,
-    generated_tables,
     generators_require_stats,
     get_flag,
     logger,
     read_config_file,
-    sorted_non_vocabulary_tables,
 )
 
-from .serialize_metadata import dict_to_metadata
+from .serialize_metadata import dict_to_metadata, should_ignore_fk
 
 # pylint: disable=too-many-arguments
 
@@ -98,10 +97,21 @@ def load_metadata_config(
             return {}
         tables_dict = meta_dict.get("tables", {})
         if config is not None and "tables" in config:
+            tables_config = config["tables"]
             # Remove ignored tables
-            for name, table_config in config.get("tables", {}).items():
+            for name, table_config in tables_config.items():
                 if get_flag(table_config, "ignore"):
                     tables_dict.pop(name, None)
+            # Remove foreign keys to ignored tables
+            for table_meta in tables_dict.values():
+                for column_meta in table_meta.get("columns", {}).values():
+                    if isinstance(column_meta, dict) and "foreign_keys" in column_meta:
+                        filtered_fks = [
+                            fk
+                            for fk in column_meta["foreign_keys"]
+                            if not should_ignore_fk(tables_config, fk)
+                        ]
+                        column_meta["foreign_keys"] = filtered_fks
         return meta_dict
 
 
@@ -823,6 +833,7 @@ def list_tables(
 @app.command()
 def version() -> None:
     """Display version information."""
+    assert __package__ is not None
     logger.info(
         "%s version %s",
         __package__,
