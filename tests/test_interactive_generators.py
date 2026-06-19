@@ -1,14 +1,19 @@
 """ Tests for the configure-generators command. """
 import copy
 import re
+import sys
 from collections.abc import MutableMapping
+from importlib import resources
+from pathlib import Path
 from typing import Any, Iterable
 
-from sqlalchemy import Connection, MetaData, select
+import yaml
+from sqlalchemy import Connection, MetaData, func, select
 
-from datafaker.generators.choice import ChoiceGeneratorFactory
 from datafaker.interactive.base import DbCmd
 from datafaker.interactive.generators import GeneratorCmd
+from datafaker.proposers.choice import ChoiceProposerFactory
+from datafaker.proposers.intervals import SecondsDifference
 from tests.utils import (
     GeneratesDBTestCase,
     RequiresDBTestCase,
@@ -162,7 +167,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
                 gc.config["src-stats"][0]["query"],
                 (
                     f"SELECT AVG({column}) AS mean__{column}, STDDEV({column})"
-                    f" AS stddev__{column} FROM {table}"
+                    f' AS stddev__{column} FROM "{table}"'
                 ),
             )
 
@@ -186,7 +191,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
                 gc.config["src-stats"][0]["query"],
                 (
                     f"SELECT AVG({column}) AS mean__{column}, STDDEV({column})"
-                    f" AS stddev__{column} FROM {table}"
+                    f' AS stddev__{column} FROM "{table}"'
                 ),
             )
 
@@ -222,7 +227,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertEqual(
                 gc.config["src-stats"][0]["query"],
                 (
-                    f"SELECT {column} AS value FROM {table}"
+                    f'SELECT {column} AS value FROM "{table}"'
                     f" WHERE {column} IS NOT NULL"
                     f" GROUP BY value ORDER BY COUNT({column}) DESC"
                 ),
@@ -386,7 +391,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
                 gc.config["src-stats"][0]["query"],
                 (
                     "SELECT AVG(frequency) AS mean__frequency,"
-                    " STDDEV(frequency) AS stddev__frequency FROM string"
+                    ' STDDEV(frequency) AS stddev__frequency FROM "string"'
                 ),
             )
 
@@ -454,7 +459,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertEqual(len(gc.config["src-stats"]), 1)
             self.assertEqual(gc.config["src-stats"][0]["name"], "auto__string")
             select_match = re.match(
-                r"SELECT (.*) FROM string", gc.config["src-stats"][0]["query"]
+                r'SELECT (.*) FROM "string"', gc.config["src-stats"][0]["query"]
             )
             assert (
                 select_match is not None
@@ -546,7 +551,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             gc.do_next(f"string.{column}")
             gc.do_propose("")
             proposals = gc.get_proposals()
-            gc.do_set(str(proposals[f"{generator}"][0]))
+            gc.do_set(str(proposals[generator][0]))
             gc.do_quit("")
             src_stats = {stat["name"]: stat["query"] for stat in gc.config["src-stats"]}
             self.assertEqual(src_stats["kraken"], config["src-stats"][0]["query"])
@@ -566,6 +571,87 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             table_names = {m[1][0] for m in gc.messages}
             self.assertIn("model", table_names)
             self.assertNotIn("string", table_names)
+
+
+class ConfigureGeneratorsWithSrc2Tests(GeneratesDBTestCase):
+    """Test `configure-generators` with the `src2.dump` database."""
+
+    dump_file_path = "src2.dump"
+    database_name = "src"
+    schema_name = "public"
+    use_temporary_cwd = True
+    copy_files = ["row_generators.py", "story_generators.py"]
+    copy_from_directory = Path("examples")
+
+    def _get_cmd(self, config: MutableMapping[str, Any]) -> TestGeneratorCmd:
+        """Get the command we are using for this test case."""
+        return TestGeneratorCmd(
+            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
+        )
+
+    def _get_config(self) -> dict[Any, Any]:
+        test_module = resources.files(sys.modules["tests"])
+        with test_module.joinpath("examples/example_config2.yaml").open(
+            encoding="utf-8",
+        ) as config_fh:
+            cy = yaml.load(config_fh, yaml.SafeLoader)
+            assert isinstance(cy, dict)
+            return cy
+
+    def test_intervals_end_to_end(self) -> None:
+        """Test that if an interval end is applicable it gets proposed and works."""
+        table = "hospital_visit"
+        column = "visit_end"
+        config = self._get_config()
+        # let's not test the uniqueness failures!
+        config["tables"]["unique_constraint_test"]["num_rows_per_pass"] = 0
+        config["tables"]["unique_constraint_test2"]["num_rows_per_pass"] = 0
+        with self._get_cmd(config) as gc:
+            # set up our interval proposer
+            gc.do_next(f"{table}.{column}")
+            gc.do_unmerge("visit_start")
+            gc.reset()
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            provider_name = (
+                "generic.anchored_provider.normal_date [anchored to visit_start]"
+            )
+            self.assertIn(provider_name, proposals)
+            proposals = gc.get_proposals()
+            gc.do_set(str(proposals[provider_name][0]))
+            gc.do_quit("")
+            self.generate_data(config, num_passes=15)
+        with self.sync_engine.connect() as conn:
+            src_diff = SecondsDifference(
+                self.metadata.tables[table].c[column],
+                self.metadata.tables[table].c["visit_start"],
+            )
+            src_result = conn.execute(
+                select(
+                    func.avg(src_diff).label("mean"), func.stddev(src_diff).label("sd")
+                ).select_from(self.metadata.tables[table])
+            ).one()
+        assert self.dst_engine is not None
+        with self.dst_engine.connect() as conn:
+            dst_diff = SecondsDifference(
+                self.dst_metadata.tables[table].c[column],
+                self.dst_metadata.tables[table].c["visit_start"],
+            )
+            dst_result = conn.execute(
+                select(
+                    func.avg(dst_diff).label("mean"), func.stddev(dst_diff).label("sd")
+                ).select_from(self.dst_metadata.tables[table])
+            ).one()
+        self.assertAlmostEqual(
+            src_result.mean, dst_result.mean, delta=src_result.mean * 0.3
+        )
+        self.assertAlmostEqual(src_result.sd, dst_result.sd, delta=src_result.sd * 0.5)
+
+
+class ConfigureGeneratorsWithSrc2DuckDbTests(ConfigureGeneratorsWithSrc2Tests):
+    """Test `configure-generators` with `src2.dump` with DuckDB."""
+
+    database_type = TestDuckDb
 
 
 class ChoiceMeasurementTableStats:
@@ -593,8 +679,8 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        ChoiceGeneratorFactory.SAMPLE_COUNT = 500
-        ChoiceGeneratorFactory.SUPPRESS_COUNT = 5
+        ChoiceProposerFactory.SAMPLE_COUNT = 500
+        ChoiceProposerFactory.SUPPRESS_COUNT = 5
 
     def _get_cmd(self, config: MutableMapping[str, Any]) -> TestGeneratorCmd:
         return TestGeneratorCmd(
@@ -641,7 +727,8 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
             gc.do_quit("")
             self.generate_data(gc.config, num_passes=200)
             # all generation possibilities should be present
-            with self.dst_sync_engine.connect() as conn:
+            assert self.dst_engine is not None
+            with self.dst_engine.connect() as conn:
                 stats = ChoiceMeasurementTableStats(self.metadata, conn)
                 self.assertSetEqual(stats.ones, {1, 4})
                 self.assertSetEqual(stats.twos, {2, 3})
@@ -659,7 +746,8 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
             gc.do_set(str(proposals["dist_gen.zipf_choice"][0]))
             gc.do_quit("")
             self.generate_data(gc.config, num_passes=200)
-        with self.dst_sync_engine.connect() as conn:
+        assert self.dst_engine is not None
+        with self.dst_engine.connect() as conn:
             stmt = select(self.metadata.tables[table_name])
             rows = conn.execute(stmt).fetchall()
             ones = set()
@@ -738,7 +826,8 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
             gc.do_set(str(prop[0]))
             gc.do_quit("")
             self.generate_data(gc.config, num_passes=200)
-        with self.dst_sync_engine.connect() as conn:
+        assert self.dst_engine is not None
+        with self.dst_engine.connect() as conn:
             stats = ChoiceMeasurementTableStats(self.metadata, conn)
             # all generation possibilities should be present
             self.assertSetEqual(stats.ones, {1, 4})
@@ -786,7 +875,8 @@ class GeneratorTests(GeneratesDBTestCase):
             config = gc.config
             self.generate_data(config, num_passes=3)
         # Test that each missingness pattern is present in the database
-        with self.dst_sync_engine.connect() as conn:
+        assert self.dst_engine is not None
+        with self.dst_engine.connect() as conn:
             # select(self.metadata.tables["string"].c["position", "frequency"]) would be nicer
             # but mypy doesn't like it
             stmt = select(
@@ -872,7 +962,8 @@ class GeneratorTests(GeneratesDBTestCase):
             gc.do_quit("")
             config = gc.config
             self.generate_data(config, num_passes=15)
-        with self.dst_sync_engine.connect() as conn:
+        assert self.dst_engine is not None
+        with self.dst_engine.connect() as conn:
             stmt = select(self.metadata.tables[table].c[column])
             rows = conn.execute(stmt).scalars().fetchall()
             self.assert_are_truncated_to(rows, 20)

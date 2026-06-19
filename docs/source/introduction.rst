@@ -70,12 +70,8 @@ And let's populate it with the fake data:
 
     export DST_DSN='postgresql://tim:password@localhost/fake_pagila'
     export DST_SCHEMA='public'
-    datafaker create-generators
     datafaker create-tables
     datafaker create-data
-
-``create-generators`` creates a Python file called ``df.py``.
-You can edit this file if you want, but it is much easier to edit ``config.yaml`` and call ``datafaker create-generators --force`` to regenerate this file.
 
 You will notice that ``create-tables`` produces a couple of warnings, and PostgreSQL complains when ``datafaker`` tries to create the data.
 The warnings are that ``datafaker`` doesn't understand the special PostgresSQL types ``TSVECTOR`` and ``ARRAY``, so it doesn't know how to generate data for those columns.
@@ -313,7 +309,6 @@ option to create multiple rows of output.
 
 .. code-block:: shell
 
-  datafaker create-generators --force
   datafaker create-data --num-passes 3
 
 Now let's have a look at what data we have in the destination database:
@@ -589,7 +584,6 @@ followed by re-generating the data:
   Do you want to save this configuration?
   (yes/no/cancel) yes
   $ datafaker remove-data --yes
-  $ datafaker create-generators --force
   $ datafaker create-data --num-passes 3
   $ datafaker dump-data --output - --table film
   description,film_id,fulltext,language_id,last_update,length,original_language_id,rating,release_year,rental_duration,rental_rate,replacement_cost,special_features,title

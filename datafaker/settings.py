@@ -83,7 +83,7 @@ class Settings(BaseSettings):
 @lru_cache(1)
 def get_settings() -> Settings:
     """Return the same Settings object every call."""
-    return Settings()
+    return Settings()  # ty: ignore[missing-argument]
 
 
 def get_source_dsn() -> str:

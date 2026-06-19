@@ -74,10 +74,10 @@ class ConfigureTablesSrcTests(ConfigureTablesTests):
             self.assertSequenceEqual(
                 tc.rows,
                 [
-                    ["id", "INTEGER", True, False, ""],
-                    ["a", "BOOLEAN", False, False, ""],
-                    ["b", "BOOLEAN", False, False, ""],
-                    ["c", "TEXT", False, False, ""],
+                    ["id", "INTEGER", True, False, "", ""],
+                    ["a", "BOOLEAN", False, False, "", ""],
+                    ["b", "BOOLEAN", False, False, "", ""],
+                    ["c", "TEXT", False, False, "", ""],
                 ],
             )
 

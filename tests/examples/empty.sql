@@ -1,0 +1,2 @@
+CREATE DATABASE empty WITH TEMPLATE template0 ENCODING = 'UTF8' LOCALE = 'en_US.utf8';
+ALTER DATABASE empty OWNER TO postgres;

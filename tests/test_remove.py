@@ -6,8 +6,7 @@ from sqlalchemy.engine import Connection
 
 from datafaker.remove import remove_db_data, remove_db_tables, remove_db_vocab
 from datafaker.serialize_metadata import metadata_to_dict
-from datafaker.settings import Settings
-from tests.utils import RequiresDBTestCase
+from tests.utils import RequiresDBTestCase, get_test_settings
 
 
 class RemoveThingsTestCase(RequiresDBTestCase):
@@ -27,7 +26,7 @@ class RemoveThingsTestCase(RequiresDBTestCase):
     @patch("datafaker.settings.get_settings")
     def test_remove_data(self, mock_get_settings: MagicMock) -> None:
         """Test that data can be removed from non-vocabulary tables."""
-        mock_get_settings.return_value = Settings(
+        mock_get_settings.return_value = get_test_settings(
             src_dsn=self.dsn,
             dst_dsn=self.dsn,
         )
@@ -50,7 +49,7 @@ class RemoveThingsTestCase(RequiresDBTestCase):
     @patch("datafaker.settings.get_settings")
     def test_remove_vocab(self, mock_get_settings: MagicMock) -> None:
         """Test that vocabulary tables can be removed."""
-        mock_get_settings.return_value = Settings(
+        mock_get_settings.return_value = get_test_settings(
             src_dsn=self.dsn,
             dst_dsn=self.dsn,
         )
@@ -78,7 +77,7 @@ class RemoveThingsTestCase(RequiresDBTestCase):
     @patch("datafaker.settings.get_settings")
     def test_remove_tables(self, mock_get_settings: MagicMock) -> None:
         """Test that destination tables can be removed."""
-        mock_get_settings.return_value = Settings(
+        mock_get_settings.return_value = get_test_settings(
             src_dsn=self.dsn,
             dst_dsn=self.dsn,
         )

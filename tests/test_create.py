@@ -5,27 +5,37 @@ import random
 import tempfile
 from collections import Counter
 from pathlib import Path
+from tempfile import mkdtemp
 from typing import Any, Generator, Mapping, Tuple
 from unittest.mock import MagicMock, call, patch
 
 import duckdb
 import pandas as pd
 from sqlalchemy import Connection, Engine, select
-from sqlalchemy.schema import MetaData, Table
+from sqlalchemy.schema import Column, MetaData, Table
+from sqlalchemy.types import Integer
 
-from datafaker.base import TableGenerator
 from datafaker.create import (
     create_db_data_into,
     create_db_tables,
+    create_db_tables_into,
     create_db_vocab,
     populate,
 )
-from datafaker.serialize_metadata import metadata_to_dict
-from tests.utils import DatafakerTestCase, GeneratesDBTestCase
+from datafaker.db_utils import (
+    create_db_engine_dst,
+    get_sync_engine,
+    sorted_non_vocabulary_tables,
+)
+from datafaker.make import FunctionCall, StoryGeneratorInfo, _get_generator_for_table
+from datafaker.populate import TableGenerator
+from datafaker.serialize_metadata import dict_to_metadata, metadata_to_dict
+from datafaker.settings import SettingsError
+from tests.utils import DatafakerTestCase, GeneratesDBTestCase, RequiresDBTestCase
 
 
 class TestCreate(GeneratesDBTestCase):
-    """Test the make_table_generators function."""
+    """Test that we can create data."""
 
     dump_file_path = "instrument.sql"
     database_name = "instrument"
@@ -51,7 +61,8 @@ class TestCreate(GeneratesDBTestCase):
             )
             create_db_tables(self.metadata)
             create_db_vocab(self.metadata, meta_dict, config, Path("./tests/examples"))
-        with self.dst_sync_engine.connect() as conn:
+        assert self.dst_engine is not None
+        with self.dst_engine.connect() as conn:
             stmt = select(self.metadata.tables["player"])
             rows = list(conn.execute(stmt).mappings().fetchall())
             self.assertEqual(len(rows), 3)
@@ -65,12 +76,13 @@ class TestCreate(GeneratesDBTestCase):
             self.assertEqual(rows[2].given_name, "Mus")
             self.assertEqual(rows[2].family_name, "Al-Said")
 
-    def test_make_table_generators(self) -> None:
+    def test_column_defaults_in_stories(self) -> None:
         """Test that we can handle column defaults in stories."""
         random.seed(56)
         config: Mapping[str, Any] = {}
         self.generate_data(config, num_passes=2)
-        with self.dst_sync_engine.connect() as conn:
+        assert self.dst_engine is not None
+        with self.dst_engine.connect() as conn:
             stmt = select(self.metadata.tables["string"])
             rows = list(conn.execute(stmt).mappings().fetchall())
             a = rows[0]
@@ -96,8 +108,56 @@ class TestCreate(GeneratesDBTestCase):
 class TestPopulate(DatafakerTestCase):
     """Test create.populate."""
 
+    def test_multicolumn_primary_key(self) -> None:
+        """Test that multi-primary-key columns get generated correctly."""
+        tmpdir = mkdtemp()
+        dsn = f"duckdb:///{tmpdir}/out.parquet"
+        engine = get_sync_engine(create_db_engine_dst(dsn))
+        metadata = MetaData()
+        table = Table("tab1", metadata)
+        table.append_column(Column("pk1", Integer(), nullable=False, primary_key=True))
+        table.append_column(Column("pk2", Integer(), nullable=False, primary_key=True))
+        create_db_tables_into(metadata, dsn)
+        with engine.connect() as conn:
+            table_gen = TableGenerator(
+                conn,
+                _get_generator_for_table(
+                    {
+                        "row_generators": [
+                            {
+                                "columns_assigned": ["pk1"],
+                                "name": "increment",
+                            },
+                            {
+                                "columns_assigned": ["pk2"],
+                                "name": "increment",
+                            },
+                        ]
+                    },
+                    table,
+                ),
+                5,
+            )
+
+            def mk_increment():
+                v = [0]
+
+                def increment():
+                    v[0] += 1
+                    return v[0]
+
+                return increment
+
+            context = {
+                "increment": mk_increment(),
+            }
+            table_gen.set_context(context)
+            row_counts = populate(conn, [table], {table.name: table_gen}, [], context)
+            self.assertEqual(row_counts["tab1"], 1)
+
     # pylint: disable=too-many-locals
-    def test_populate(self) -> None:
+    @patch("datafaker.populate._get_object")
+    def test_populate(self, mock_get_object: MagicMock) -> None:
         """Test the populate function."""
         table_name = "table_name"
 
@@ -105,9 +165,7 @@ class TestPopulate(DatafakerTestCase):
             """Mock story."""
             yield table_name, {}
 
-        def mock_story_gen(_: Any) -> Generator[Tuple[str, dict], None, None]:
-            """A function that returns mock stories."""
-            return story()
+        mock_get_object.return_value = story
 
         for num_stories_per_pass, num_rows_per_pass, num_initial_rows in itt.product(
             [0, 2], [0, 3], [0, 17]
@@ -126,13 +184,13 @@ class TestPopulate(DatafakerTestCase):
                     {table_name: num_initial_rows} if num_initial_rows > 0 else {}
                 )
 
-                story_generators: list[dict[str, Any]] = (
+                story_generators: list[StoryGeneratorInfo] = (
                     [
-                        {
-                            "function": mock_story_gen,
-                            "num_stories_per_pass": num_stories_per_pass,
-                            "name": "mock_story_gen",
-                        }
+                        StoryGeneratorInfo(
+                            "mock_story_gen name",
+                            FunctionCall("mock_story_gen", [], {}),
+                            num_stories_per_pass,
+                        )
                     ]
                     if num_stories_per_pass > 0
                     else []
@@ -220,7 +278,7 @@ class CreateReadsNoParquetTestCase(DatafakerTestCase):
     Otherwise there is a risk of leakage of source data.
     """
 
-    examples_dir = Path("tests/examples/duckdb")
+    examples_dir = Path("examples/duckdb")
     parquet_name = "fruit.parquet"
 
     def setUp(self) -> None:
@@ -302,6 +360,7 @@ class CreateReadsNoParquetTestCase(DatafakerTestCase):
         create_db_data_into(
             [MagicMock()],
             MagicMock(),
+            None,
             1,
             "duckdb:///:memory:data",
             None,
@@ -338,3 +397,124 @@ class CreateReadsNoParquetTestCase(DatafakerTestCase):
                 base_path=Path("base"),
             )
         assert file_uploader.return_value.load.called
+
+
+class CreateDataTestCase(RequiresDBTestCase):
+    """Tests for create-data."""
+
+    dump_file_path = "empty.sql"
+    database_name = "empty"
+    schema_name = "public"
+
+    def test_create_data_minimal(self) -> None:
+        """Test creating one table with one PK column."""
+        config: dict[str, Any] = {}
+        orm = {
+            "tables": {
+                "one": {
+                    "columns": {
+                        "id": {
+                            "primary": True,
+                            "type": "INTEGER",
+                        }
+                    }
+                }
+            }
+        }
+        metadata = dict_to_metadata(orm, config)
+        create_db_tables_into(metadata, self.dsn, self.schema_name)
+        generate_count = 4
+        row_counts = create_db_data_into(
+            sorted_non_vocabulary_tables(metadata, config),
+            config,
+            None,
+            generate_count,
+            self.dsn,
+            self.schema_name,
+            metadata,
+        )
+        with self.sync_engine.connect() as connection:
+            stmt = select(metadata.tables["one"])
+            rows = connection.execute(stmt).fetchall()
+            self.assertEqual(rows, [(1,), (2,), (3,), (4,)])
+        self.assertListEqual(list(row_counts.keys()), ["one"])
+        self.assertEqual(row_counts["one"], generate_count)
+
+    def test_unique_constraint_minimal(self) -> None:
+        """Test that unique constraints cause a failure with a constant provider."""
+        config = {
+            "tables": {
+                "one": {
+                    "row_generators": [
+                        {
+                            "name": "dist_gen.constant",
+                            "kwargs": {
+                                "value": 123,
+                            },
+                            "columns_assigned": ["tiger"],
+                        }
+                    ]
+                }
+            },
+            "max-unique-constraint-tries": 20,
+        }
+        orm = {
+            "tables": {
+                "one": {
+                    "columns": {
+                        "id": {
+                            "primary": True,
+                            "type": "INTEGER",
+                        },
+                        "tiger": {
+                            "type": "INTEGER",
+                        },
+                    },
+                    "unique": [{"name": "tiger_uniq", "columns": ["tiger"]}],
+                }
+            }
+        }
+        metadata = dict_to_metadata(orm, config)
+        create_db_tables_into(metadata, self.dsn, self.schema_name)
+        self.assertRaises(
+            RuntimeError,
+            create_db_data_into,
+            sorted_non_vocabulary_tables(metadata, config),
+            config,
+            None,
+            2,
+            self.dsn,
+            self.schema_name,
+            metadata,
+        )
+
+    def test_story_incorrect_name_minimal(self) -> None:
+        """Test we get a proper error message if the story generator module does not exist."""
+        config = {
+            "story_generators_module": "incorrect_module",
+        }
+        orm = {
+            "tables": {
+                "one": {
+                    "columns": {
+                        "id": {
+                            "primary": True,
+                            "type": "INTEGER",
+                        }
+                    }
+                }
+            }
+        }
+        metadata = dict_to_metadata(orm, config)
+        create_db_tables_into(metadata, self.dsn, self.schema_name)
+        self.assertRaises(
+            SettingsError,
+            create_db_data_into,
+            sorted_non_vocabulary_tables(metadata, config),
+            config,
+            None,
+            1,
+            self.dsn,
+            self.schema_name,
+            metadata,
+        )

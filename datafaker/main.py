@@ -1,6 +1,6 @@
 """Entrypoint for the datafaker package."""
 import asyncio
-import importlib
+import importlib.metadata
 import io
 import json
 import sys
@@ -17,6 +17,7 @@ from sqlalchemy.exc import InternalError, OperationalError
 from typer import Argument, Exit, Option, Typer
 
 from datafaker.create import create_db_data, create_db_tables, create_db_vocab
+from datafaker.db_utils import generated_tables, sorted_non_vocabulary_tables
 from datafaker.dump import (
     CsvTableWriter,
     ParquetTableWriter,
@@ -29,12 +30,7 @@ from datafaker.interactive import (
     update_missingness,
 )
 from datafaker.interactive.base import DbCmd
-from datafaker.make import (
-    make_src_stats,
-    make_table_generators,
-    make_tables_file,
-    make_vocabulary_tables,
-)
+from datafaker.make import make_src_stats, make_tables_file, make_vocabulary_tables
 from datafaker.remove import remove_db_data, remove_db_tables, remove_db_vocab
 from datafaker.settings import (
     SettingsError,
@@ -46,22 +42,18 @@ from datafaker.settings import (
 from datafaker.utils import (
     CONFIG_SCHEMA_PATH,
     conf_logger,
-    generated_tables,
     generators_require_stats,
     get_flag,
-    import_file,
     logger,
     read_config_file,
-    sorted_non_vocabulary_tables,
 )
 
-from .serialize_metadata import dict_to_metadata
+from .serialize_metadata import dict_to_metadata, should_ignore_fk
 
 # pylint: disable=too-many-arguments
 
 ORM_FILENAME: Final[str] = "orm.yaml"
 CONFIG_FILENAME: Final[str] = "config.yaml"
-DF_FILENAME: Final[str] = "df.py"
 STATS_FILENAME: Final[str] = "src-stats.yaml"
 
 app = Typer(no_args_is_help=True)
@@ -105,10 +97,21 @@ def load_metadata_config(
             return {}
         tables_dict = meta_dict.get("tables", {})
         if config is not None and "tables" in config:
+            tables_config = config["tables"]
             # Remove ignored tables
-            for name, table_config in config.get("tables", {}).items():
+            for name, table_config in tables_config.items():
                 if get_flag(table_config, "ignore"):
                     tables_dict.pop(name, None)
+            # Remove foreign keys to ignored tables
+            for table_meta in tables_dict.values():
+                for column_meta in table_meta.get("columns", {}).values():
+                    if isinstance(column_meta, dict) and "foreign_keys" in column_meta:
+                        filtered_fks = [
+                            fk
+                            for fk in column_meta["foreign_keys"]
+                            if not should_ignore_fk(tables_config, fk)
+                        ]
+                        column_meta["foreign_keys"] = filtered_fks
         return meta_dict
 
 
@@ -147,14 +150,18 @@ def create_data(
         help="The name of the ORM yaml file",
         dir_okay=False,
     ),
-    df_file: str = Option(
-        DF_FILENAME,
-        help="The name of the generators file. Must be in the current working directory.",
-        dir_okay=False,
-    ),
     config_file: Optional[Path] = Option(
         CONFIG_FILENAME,
         help="The configuration file",
+    ),
+    stats_file: Optional[Path] = Option(
+        None,
+        help=(
+            "Statistics file (output of make-stats); default is src-stats.yaml if the "
+            "config file references SRC_STATS, or None otherwise."
+        ),
+        show_default=False,
+        dir_okay=False,
     ),
     num_passes: int = Option(1, help="Number of passes (rows or stories) to make"),
 ) -> None:
@@ -178,12 +185,14 @@ def create_data(
     """
     logger.debug("Creating data.")
     config = read_config_file(config_file) if config_file is not None else {}
+    if stats_file is None and generators_require_stats(config):
+        stats_file = Path(STATS_FILENAME)
     orm_metadata = load_metadata_for_output(orm_file, config)
-    df_module = import_file(df_file)
     try:
         row_counts = create_db_data(
             sorted_non_vocabulary_tables(orm_metadata, config),
-            df_module,
+            config,
+            stats_file,
             num_passes,
             orm_metadata,
         )
@@ -202,6 +211,8 @@ def create_data(
         return
     except RuntimeError as e:
         logger.error(e.args[0])
+    except SettingsError as e:
+        logger.error(str(e))
     raise Exit(1)
 
 
@@ -262,22 +273,22 @@ def create_tables(
 
 @app.command()
 def create_generators(
-    orm_file: Path = Option(
+    _orm_file: Path = Option(
         ORM_FILENAME,
         help="The name of the ORM yaml file",
         dir_okay=False,
     ),
-    df_file: Path = Option(
-        DF_FILENAME,
+    _df_file: Path = Option(
+        None,
         help="Path to write Python generators to.",
         dir_okay=False,
     ),
-    config_file: Path = Option(
+    _config_file: Path = Option(
         CONFIG_FILENAME,
         help="The configuration file",
         dir_okay=False,
     ),
-    stats_file: Optional[Path] = Option(
+    _stats_file: Optional[Path] = Option(
         None,
         help=(
             "Statistics file (output of make-stats); default is src-stats.yaml if the "
@@ -286,38 +297,12 @@ def create_generators(
         show_default=False,
         dir_okay=False,
     ),
-    force: bool = Option(
+    _force: bool = Option(
         False, "--force", "-f", help="Overwrite any existing Python generators file."
     ),
 ) -> None:
-    """Make a datafaker file of generator classes.
-
-    This CLI command takes an object relation model output by sqlcodegen and
-    returns a set of synthetic data generators for each attribute
-
-    Example:
-        $ datafaker create-generators
-    """
-    logger.debug("Making %s.", df_file)
-
-    if not force:
-        _check_file_non_existence(df_file)
-
-    generator_config = read_config_file(config_file) if config_file is not None else {}
-    if stats_file is None and generators_require_stats(generator_config):
-        stats_file = Path(STATS_FILENAME)
-    orm_metadata = load_metadata_for_output(orm_file, generator_config)
-    result: str = make_table_generators(
-        orm_metadata,
-        generator_config,
-        orm_file,
-        config_file,
-        stats_file,
-    )
-
-    df_file.write_text(result, encoding="utf-8")
-
-    logger.debug("%s created.", df_file)
+    """Obsolete command."""
+    logger.error("This command is deprecated; it does nothing.")
 
 
 @app.command()
@@ -508,7 +493,7 @@ def configure_missing(
         return
     content = yaml.dump(config_updated)
     config_file.write_text(content, encoding="utf-8")
-    logger.debug("Generators missingness in %s.", config_file)
+    logger.debug("Missingness generators in %s.", config_file)
 
 
 @app.command()
@@ -848,6 +833,7 @@ def list_tables(
 @app.command()
 def version() -> None:
     """Display version information."""
+    assert __package__ is not None
     logger.info(
         "%s version %s",
         __package__,

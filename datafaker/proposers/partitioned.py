@@ -7,12 +7,13 @@ from typing import Any, Union
 
 import sqlalchemy
 from sqlalchemy import Column, Connection, Engine, RowMapping, text
+from sqlalchemy.exc import DatabaseError
 from sqlalchemy.types import Integer, Numeric
 
-from datafaker.generators.base import Generator, dist_gen, get_column_type
-from datafaker.generators.continuous import (
+from datafaker.proposers.base import Proposer, dist_gen, get_column_type
+from datafaker.proposers.continuous import (
     CovariateQuery,
-    MultivariateNormalGeneratorFactory,
+    MultivariateNormalProposerFactory,
 )
 from datafaker.utils import T, get_property, logger
 
@@ -181,7 +182,7 @@ class PartitionCountQuery:
         ] + [f"{nc.column.name}: {nc.bitmask}" for nc in nullable_columns]
 
 
-class NullPartitionedNormalGenerator(Generator):
+class NullPartitionedNormalProposer(Proposer):
     """
     A generator of mixed numeric and non-numeric data.
 
@@ -391,7 +392,7 @@ class NullPatternPartition:
                 self.nones[col_index] = None
 
 
-class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
+class NullPartitionedNormalProposerFactory(MultivariateNormalProposerFactory):
     """Produces null partitioned generators, for complex interdependent data."""
 
     SAMPLE_COUNT = MAXIMUM_CHOICES
@@ -445,7 +446,7 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
 
     def __init__(self, config: Mapping[str, Any]) -> None:
         """Initialize the null partitioned generator factory."""
-        tables = get_property(config, "tables", dict, {})
+        tables: dict[str, Any] = get_property(config, "tables", {})
         self._named_tables = {
             table_name: table_conf["name_column"]
             for table_name, table_conf in tables.items()
@@ -480,11 +481,14 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
             for nc in ncs
         )
         if where is None:
-            return f'SELECT COUNT(*) AS count, {index_exp} AS "index" FROM {table} GROUP BY "index"'
+            return (
+                f'SELECT COUNT(*) AS count, {index_exp} AS "index" FROM "{table}"'
+                ' GROUP BY "index"'
+            )
         return (
             'SELECT count, "index" FROM (SELECT COUNT(*) AS count,'
             f' {index_exp} AS "index"'
-            f' FROM {table} GROUP BY "index") AS _q {where}'
+            f' FROM "{table}" GROUP BY "index") AS _q {where}'
         )
 
     # pylint: disable=too-many-arguments too-many-positional-arguments
@@ -495,7 +499,7 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
         columns: list[Column],
         nullable_columns: list[NullableColumn],
         name_suffix: str | None = None,
-    ) -> NullPartitionedNormalGenerator | None:
+    ) -> NullPartitionedNormalProposer | None:
         where = ""
         if 1 < cov_query.suppress_count:
             where = f' WHERE {cov_query.suppress_count} < "count"'
@@ -523,7 +527,7 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
         if not self._execute_partition_queries(connection, partitions):
             return None
         query = self.get_partition_count_query(nullable_columns, cov_query.table, where)
-        return NullPartitionedNormalGenerator(
+        return NullPartitionedNormalProposer(
             f"{cov_query.table}__{columns[0].name}",
             partitions,
             self.function_name(),
@@ -538,9 +542,9 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
             ),
         )
 
-    def get_generators(
+    def get_proposers(
         self, columns: list[Column], engine: Engine
-    ) -> Sequence[Generator]:
+    ) -> Sequence[Proposer]:
         """Get any appropriate generators for these columns."""
         if len(columns) < 2:
             return []
@@ -548,7 +552,7 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
         if not nullable_columns:
             return []
         table = columns[0].table.name
-        gens: list[Generator | None] = []
+        gens: list[Proposer | None] = []
         try:
             with engine.connect() as connection:
                 cov_query = CovariateQuery(table, self)
@@ -592,7 +596,7 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
                         name_suffix="sampled and suppressed",
                     )
                 )
-        except sqlalchemy.exc.DatabaseError as exc:
+        except DatabaseError as exc:
             logger.debug("SQL query failed with error %s [%s]", exc, exc.statement)
             return []
         return [gen for gen in gens if gen]
@@ -619,7 +623,7 @@ class NullPartitionedNormalGeneratorFactory(MultivariateNormalGeneratorFactory):
         return found_nonzero
 
 
-class NullPartitionedLogNormalGeneratorFactory(NullPartitionedNormalGeneratorFactory):
+class NullPartitionedLogNormalProposerFactory(NullPartitionedNormalProposerFactory):
     """
     A generator for numeric and non-numeric columns.
 
