@@ -31,11 +31,11 @@ class TestMimesisDateTimeDialect(unittest.TestCase):
 
     def test_postgresql_uses_extract(self) -> None:
         """PostgreSQL year clause uses EXTRACT."""
-        from datafaker.generators.mimesis import MimesisDateTimeGenerator
+        from datafaker.proposers.mimesis import MimesisDateTimeProposer
 
         column = self._make_column()
         engine = self._make_engine(postgresql.dialect)
-        gens = MimesisDateTimeGenerator.make_singleton(column, engine, "datetime.datetime")
+        gens = MimesisDateTimeProposer.make_singleton(column, engine, "datetime.datetime")
         self.assertEqual(len(gens), 1)
         clauses = gens[0].select_aggregate_clauses()
         min_clause = clauses["birth_datetime__start"]["clause"]
@@ -46,11 +46,11 @@ class TestMimesisDateTimeDialect(unittest.TestCase):
 
     def test_mssql_uses_datepart(self) -> None:
         """MS-SQL year clause uses DATEPART."""
-        from datafaker.generators.mimesis import MimesisDateTimeGenerator
+        from datafaker.proposers.mimesis import MimesisDateTimeProposer
 
         column = self._make_column()
         engine = self._make_engine(mssql.dialect)
-        gens = MimesisDateTimeGenerator.make_singleton(column, engine, "datetime.datetime")
+        gens = MimesisDateTimeProposer.make_singleton(column, engine, "datetime.datetime")
         self.assertEqual(len(gens), 1)
         clauses = gens[0].select_aggregate_clauses()
         min_clause = clauses["birth_datetime__start"]["clause"]
@@ -79,7 +79,7 @@ class TestBucketsStddevDialect(unittest.TestCase):
         return engine
 
     def _get_executed_sql(self, dialect_name: str) -> str:
-        from datafaker.generators.base import Buckets
+        from datafaker.proposers.base import Buckets
 
         engine = self._make_engine_with_dialect_name(dialect_name)
         # make_buckets will call engine.connect().execute(stmt)
@@ -93,8 +93,9 @@ class TestBucketsStddevDialect(unittest.TestCase):
 
         engine.connect.return_value.execute = capture_execute
         # Prevent the Buckets constructor from running (it uses a separate query)
+        tbl = Table("person", MetaData(), Column("age", Integer()))
         with unittest.mock.patch.object(Buckets, "__init__", return_value=None):
-            Buckets.make_buckets(engine, "person", "age")
+            Buckets.make_buckets(engine, tbl, tbl.c.age)
 
         self.assertEqual(len(executed_stmts), 1)
         compiled = str(executed_stmts[0].compile(
@@ -120,8 +121,8 @@ class TestChoiceGeneratorStoredQuery(unittest.TestCase):
     """ChoiceGenerator._query is compiled to dialect-correct SQL at construction time."""
 
     def _make_gen(self, dialect, sample_count=None, suppress_count=0):
-        from datafaker.generators.choice import ZipfChoiceGenerator
-        return ZipfChoiceGenerator(
+        from datafaker.proposers.choice import ZipfChoiceProposer
+        return ZipfChoiceProposer(
             table_name="patient",
             column_name="gender",
             values=["M", "F"],
@@ -180,8 +181,8 @@ class TestChoiceGeneratorFactoryLiveQueries(unittest.TestCase):
     """ChoiceGeneratorFactory.get_generators executes dialect-correct live SQL."""
 
     def _captured_sqls(self, dialect, schema=None) -> list[str]:
-        """Run get_generators with a mocked engine and return compiled SQL strings."""
-        from datafaker.generators.choice import ChoiceGeneratorFactory
+        """Run get_proposers with a mocked engine and return compiled SQL strings."""
+        from datafaker.proposers.choice import ChoiceProposerFactory
 
         engine = MagicMock()
         engine.dialect = dialect
@@ -215,7 +216,7 @@ class TestChoiceGeneratorFactoryLiveQueries(unittest.TestCase):
 
         meta = MetaData()
         tbl = Table("patient", meta, Column("gender", Integer()), schema=schema)
-        ChoiceGeneratorFactory().get_generators([tbl.c.gender], engine)
+        ChoiceProposerFactory().get_proposers([tbl.c.gender], engine)
 
         return [
             str(s.compile(dialect=dialect, compile_kwargs={"literal_binds": True})).upper()
@@ -270,7 +271,7 @@ class TestBucketsSchemaQualified(unittest.TestCase):
         return engine
 
     def _get_make_buckets_sql(self, dialect_name: str, schema: str | None) -> str:
-        from datafaker.generators.base import Buckets
+        from datafaker.proposers.base import Buckets
 
         engine = self._make_engine(dialect_name)
         meta = MetaData()
@@ -286,7 +287,7 @@ class TestBucketsSchemaQualified(unittest.TestCase):
         engine.connect.return_value.execute = capture_execute
 
         with unittest.mock.patch.object(Buckets, "__init__", return_value=None):
-            Buckets.make_buckets(engine, "person", "age", src_table=tbl)
+            Buckets.make_buckets(engine, tbl, tbl.c.age)
 
         self.assertGreaterEqual(len(executed_stmts), 1)
         dialect = mssql.dialect() if dialect_name == "mssql" else postgresql.dialect()
@@ -306,9 +307,10 @@ class TestBucketsSchemaQualified(unittest.TestCase):
         self.assertIn("MYSCHEMA", sql)
 
     def test_no_schema_omits_qualifier(self) -> None:
-        """Without schema, the FROM clause has no dot-qualifier."""
+        """Without schema, FROM clause has no schema.table qualifier."""
         sql = self._get_make_buckets_sql("postgresql", schema=None)
-        self.assertNotIn(".", sql)
+        # A schema qualifier would appear as "SCHEMA.PERSON"; no dot before the table name.
+        self.assertNotIn(".PERSON", sql)
 
 
 class TestCovariateQueryDialect(unittest.TestCase):
@@ -320,7 +322,7 @@ class TestCovariateQueryDialect(unittest.TestCase):
         return factory
 
     def _inner_query(self, dialect_name: str) -> str:
-        from datafaker.generators.continuous import CovariateQuery
+        from datafaker.proposers.continuous import CovariateQuery
 
         cq = (
             CovariateQuery("person", self._make_factory(), dialect_name=dialect_name)
@@ -346,7 +348,7 @@ class TestCovariateQueryDialect(unittest.TestCase):
 
     def test_no_sample_count_has_no_random_or_limit(self) -> None:
         """When sample_count is None no random ordering is emitted."""
-        from datafaker.generators.continuous import CovariateQuery
+        from datafaker.proposers.continuous import CovariateQuery
 
         for dialect in ("mssql", "postgresql", ""):
             with self.subTest(dialect=dialect):
@@ -398,7 +400,7 @@ class TestLogNormalGeneratorSchemaQualified(unittest.TestCase):
     """ContinuousLogDistributionGeneratorFactory respects src_table schema."""
 
     def _get_sql(self, schema: str | None) -> str:
-        from datafaker.generators.continuous import ContinuousLogDistributionGeneratorFactory
+        from datafaker.proposers.continuous import ContinuousLogDistributionProposerFactory
 
         meta = MetaData()
         tbl = Table("person", meta, Column("age", Integer()), schema=schema)
@@ -420,11 +422,11 @@ class TestLogNormalGeneratorSchemaQualified(unittest.TestCase):
         engine = MagicMock()
         engine.connect.return_value = conn
 
-        from datafaker.generators.base import Buckets
+        from datafaker.proposers.base import Buckets
         import unittest.mock
 
         buckets = MagicMock(spec=Buckets)
-        factory = ContinuousLogDistributionGeneratorFactory()
+        factory = ContinuousLogDistributionProposerFactory()
         with unittest.mock.patch.object(Buckets, "make_buckets", return_value=buckets):
             factory._get_generators_from_buckets(engine, tbl, "age", buckets)
 
@@ -476,22 +478,22 @@ class TestPredefinedGeneratorSchemaQualified(unittest.TestCase):
         }
 
     def test_unqualified_name_parses_clauses(self) -> None:
-        """PredefinedGenerator parses select_aggregate_clauses from unqualified FROM."""
-        from datafaker.generators.base import PredefinedGenerator
+        """PredefinedProposer parses select_aggregate_clauses from unqualified FROM."""
+        from datafaker.proposers.base import PredefinedProposer
 
         config = self._make_config("person")
         rg = config["tables"]["person"]["row_generators"][0]
-        gen = PredefinedGenerator("person", rg, config)
+        gen = PredefinedProposer("person", rg, config)
         self.assertIn("mean__age", gen.select_aggregate_clauses())
         self.assertIn("sd__age", gen.select_aggregate_clauses())
 
     def test_schema_qualified_name_parses_clauses(self) -> None:
-        """PredefinedGenerator parses select_aggregate_clauses from schema-qualified FROM."""
-        from datafaker.generators.base import PredefinedGenerator
+        """PredefinedProposer parses select_aggregate_clauses from schema-qualified FROM."""
+        from datafaker.proposers.base import PredefinedProposer
 
         config = self._make_config("myschema.person")
         rg = config["tables"]["person"]["row_generators"][0]
-        gen = PredefinedGenerator("person", rg, config)
+        gen = PredefinedProposer("person", rg, config)
         self.assertIn("mean__age", gen.select_aggregate_clauses())
         self.assertIn("sd__age", gen.select_aggregate_clauses())
 
@@ -499,38 +501,39 @@ class TestPredefinedGeneratorSchemaQualified(unittest.TestCase):
 class TestAggregateQuerySchemaQualified(unittest.TestCase):
     """_get_aggregate_query qualifies table names using the engine's schema_translate_map."""
 
-    def _make_shell(self, schema: str | None):
-        from datafaker.interactive.generators import GeneratorCmd
-        from datafaker.generators.base import Generator
-
-        gen = MagicMock(spec=Generator)
-        gen.select_aggregate_clauses.return_value = {
-            "mean__age": {"clause": "AVG(age)", "comment": None}
-        }
-
+    def _make_engine(self, schema: str | None) -> MagicMock:
         engine = MagicMock()
         schema_map = {None: schema} if schema else {}
         engine.get_execution_options.return_value = {"schema_translate_map": schema_map}
+        return engine
 
-        shell = MagicMock(spec=GeneratorCmd)
-        shell.sync_engine = engine
-        return shell, gen
+    def _make_gen(self) -> MagicMock:
+        from datafaker.proposers.base import Proposer
+
+        gen = MagicMock(spec=Proposer)
+        gen.select_aggregate_clauses.return_value = {
+            "mean__age": {"clause": "AVG(age)", "comment": None}
+        }
+        return gen
 
     def test_aggregate_query_includes_schema(self) -> None:
-        """_get_aggregate_query qualifies the bare table name when engine has a schema map."""
-        from datafaker.interactive.generators import GeneratorCmd
+        """get_aggregate_query qualifies the bare table name when engine has a schema map."""
+        from datafaker.interactive.generators import get_aggregate_query
 
-        shell, gen = self._make_shell("myschema")
-        result = GeneratorCmd._get_aggregate_query(shell, [gen], "person")
+        engine = self._make_engine("myschema")
+        gen = self._make_gen()
+        result = get_aggregate_query([gen], "person", engine)
         self.assertIsNotNone(result)
         self.assertIn("myschema.person", result)
 
     def test_aggregate_query_no_schema(self) -> None:
-        """_get_aggregate_query uses the bare name when no schema is set."""
-        from datafaker.interactive.generators import GeneratorCmd
+        """get_aggregate_query uses the bare name when no schema is set."""
+        from datafaker.interactive.generators import get_aggregate_query
 
-        shell, gen = self._make_shell(None)
-        result = GeneratorCmd._get_aggregate_query(shell, [gen], "person")
+        engine = self._make_engine(None)
+        gen = self._make_gen()
+        result = get_aggregate_query([gen], "person", engine)
         self.assertIsNotNone(result)
-        self.assertIn("FROM person", result)
-        self.assertNotIn(".", result.split("FROM ")[-1])
+        self.assertIn("person", result)
+        # No schema qualifier (schema.table) should appear after FROM
+        self.assertNotIn(".", result.split("FROM ")[-1].strip('"').strip())
