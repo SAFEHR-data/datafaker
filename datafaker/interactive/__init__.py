@@ -81,22 +81,22 @@ def update_config_generators(
         if spec_path is None:
             gc.cmdloop()
             return gc.config
-        spec = spec_path.open()
-        line_no = 0
-        for line in csv.reader(spec):
-            line_no += 1
-            if line:
-                if len(line) < 3:
-                    logger.error(
-                        "line %d of file %s has fewer than three values",
-                        line_no,
-                        spec_path,
-                    )
-                cols = line[1].split(maxsplit=1)
-                if gc.go_to(f"{line[0]}.{cols[0]}"):
-                    if len(cols) == 1 or gc.set_merged_columns(cols[0], cols[1]):
-                        try_setting_generator(gc, itertools.islice(line, 2, None))
-                else:
-                    logger.warning("no such column %s[%s]", line[0], line[1])
-        gc.do_quit("yes")
-        return gc.config
+        with spec_path.open() as spec:
+            line_no = 0
+            for line in csv.reader(spec):
+                line_no += 1
+                if line:
+                    if len(line) < 3:
+                        logger.error(
+                            "line %d of file %s has fewer than three values",
+                            line_no,
+                            spec_path,
+                        )
+                    cols = line[1].split(maxsplit=1)
+                    if gc.go_to(f"{line[0]}.{cols[0]}"):
+                        if len(cols) == 1 or gc.set_merged_columns(cols[0], cols[1]):
+                            try_setting_generator(gc, itertools.islice(line, 2, None))
+                    else:
+                        logger.warning("no such column %s[%s]", line[0], line[1])
+            gc.do_quit("yes")
+            return gc.config

@@ -14,7 +14,7 @@ class MissingnessType:
     SAMPLED = "column_presence.sampled"
     SAMPLED_QUERY = (
         "SELECT COUNT(*) AS row_count, {result_names} FROM "
-        "(SELECT {column_is_nulls} FROM {table} ORDER BY RANDOM() LIMIT {count})"
+        '(SELECT {column_is_nulls} FROM "{table}" ORDER BY RANDOM() LIMIT {count})'
         " AS __t GROUP BY {result_names}"
     )
     name: str

@@ -7,37 +7,45 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from types import TracebackType
-from typing import Any, Final, Optional, Tuple, Type, Union
+from typing import Any, Final, Optional, Tuple, Type
 
 import pandas as pd
 import snsql
 import typer
 import yaml
-from black import FileMode, format_str
-from jinja2 import Environment, FileSystemLoader, Template
 from mimesis.providers.base import BaseProvider
 from sqlalchemy import CursorResult, Engine, Integer, MetaData, UniqueConstraint, text
 from sqlalchemy.dialects import mssql, postgresql
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
-from sqlalchemy.schema import Column, Table
+from sqlalchemy.schema import (
+    Column,
+    ColumnCollectionConstraint,
+    PrimaryKeyConstraint,
+    Table,
+    UniqueConstraint,
+)
 from sqlalchemy.sql import Executable, sqltypes
 from typing_extensions import Self
 
 from datafaker import providers
+from datafaker.db_utils import (
+    MaybeAsyncEngine,
+    constraint_name,
+    create_db_engine,
+    download_table,
+    get_metadata,
+    get_related_table_names,
+    get_sync_engine,
+    get_vocabulary_table_names,
+)
 from datafaker.parquet2orm import get_parquet_orm
 from datafaker.settings import get_source_dsn, get_source_schema
 from datafaker.utils import (
-    MaybeAsyncEngine,
-    create_db_engine,
-    download_table,
     get_columns_assigned,
-    get_metadata,
     get_property,
-    get_related_table_names,
+    get_property_or_none,
     get_row_generators,
-    get_sync_engine,
-    get_vocabulary_table_names,
     logger,
     make_primary_key_name,
     split_column_full_name,
@@ -50,13 +58,10 @@ for entry_name, entry in inspect.getmembers(providers, inspect.isclass):
     if issubclass(entry, BaseProvider) and entry.__module__ == "datafaker.providers":
         PROVIDER_IMPORTS.append(entry_name)
 
-TEMPLATE_DIRECTORY: Final[Path] = Path(__file__).parent / "templates/"
-DF_TEMPLATE_FILENAME: Final[str] = "df.py.j2"
-
 
 @dataclass
 class VocabularyTableGeneratorInfo:
-    """Contains the df.py content related to vocabulary tables."""
+    """Contains the vocabulary tables to be generated."""
 
     variable_name: str
     table_name: str
@@ -65,15 +70,16 @@ class VocabularyTableGeneratorInfo:
 
 @dataclass
 class FunctionCall:
-    """Contains the df.py content related function calls."""
+    """Which function to call with what."""
 
     function_name: str
-    argument_values: list[str]
+    args: Sequence[Any]
+    kwargs: Mapping[str, Any]
 
 
 @dataclass
 class RowGeneratorInfo:
-    """Contains the df.py content related to row generators of a table."""
+    """Contains the row generators of a table."""
 
     variable_names: list[str]
     function_call: FunctionCall
@@ -85,7 +91,8 @@ class ColumnChoice:
     """Choose columns based on a random number in [0,1)."""
 
     function_name: str
-    argument_values: list[str]
+    args: list[str]
+    kwargs: dict[str, str]
 
 
 def make_column_choices(
@@ -102,7 +109,8 @@ def make_column_choices(
     return [
         ColumnChoice(
             function_name=mg["name"],
-            argument_values=[f"{k}={v}" for k, v in mg.get("kwargs", {}).items()],
+            args=mg.get("args", []),
+            kwargs=mg.get("kwargs", {}),
         )
         for mg in table_config.get("missingness_generators", [])
         if "name" in mg
@@ -110,20 +118,8 @@ def make_column_choices(
 
 
 @dataclass
-class _PrimaryConstraint:
-    """
-    Describes a Uniqueness constraint for a multi-column primary key.
-
-    Not a real constraint, but enough to write df.py.
-    """
-
-    columns: list[Column]
-    name: str
-
-
-@dataclass
 class TableGeneratorInfo:
-    """Contains the df.py content related to regular tables."""
+    """Contains the tables that need data generation."""
 
     class_name: str
     table_name: str
@@ -131,14 +127,14 @@ class TableGeneratorInfo:
     column_choices: list[ColumnChoice]
     rows_per_pass: int
     row_gens: list[RowGeneratorInfo] = field(default_factory=list)
-    unique_constraints: Sequence[Union[UniqueConstraint, _PrimaryConstraint]] = field(
+    unique_constraints: Sequence[ColumnCollectionConstraint] = field(
         default_factory=list
     )
 
 
 @dataclass
 class StoryGeneratorInfo:
-    """Contains the df.py content related to story generators."""
+    """Contains the story generators."""
 
     wrapper_name: str
     function_call: FunctionCall
@@ -170,12 +166,11 @@ def _get_function_call(
     if keyword_arguments is None:
         keyword_arguments = {}
 
-    argument_values: list[str] = [str(value) for value in positional_arguments]
-    argument_values += [
-        f"{key}={_render_value(value)}" for key, value in keyword_arguments.items()
-    ]
-
-    return FunctionCall(function_name=function_name, argument_values=argument_values)
+    return FunctionCall(
+        function_name=function_name,
+        args=positional_arguments,
+        kwargs=keyword_arguments,
+    )
 
 
 def _get_row_generator(
@@ -312,7 +307,21 @@ def _integer_generator(column: Column) -> tuple[str, dict[str, str]]:
     :return: A pair consisting of the name of a generator and its
         arguments.
     """
-    return ("generic.numeric.integer_number", {})
+    if not column.primary_key:
+        return ("generic.numeric.integer_number", {})
+    return (
+        "generic.column_value_provider.increment",
+        {
+            "db_connection": "dst_db_conn",
+            "column": f'metadata.tables["{column.table.name}"].columns["{column.name}"]',
+        },
+    )
+
+
+_YEAR_SUMMARY_QUERY = (
+    "SELECT MIN(y) AS start, MAX(y) AS end FROM "
+    '(SELECT EXTRACT(YEAR FROM {column}) AS y FROM "{table}") AS years'
+)
 
 
 @dataclass
@@ -351,7 +360,7 @@ def get_result_mappings(
     return kw
 
 
-_COLUMN_TYPE_TO_GENERATOR_INFO = {
+_COLUMN_TYPE_TO_GENERATOR_INFO: dict[Any, GeneratorInfo] = {
     sqltypes.Boolean: GeneratorInfo(
         generator="generic.development.boolean",
         choice=True,
@@ -437,6 +446,9 @@ def _get_generator_and_arguments(column: Column) -> tuple[str | None, dict[str, 
 
     generator_arguments: dict[str, str] = {}
     if callable(generator_function):
+        # These assertions persuade ty that the call is OK
+        assert generator_function is not None
+        assert not isinstance(generator_function, str)
         (generator_function, generator_arguments) = generator_function(column)
     return generator_function, generator_arguments
 
@@ -469,19 +481,6 @@ def _get_provider_for_column(column: Column) -> Tuple[list[str], str, dict[str, 
     return variable_names, generator_function, generator_arguments
 
 
-def _constraint_sort_key(constraint: UniqueConstraint) -> str:
-    """Extract a string out of a UniqueConstraint that is unique to that constraint.
-
-    We sort the constraints so that the output of make_tables is deterministic, this is
-    the sort key.
-    """
-    return (
-        constraint.name
-        if isinstance(constraint.name, str)
-        else "_".join(map(str, constraint.columns))
-    )
-
-
 def _get_generator_for_table(
     table_config: Mapping[str, Any],
     table: Table,
@@ -493,13 +492,13 @@ def _get_generator_for_table(
             for constraint in table.constraints
             if isinstance(constraint, UniqueConstraint)
         ),
-        key=_constraint_sort_key,
+        key=constraint_name,
     )
     primary_keys = [c for c in table.columns if c.primary_key]
-    constraints: Sequence[UniqueConstraint | _PrimaryConstraint] = unique_constraints
+    constraints: Sequence[ColumnCollectionConstraint] = unique_constraints
     if 1 < len(primary_keys):
-        primary_constraint = _PrimaryConstraint(
-            columns=primary_keys, name=make_primary_key_name(table.name)
+        primary_constraint = PrimaryKeyConstraint(
+            *primary_keys, name=make_primary_key_name(table.name)
         )
         constraints = unique_constraints + [primary_constraint]
     column_choices = make_column_choices(table_config)
@@ -520,7 +519,7 @@ def _get_generator_for_table(
         class_name=table.name.title().replace(".", "") + "Generator",
         nonnull_columns=nonnull_columns,
         column_choices=column_choices,
-        rows_per_pass=get_property(table_config, "num_rows_per_pass", int, 1),
+        rows_per_pass=get_property(table_config, "num_rows_per_pass", 1),
         unique_constraints=constraints,
     )
 
@@ -590,13 +589,25 @@ def make_vocabulary_tables(
         )
 
 
-def make_table_generators(  # pylint: disable=too-many-locals
+@dataclass
+# pylint: disable=too-many-instance-attributes
+class GenerationInfo:
+    """Information for the generation of all data."""
+
+    provider_imports: list[str]
+    row_generator_module_name: str | None
+    story_generator_module_name: str | None
+    object_instantiation: dict[str, dict]
+    tables: list[TableGeneratorInfo]
+    vocabulary_tables: list[VocabularyTableGeneratorInfo]
+    story_generators: list[StoryGeneratorInfo]
+    max_unique_constraint_tries: int | None
+
+
+def get_generation_info(
     metadata: MetaData,
     config: Mapping,
-    orm_filename: Path,
-    config_filename: Path,
-    src_stats_filename: Optional[Path],
-) -> str:
+) -> GenerationInfo:
     """
     Create datafaker generator classes.
 
@@ -615,24 +626,28 @@ def make_table_generators(  # pylint: disable=too-many-locals
 
     :return: A string that is a valid Python module, once written to file.
     """
-    row_generator_module_name: str = config.get("row_generators_module", None)
+    row_generator_module_name = get_property_or_none(
+        config, "row_generators_module", str
+    )
     if row_generator_module_name and "-" in row_generator_module_name:
         logger.error(
-            "Row generator name %s specified in %s should not contain a hyphen",
+            "Row generator name %s should not contain a hyphen",
             row_generator_module_name,
-            config_filename,
         )
         raise typer.Exit(1)
-    story_generator_module_name = config.get("story_generators_module", None)
+    story_generator_module_name = get_property_or_none(
+        config, "story_generators_module", str
+    )
     if story_generator_module_name and "-" in story_generator_module_name:
         logger.error(
-            "Story generator name %s specified in %s should not contain a hyphen",
+            "Story generator name %s should not contain a hyphen",
             story_generator_module_name,
-            config_filename,
         )
         raise typer.Exit(1)
-    object_instantiation: dict[str, dict] = config.get("object_instantiation", {})
-    tables_config = config.get("tables", {})
+    object_instantiation: dict[str, Any] = get_property(
+        config, "object_instantiation", {}
+    )
+    tables_config: dict[str, Any] = get_property(config, "tables", {})
 
     tables: list[TableGeneratorInfo] = []
     vocabulary_tables: list[VocabularyTableGeneratorInfo] = []
@@ -661,34 +676,19 @@ def make_table_generators(  # pylint: disable=too-many-locals
 
     story_generators = _get_story_generators(config)
 
-    max_unique_constraint_tries = config.get("max-unique-constraint-tries", None)
-    return generate_df_content(
-        {
-            "provider_imports": PROVIDER_IMPORTS,
-            "orm_file_name": orm_filename,
-            "config_file_name": config_filename,
-            "row_generator_module_name": row_generator_module_name,
-            "story_generator_module_name": story_generator_module_name,
-            "object_instantiation": object_instantiation,
-            "src_stats_filename": src_stats_filename,
-            "tables": tables,
-            "vocabulary_tables": vocabulary_tables,
-            "story_generators": story_generators,
-            "max_unique_constraint_tries": max_unique_constraint_tries,
-        }
+    max_unique_constraint_tries = get_property_or_none(
+        config, "max-unique-constraint-tries", int
     )
-
-
-def generate_df_content(template_context: Mapping[str, Any]) -> str:
-    """Generate the content of the df.py file as a string."""
-    environment: Environment = Environment(
-        loader=FileSystemLoader(TEMPLATE_DIRECTORY),
-        trim_blocks=True,
-        lstrip_blocks=True,
+    return GenerationInfo(
+        provider_imports=PROVIDER_IMPORTS,
+        row_generator_module_name=row_generator_module_name,
+        story_generator_module_name=story_generator_module_name,
+        object_instantiation=object_instantiation,
+        tables=tables,
+        vocabulary_tables=vocabulary_tables,
+        story_generators=story_generators,
+        max_unique_constraint_tries=max_unique_constraint_tries,
     )
-    df_template: Template = environment.get_template(DF_TEMPLATE_FILENAME)
-    template_output: str = df_template.render(template_context)
-    return format_str(template_output, mode=FileMode())
 
 
 def _get_generator_for_existing_vocabulary_table(
@@ -727,13 +727,13 @@ def make_tables_file(
     """Construct the YAML file representing the schema."""
     engine = get_sync_engine(create_db_engine(db_dsn, schema_name=schema_name))
 
-    metadata = get_metadata(engine, schema_name=schema_name)
+    metadata = get_metadata(engine)
     meta_dict = metadata_to_dict(metadata, schema_name, engine, parquet_dir)
 
     if parquet_dir is not None:
         extra_meta = get_parquet_orm(parquet_dir)
         if extra_meta:
-            md_tables = get_property(meta_dict, "tables", dict, {})
+            md_tables: dict[str, Any] = get_property(meta_dict, "tables", {})
             new_tables = {**extra_meta, **md_tables}
             meta_dict["tables"] = new_tables
 
@@ -781,7 +781,7 @@ class DbConnection:
     async def table_row_count(self, table_name: str) -> int:
         """Count the number of rows in the named table."""
         with await self.execute_raw_query(
-            text(f"SELECT COUNT(*) FROM {table_name}")
+            text(f'SELECT COUNT(*) FROM "{table_name}"')
         ) as result:
             return int(result.scalar_one())
 

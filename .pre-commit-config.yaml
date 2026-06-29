@@ -39,7 +39,7 @@ repos:
         entry: poetry run black
         language: system
         types: ['python']
-        exclude: (?x)(
+        exclude: (?x)^(
           tests/examples
           )
       - id: isort
@@ -47,7 +47,7 @@ repos:
         entry: poetry run isort
         language: system
         types: ['python']
-        exclude: (?x)(
+        exclude: (?x)^(
           tests/examples|
           examples
           )
@@ -56,7 +56,7 @@ repos:
         entry: poetry run pylint
         language: system
         types: ['python']
-        exclude: (?x)(
+        exclude: (?x)^(
           examples/
           )
       - id: pydocstyle
@@ -64,17 +64,18 @@ repos:
         entry: poetry run pydocstyle
         language: system
         types: ['python']
-        exclude: (?x)(
+        exclude: (?x)^(
           docs/|
           tests/|
           examples/
           )
-      - id: mypy
-        name: mypy
-        entry: poetry run mypy --follow-imports=silent
+      - id: ty
+        name: ty
+        entry: poetry run ty check
         language: system
-        exclude: (?x)(
-          tests/examples|
-          examples
+        exclude: (?x)^(
+          tests/examples/|
+          examples/|
+          /\.
           )
         types: ['python']

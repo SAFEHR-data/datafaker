@@ -11,14 +11,15 @@ from typing import Any, Optional, Type
 import sqlalchemy
 from prettytable import PrettyTable
 from sqlalchemy import Engine, ForeignKey, MetaData, Table, func, literal_column, or_, select
+from sqlalchemy.exc import DatabaseError, SQLAlchemyError
 from typing_extensions import Self
 
-from datafaker.utils import (
-    T,
+from datafaker.db_utils import (
     create_db_engine,
     fk_refers_to_ignored_table,
     get_sync_engine,
 )
+from datafaker.utils import T, get_property
 
 
 def or_default(v: T | None, d: T) -> T:
@@ -139,12 +140,7 @@ class DbCmd(ABC, cmd.Cmd):
         """
         Initialise a DbCmd.
 
-        :param src_dsn: The database connection string for the source database.
-        :param src_schema: The name of the schema name for the source database.
-        :param metadata: The metadata for the source database.
-        :param config: The ``config.xml`` object.
-        :param parquet_dir: The directory where parquet files are stored that
-          are to be considered part of the source database (only for DuckDB).
+        :param src_dsn: Settings for the source database.
         """
         super().__init__()
         self.config: MutableMapping[str, Any] = settings.config
@@ -274,8 +270,14 @@ class DbCmd(ABC, cmd.Cmd):
 
     def report_columns(self) -> None:
         """Print information about the current columns."""
+        table = self.table_metadata()
+        table_config: dict[str, Any] = get_property(
+            self.config,
+            ["tables", table.name, "columns"],
+            {},
+        )
         self.print_table(
-            ["name", "type", "primary", "nullable", "foreign key"],
+            ["name", "type", "primary", "nullable", "foreign key", "roles"],
             [
                 [
                     name,
@@ -283,8 +285,9 @@ class DbCmd(ABC, cmd.Cmd):
                     col.primary_key,
                     col.nullable,
                     ", ".join([fk_column_name(fk) for fk in col.foreign_keys]),
+                    ", ".join(get_property(table_config, [name, "roles"], [])),
                 ]
-                for name, col in self.table_metadata().columns.items()
+                for name, col in table.columns.items()
             ],
         )
 
@@ -377,7 +380,7 @@ class DbCmd(ABC, cmd.Cmd):
         with self.sync_engine.connect() as connection:
             try:
                 result = connection.execute(sqlalchemy.text(query))
-            except sqlalchemy.exc.DatabaseError as exc:
+            except DatabaseError as exc:
                 self.print(self.ERROR_FAILED_SQL, exc=exc, query=query)
                 return
             row_count = result.rowcount
@@ -423,7 +426,7 @@ class DbCmd(ABC, cmd.Cmd):
         with self.sync_engine.connect() as connection:
             try:
                 result = connection.execute(stmt)
-            except sqlalchemy.exc.SQLAlchemyError as exc:
+            except SQLAlchemyError as exc:
                 self.print(self.ERROR_FAILED_SQL, exc=exc, query=stmt)
                 return
             self.print_table(list(result.keys()), result.fetchmany(max_peek_rows))

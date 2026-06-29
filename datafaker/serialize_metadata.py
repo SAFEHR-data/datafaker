@@ -1,20 +1,33 @@
 """Convert between a Python dict describing a database schema and a SQLAlchemy MetaData."""
 import typing
+from collections.abc import Callable, Mapping
 from functools import partial
 from pathlib import Path
+from typing import Any
 
 import parsy
 from sqlalchemy import Column, Dialect, Engine, ForeignKey, MetaData, Table
 from sqlalchemy.dialects import mssql, oracle, postgresql
 from sqlalchemy.sql import schema, sqltypes
 
-from datafaker.utils import get_property, make_foreign_key_name, split_column_full_name
+from datafaker.db_utils import constraint_name
+from datafaker.utils import (
+    T,
+    get_property,
+    make_foreign_key_name,
+    split_column_full_name,
+)
 
 TableT = dict[str, typing.Any]
 
 
 # We will change this to parsy.Parser when parsy exports its types properly
 ParserType = typing.Any
+
+
+def generate(s: str) -> Callable[[T], T]:
+    """Return a ty friendly parsy generate decorator."""
+    return lambda fn: parsy.generate(fn).desc(s)  # pylint: disable=no-member
 
 
 def simple(type_: type) -> ParserType:
@@ -66,7 +79,7 @@ def string_type(type_: type) -> ParserType:
     (MS-SQL style, unquoted collation name)
     """
 
-    @parsy.generate(type_.__name__)
+    @generate(type_.__name__)
     def st_parser() -> typing.Generator[ParserType, None, typing.Any]:
         """Parse the specific type."""
         yield parsy.string(type_.__name__)
@@ -98,7 +111,7 @@ def time_type(type_: type, tz_type: type) -> ParserType:
     parsed text, ``tz_type(precision, timezone)`` otherwise.
     """
 
-    @parsy.generate(type_.__name__)
+    @generate(type_.__name__)
     def pgt_parser() -> typing.Generator[ParserType, None, typing.Any]:
         """Parse the actual type."""
         yield parsy.string(type_.__name__)
@@ -225,7 +238,7 @@ def column_to_dict(column: Column, dialect: Dialect) -> dict[str, typing.Any]:
         compiled = "TEXT"
     else:
         compiled = dialect.type_compiler_instance.process(type_)
-    result = {
+    result: dict[str, Any] = {
         "type": compiled,
         "primary": column.primary_key,
         "nullable": column.nullable,
@@ -305,7 +318,7 @@ def dict_to_unique(rep: dict) -> schema.UniqueConstraint:
 def unique_to_dict(constraint: schema.UniqueConstraint) -> dict:
     """Render a dict representation of a uniqueness constraint."""
     return {
-        "name": constraint.name,
+        "name": constraint_name(constraint),
         "columns": [str(col.name) for col in constraint.columns],
     }
 
@@ -380,18 +393,20 @@ def should_ignore_fk(tables_dict: dict[str, TableT], fk: str) -> bool:
     # Try the fully-qualified name first so users can be explicit in config
     # (e.g. "mimic100.concept: ignore: true"); fall back to the bare table
     # name for configs that don't include a schema prefix.
-    td = get_property(tables_dict, table, dict, None)
+    td = get_property(tables_dict, table, None)
     if td is None:
         bare = table.split(".")[-1]
-        td = get_property(tables_dict, bare, dict, {})
-    return get_property(td, "ignore", bool, False)
+        td = get_property(tables_dict, bare, {})
+    return get_property(td, "ignore", False)
 
 
 def _always_false(_: str) -> bool:
     return False
 
 
-def dict_to_metadata(obj: dict, config_for_output: dict | None = None) -> MetaData:
+def dict_to_metadata(
+    obj: dict, config_for_output: Mapping[Any, Any] | None = None
+) -> MetaData:
     """
     Convert a dict to a SQL Alchemy MetaData object.
 

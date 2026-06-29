@@ -1,6 +1,7 @@
 """Generators using Mimesis."""
 
-from typing import Any, Callable, Sequence, Union
+from collections.abc import Callable, Sequence
+from typing import Any, Union
 
 import mimesis
 import mimesis.locales
@@ -8,11 +9,11 @@ from sqlalchemy import Column, Engine, cast, extract, func, literal_column, sele
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.types import Date, DateTime, Integer, Numeric, String, Time
 
-from datafaker.generators.base import (
+from datafaker.proposers.base import (
     Buckets,
-    Generator,
-    GeneratorError,
-    GeneratorFactory,
+    Proposer,
+    ProposerError,
+    ProposerFactory,
     get_column_type,
 )
 from datafaker.providers import DistributionProvider
@@ -27,15 +28,15 @@ dist_gen = DistributionProvider()
 generic = mimesis.Generic(locale=mimesis.locales.Locale.EN_GB)
 
 
-class MimesisGeneratorBase(Generator):
-    """Base class for a generator using Mimesis."""
+class MimesisProposerBase(Proposer):
+    """Base class for a proposer using Mimesis."""
 
     def __init__(
         self,
         function_name: str,
     ):
         """
-        Initialise a generator that uses Mimesis.
+        Initialise a proposer that uses Mimesis.
 
         :param function_name: is relative to 'generic', for example 'person.name'.
         """
@@ -43,17 +44,17 @@ class MimesisGeneratorBase(Generator):
         f = generic
         for part in function_name.split("."):
             if not hasattr(f, part):
-                raise GeneratorError(
+                raise ProposerError(
                     f"Mimesis does not have a function {function_name}: {part} not found"
                 )
             f = getattr(f, part)
         if not callable(f):
-            raise GeneratorError(
+            raise ProposerError(
                 f"Mimesis object {function_name} is not a callable,"
                 " so cannot be used as a generator"
             )
         self._name = "generic." + function_name
-        self._generator_function = f
+        self._generator_function: Callable[..., Any] = f
 
     def function_name(self) -> str:
         """Get the name of the generator function to call."""
@@ -64,7 +65,7 @@ class MimesisGeneratorBase(Generator):
         return [self._generator_function() for _ in range(count)]
 
 
-class MimesisGenerator(MimesisGeneratorBase):
+class MimesisProposer(MimesisProposerBase):
     """A generator using Mimesis."""
 
     def __init__(
@@ -108,7 +109,7 @@ class MimesisGenerator(MimesisGeneratorBase):
         return default if self._fit is None else self._fit
 
 
-class MimesisGeneratorTruncated(MimesisGenerator):
+class MimesisGeneratorTruncated(MimesisProposer):
     """A string generator using Mimesis that must fit within a certain number of characters."""
 
     def __init__(
@@ -151,8 +152,8 @@ class MimesisGeneratorTruncated(MimesisGenerator):
         return [self._generator_function()[: self._length] for _ in range(count)]
 
 
-class MimesisDateTimeGenerator(MimesisGeneratorBase):
-    """DateTime generator using Mimesis."""
+class MimesisDateTimeProposer(MimesisProposerBase):
+    """DateTime proposer using Mimesis."""
 
     # pylint: disable=too-many-arguments too-many-positional-arguments
     def __init__(
@@ -165,7 +166,7 @@ class MimesisDateTimeGenerator(MimesisGeneratorBase):
         end: int,
     ) -> None:
         """
-        Initialise a MimesisDateTimeGenerator.
+        Initialise a MimesisDateTimeProposer.
 
         :param column: The column to generate into
         :param function_name: The name of the mimesis function
@@ -184,7 +185,7 @@ class MimesisDateTimeGenerator(MimesisGeneratorBase):
     @classmethod
     def make_singleton(
         cls, column: Column, engine: Engine, function_name: str
-    ) -> Sequence[Generator]:
+    ) -> Sequence[Proposer]:
         """Make the appropriate generation configuration for this column."""
         col_expr = literal_column(column.name)
         year_expr = cast(extract("year", col_expr), Integer())
@@ -201,7 +202,7 @@ class MimesisDateTimeGenerator(MimesisGeneratorBase):
         min_year = str(min_expr.compile(dialect=dialect, compile_kwargs={"literal_binds": True}))
         max_year = str(max_expr.compile(dialect=dialect, compile_kwargs={"literal_binds": True}))
         return [
-            MimesisDateTimeGenerator(
+            MimesisDateTimeProposer(
                 column,
                 function_name,
                 min_year,
@@ -258,7 +259,7 @@ class MimesisDateTimeGenerator(MimesisGeneratorBase):
         ]
 
 
-class MimesisStringGeneratorFactory(GeneratorFactory):
+class MimesisStringProposerFactory(ProposerFactory):
     """All Mimesis generators that return strings."""
 
     GENERATOR_NAMES = [
@@ -297,8 +298,8 @@ class MimesisStringGeneratorFactory(GeneratorFactory):
 
     def _get_generators_with(
         self, gen_class: Callable, **kwargs: Any
-    ) -> list[Generator]:
-        gens: list[Generator] = []
+    ) -> list[Proposer]:
+        gens: list[Proposer] = []
         for name in self.GENERATOR_NAMES:
             try:
                 gens.append(gen_class(name, **kwargs))
@@ -306,9 +307,9 @@ class MimesisStringGeneratorFactory(GeneratorFactory):
                 pass
         return gens
 
-    def get_generators(
+    def get_proposers(
         self, columns: list[Column], engine: Engine
-    ) -> Sequence[Generator]:
+    ) -> Sequence[Proposer]:
         """Get the generators appropriate to these columns."""
         if len(columns) != 1:
             return []
@@ -319,9 +320,8 @@ class MimesisStringGeneratorFactory(GeneratorFactory):
         try:
             buckets = Buckets.make_buckets(
                 engine,
-                column.table.name,
-                f"LENGTH({column.name})",
-                src_table=column.table,
+                column.table,
+                func.length(column),
             )
             fitness_fn = len
         except SQLAlchemyError:
@@ -339,18 +339,18 @@ class MimesisStringGeneratorFactory(GeneratorFactory):
                 buckets=buckets,
             )
         return self._get_generators_with(
-            MimesisGenerator,
+            MimesisProposer,
             value_fn=fitness_fn,
             buckets=buckets,
         )
 
 
-class MimesisFloatGeneratorFactory(GeneratorFactory):
+class MimesisFloatProposerFactory(ProposerFactory):
     """All Mimesis generators that return floating point numbers."""
 
-    def get_generators(
-        self, columns: list[Column], _engine: Engine
-    ) -> Sequence[Generator]:
+    def get_proposers(
+        self, columns: list[Column], engine: Engine
+    ) -> Sequence[Proposer]:
         """Get the generators appropriate to these columns."""
         if len(columns) != 1:
             return []
@@ -359,7 +359,7 @@ class MimesisFloatGeneratorFactory(GeneratorFactory):
             return []
         return list(
             map(
-                MimesisGenerator,
+                MimesisProposer,
                 [
                     "person.height",
                 ],
@@ -367,12 +367,12 @@ class MimesisFloatGeneratorFactory(GeneratorFactory):
         )
 
 
-class MimesisDateGeneratorFactory(GeneratorFactory):
+class MimesisDateProposerFactory(ProposerFactory):
     """All Mimesis generators that return dates."""
 
-    def get_generators(
+    def get_proposers(
         self, columns: list[Column], engine: Engine
-    ) -> Sequence[Generator]:
+    ) -> Sequence[Proposer]:
         """Get the generators appropriate to these columns."""
         if len(columns) != 1:
             return []
@@ -380,15 +380,15 @@ class MimesisDateGeneratorFactory(GeneratorFactory):
         ct = get_column_type(column)
         if not isinstance(ct, Date):
             return []
-        return MimesisDateTimeGenerator.make_singleton(column, engine, "datetime.date")
+        return MimesisDateTimeProposer.make_singleton(column, engine, "datetime.date")
 
 
-class MimesisDateTimeGeneratorFactory(GeneratorFactory):
+class MimesisDateTimeProposerFactory(ProposerFactory):
     """All Mimesis generators that return datetimes."""
 
-    def get_generators(
+    def get_proposers(
         self, columns: list[Column], engine: Engine
-    ) -> Sequence[Generator]:
+    ) -> Sequence[Proposer]:
         """Get the generators appropriate to these columns."""
         if len(columns) != 1:
             return []
@@ -396,17 +396,17 @@ class MimesisDateTimeGeneratorFactory(GeneratorFactory):
         ct = get_column_type(column)
         if not isinstance(ct, DateTime):
             return []
-        return MimesisDateTimeGenerator.make_singleton(
+        return MimesisDateTimeProposer.make_singleton(
             column, engine, "datetime.datetime"
         )
 
 
-class MimesisTimeGeneratorFactory(GeneratorFactory):
+class MimesisTimeProposerFactory(ProposerFactory):
     """All Mimesis generators that return times."""
 
-    def get_generators(
-        self, columns: list[Column], _engine: Engine
-    ) -> Sequence[Generator]:
+    def get_proposers(
+        self, columns: list[Column], engine: Engine
+    ) -> Sequence[Proposer]:
         """Get the generators appropriate to these columns."""
         if len(columns) != 1:
             return []
@@ -414,15 +414,15 @@ class MimesisTimeGeneratorFactory(GeneratorFactory):
         ct = get_column_type(column)
         if not isinstance(ct, Time):
             return []
-        return [MimesisGenerator("datetime.time")]
+        return [MimesisProposer("datetime.time")]
 
 
-class MimesisIntegerGeneratorFactory(GeneratorFactory):
+class MimesisIntegerProposerFactory(ProposerFactory):
     """All Mimesis generators that return integers."""
 
-    def get_generators(
-        self, columns: list[Column], _engine: Engine
-    ) -> Sequence[Generator]:
+    def get_proposers(
+        self, columns: list[Column], engine: Engine
+    ) -> Sequence[Proposer]:
         """Get the generators appropriate to these columns."""
         if len(columns) != 1:
             return []
@@ -430,4 +430,4 @@ class MimesisIntegerGeneratorFactory(GeneratorFactory):
         ct = get_column_type(column)
         if not isinstance(ct, Numeric) and not isinstance(ct, Integer):
             return []
-        return [MimesisGenerator("person.weight")]
+        return [MimesisProposer("person.weight")]

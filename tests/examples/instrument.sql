@@ -1,5 +1,5 @@
 -- DROP DATABASE IF EXISTS instrument WITH (FORCE);
-CREATE DATABASE instrument WITH TEMPLATE template0 ENCODING = 'UTF8' LOCALE = 'en_US.utf8';
+CREATE DATABASE instrument WITH TEMPLATE template0 ENCODING = 'UTF8' ;
 ALTER DATABASE instrument OWNER TO postgres;
 
 \connect instrument

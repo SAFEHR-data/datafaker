@@ -63,7 +63,7 @@ class ConfigureMissingnessTests(RequiresDBTestCase):
                     " player_id__is_null, based_on__is_null FROM"
                     " (SELECT player_id IS NULL AS player_id__is_null,"
                     " based_on IS NULL AS based_on__is_null FROM"
-                    " signature_model ORDER BY RANDOM() LIMIT 1000)"
+                    ' "signature_model" ORDER BY RANDOM() LIMIT 1000)'
                     " AS __t GROUP BY player_id__is_null, based_on__is_null"
                 ),
             )

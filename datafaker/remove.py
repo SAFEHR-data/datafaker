@@ -3,17 +3,16 @@ from typing import Any, Mapping, Optional
 
 from sqlalchemy import MetaData, delete
 
-from datafaker.settings import get_destination_dsn, get_destination_schema
-from datafaker.utils import (
+from datafaker.db_utils import (
     create_db_engine,
     get_metadata,
     get_sync_engine,
-    get_vocabulary_table_names,
-    logger,
     reinstate_vocab_foreign_key_constraints,
     remove_vocab_foreign_key_constraints,
     sorted_non_vocabulary_tables,
 )
+from datafaker.settings import get_destination_dsn, get_destination_schema
+from datafaker.utils import get_vocabulary_table_names, logger
 
 
 def remove_db_data(metadata: MetaData, config: Mapping[str, Any]) -> None:
@@ -69,5 +68,5 @@ def remove_db_tables(metadata: Optional[MetaData]) -> None:
         )
     )
     if metadata is None:
-        metadata = get_metadata(dst_engine, schema_name=schema_name)
+        metadata = get_metadata(dst_engine)
     metadata.drop_all(dst_engine)

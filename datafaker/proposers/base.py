@@ -1,14 +1,20 @@
-"""Basic Generators and factories."""
+"""Basic Proposers and their factories."""
 
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
-from typing import Any, Sequence, Union
+from collections.abc import Mapping, Sequence
+from typing import Any, Union
 
 import mimesis
 import mimesis.locales
-import sqlalchemy
-from sqlalchemy import Column, Engine, func, literal_column, select, table
+from sqlalchemy import Column, Engine, Join, Table, func, select
+from sqlalchemy.exc import DatabaseError
+from sqlalchemy.sql.selectable import NamedFromClause
+from sqlalchemy.sql.visitors import (
+    ExternallyTraversible,
+    replacement_traverse,
+    traverse,
+)
 from sqlalchemy.types import Integer, Numeric, String, TypeEngine
 from typing_extensions import Self
 
@@ -22,18 +28,18 @@ dist_gen = DistributionProvider()
 generic = mimesis.Generic(locale=mimesis.locales.Locale.EN_GB)
 
 
-class GeneratorError(Exception):
-    """Error thrown from Datafaker Generators."""
+class ProposerError(Exception):
+    """Error thrown from Datafaker Proposers."""
 
 
-class Generator(ABC):
+class Proposer(ABC):
     """
-    Random data generator.
+    Random data generator proposer.
 
-    A generator is specific to a particular column in a particular table in
-    a particluar database.
+    A proposer is specific to a particular column (set) in a particular table
+    in a particluar database.
 
-    A generator knows how to fetch its summary data from the database, how to calculate
+    A proposer knows how to fetch its summary data from the database, how to calculate
     its fit (if apropriate) and which function actually does the generation.
 
     It also knows these summary statistics for the column it was instantiated on,
@@ -42,14 +48,14 @@ class Generator(ABC):
 
     @abstractmethod
     def function_name(self) -> str:
-        """Get the name of the generator function to put into df.py."""
+        """Get the name of the generator function to call to generate the data."""
 
     def name(self) -> str:
         """
-        Get the name of the generator.
+        Get the name of the proposer.
 
         Usually the same as the function name, but can be different to distinguish
-        between generators that have the same function but different queries.
+        between proposers that have the same function but different queries.
         """
         return self.function_name()
 
@@ -65,6 +71,10 @@ class Generator(ABC):
         SRC_STATS["auto__patient"]["results"][0]["age_mean"] as the "avg_age" argument
         to the generator function.
         """
+
+    def nominal_args(self) -> list[str]:
+        """Get the args the generator wants to be called with."""
+        return []
 
     def select_aggregate_clauses(self) -> dict[str, dict[str, str]]:
         """
@@ -103,6 +113,23 @@ class Generator(ABC):
 
         Keys should be chosen to minimize the chances of clashing with other queries,
         for example "auto__{table}__{column}__{queryname}"
+
+        In order for your query to work for all database types, alias each table
+        referenced in both FROM and SELECT clauses, only use the aliased value,
+        and double quote all table names.
+
+        The following are OK:
+
+        - SELECT AVG(column) FROM "table" WHERE column > 3
+        - SELECT AVG(a.column) FROM "table" AS a WHERE a.column > 3
+
+        The following are not OK:
+
+        - SELECT AVG("table".column) FROM "table" WHERE "table".column > 3
+        - SELECT AVG(a.column) FROM table AS a WHERE a.column > 3
+
+        Or, if you are using the SQLAlchemy ORM, pass the query through
+          ``duckdb_workaround`` before compiling it.
         """
         return {}
 
@@ -128,8 +155,13 @@ class Generator(ABC):
         return default
 
 
-class PredefinedGenerator(Generator):
-    """Generator built from an existing config.yaml."""
+class PredefinedProposer(Proposer):
+    """
+    Proposer built from an existing config.yaml.
+
+    Does not actually propose, it just represents generators
+    that have been defined previously.
+    """
 
     SELECT_AGGREGATE_RE = re.compile(
         r"SELECT (.*) FROM ((?:[A-Za-z_][A-Za-z0-9_]*\.)?[A-Za-z_][A-Za-z0-9_]*)"
@@ -161,22 +193,21 @@ class PredefinedGenerator(Generator):
         config: Mapping[str, Any],
     ):
         """
-        Initialise a generator from a config.yaml.
+        Initialise a proposer from a config.yaml.
 
         :param config: The entire configuration.
         :param generator_object: The part of the configuration at tables.*.row_generators
         """
         logger.debug(
-            "Creating a PredefinedGenerator %s from table %s",
+            "Creating a PredefinedProposer %s from table %s",
             generator_object["name"],
             table_name,
         )
         self._table_name = table_name
         self._name: str = generator_object["name"]
         self._kwn: dict[str, str] = generator_object.get("kwargs", {})
+        self._asn: list[str] = generator_object.get("args", [])
         self._src_stats_mentioned = self._get_src_stats_mentioned(self._kwn)
-        # Need to deal with this somehow (or remove it from the schema)
-        self._argn: list[str] = generator_object.get("args", [])
         self._select_aggregate_clauses: dict[str, dict[str, str | Any]] = {}
         self._custom_queries = {}
         for sstat in config.get("src-stats", []):
@@ -219,8 +250,12 @@ class PredefinedGenerator(Generator):
         return self._name
 
     def nominal_kwargs(self) -> dict[str, str]:
-        """Get the arguments to be entered into ``config.yaml``."""
+        """Get the keyword arguments to be entered into ``config.yaml``."""
         return self._kwn
+
+    def nominal_args(self) -> list[str]:
+        """Get the position arguments to be entered into ``config.yaml``."""
+        return self._asn
 
     def select_aggregate_clauses(self) -> dict[str, dict[str, str]]:
         """Get the query fragments the generators need to call."""
@@ -234,27 +269,78 @@ class PredefinedGenerator(Generator):
         """Get the kwargs (summary statistics) this generator was instantiated with."""
         # Run the queries from nominal_kwargs
         # ...
-        logger.error("PredefinedGenerator.actual_kwargs not implemented yet")
+        logger.error("PredefinedProposer.actual_kwargs not implemented yet")
         return {}
 
     def generate_data(self, count: int) -> list[Any]:
         """Generate ``count`` random data points for this column."""
         # Call the function if we can. This could be tricky...
         # ...
-        logger.error("PredefinedGenerator.generate_data not implemented yet")
+        logger.error("PredefinedProposer.generate_data not implemented yet")
         return []
 
 
-class GeneratorFactory(ABC):
-    """A factory for making generators appropriate for a database column."""
+class ProposerFactory(ABC):
+    """A factory for making proposers appropriate for a database column."""
 
     @abstractmethod
-    def get_generators(
+    def get_proposers(
         self,
         columns: list[Column],
         engine: Engine,
-    ) -> Sequence[Generator]:
-        """Get the generators appropriate to these columns."""
+    ) -> Sequence[Proposer]:
+        """Get the proposers appropriate to these columns."""
+
+
+class TableReplacer:
+    """
+    Replaces tables with aliased tables.
+
+    We need this to work around a DuckDB problem:
+    If we are using the ORM code to select a column ``c`` from a table
+    ``t.parquet``, then DuckDB expects the SQL
+    ``SELECT "t.parquet".c FROM "t.parquet"`` if ``t.parquet`` is an actual
+    table in the database, or ``SELECT t.c FROM "t.parquet"`` if ``t.parquet``
+    names a file. The best way around this seems to be to use an aliased table,
+    which works in both cases: ``SELECT a.c FROM "t.parquet" AS a``, and the
+    best way for that to happen seems to be to use ``replacement_traverse``.
+    """
+
+    def __init__(self, table: Table) -> None:
+        """Initialise with the table to be aliased."""
+        self.table = table
+        self.atable = table.alias(f"_{table.name}__alias")
+
+    def replace(
+        self, obj: ExternallyTraversible, **_kw: Any
+    ) -> ExternallyTraversible | None:
+        """Replace columns with the same column on the aliased table."""
+        if isinstance(obj, Column):
+            if obj.table == self.table:
+                return self.atable.columns[obj.name]
+        elif isinstance(obj, Table):
+            return self.atable
+        return None
+
+    def aliased_table(self) -> NamedFromClause:
+        """Get the aliased table."""
+        return self.atable
+
+
+def duckdb_workaround(stmt: ExternallyTraversible) -> Any:
+    """
+    Transform a SQLAlchemy ORM statement to work around DuckDB issues.
+
+    :param stmt: An ORM statement, such as the return value of ``select``.
+    :return: An ORM statement, transformed if necessary.
+    """
+    tables: list[Table] = []
+    traverse(stmt, {}, {"table": tables.append})
+    for t in tables:
+        tr = TableReplacer(t)
+        opts: Mapping[str, Any] = {}
+        stmt = replacement_traverse(stmt, opts, tr.replace)  # type: ignore
+    return stmt
 
 
 def fit_from_buckets(xs: Sequence[NumericType], ys: Sequence[NumericType]) -> float:
@@ -276,26 +362,25 @@ class Buckets:
     def __init__(
         self,
         engine: Engine,
-        table_name: str,
-        column_name: str,
+        table: Table | Join,
+        column: Any,
         mean: float,
         stddev: float,
         count: int,
         src_table: Any = None,
     ):
         """Initialise a Buckets object."""
-        src = src_table if src_table is not None else table(table_name)
-        col = literal_column(column_name)
-        offset = mean - 2 * stddev
+        bottom = mean - 2 * stddev
         width = stddev / 2
-        floor_expr = func.floor((col - offset) / width)
-        stmt = (
-            select(func.count(col).label("f"), floor_expr.label("b"))
-            .select_from(src)
-            .group_by(floor_expr)
-        )
         with engine.connect() as connection:
-            raw_buckets = connection.execute(stmt)
+            raw_buckets = connection.execute(
+                select(
+                    func.count(column).label("f"),  # pylint: disable=not-callable
+                    ((func.floor(column) - bottom) / width).label("b"),
+                )
+                .select_from(table)
+                .group_by("b")
+            )
             self.buckets: Sequence[int] = [0] * 10
             for rb in raw_buckets:
                 try:
@@ -315,7 +400,7 @@ class Buckets:
 
     @classmethod
     def make_buckets(
-        cls, engine: Engine, table_name: str, column_name: str, src_table: Any = None
+        cls, engine: Engine, table: Table | Join, column: Any
     ) -> Self | None:
         """
         Construct a Buckets object.
@@ -325,30 +410,34 @@ class Buckets:
         a standard deviation wide (except for the end two that extend to
         infinity). Each bucket will be set to the count of the number of values
         in the column within that bucket.
+
+        :param engine: SQLAlchemy engine.
+        :param table: SQLAlchemy table (or joined tables) to pull data from.
+        :param column: SQLAlchemy column or expression to measure.
         """
-        src = src_table if src_table is not None else table(table_name)
-        col = literal_column(column_name)
         stddev_fn = func.stdev if engine.dialect.name == "mssql" else func.stddev
-        stmt = select(
-            func.avg(col).label("mean"),
-            stddev_fn(col).label("stddev"),
-            func.count(col).label("count"),
-        ).select_from(src)
         with engine.connect() as connection:
-            result = connection.execute(stmt).first()
+            result = connection.execute(
+                duckdb_workaround(
+                    select(
+                        func.avg(column).label("mean"),
+                        stddev_fn(column).label("stddev"),
+                        func.count(column).label("count"),  # pylint: disable=not-callable
+                    ).select_from(table)
+                )
+            ).first()
             if result is None or result.stddev is None or getattr(result, "count") < 2:
                 return None
         try:
             buckets = cls(
                 engine,
-                table_name,
-                column_name,
+                table,
+                column,
                 result.mean,
                 result.stddev,
                 getattr(result, "count"),
-                src_table=src_table,
             )
-        except sqlalchemy.exc.DatabaseError as exc:
+        except DatabaseError as exc:
             logger.debug("Failed to instantiate Buckets object: %s", exc)
             return None
         return buckets
@@ -368,22 +457,22 @@ class Buckets:
         return self.fit_from_counts(buckets)
 
 
-class MultiGeneratorFactory(GeneratorFactory):
+class MultiProposerFactory(ProposerFactory):
     """A composite factory."""
 
-    def __init__(self, *factories: GeneratorFactory):
-        """Initialise a MultiGeneratorFactory."""
+    def __init__(self, *factories: ProposerFactory):
+        """Initialise a MultiProposerFactory."""
         super().__init__()
         self.factories = factories
 
-    def get_generators(
+    def get_proposers(
         self, columns: list[Column], engine: Engine
-    ) -> Sequence[Generator]:
-        """Get the generators appropriate to these columns."""
+    ) -> Sequence[Proposer]:
+        """Get the proposers appropriate to these columns."""
         return [
             generator
             for factory in self.factories
-            for generator in factory.get_generators(columns, engine)
+            for generator in factory.get_proposers(columns, engine)
         ]
 
 
@@ -395,11 +484,11 @@ def get_column_type(column: Column) -> TypeEngine:
         return column.type
 
 
-class ConstantGenerator(Generator):
-    """Generator that always produces the same value."""
+class ConstantProposer(Proposer):
+    """Proposer for a generator that always produces the same value."""
 
     def __init__(self, value: Any) -> None:
-        """Initialise the ConstantGenerator."""
+        """Initialise the ConstantProposer."""
         super().__init__()
         self.value = value
         self.repr = repr(value)
@@ -421,23 +510,23 @@ class ConstantGenerator(Generator):
         return [self.value for _ in range(count)]
 
 
-class ConstantGeneratorFactory(GeneratorFactory):
-    """Just the null generator."""
+class ConstantProposerFactory(ProposerFactory):
+    """Propose just the null generator."""
 
-    def get_generators(
-        self, columns: list[Column], _engine: Engine
-    ) -> Sequence[Generator]:
+    def get_proposers(
+        self, columns: list[Column], engine: Engine
+    ) -> Sequence[Proposer]:
         """Get the generators appropriate for these columns."""
         if len(columns) != 1:
             return []
         column = columns[0]
         if column.nullable:
-            return [ConstantGenerator(None)]
+            return [ConstantProposer(None)]
         c_type = get_column_type(column)
         if isinstance(c_type, String):
-            return [ConstantGenerator("")]
+            return [ConstantProposer("")]
         if isinstance(c_type, Numeric):
-            return [ConstantGenerator(0.0)]
+            return [ConstantProposer(0.0)]
         if isinstance(c_type, Integer):
-            return [ConstantGenerator(0)]
+            return [ConstantProposer(0)]
         return []
