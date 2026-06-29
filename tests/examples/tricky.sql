@@ -1,5 +1,5 @@
 -- DROP DATABASE IF EXISTS tricky WITH (FORCE);
-CREATE DATABASE tricky WITH TEMPLATE template0 ENCODING = 'UTF8' LOCALE = 'en_US.utf8';
+CREATE DATABASE tricky WITH TEMPLATE template0 ENCODING = 'UTF8' ;
 ALTER DATABASE tricky OWNER TO postgres;
 
 \connect tricky

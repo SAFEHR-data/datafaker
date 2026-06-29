@@ -1,5 +1,5 @@
 -- DROP DATABASE IF EXISTS instrument WITH (FORCE);
-CREATE DATABASE numbers WITH TEMPLATE template0 ENCODING = 'UTF8' LOCALE = 'en_US.utf8';
+CREATE DATABASE numbers WITH TEMPLATE template0 ENCODING = 'UTF8' ;
 ALTER DATABASE numbers OWNER TO postgres;
 
 \connect numbers

@@ -1,7 +1,7 @@
 --
 -- Version of src.dump that works with DuckDB and includes hospital visits.
 --
-CREATE DATABASE src WITH TEMPLATE = template0 ENCODING = 'UTF8' LOCALE = 'en_US.utf8';
+CREATE DATABASE src WITH TEMPLATE = template0 ENCODING = 'UTF8' ;
 
 ALTER DATABASE src OWNER TO postgres;
 
