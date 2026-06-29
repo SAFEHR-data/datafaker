@@ -246,6 +246,90 @@ class TestDuckDb(TestDatabaseBase):
         return self.get_dsn(name)
 
 
+class TestMSSQL(TestDatabaseBase):
+    """MS-SQL Server test database.
+
+    Requires the ``MSSQL_TEST_DSN`` environment variable to be set to a
+    ``mssql+pyodbc://`` connection string pointing at a running SQL Server
+    instance (e.g. the docker-compose ``mssql`` service).
+
+    Tests that use this class are skipped automatically when the variable is
+    absent or when a connection cannot be established.
+    """
+
+    _ENV_VAR = "MSSQL_TEST_DSN"
+    _base_dsn: str = ""
+
+    @classmethod
+    def skip(cls) -> str | None:
+        """Return a skip message if SQL Server is not reachable."""
+        dsn = os.environ.get(cls._ENV_VAR)
+        if not dsn:
+            return f"set {cls._ENV_VAR} to enable MS-SQL tests"
+        try:
+            import pyodbc as _pyodbc  # noqa: F401
+        except ImportError:
+            return "pyodbc not installed; run: poetry install --extras mssql"
+        try:
+            from sqlalchemy import create_engine as _ce
+
+            with _ce(dsn).connect():
+                pass
+        except Exception as exc:  # pylint: disable=broad-except
+            return f"cannot connect to MS-SQL ({exc})"
+        return None
+
+    @classmethod
+    def setup(cls) -> None:
+        """Store the base DSN for use by all instances."""
+        cls._base_dsn = os.environ[cls._ENV_VAR]
+
+    def open(self) -> None:
+        """Nothing to open — SQL Server runs externally."""
+
+    def close(self) -> None:
+        """Nothing to close — SQL Server runs externally."""
+
+    def get_dsn(self, database_name: str | None) -> str:
+        """Return a DSN pointing at ``database_name`` within the SQL Server instance."""
+        if not database_name:
+            return self._base_dsn
+        from sqlalchemy.engine import make_url
+
+        url = make_url(self._base_dsn)
+        return str(url.set(database=database_name))
+
+    def create_empty(self, name: str) -> str:
+        """Create a SQL Server database named ``name`` and return its DSN."""
+        dsn = self.get_dsn(name)
+        from sqlalchemy_utils import create_database, database_exists
+
+        if not database_exists(dsn):
+            create_database(dsn)
+        return dsn
+
+    def run_sql(self, sql_file: Path) -> None:
+        """Execute a T-SQL file via pyodbc, splitting batches on GO."""
+        import pyodbc  # pylint: disable=import-outside-toplevel
+
+        from sqlalchemy.engine import make_url  # pylint: disable=import-outside-toplevel
+
+        url = make_url(self._base_dsn)
+        conn_str = (
+            f"DRIVER={{ODBC Driver 18 for SQL Server}};"
+            f"SERVER={url.host},{url.port or 1433};"
+            f"DATABASE={url.database or 'master'};"
+            f"UID={url.username};PWD={url.password};"
+            "TrustServerCertificate=yes;"
+        )
+        sql = sql_file.read_text(encoding="utf-8")
+        with pyodbc.connect(conn_str, autocommit=True) as conn:
+            for batch in re.split(r"^\s*GO\s*$", sql, flags=re.MULTILINE):
+                batch = batch.strip()
+                if batch:
+                    conn.execute(batch)
+
+
 class DatafakerTestCase(TestCase):
     """Parent class for all TestCases in datafaker."""
 

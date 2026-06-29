@@ -38,6 +38,7 @@ from datafaker.utils import (
     get_ignored_table_names,
     get_vocabulary_table_names,
     logger,
+    make_async_dsn,
     make_foreign_key_name,
 )
 
@@ -141,8 +142,7 @@ def create_db_engine(
     """Create a SQLAlchemy Engine."""
     try:
         if use_asyncio:
-            async_dsn = db_dsn.replace("postgresql://", "postgresql+asyncpg://")
-            engine: MaybeAsyncEngine = create_async_engine(async_dsn, **kwargs)
+            engine: MaybeAsyncEngine = create_async_engine(make_async_dsn(db_dsn), **kwargs)
         else:
             engine = create_engine(db_dsn, **kwargs)
     except NoSuchModuleError as exc:
@@ -155,7 +155,10 @@ def create_db_engine(
 
     settings = {}
     if schema_name is not None:
-        settings["search_path"] = schema_name
+        if get_sync_engine(engine).dialect.name == "mssql":
+            engine = engine.execution_options(schema_translate_map={None: schema_name})
+        else:
+            settings["search_path"] = schema_name
     if parquet_dir is not None:
         joined = ",".join(_find_parquet_directories(parquet_dir))
         # double up single quotes
