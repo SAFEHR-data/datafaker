@@ -136,6 +136,7 @@ def create_db_vocab(
         config,
         dst_engine,
     )
+    dst_engine.dispose()
     return tables_loaded
 
 
