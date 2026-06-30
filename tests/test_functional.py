@@ -317,7 +317,7 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
     schema_name = "public"
     alt_orm_file_path = Path("my_orm.yaml")
 
-    def atest_workflow_maximal_args(self) -> None:
+    def test_workflow_maximal_args(self) -> None:
         """Test the CLI workflow runs with optional arguments."""
         completed_process = self.invoke(
             "--verbose",
