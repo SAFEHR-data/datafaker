@@ -139,13 +139,13 @@ class ContinuousDistributionProposerFactory(ProposerFactory):
     def _get_generators_from_buckets(
         self,
         engine: Engine,  # pylint: disable=unused-argument
-        table_name: str,
+        src_table: Table,
         column_name: str,
         buckets: Buckets,
     ) -> Sequence[Proposer]:
         return [
-            GaussianProposer(table_name, column_name, buckets),
-            UniformProposer(table_name, column_name, buckets),
+            GaussianProposer(src_table.name, column_name, buckets),
+            UniformProposer(src_table.name, column_name, buckets),
         ]
 
     def get_proposers(
@@ -163,7 +163,7 @@ class ContinuousDistributionProposerFactory(ProposerFactory):
         if buckets is None:
             return []
         return self._get_generators_from_buckets(
-            engine, table.name, column.name, buckets
+            engine, table, column.name, buckets
         )
 
 
