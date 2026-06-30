@@ -215,7 +215,7 @@ class TestMakeStats(RequiresDBTestCase):
             count_names,
             [
                 {"num": 1, "name": "Miranda Rando-Generata"},
-                {"num": 997, "name": "Randy Random"},
+                {"num": 997, "name": "Someone Random"},
                 {"num": 1, "name": "Testfried Testermann"},
                 {"num": 1, "name": "Veronica Fyre"},
             ],
