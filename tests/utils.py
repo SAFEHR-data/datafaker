@@ -297,16 +297,32 @@ class TestMSSQL(TestDatabaseBase):
         from sqlalchemy.engine import make_url
 
         url = make_url(self._base_dsn)
-        return str(url.set(database=database_name))
+        return url.set(database=database_name).render_as_string(hide_password=False)
 
     def create_empty(self, name: str) -> str:
-        """Create a SQL Server database named ``name`` and return its DSN."""
-        dsn = self.get_dsn(name)
-        from sqlalchemy_utils import create_database, database_exists
+        """Drop (if exists) and create a fresh SQL Server database named ``name``."""
+        import pyodbc  # pylint: disable=import-outside-toplevel
+        from sqlalchemy.engine import make_url  # pylint: disable=import-outside-toplevel
 
-        if not database_exists(dsn):
-            create_database(dsn)
-        return dsn
+        url = make_url(self._base_dsn)
+        conn_str = (
+            f"DRIVER={{ODBC Driver 18 for SQL Server}};"
+            f"SERVER={url.host},{url.port or 1433};"
+            f"DATABASE=master;"
+            f"UID={url.username};PWD={url.password};"
+            "TrustServerCertificate=yes;"
+        )
+        with pyodbc.connect(conn_str, autocommit=True) as conn:
+            conn.execute(
+                f"IF EXISTS (SELECT name FROM sys.databases WHERE name = N'{name}') "
+                f"ALTER DATABASE [{name}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE"
+            )
+            conn.execute(
+                f"IF EXISTS (SELECT name FROM sys.databases WHERE name = N'{name}') "
+                f"DROP DATABASE [{name}]"
+            )
+            conn.execute(f"CREATE DATABASE [{name}]")
+        return self.get_dsn(name)
 
     def run_sql(self, sql_file: Path) -> None:
         """Execute a T-SQL file via pyodbc, splitting batches on GO."""

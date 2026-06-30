@@ -150,7 +150,7 @@ SIMPLE_TYPE_PARSER = parsy.alt(
     parsy.string("DOUBLE PRECISION").result(
         sqltypes.DOUBLE_PRECISION
     ),  # must be before DOUBLE
-    simple(sqltypes.FLOAT),
+    numeric_type(sqltypes.FLOAT),
     simple(sqltypes.DOUBLE),
     simple(sqltypes.INTEGER),
     simple(sqltypes.SMALLINT),
