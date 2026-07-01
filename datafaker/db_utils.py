@@ -140,6 +140,7 @@ def create_db_engine(
     **kwargs: Any,
 ) -> MaybeAsyncEngine:
     """Create a SQLAlchemy Engine."""
+    kwargs.setdefault("pool_pre_ping", True)
     try:
         if use_asyncio:
             engine: MaybeAsyncEngine = create_async_engine(make_async_dsn(db_dsn), **kwargs)

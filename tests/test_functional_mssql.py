@@ -191,7 +191,7 @@ class MSSQLFunctionalTestCase(GeneratesDBTestCase):
         # Write orm.yaml so generate_data() has the file it expects.
         (self.orm_fd, self.orm_file_path) = mkstemp(".yaml", "orm_", text=True)
         with os.fdopen(self.orm_fd, "w", encoding="utf-8") as fh:
-            fh.write(make_tables_file(src_dsn, self.schema_name))
+            fh.write(make_tables_file(src_dsn, self.schema_name, engine=self.sync_engine))
 
         # Initialise stats/config path attributes expected by generate_data().
         self.stats_fd = 0

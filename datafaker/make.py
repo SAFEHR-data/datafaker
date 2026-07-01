@@ -723,9 +723,11 @@ def make_tables_file(
     db_dsn: str,
     schema_name: Optional[str],
     parquet_dir: Optional[Path] = None,
+    engine: Optional[Engine] = None,
 ) -> str:
     """Construct the YAML file representing the schema."""
-    engine = get_sync_engine(create_db_engine(db_dsn, schema_name=schema_name))
+    if engine is None:
+        engine = get_sync_engine(create_db_engine(db_dsn, schema_name=schema_name))
 
     metadata = get_metadata(engine)
     meta_dict = metadata_to_dict(metadata, schema_name, engine, parquet_dir)

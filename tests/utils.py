@@ -322,7 +322,23 @@ class TestMSSQL(TestDatabaseBase):
                 f"DROP DATABASE [{name}]"
             )
             conn.execute(f"CREATE DATABASE [{name}]")
-        return self.get_dsn(name)
+
+        # SQL Server can take a moment to bring the new database fully online.
+        # Poll until a connection succeeds rather than returning a DSN that
+        # immediately produces TCP resets.
+        dsn = self.get_dsn(name)
+        db_conn_str = conn_str.replace("DATABASE=master;", f"DATABASE={name};")
+        deadline = time.monotonic() + 30
+        while True:
+            try:
+                with pyodbc.connect(db_conn_str, autocommit=True, timeout=5) as probe:
+                    probe.execute("SELECT 1")
+                break
+            except pyodbc.Error:
+                if time.monotonic() > deadline:
+                    raise
+                time.sleep(0.5)
+        return dsn
 
     def run_sql(self, sql_file: Path) -> None:
         """Execute a T-SQL file via pyodbc, splitting batches on GO."""
