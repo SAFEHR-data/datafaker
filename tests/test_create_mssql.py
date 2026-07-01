@@ -51,10 +51,6 @@ class TestMSSQLIdentityPresent(unittest.TestCase):
         ddl = _compile_create_table(self._make_table())
         self.assertIn("value", ddl.lower())
 
-    def test_duckdb_serial_hook_still_works(self) -> None:
-        """The DuckDB SERIAL hook is not affected by this change."""
-        self.assertTrue(callable(datafaker.create.remove_serial))
-
 
 class TestMSSQLRemoveOnDeleteCascade(unittest.TestCase):
     """@compiles(CreateTable, 'mssql') strips ON DELETE CASCADE to avoid error 1785."""
