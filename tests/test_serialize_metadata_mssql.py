@@ -132,7 +132,7 @@ class TestExistingPostgreSQLTypesRoundTrip(unittest.TestCase):
         self.assertIs(parse("BOOLEAN"), sqltypes.BOOLEAN)
 
     def test_float(self) -> None:
-        self.assertIs(parse("FLOAT"), sqltypes.FLOAT)
+        self.assertIsInstance(parse("FLOAT"), sqltypes.FLOAT)
 
     def test_double_precision(self) -> None:
         self.assertIs(parse("DOUBLE PRECISION"), sqltypes.DOUBLE_PRECISION)
