@@ -64,7 +64,9 @@ PostgreSQL uses `SERIAL` for autoincrement columns. The code already strips `SER
 poetry install --extras mssql
 ```
 
-### 2. Install and register the ODBC driver (macOS)
+### 2. Install and register the ODBC driver
+
+#### mac OS
 
 If you do not already have the Microsoft ODBC driver installed:
 
@@ -88,6 +90,16 @@ Description=Microsoft ODBC Driver 18 for SQL Server
 Driver=/opt/homebrew/lib/libmsodbcsql.18.dylib
 UsageCount=1
 EOF
+```
+
+#### Ubuntu
+
+Install and check the MS SQL tools:
+
+```console
+$ sudo apt install mssql-tools18
+$ odbcinst -q -d
+[ODBC Driver 18 for SQL Server]
 ```
 
 ### 3. Configure the connection

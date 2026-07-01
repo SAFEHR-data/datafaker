@@ -2,7 +2,7 @@
 import sys
 import unittest
 from unittest.mock import MagicMock, call, patch
-
+from datafaker.db_utils import create_db_engine, get_metadata, get_sync_engine
 
 class TestMakeAsyncDsn(unittest.TestCase):
     """Tests for make_async_dsn."""
@@ -152,8 +152,6 @@ class TestSchemaTranslateMap(unittest.TestCase):
     """Tests for the cross-dialect schema routing in create_db_engine."""
 
     def _make_engine(self, dsn: str, schema_name: str | None = None):
-        from datafaker.utils import create_db_engine, get_sync_engine
-
         return get_sync_engine(create_db_engine(dsn, schema_name=schema_name))
 
     def test_no_schema_no_translate_map(self) -> None:
@@ -171,7 +169,6 @@ class TestSchemaTranslateMap(unittest.TestCase):
 
     def test_search_path_not_issued(self) -> None:
         """set_db_settings is never called with a search_path key."""
-        from datafaker.utils import create_db_engine, get_sync_engine
 
         with patch("datafaker.utils.set_db_settings") as mock_set:
             engine = get_sync_engine(
@@ -191,7 +188,6 @@ class TestSchemaTranslateMap(unittest.TestCase):
 
     def test_mssql_dsn_schema_sets_translate_map(self) -> None:
         """schema_translate_map is set even for an MS-SQL DSN (engine creation, no connect)."""
-        from datafaker.utils import create_db_engine, get_sync_engine
 
         # create_engine with mssql+pyodbc does not connect at construction time,
         # so this is safe to run even without an ODBC driver installed.
@@ -211,7 +207,6 @@ class TestGetMetadataSchema(unittest.TestCase):
 
     def test_reflect_called_with_schema(self) -> None:
         """get_metadata passes schema_name to MetaData.reflect."""
-        from datafaker.utils import get_metadata
 
         mock_engine = MagicMock()
         mock_engine.connect.return_value.__enter__ = MagicMock(return_value=MagicMock())
@@ -228,7 +223,6 @@ class TestGetMetadataSchema(unittest.TestCase):
 
     def test_reflect_called_without_schema_when_none(self) -> None:
         """get_metadata passes schema=None to reflect when no schema_name is given."""
-        from datafaker.utils import get_metadata
 
         mock_engine = MagicMock()
 
