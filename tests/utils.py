@@ -562,6 +562,10 @@ class RequiresDBTestCase(
 
     def tearDown(self) -> None:
         assert self.database is not None
+        if hasattr(self, "sync_engine"):
+            self.sync_engine.dispose()
+        if self.dst_engine is not None:
+            self.dst_engine.dispose()
         self.database.close()
         if self.dst_database is not None:
             self.dst_database.close()
