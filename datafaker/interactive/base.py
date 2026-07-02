@@ -407,18 +407,18 @@ class DbCmd(ABC, cmd.Cmd):
         max_peek_rows = 25
         if len(self._table_entries) <= self.table_index:
             return
-        table_name = self.table_name()
         col_names = arg.split()
         if not col_names:
             col_names = self._get_column_names()
         random_fn = (
             func.newid() if self.sync_engine.dialect.name == "mssql" else func.random()
         )
-        col_exprs = [literal_column(f'"{cn}"') for cn in col_names]
-        nonnull_clauses = [literal_column(f'"{cn}"').isnot(None) for cn in col_names]
+        table = self.table_metadata()
+        col_exprs = [table.columns[cn] for cn in col_names]
+        nonnull_clauses = [ce.isnot(None) for ce in col_exprs]
         stmt = (
             select(*col_exprs)
-            .select_from(self.table_metadata())
+            .select_from(table)
             .where(or_(*nonnull_clauses))
             .order_by(random_fn)
             .limit(max_peek_rows)
