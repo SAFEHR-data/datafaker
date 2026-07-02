@@ -170,7 +170,7 @@ class TestSchemaTranslateMap(unittest.TestCase):
     def test_search_path_not_issued(self) -> None:
         """set_db_settings is never called with a search_path key."""
 
-        with patch("datafaker.utils.set_db_settings") as mock_set:
+        with patch("datafaker.db_utils.set_db_settings") as mock_set:
             engine = get_sync_engine(
                 create_db_engine("duckdb:///:memory:", schema_name="myschema")
             )
@@ -212,7 +212,7 @@ class TestGetMetadataSchema(unittest.TestCase):
         mock_engine.connect.return_value.__enter__ = MagicMock(return_value=MagicMock())
         mock_engine.connect.return_value.__exit__ = MagicMock(return_value=False)
 
-        with patch("datafaker.utils.MetaData") as MockMetaData:
+        with patch("datafaker.db_utils.MetaData") as MockMetaData:
             mock_md = MagicMock()
             MockMetaData.return_value = mock_md
             mock_md.reflect.return_value = None
@@ -226,7 +226,7 @@ class TestGetMetadataSchema(unittest.TestCase):
 
         mock_engine = MagicMock()
 
-        with patch("datafaker.utils.MetaData") as MockMetaData:
+        with patch("datafaker.db_utils.MetaData") as MockMetaData:
             mock_md = MagicMock()
             MockMetaData.return_value = mock_md
             mock_md.reflect.return_value = None

@@ -729,7 +729,7 @@ def make_tables_file(
     if engine is None:
         engine = get_sync_engine(create_db_engine(db_dsn, schema_name=schema_name))
 
-    metadata = get_metadata(engine)
+    metadata = get_metadata(engine, schema_name=schema_name)
     meta_dict = metadata_to_dict(metadata, schema_name, engine, parquet_dir)
 
     if parquet_dir is not None:

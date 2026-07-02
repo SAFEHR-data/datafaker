@@ -156,10 +156,7 @@ def create_db_engine(
 
     settings = {}
     if schema_name is not None:
-        if get_sync_engine(engine).dialect.name == "mssql":
-            engine = engine.execution_options(schema_translate_map={None: schema_name})
-        else:
-            settings["search_path"] = schema_name
+        engine = engine.execution_options(schema_translate_map={None: schema_name})
     if parquet_dir is not None:
         joined = ",".join(_find_parquet_directories(parquet_dir))
         # double up single quotes
@@ -206,11 +203,11 @@ def create_db_engine_dst(
     return create_db_engine(db_dsn, schema_name, use_asyncio)
 
 
-def get_metadata(engine: Engine) -> MetaData:
+def get_metadata(engine: Engine, schema_name: Optional[str] = None) -> MetaData:
     """Get the MetaData object associated with the engine passed."""
     md = MetaData()
     try:
-        md.reflect(engine)
+        md.reflect(engine, schema=schema_name)
     except OperationalError as exc:
         logger.error("Cannot connect to database: %s", exc)
         raise Exit(1) from exc

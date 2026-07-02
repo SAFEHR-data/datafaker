@@ -68,5 +68,5 @@ def remove_db_tables(metadata: Optional[MetaData]) -> None:
         )
     )
     if metadata is None:
-        metadata = get_metadata(dst_engine)
+        metadata = get_metadata(dst_engine, schema_name=schema_name)
     metadata.drop_all(dst_engine)

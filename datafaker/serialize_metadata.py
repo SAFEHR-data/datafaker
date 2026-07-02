@@ -249,7 +249,9 @@ def column_to_dict(column: Column, dialect: Dialect) -> dict[str, typing.Any]:
     return result
 
 
-def _unqualify_fk_target(fk: str) -> str:
+def _unqualify_fk_target(
+    fk: str, table_names: typing.Optional[frozenset] = None
+) -> str:
     """
     Drop the schema qualifier from a 3-part FK target.
 
@@ -257,9 +259,17 @@ def _unqualify_fk_target(fk: str) -> str:
     can resolve the reference against a MetaData whose tables were registered
     without a schema prefix. 2-part ``table.column`` targets are returned
     unchanged.
+
+    When ``table_names`` is supplied, a 3-part target whose first two parts
+    form a known table name (e.g. ``manufacturer.parquet``) is left unchanged
+    because the dot is part of the table name, not a schema prefix.
     """
     parts = fk.split(".")
-    return ".".join(parts[-2:]) if len(parts) == 3 else fk
+    if len(parts) == 3:
+        if table_names is not None and f"{parts[0]}.{parts[1]}" in table_names:
+            return fk
+        return f"{parts[1]}.{parts[2]}"
+    return fk
 
 
 def dict_to_column(
@@ -267,6 +277,7 @@ def dict_to_column(
     col_name: str,
     rep: dict,
     ignore_fk: typing.Callable[[str], bool],
+    table_names: typing.Optional[frozenset] = None,
 ) -> Column:
     """
     Produce column from aspects of its dict description.
@@ -292,7 +303,7 @@ def dict_to_column(
     if "foreign_keys" in rep:
         args = [
             ForeignKey(
-                _unqualify_fk_target(fk),
+                _unqualify_fk_target(fk, table_names),
                 name=make_foreign_key_name(table_name, col_name),
                 ondelete="CASCADE",
             )
@@ -343,13 +354,14 @@ def dict_to_table(
     meta: MetaData,
     table_dict: TableT,
     ignore_fk: typing.Callable[[str], bool],
+    table_names: typing.Optional[frozenset] = None,
 ) -> Table:
     """Create a Table from its description."""
     return Table(
         name,
         meta,
         *[
-            dict_to_column(name, colname, col, ignore_fk)
+            dict_to_column(name, colname, col, ignore_fk, table_names)
             for (colname, col) in table_dict.get("columns", {}).items()
         ],
         *[dict_to_unique(constraint) for constraint in table_dict.get("unique", [])],
@@ -423,7 +435,8 @@ def dict_to_metadata(
         ignore_fk = partial(should_ignore_fk, tables_config)
     else:
         ignore_fk = _always_false
+    table_names = frozenset(tables_dict.keys())
     meta = MetaData()
     for k, td in tables_dict.items():
-        dict_to_table(k, meta, td, ignore_fk)
+        dict_to_table(k, meta, td, ignore_fk, table_names)
     return meta
