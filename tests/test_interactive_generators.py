@@ -227,9 +227,10 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertEqual(
                 gc.config["src-stats"][0]["query"],
                 (
-                    f'SELECT {column} AS value FROM "{table}"'
-                    f" WHERE {column} IS NOT NULL"
-                    f" GROUP BY value ORDER BY COUNT({column}) DESC"
+                    f'SELECT _counted.value \nFROM (SELECT "{column}" AS value,'
+                    f' count("{column}") AS count \nFROM {table} \nWHERE "{column}"'
+                    f' IS NOT NULL GROUP BY "{column}") AS _counted'
+                    f" ORDER BY _counted.count DESC"
                 ),
             )
 

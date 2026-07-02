@@ -498,6 +498,126 @@ class TestPredefinedGeneratorSchemaQualified(unittest.TestCase):
         self.assertIn("sd__age", gen.select_aggregate_clauses())
 
 
+class TestContinuousStddevDialect(unittest.TestCase):
+    """ContinuousDistributionProposer and LogNormalProposer emit STDEV on MSSQL."""
+
+    def _make_table(self) -> tuple:
+        meta = MetaData()
+        tbl = Table("person", meta, Column("age", Integer()))
+        return tbl, tbl.c.age
+
+    def test_gaussian_postgresql_uses_stddev(self) -> None:
+        """GaussianProposer.select_aggregate_clauses uses STDDEV on PostgreSQL."""
+        from datafaker.proposers.continuous import GaussianProposer
+
+        tbl, _ = self._make_table()
+        proposer = GaussianProposer(tbl.name, "age", MagicMock(), dialect_name="postgresql")
+        clause = proposer.select_aggregate_clauses()["stddev__age"]["clause"]
+        self.assertIn("STDDEV", clause.upper())
+
+    def test_gaussian_mssql_uses_stdev(self) -> None:
+        """GaussianProposer.select_aggregate_clauses uses STDEV on MSSQL."""
+        from datafaker.proposers.continuous import GaussianProposer
+
+        tbl, _ = self._make_table()
+        proposer = GaussianProposer(tbl.name, "age", MagicMock(), dialect_name="mssql")
+        clause = proposer.select_aggregate_clauses()["stddev__age"]["clause"]
+        self.assertIn("STDEV", clause.upper())
+        self.assertNotIn("STDDEV", clause.upper())
+
+    def test_lognormal_postgresql_uses_stddev(self) -> None:
+        """LogNormalProposer.select_aggregate_clauses uses STDDEV on PostgreSQL."""
+        from datafaker.proposers.continuous import LogNormalProposer
+
+        tbl, _ = self._make_table()
+        proposer = LogNormalProposer(tbl.name, "age", MagicMock(), 1.0, 0.5, dialect_name="postgresql")
+        clause = proposer.select_aggregate_clauses()["logstddev__age"]["clause"]
+        self.assertIn("STDDEV", clause.upper())
+
+    def test_lognormal_mssql_uses_stdev(self) -> None:
+        """LogNormalProposer.select_aggregate_clauses uses STDEV on MSSQL."""
+        from datafaker.proposers.continuous import LogNormalProposer
+
+        tbl, _ = self._make_table()
+        proposer = LogNormalProposer(tbl.name, "age", MagicMock(), 1.0, 0.5, dialect_name="mssql")
+        clause = proposer.select_aggregate_clauses()["logstddev__age"]["clause"]
+        self.assertIn("STDEV", clause.upper())
+        self.assertNotIn("STDDEV", clause.upper())
+
+
+class TestIntervalsDifferenceDialect(unittest.TestCase):
+    """SecondsDifference compiles to DATEDIFF on MSSQL and EXTRACT(EPOCH) on PostgreSQL."""
+
+    def _make_element(self):
+        from sqlalchemy import literal_column
+        from datafaker.proposers.intervals import SecondsDifference
+
+        return SecondsDifference(literal_column("t1"), literal_column("t2"))
+
+    def test_postgresql_uses_extract_epoch(self) -> None:
+        """PostgreSQL SecondsDifference uses EXTRACT(EPOCH FROM …)."""
+        elem = self._make_element()
+        sql = str(elem.compile(dialect=postgresql.dialect())).upper()
+        self.assertIn("EXTRACT", sql)
+        self.assertIn("EPOCH", sql)
+        self.assertNotIn("DATEDIFF", sql)
+
+    def test_mssql_uses_datediff(self) -> None:
+        """MSSQL SecondsDifference uses DATEDIFF(second, …)."""
+        elem = self._make_element()
+        sql = str(elem.compile(dialect=mssql.dialect())).upper()
+        self.assertIn("DATEDIFF", sql)
+        self.assertNotIn("EXTRACT", sql)
+        self.assertNotIn("EPOCH", sql)
+
+    def test_date_after_proposer_stddev_clause_mssql(self) -> None:
+        """DateAfterProposer.select_aggregate_clauses uses STDEV and DATEDIFF on MSSQL."""
+        from sqlalchemy import Column
+        from sqlalchemy.types import DateTime
+        from datafaker.proposers.intervals import DateAfterProposer
+
+        meta = MetaData()
+        tbl = Table("visit", meta, Column("start_date", DateTime()), Column("end_date", DateTime()))
+        proposer = DateAfterProposer(
+            metadata=meta,
+            sd=1.0,
+            mean=86400.0,
+            column=tbl.c.end_date,
+            anchor=tbl.c.start_date,
+            dialect_name="mssql",
+        )
+        clauses = proposer.select_aggregate_clauses()
+        mean_clause = clauses["mean__end_date"]["clause"].upper()
+        sd_clause = clauses["stddev__end_date"]["clause"].upper()
+        self.assertIn("DATEDIFF", mean_clause)
+        self.assertIn("DATEDIFF", sd_clause)
+        self.assertIn("STDEV", sd_clause)
+        self.assertNotIn("STDDEV", sd_clause)
+
+    def test_date_after_proposer_stddev_clause_postgresql(self) -> None:
+        """DateAfterProposer.select_aggregate_clauses uses STDDEV and EXTRACT on PostgreSQL."""
+        from sqlalchemy import Column
+        from sqlalchemy.types import DateTime
+        from datafaker.proposers.intervals import DateAfterProposer
+
+        meta = MetaData()
+        tbl = Table("visit", meta, Column("start_date", DateTime()), Column("end_date", DateTime()))
+        proposer = DateAfterProposer(
+            metadata=meta,
+            sd=1.0,
+            mean=86400.0,
+            column=tbl.c.end_date,
+            anchor=tbl.c.start_date,
+            dialect_name="postgresql",
+        )
+        clauses = proposer.select_aggregate_clauses()
+        mean_clause = clauses["mean__end_date"]["clause"].upper()
+        sd_clause = clauses["stddev__end_date"]["clause"].upper()
+        self.assertIn("EXTRACT", mean_clause)
+        self.assertIn("EXTRACT", sd_clause)
+        self.assertIn("STDDEV", sd_clause)
+
+
 class TestAggregateQuerySchemaQualified(unittest.TestCase):
     """_get_aggregate_query qualifies table names using the engine's schema_translate_map."""
 
