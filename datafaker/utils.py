@@ -1,5 +1,6 @@
 """Utility functions."""
 import ast
+import typing
 import importlib.util
 import io
 import json
@@ -579,6 +580,29 @@ def generators_require_stats(config: Mapping) -> bool:
     for error in errors:
         logger.error(*error)
     return "SRC_STATS" in symbols
+
+
+def unqualify_fk_target(
+    fk: str, table_names: typing.Optional[frozenset] = None
+) -> str:
+    """
+    Drop the schema qualifier from a 3-part FK target.
+
+    Converts ``schema.table.column`` → ``table.column`` so that SQLAlchemy
+    can resolve the reference against a MetaData whose tables were registered
+    without a schema prefix. 2-part ``table.column`` targets are returned
+    unchanged.
+
+    When ``table_names`` is supplied, a 3-part target whose first two parts
+    form a known table name (e.g. ``manufacturer.parquet``) is left unchanged
+    because the dot is part of the table name, not a schema prefix.
+    """
+    parts = fk.split(".")
+    if len(parts) == 3:
+        if table_names is not None and f"{parts[0]}.{parts[1]}" in table_names:
+            return fk
+        return f"{parts[1]}.{parts[2]}"
+    return fk
 
 
 def split_column_full_name(col_fullname: str) -> tuple[str, str]:
