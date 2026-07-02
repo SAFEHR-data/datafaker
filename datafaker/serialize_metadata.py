@@ -303,6 +303,7 @@ def dict_to_column(
         type_=type_,
         primary_key=rep.get("primary", False),
         nullable=rep.get("nullable", None),
+        autoincrement=False,
     )
 
 
