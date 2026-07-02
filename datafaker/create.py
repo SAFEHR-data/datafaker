@@ -210,7 +210,7 @@ def create_db_data_into(
     :param metadata: Destination database metadata.
     """
     dst_engine = get_sync_engine(create_db_engine_dst(db_dsn, schema_name=schema_name))
-    gen_info = get_generation_info(metadata, config)
+    gen_info = get_generation_info(metadata, config, dst_engine.dialect.name)
     context = get_symbols(
         gen_info.row_generator_module_name,
         gen_info.story_generator_module_name,

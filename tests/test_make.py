@@ -25,20 +25,20 @@ class TestGetDefaultGenerator(unittest.TestCase):
         return Table("t", meta, *columns)
 
     def test_simple_integer_pk_returns_none(self) -> None:
-        """Single-column INTEGER PK with no FK → DB generates it, skip in df.py."""
+        """Single-column INTEGER PK with no FK → DB generates it on mssql, skip in df.py."""
         table = self._make_table(
             Column("id", Integer(), primary_key=True),
             Column("val", String()),
         )
-        self.assertIsNone(_get_default_generator(table.c.id))
+        self.assertIsNone(_get_default_generator(table.c.id, dialect_name="mssql"))
 
     def test_simple_biginteger_pk_returns_none(self) -> None:
-        """BigInteger (BIGINT) single-column PK is also DB-generated."""
+        """BigInteger (BIGINT) single-column PK is also DB-generated on mssql."""
         table = self._make_table(
             Column("id", BigInteger(), primary_key=True),
             Column("val", String()),
         )
-        self.assertIsNone(_get_default_generator(table.c.id))
+        self.assertIsNone(_get_default_generator(table.c.id, dialect_name="mssql"))
 
     def test_composite_pk_not_skipped(self) -> None:
         """Columns in a composite PK are not DB-generated and must have a generator."""

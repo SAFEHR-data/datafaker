@@ -405,10 +405,10 @@ def should_ignore_fk(tables_dict: dict[str, TableT], fk: str) -> bool:
     # Try the fully-qualified name first so users can be explicit in config
     # (e.g. "mimic100.concept: ignore: true"); fall back to the bare table
     # name for configs that don't include a schema prefix.
-    td = get_property(tables_dict, table, None)
+    td = tables_dict.get(table)
     if td is None:
         bare = table.split(".")[-1]
-        td = get_property(tables_dict, bare, {})
+        td = tables_dict.get(bare, {})
     return get_property(td, "ignore", False)
 
 
