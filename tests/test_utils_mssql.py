@@ -161,30 +161,33 @@ class TestSchemaTranslateMap(unittest.TestCase):
         self.assertNotIn("schema_translate_map", opts)
 
     def test_schema_sets_translate_map(self) -> None:
-        """When schema_name is given, schema_translate_map routes None to that schema."""
-        engine = self._make_engine("duckdb:///:memory:", schema_name="myschema")
+        """When schema_name is given, MSSQL uses schema_translate_map (not search_path)."""
+        try:
+            engine = self._make_engine(
+                "mssql+pyodbc://user:pass@host/db", schema_name="myschema"
+            )
+        except Exception:
+            self.skipTest("mssql+pyodbc driver not available in this environment")
         opts = engine.get_execution_options()
         self.assertIn("schema_translate_map", opts)
         self.assertEqual(opts["schema_translate_map"], {None: "myschema"})
 
-    def test_search_path_not_issued(self) -> None:
-        """set_db_settings is never called with a search_path key."""
+    def test_duckdb_schema_sets_search_path(self) -> None:
+        """For non-MSSQL dialects, schema_name is applied via search_path session setting."""
 
         with patch("datafaker.db_utils.set_db_settings") as mock_set:
             engine = get_sync_engine(
                 create_db_engine("duckdb:///:memory:", schema_name="myschema")
             )
-            # Force a connection so any connect-event handler would fire
+            # Force a connection so the connect-event handler fires
             with engine.connect() as conn:
                 conn.execute(__import__("sqlalchemy").text("SELECT 1"))
 
-            for c in mock_set.call_args_list:
-                settings_arg = c.args[1] if len(c.args) > 1 else c.kwargs.get("settings", {})
-                self.assertNotIn(
-                    "search_path",
-                    settings_arg,
-                    "search_path must not be passed to set_db_settings",
-                )
+        calls = mock_set.call_args_list
+        self.assertTrue(calls, "set_db_settings should have been called at least once")
+        settings_passed = calls[0].args[1] if len(calls[0].args) > 1 else calls[0].kwargs.get("settings", {})
+        self.assertIn("search_path", settings_passed)
+        self.assertEqual(settings_passed["search_path"], "myschema")
 
     def test_mssql_dsn_schema_sets_translate_map(self) -> None:
         """schema_translate_map is set even for an MS-SQL DSN (engine creation, no connect)."""

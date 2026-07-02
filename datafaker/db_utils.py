@@ -156,7 +156,10 @@ def create_db_engine(
 
     settings = {}
     if schema_name is not None:
-        engine = engine.execution_options(schema_translate_map={None: schema_name})
+        if get_sync_engine(engine).dialect.name == "mssql":
+            engine = engine.execution_options(schema_translate_map={None: schema_name})
+        else:
+            settings["search_path"] = schema_name
     if parquet_dir is not None:
         joined = ",".join(_find_parquet_directories(parquet_dir))
         # double up single quotes
