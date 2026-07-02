@@ -218,8 +218,8 @@ class TestMakeStats(RequiresDBTestCase):
         self.assertListEqual(
             count_names,
             [
+                {"num": 997, "name": "Anon Patient"},
                 {"num": 1, "name": "Miranda Rando-Generata"},
-                {"num": 997, "name": "Someone Random"},
                 {"num": 1, "name": "Testfried Testermann"},
                 {"num": 1, "name": "Veronica Fyre"},
             ],
