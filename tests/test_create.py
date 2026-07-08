@@ -31,7 +31,7 @@ from datafaker.make import FunctionCall, StoryGeneratorInfo, _get_generator_for_
 from datafaker.populate import TableGenerator
 from datafaker.serialize_metadata import dict_to_metadata, metadata_to_dict
 from datafaker.settings import SettingsError
-from tests.utils import DatafakerTestCase, GeneratesDBTestCase, RequiresDBTestCase
+from tests.utils import DatafakerTestCase, GeneratesDBTestCase, RequiresDBTestCase, TestMSSQL
 
 
 class TestCreate(GeneratesDBTestCase):
@@ -405,6 +405,7 @@ class CreateDataTestCase(RequiresDBTestCase):
     dump_file_path = "empty.sql"
     database_name = "empty"
     schema_name = "public"
+    dst_schema_name = "fake"
 
     def test_create_data_minimal(self) -> None:
         """Test creating one table with one PK column."""
@@ -518,3 +519,7 @@ class CreateDataTestCase(RequiresDBTestCase):
             self.schema_name,
             metadata,
         )
+
+class CreateDataTestCaseMsSql(CreateDataTestCase):
+    database_type = TestMSSQL
+    schema_name = None

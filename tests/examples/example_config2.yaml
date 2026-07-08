@@ -45,7 +45,7 @@ src-stats:
       - All the values and their counts that appear in column visit_type_concept_id of table hospital_visit
     query: >
       SELECT visit_type_concept_id AS value, COUNT(visit_type_concept_id) AS count FROM hospital_visit
-      WHERE visit_type_concept_id IS NOT NULL GROUP BY value
+      WHERE visit_type_concept_id IS NOT NULL GROUP BY visit_type_concept_id
       ORDER BY COUNT(visit_type_concept_id) DESC
 
 max-unique-constraint-tries: 50

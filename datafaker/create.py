@@ -52,6 +52,15 @@ def remove_mssql_on_delete_cascade(element: CreateTable, compiler: Any, **kw: An
     return text.replace(" ON DELETE CASCADE", "")
 
 
+@compiles(CreateSchema, "mssql")
+def mssql_create_schema(element: CreateSchema, compiler: Any, **kw: Any) -> str:
+    """Correct CREATE SCHEMA IF NOT EXISTS."""
+    name = element.element.replace("'", "''")
+    if element.if_not_exists:
+        return f"IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = '{name}') BEGIN EXEC('CREATE SCHEMA {name}') END"
+    return f"CREATE SCHEMA {name}"
+
+
 @compiles(CreateTable, "duckdb")
 def remove_on_delete_cascade(element: CreateTable, compiler: Any, **kw: Any) -> str:
     """
@@ -419,7 +428,7 @@ def populate(
         with dst_conn.begin():
             try:
                 for _ in range(table_generator.num_rows_per_pass):
-                    stmt = insert(table).values(table_generator(dst_conn))
+                    stmt = insert(table).values(table_generator.generate_row(dst_conn))
                     dst_conn.execute(stmt)
                     row_counts[table.name] = row_counts.get(table.name, 0) + 1
                 dst_conn.commit()

@@ -99,8 +99,8 @@ def _insert_sample_rows(engine) -> None:
         conn.execute(
             _SRC_METADATA.tables["manufacturer"].insert(),
             [
-                {"id": 1, "name": "Blender", "founded": "1951-01-08 04:05:06"},
-                {"id": 2, "name": "Gibbs", "founded": "1959-03-04 07:08:09"},
+                {"id": 1, "name": "Blender", "founded": "1951-01-08 12:05:06"},
+                {"id": 2, "name": "Gibbs", "founded": "1959-03-04 15:08:09"},
             ],
         )
         conn.execute(
@@ -166,7 +166,8 @@ class MSSQLFunctionalTestCase(GeneratesDBTestCase):
         self.database.open()
 
         # Create the source database, build schema, and seed rows.
-        src_dsn = self.database.create_empty(self.database_name)
+        self.database.create_empty(self.database_name, None)
+        src_dsn = self.database.get_dsn(self.database_name)
         src_engine = sa_create_engine(src_dsn)
         _SRC_METADATA.create_all(src_engine)
         _insert_sample_rows(src_engine)
@@ -181,7 +182,8 @@ class MSSQLFunctionalTestCase(GeneratesDBTestCase):
         # Empty destination database — create-tables will build the schema there.
         self.dst_database = TestMSSQL()
         self.dst_database.open()
-        dst_dsn = self.dst_database.create_empty(self._DST_DB)
+        self.dst_database.create_empty(self._DST_DB, None)
+        dst_dsn = self.dst_database.get_dsn(self.database_name)
         self.dst_name = self._DST_DB
         self.dst_metadata = MetaData()
         self.dst_engine = get_sync_engine(

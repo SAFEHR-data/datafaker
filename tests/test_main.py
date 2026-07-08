@@ -14,6 +14,7 @@ from tests.utils import (
     DatafakerTestCase,
     GeneratesDBTestCase,
     TestDuckDb,
+    TestMSSQL,
     get_test_settings,
 )
 
@@ -550,3 +551,9 @@ class TestCliCreateDuckDb(TestsCliCreate):
     """Tests that use the CLI to generate output in a DuckDB database."""
 
     database_type = TestDuckDb
+
+
+class TestCliCreateMsSql(TestsCliCreate):
+    """Tests that use the CLI to generate output in an MS Sql database."""
+
+    database_type = TestMSSQL

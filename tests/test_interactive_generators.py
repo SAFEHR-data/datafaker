@@ -19,6 +19,7 @@ from tests.utils import (
     RequiresDBTestCase,
     TestDbCmdMixin,
     TestDuckDb,
+    TestMSSQL,
 )
 
 
@@ -227,9 +228,10 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertEqual(
                 gc.config["src-stats"][0]["query"],
                 (
-                    f'SELECT {column} AS value FROM "{table}"'
-                    f" WHERE {column} IS NOT NULL"
-                    f" GROUP BY value ORDER BY COUNT({column}) DESC"
+                    f"""SELECT _counted.value 
+FROM (SELECT "{column}" AS value, count("{column}") AS count 
+FROM {table} 
+WHERE "{column}" IS NOT NULL GROUP BY "{column}") AS _counted ORDER BY _counted.count DESC"""
                 ),
             )
 
@@ -654,6 +656,11 @@ class ConfigureGeneratorsWithSrc2DuckDbTests(ConfigureGeneratorsWithSrc2Tests):
     database_type = TestDuckDb
 
 
+class ConfigureGeneratorsWithSrc2MsSqlTests(ConfigureGeneratorsWithSrc2Tests):
+    """Test `configure-generators` with `src2.dump` with DuckDB."""
+
+    database_type = TestMSSQL
+
 class ChoiceMeasurementTableStats:
     """Measure the data in the ``choice.sql`` schema."""
 
@@ -841,6 +848,12 @@ class GeneratorsOutputTestsDuckDb(GeneratorsOutputTests):
     database_type = TestDuckDb
 
 
+class GeneratorsOutputTestsMsSql(GeneratorsOutputTests):
+    """As ``GeneratorsOutputTests`` but with MS Sql."""
+
+    database_type = TestMSSQL
+
+
 class GeneratorTests(GeneratesDBTestCase):
     """Testing configure-generators with generation."""
 
@@ -973,3 +986,9 @@ class GeneratorTestsDuckDb(GeneratorTests):
     """As ``GeneratorTests`` but with DuckDB."""
 
     database_type = TestDuckDb
+
+
+class GeneratorTestsMsSql(GeneratorTests):
+    """As ``GeneratorTests`` but with M SSql."""
+
+    database_type = TestMSSQL

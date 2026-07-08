@@ -870,10 +870,8 @@ async def make_src_stats_connection(
     )
     src_stats = {
         query_block["name"]: {
-            "queries": {
-                "date": date_string,
-                "query": query_block["query"],
-            },
+            "query_date": date_string,
+            "query": query_block["query"],
             "comments": query_block.get("comments", []),
             "results": fix_types(result),
         }

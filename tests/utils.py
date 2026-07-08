@@ -21,7 +21,10 @@ from unittest import SkipTest, TestCase
 import duckdb
 import testing.postgresql
 import yaml
-from sqlalchemy import Engine, MetaData
+from prettytable import PrettyTable
+import pyodbc
+from sqlalchemy import Engine, MetaData, text, RowMapping
+from sqlalchemy.engine import make_url
 from sqlalchemy_utils import create_database
 
 from datafaker import settings
@@ -91,11 +94,10 @@ class TestDatabaseBase(ABC):
     def run_sql(self, sql_file: Path) -> None:
         """Run the provided SQL file on the test database."""
 
-    def create_empty(self, name: str) -> str:
+    def create_empty(self, name: str, schema_name: str | None) -> None:
         """Create an empty database and return the DSN string."""
         dsn = self.get_dsn(name)
         create_database(dsn)
-        return dsn
 
 
 class TestPostgres(TestDatabaseBase):
@@ -237,13 +239,13 @@ class TestDuckDb(TestDatabaseBase):
         duckdb_con.execute(sanitized)
         duckdb_con.close()
 
-    def create_empty(self, name: str) -> str:
+    def create_empty(self, name: str, schema_name: str | None) -> None:
         """
         The standard SQLAlchemy database creation tool doesn't work for DuckDB.
 
         Thankfully, it is not necessary either.
         """
-        return self.get_dsn(name)
+        return
 
 
 class TestMSSQL(TestDatabaseBase):
@@ -259,13 +261,36 @@ class TestMSSQL(TestDatabaseBase):
 
     _ENV_VAR = "MSSQL_TEST_DSN"
     _base_dsn: str = ""
+    _CREATE_DATABASE_RE = re.compile(r"CREATE\s+DATABASE\s+([A-Za-z0-9_]+)\s+WITH\s.*;")
+    _ALTER_DATABASE_RE = re.compile(r"ALTER\s+DATABASE\s+([A-Za-z0-9_]+)\s+OWNER\s+TO\s.*;")
+    _CONNECT_RE = re.compile(r"^\\connect\s+([A-Za-z0-9_]+)\s*$", re.MULTILINE)
+    _PUBLIC_SCHEMA = re.compile(r"(\s)public\.")
+    _GO_RE = re.compile(r"^\s*GO\s*$", re.MULTILINE)
+    _EOL_RE = re.compile(r";$", re.MULTILINE)
+    _TIMESTAMP_RE = re.compile(r"(TIMESTAMP)\s+WITH\s+TIME\s+ZONE", re.IGNORECASE)
+    _ALTER_OWNER_RE = re.compile(r"ALTER\s+(TABLE|DATABASE)\s+[A-Za-z0-9_.]+\s+OWNER\s+TO\s+[A-Za-z0-9_]+\s*;")
+    _ALTER_ONLY_RE = re.compile(r"ALTER\s+TABLE\s+ONLY\s+")
+    _CREATE_INDEX_RE = re.compile(r"(CREATE\s+INDEX\s+[A-Za-z0-9_.]+\s+ON\s+[A-Za-z0-9_.]+\s+)USING\s+[A-Za-z0-9_.]+\s+(\([A-Za-z0-9_., ]+\))\s*;")
+    _BOOLEAN_RE = re.compile(r"\bboolean\b", re.IGNORECASE)
+    _TRUE_RE = re.compile(r"\btrue\b", re.IGNORECASE)
+    _FALSE_RE = re.compile(r"\bfalse\b", re.IGNORECASE)
+    _UUID_RE = re.compile(r"\buuid\b", re.IGNORECASE)
+    _TEXT_RE = re.compile(r"\btext\b", re.IGNORECASE)
+
+    @classmethod
+    def get_test_db_dsn(cls) -> str:
+        return os.environ.get(
+            cls._ENV_VAR,
+            "mssql+pyodbc://sa:Datafaker!Test123"
+            "@127.0.0.1:21433/master"
+            "?driver=ODBC+Driver+18+for+SQL+Server"
+            "&TrustServerCertificate=yes"
+        )
 
     @classmethod
     def skip(cls) -> str | None:
         """Return a skip message if SQL Server is not reachable."""
-        dsn = os.environ.get(cls._ENV_VAR)
-        if not dsn:
-            return f"set {cls._ENV_VAR} to enable MS-SQL tests"
+        dsn = cls.get_test_db_dsn()
         try:
             import pyodbc as _pyodbc  # noqa: F401
         except ImportError:
@@ -282,52 +307,85 @@ class TestMSSQL(TestDatabaseBase):
     @classmethod
     def setup(cls) -> None:
         """Store the base DSN for use by all instances."""
-        cls._base_dsn = os.environ[cls._ENV_VAR]
+        cls._base_dsn = cls.get_test_db_dsn()
+
+    def __init__(self):
+        super().__init__()
+        self.db_names = []
+        self.prefix = f"tmp{''.join(random.choices(string.digits, k=3))}_"
 
     def open(self) -> None:
         """Nothing to open — SQL Server runs externally."""
 
     def close(self) -> None:
-        """Nothing to close — SQL Server runs externally."""
+        self._drop_databases_then(self.db_names, [])
+        self.db_names = []
 
     def get_dsn(self, database_name: str | None) -> str:
         """Return a DSN pointing at ``database_name`` within the SQL Server instance."""
         if not database_name:
             return self._base_dsn
-        from sqlalchemy.engine import make_url
 
         url = make_url(self._base_dsn)
-        return url.set(database=database_name).render_as_string(hide_password=False)
+        return url.set(database=self.prefix + database_name).render_as_string(hide_password=False)
 
-    def create_empty(self, name: str) -> str:
-        """Drop (if exists) and create a fresh SQL Server database named ``name``."""
-        import pyodbc  # pylint: disable=import-outside-toplevel
-        from sqlalchemy.engine import make_url  # pylint: disable=import-outside-toplevel
-
+    def _get_connection_string(self, db_name: str) -> str:
+        """Get a connection string for the named database."""
         url = make_url(self._base_dsn)
-        conn_str = (
+        return (
             f"DRIVER={{ODBC Driver 18 for SQL Server}};"
-            f"SERVER={url.host},{url.port or 1433};"
-            f"DATABASE=master;"
+            f"SERVER={url.host},{url.port or 21433};"
+            f"DATABASE={db_name};"
             f"UID={url.username};PWD={url.password};"
             "TrustServerCertificate=yes;"
         )
+
+    def _drop_databases_then(self, db_names: list[str], execs: list[str]) -> None:
+        """Drop the database ``db_name`` and maybe execute a command."""
+        conn_str = self._get_connection_string("master")
         with pyodbc.connect(conn_str, autocommit=True) as conn:
-            conn.execute(
-                f"IF EXISTS (SELECT name FROM sys.databases WHERE name = N'{name}') "
-                f"ALTER DATABASE [{name}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE"
-            )
-            conn.execute(
-                f"IF EXISTS (SELECT name FROM sys.databases WHERE name = N'{name}') "
-                f"DROP DATABASE [{name}]"
-            )
-            conn.execute(f"CREATE DATABASE [{name}]")
+            conn.execute(f"USE master")
+            for db_name in db_names:
+                # adapted from https://stackoverflow.com/questions/8439650/how-to-drop-all-tables-in-a-sql-server-database
+                conn.execute(f"""DECLARE @sql NVARCHAR(2000)
+
+WHILE(EXISTS(SELECT 1 from INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE CONSTRAINT_TYPE='FOREIGN KEY' AND TABLE_CATALOG='{db_name}'))
+BEGIN
+    SELECT TOP 1 @sql=('ALTER TABLE [{db_name}].' + TABLE_SCHEMA + '.[' + TABLE_NAME + '] DROP CONSTRAINT [' + CONSTRAINT_NAME + ']')
+    FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+    WHERE CONSTRAINT_TYPE = 'FOREIGN KEY'
+    EXEC(@sql)
+END
+
+WHILE(EXISTS(SELECT * from INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME != '__MigrationHistory' AND TABLE_NAME != 'database_firewall_rules' AND TABLE_TYPE != 'VIEW' AND TABLE_CATALOG='{db_name}'))
+BEGIN
+    SELECT TOP 1 @sql=('DROP TABLE [{db_name}].' + TABLE_SCHEMA + '.[' + TABLE_NAME + ']')
+    FROM INFORMATION_SCHEMA.TABLES
+    WHERE TABLE_NAME != '__MigrationHistory' AND TABLE_NAME != 'database_firewall_rules' 
+    EXEC(@sql)
+END""")
+                conn.execute("DROP DATABASE IF EXISTS [{db_name}]")
+            for exec in execs:
+                sql = exec.strip()
+                if sql:
+                    conn.execute(sql)
+
+    def create_empty(self, name: str, schema_name: str | None) -> None:
+        """Drop (if exists) and create a fresh SQL Server database named ``name``."""
+        qname = self.prefix + name
+        instructions = [
+            f"CREATE DATABASE [{qname}]",
+            f"USE [{qname}]",
+        ]
+        if schema_name:
+            instructions.append(f"CREATE SCHEMA [{schema_name}]")
+        self._drop_databases_then([qname], instructions)
+        self.db_names.append(qname)
 
         # SQL Server can take a moment to bring the new database fully online.
         # Poll until a connection succeeds rather than returning a DSN that
         # immediately produces TCP resets.
-        dsn = self.get_dsn(name)
-        db_conn_str = conn_str.replace("DATABASE=master;", f"DATABASE={name};")
+        db_conn_str = self._get_connection_string(qname)
         deadline = time.monotonic() + 30
         while True:
             try:
@@ -338,28 +396,44 @@ class TestMSSQL(TestDatabaseBase):
                 if time.monotonic() > deadline:
                     raise
                 time.sleep(0.5)
-        return dsn
 
     def run_sql(self, sql_file: Path) -> None:
         """Execute a T-SQL file via pyodbc, splitting batches on GO."""
-        import pyodbc  # pylint: disable=import-outside-toplevel
-
-        from sqlalchemy.engine import make_url  # pylint: disable=import-outside-toplevel
-
         url = make_url(self._base_dsn)
-        conn_str = (
-            f"DRIVER={{ODBC Driver 18 for SQL Server}};"
-            f"SERVER={url.host},{url.port or 1433};"
-            f"DATABASE={url.database or 'master'};"
-            f"UID={url.username};PWD={url.password};"
-            "TrustServerCertificate=yes;"
-        )
+        db_name = url.database or "master"
         sql = sql_file.read_text(encoding="utf-8")
-        with pyodbc.connect(conn_str, autocommit=True) as conn:
-            for batch in re.split(r"^\s*GO\s*$", sql, flags=re.MULTILINE):
-                batch = batch.strip()
-                if batch:
-                    conn.execute(batch)
+        # Which databases are we creating?
+        db_names = self._CREATE_DATABASE_RE.findall(sql)
+        self.db_names = [self.prefix + name for name in db_names]
+        # Get rid of parameters MSSQL does not understand
+        sql = self._CREATE_DATABASE_RE.sub(f"CREATE DATABASE {self.prefix}\\1;\nGO\n", sql)
+        # Get rid of ownership change
+        sql = self._ALTER_DATABASE_RE.sub("", sql)
+        # Turn \connect into USE
+        sql = self._CONNECT_RE.sub(f"USE {self.prefix}\\1;", sql)
+        # Get rid of public. (preceded by space)
+        sql = self._PUBLIC_SCHEMA.sub("\\1", sql)
+        # Get rid of WITH TIME ZONE
+        sql = self._TIMESTAMP_RE.sub("DATETIME2", sql)
+        # Get rid of changing owner
+        sql = self._ALTER_OWNER_RE.sub("", sql)
+        # Get rid of ONLY
+        sql = self._ALTER_ONLY_RE.sub("ALTER TABLE ", sql)
+        # Get USING out of CREATE INDEX
+        sql = self._CREATE_INDEX_RE.sub("\\1\\2;", sql)
+        # BOOLEAN -> BIT
+        sql = self._BOOLEAN_RE.sub("BIT", sql)
+        sql = self._TRUE_RE.sub("1", sql)
+        sql = self._FALSE_RE.sub("0", sql)
+        # UUID -> UNIQUEIDENTIFIER
+        sql = self._UUID_RE.sub("UNIQUEIDENTIFIER", sql)
+        # TEXT -> NVARCHAR(450), the largest unicode text that have a unique constaint
+        sql = self._TEXT_RE.sub("NVARCHAR(450)", sql)
+        sql = self._EOL_RE.sub(";\nGO", sql)
+        self._drop_databases_then(
+            self.db_names,
+            self._GO_RE.split(sql),
+        )
 
 
 class DatafakerTestCase(TestCase):
@@ -478,6 +552,22 @@ class DatafakerTestCase(TestCase):
         standard_msg = "\n".join(lines)
         self.fail(self._formatMessage(msg, standard_msg))
 
+def print_sql_results(engine: Engine, sql: str) -> None:
+    """
+    Pretty print the result of some sql.
+    """
+    with engine.connect() as conn:
+        results = conn.execute(text(sql)).fetchall()
+        if len(results) == 0:
+            print("No results returned")
+            return
+        pt = PrettyTable(results[0]._fields)
+        to_print = min(len(results), 20)
+        pt.add_rows(results[:to_print])
+        print(pt)
+        skipped = len(results) - to_print
+        if skipped:
+            print(f"... and {skipped} more rows")
 
 class RequiresDBTestCase(
     DatafakerTestCase
@@ -542,6 +632,22 @@ class RequiresDBTestCase(
         self.sync_engine = get_sync_engine(self.engine)
         self.metadata.reflect(self.sync_engine)
 
+    def sql(self, sql: str) -> None:
+        """
+        Execute some SQL against the source database.
+
+        This method is useful during debugging.
+        """
+        print_sql_results(self.sync_engine, sql)
+
+    def dst_sql(self, sql: str) -> None:
+        """
+        Execute some SQL against the destination database.
+
+        This method is useful during debugging.
+        """
+        print_sql_results(self.dst_engine, sql)
+
     def make_destination_database(self, name: str) -> None:
         """Make an empty destination database."""
         self.dst_name = name
@@ -549,9 +655,7 @@ class RequiresDBTestCase(
             self.dst_database = self.database_type()
         else:
             self.dst_database.open()
-        dsn = self.dst_database.create_empty(name)
-        # Check that our programmatic way of getting the DSN works
-        assert dsn == self.dst_dsn
+        self.dst_database.create_empty(name, self.dst_schema_name)
         self.dst_engine = get_sync_engine(
             create_db_engine_dst(
                 self.dst_dsn,
@@ -566,9 +670,9 @@ class RequiresDBTestCase(
             self.sync_engine.dispose()
         if self.dst_engine is not None:
             self.dst_engine.dispose()
-        self.database.close()
         if self.dst_database is not None:
             self.dst_database.close()
+        self.database.close()
         super().tearDown()
 
     @property

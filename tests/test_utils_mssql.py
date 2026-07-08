@@ -3,6 +3,7 @@ import sys
 import unittest
 from unittest.mock import MagicMock, call, patch
 from datafaker.db_utils import create_db_engine, get_metadata, get_sync_engine
+from tests.utils import TestMSSQL
 
 class TestMakeAsyncDsn(unittest.TestCase):
     """Tests for make_async_dsn."""
@@ -162,7 +163,7 @@ class TestSchemaTranslateMap(unittest.TestCase):
 
     def test_schema_sets_translate_map(self) -> None:
         """When schema_name is given, schema_translate_map routes None to that schema."""
-        engine = self._make_engine("duckdb:///:memory:", schema_name="myschema")
+        engine = self._make_engine(TestMSSQL.get_test_db_dsn(), schema_name="myschema")
         opts = engine.get_execution_options()
         self.assertIn("schema_translate_map", opts)
         self.assertEqual(opts["schema_translate_map"], {None: "myschema"})
