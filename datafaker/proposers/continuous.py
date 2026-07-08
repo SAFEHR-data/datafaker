@@ -26,12 +26,19 @@ class ContinuousDistributionProposer(Proposer):
 
     expected_buckets: Sequence[NumericType] = []
 
-    def __init__(self, table_name: str, column_name: str, buckets: Buckets):
+    def __init__(
+        self,
+        table_name: str,
+        column_name: str,
+        buckets: Buckets,
+        dialect_name: str = "",
+    ):
         """Initialise a ContinuousDistributionProposer."""
         super().__init__()
         self.table_name = table_name
         self.column_name = column_name
         self.buckets = buckets
+        self._dialect_name = dialect_name
 
     def nominal_kwargs(self) -> dict[str, Any]:
         """Get the arguments to be entered into ``config.yaml``."""
@@ -65,7 +72,7 @@ class ContinuousDistributionProposer(Proposer):
                 "comment": f"Mean of {self.column_name} from table {self.table_name}",
             },
             f"stddev__{self.column_name}": {
-                "clause": f"STDDEV({self.column_name})",
+                "clause": f"{'STDEV' if self._dialect_name == 'mssql' else 'STDDEV'}({self.column_name})",
                 "comment": f"Standard deviation of {self.column_name} from table {self.table_name}",
             },
         }
@@ -138,14 +145,15 @@ class ContinuousDistributionProposerFactory(ProposerFactory):
 
     def _get_generators_from_buckets(
         self,
-        engine: Engine,  # pylint: disable=unused-argument
+        engine: Engine,
         src_table: Table,
         column_name: str,
         buckets: Buckets,
     ) -> Sequence[Proposer]:
+        dialect_name = engine.dialect.name
         return [
-            GaussianProposer(src_table.name, column_name, buckets),
-            UniformProposer(src_table.name, column_name, buckets),
+            GaussianProposer(src_table.name, column_name, buckets, dialect_name=dialect_name),
+            UniformProposer(src_table.name, column_name, buckets, dialect_name=dialect_name),
         ]
 
     def get_proposers(
@@ -197,6 +205,7 @@ class LogNormalProposer(Proposer):
         buckets: Buckets,
         logmean: float,
         logstddev: float,
+        dialect_name: str = "",
     ):
         """Initialise a LogNormalProposer."""
         super().__init__()
@@ -205,6 +214,7 @@ class LogNormalProposer(Proposer):
         self.buckets = buckets
         self.logmean = logmean
         self.logstddev = logstddev
+        self._dialect_name = dialect_name
 
     def function_name(self) -> str:
         """Get the name of the generator function to call."""
@@ -248,7 +258,8 @@ class LogNormalProposer(Proposer):
             },
             f"logstddev__{self.column_name}": {
                 "clause": (
-                    f"STDDEV(CASE WHEN 0<{self.column_name}"
+                    f"{'STDEV' if self._dialect_name == 'mssql' else 'STDDEV'}"
+                    f"(CASE WHEN 0<{self.column_name}"
                     f" THEN LN({self.column_name}) ELSE NULL END)"
                 ),
                 "comment": (
@@ -294,6 +305,7 @@ class ContinuousLogDistributionProposerFactory(ContinuousDistributionProposerFac
                 buckets,
                 float(result.logmean),
                 float(result.logstddev),
+                dialect_name=engine.dialect.name,
             )
         ]
 

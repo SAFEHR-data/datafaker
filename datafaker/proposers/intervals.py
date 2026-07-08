@@ -9,10 +9,8 @@ from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.visitors import InternalTraversal
 from sqlalchemy.types import Date, DateTime
 
-from datafaker.db_utils import get_dialect
 from datafaker.proposers.base import Buckets, Proposer, ProposerFactory, get_column_type
 from datafaker.providers import AnchoredProvider
-from datafaker.settings import get_settings
 from datafaker.utils import get_property
 
 RelatedColumn = tuple[ForeignKey | None, Column]
@@ -53,6 +51,16 @@ def compile_seconds_difference(
     e1 = compiler.process(element.expr1, **kw)
     e2 = compiler.process(element.expr2, **kw)
     return f"CAST(EXTRACT(EPOCH FROM ({e1})) - EXTRACT(EPOCH FROM ({e2})) AS FLOAT)"
+
+
+@compiles(SecondsDifference, "mssql")
+def compile_seconds_difference_mssql(
+    element: SecondsDifference, compiler: Any, **kw: Any
+) -> str:
+    """MSSQL equivalent: EXTRACT(EPOCH FROM …) is not available; use DATEDIFF."""
+    e1 = compiler.process(element.expr1, **kw)
+    e2 = compiler.process(element.expr2, **kw)
+    return f"CAST(DATEDIFF(second, {e2}, {e1}) AS FLOAT)"
 
 
 def _set_roles_for_column(
@@ -132,6 +140,7 @@ class DateAfterProposer(Proposer):
         column: Column,
         anchor: Column,
         buckets: Buckets | None = None,
+        dialect_name: str = "",
     ):
         """
         Initialise a date after proposer.
@@ -144,6 +153,7 @@ class DateAfterProposer(Proposer):
         self._mean = mean
         self._anchor = anchor
         self._column = column
+        self._dialect_name = dialect_name
         self._provider = AnchoredProvider(metadata=metadata)
         if buckets is None:
             self._fit = None
@@ -195,13 +205,13 @@ class DateAfterProposer(Proposer):
 
         This will only work for anchors in the same table.
         """
-        dest_dsn = get_settings().dst_dsn
-        if dest_dsn:
-            dialect = get_dialect(dest_dsn)
+        if self._dialect_name == "mssql":
+            dialect = dialects.mssql.dialect()  # type: ignore
         else:
             dialect = dialects.postgresql.dialect()  # type: ignore
+        stddev_fn = func.stdev if self._dialect_name == "mssql" else func.stddev
         mean_q = func.avg(SecondsDifference(self._column, self._anchor))
-        sd_q = func.stddev(SecondsDifference(self._column, self._anchor))
+        sd_q = stddev_fn(SecondsDifference(self._column, self._anchor))
 
         return {
             f"mean__{self._column.name}": {
@@ -254,11 +264,12 @@ class DateAfterProposerFactory(ProposerFactory):
         self, engine: Engine, column: Column, anchor: Column
     ) -> list[DateAfterProposer]:
         """Create a ``DateAfterProposer`` object."""
+        stddev_fn = func.stdev if engine.dialect.name == "mssql" else func.stddev
         with engine.connect() as connection:
             result = connection.execute(
                 select(
                     func.avg(SecondsDifference(column, anchor)).label("mean"),
-                    func.stddev(SecondsDifference(column, anchor)).label("sd"),
+                    stddev_fn(SecondsDifference(column, anchor)).label("sd"),
                 ).select_from(column.table)
             ).first()
             if result is None or result.sd is None:
@@ -274,6 +285,7 @@ class DateAfterProposerFactory(ProposerFactory):
                 column,
                 anchor,
                 buckets,
+                dialect_name=engine.dialect.name,
             )
         ]
 

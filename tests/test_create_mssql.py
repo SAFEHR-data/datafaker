@@ -14,12 +14,12 @@ def _compile_create_table(table: Table) -> str:
     return str(CreateTable(table).compile(dialect=mssql.dialect()))
 
 
-class TestMSSQLIdentityPresent(unittest.TestCase):
-    """MS-SQL tables should have IDENTITY on autoincrement columns.
+class TestMSSQLIdentityAbsent(unittest.TestCase):
+    """MS-SQL tables must NOT have IDENTITY — datafaker supplies explicit PK values.
 
-    The remove_mssql_identity hook was removed (issue #104): datafaker now lets
-    the database generate single-column integer PKs rather than supplying
-    explicit values and fighting with SET IDENTITY_INSERT.
+    The remove_mssql_identity hook strips IDENTITY from CREATE TABLE DDL so that
+    ColumnValueProvider.increment() can insert explicit PK values without needing
+    SET IDENTITY_INSERT ON.
     """
 
     def _make_table(self) -> Table:
@@ -31,10 +31,10 @@ class TestMSSQLIdentityPresent(unittest.TestCase):
             Column("value", Integer(), nullable=True),
         )
 
-    def test_identity_present_in_ddl(self) -> None:
-        """IDENTITY must be present so the DB generates PK values automatically."""
+    def test_identity_absent_from_ddl(self) -> None:
+        """IDENTITY must be stripped so datafaker can insert explicit PK values."""
         ddl = _compile_create_table(self._make_table())
-        self.assertIn("IDENTITY", ddl)
+        self.assertNotIn("IDENTITY", ddl)
 
     def test_integer_type_preserved(self) -> None:
         """The INTEGER type is preserved."""
@@ -79,6 +79,6 @@ class TestMSSQLRemoveOnDeleteCascade(unittest.TestCase):
         self.assertIn("FOREIGN KEY", ddl)
 
     def test_duckdb_cascade_hook_still_works(self) -> None:
-        """Adding the mssql CASCADE hook does not break the DuckDB CASCADE hook."""
+        """The combined mssql hook does not break the DuckDB CASCADE hook."""
         self.assertTrue(callable(datafaker.create.remove_on_delete_cascade))
-        self.assertTrue(callable(datafaker.create.remove_mssql_on_delete_cascade))
+        self.assertTrue(callable(datafaker.create.compile_mssql_create_table))

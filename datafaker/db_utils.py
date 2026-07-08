@@ -40,6 +40,7 @@ from datafaker.utils import (
     logger,
     make_async_dsn,
     make_foreign_key_name,
+    unqualify_fk_target,
 )
 
 # Define some types used repeatedly in the code base
@@ -206,11 +207,11 @@ def create_db_engine_dst(
     return create_db_engine(db_dsn, schema_name, use_asyncio)
 
 
-def get_metadata(engine: Engine) -> MetaData:
+def get_metadata(engine: Engine, schema_name: Optional[str] = None) -> MetaData:
     """Get the MetaData object associated with the engine passed."""
     md = MetaData()
     try:
-        md.reflect(engine)
+        md.reflect(engine, schema=schema_name)
     except OperationalError as exc:
         logger.error("Cannot connect to database: %s", exc)
         raise Exit(1) from exc
@@ -421,10 +422,11 @@ def reinstate_vocab_foreign_key_constraints(
             ].items():
                 fk_targets = column_dict.get("foreign_keys", [])
                 if fk_targets:
+                    table_names = frozenset(meta_dict.get("tables", {}).keys())
                     fk = ForeignKeyConstraint(
                         columns=[column_name],
                         name=make_foreign_key_name(vocab_table_name, column_name),
-                        refcolumns=fk_targets,
+                        refcolumns=[unqualify_fk_target(t, table_names) for t in fk_targets],
                     )
                     logger.debug("Restoring foreign key constraint %s", fk.name)
                     with Session(dst_engine) as session:

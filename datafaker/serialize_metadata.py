@@ -16,6 +16,7 @@ from datafaker.utils import (
     get_property,
     make_foreign_key_name,
     split_column_full_name,
+    unqualify_fk_target,
 )
 
 TableT = dict[str, typing.Any]
@@ -249,17 +250,11 @@ def column_to_dict(column: Column, dialect: Dialect) -> dict[str, typing.Any]:
     return result
 
 
-def _unqualify_fk_target(fk: str) -> str:
-    """
-    Drop the schema qualifier from a 3-part FK target.
-
-    Converts ``schema.table.column`` → ``table.column`` so that SQLAlchemy
-    can resolve the reference against a MetaData whose tables were registered
-    without a schema prefix. 2-part ``table.column`` targets are returned
-    unchanged.
-    """
-    parts = fk.split(".")
-    return ".".join(parts[-2:]) if len(parts) == 3 else fk
+def _unqualify_fk_target(
+    fk: str, table_names: typing.Optional[frozenset] = None
+) -> str:
+    """Thin alias kept for call-site compatibility; logic lives in utils.unqualify_fk_target."""
+    return unqualify_fk_target(fk, table_names)
 
 
 def dict_to_column(
@@ -267,6 +262,7 @@ def dict_to_column(
     col_name: str,
     rep: dict,
     ignore_fk: typing.Callable[[str], bool],
+    table_names: typing.Optional[frozenset] = None,
 ) -> Column:
     """
     Produce column from aspects of its dict description.
@@ -292,7 +288,7 @@ def dict_to_column(
     if "foreign_keys" in rep:
         args = [
             ForeignKey(
-                _unqualify_fk_target(fk),
+                _unqualify_fk_target(fk, table_names),
                 name=make_foreign_key_name(table_name, col_name),
                 ondelete="CASCADE",
             )
@@ -307,6 +303,7 @@ def dict_to_column(
         type_=type_,
         primary_key=rep.get("primary", False),
         nullable=rep.get("nullable", None),
+        autoincrement=False,
     )
 
 
@@ -343,13 +340,14 @@ def dict_to_table(
     meta: MetaData,
     table_dict: TableT,
     ignore_fk: typing.Callable[[str], bool],
+    table_names: typing.Optional[frozenset] = None,
 ) -> Table:
     """Create a Table from its description."""
     return Table(
         name,
         meta,
         *[
-            dict_to_column(name, colname, col, ignore_fk)
+            dict_to_column(name, colname, col, ignore_fk, table_names)
             for (colname, col) in table_dict.get("columns", {}).items()
         ],
         *[dict_to_unique(constraint) for constraint in table_dict.get("unique", [])],
@@ -393,10 +391,10 @@ def should_ignore_fk(tables_dict: dict[str, TableT], fk: str) -> bool:
     # Try the fully-qualified name first so users can be explicit in config
     # (e.g. "mimic100.concept: ignore: true"); fall back to the bare table
     # name for configs that don't include a schema prefix.
-    td = get_property(tables_dict, table, None)
+    td = tables_dict.get(table)
     if td is None:
         bare = table.split(".")[-1]
-        td = get_property(tables_dict, bare, {})
+        td = tables_dict.get(bare, {})
     return get_property(td, "ignore", False)
 
 
@@ -423,7 +421,8 @@ def dict_to_metadata(
         ignore_fk = partial(should_ignore_fk, tables_config)
     else:
         ignore_fk = _always_false
+    table_names = frozenset(tables_dict.keys())
     meta = MetaData()
     for k, td in tables_dict.items():
-        dict_to_table(k, meta, td, ignore_fk)
+        dict_to_table(k, meta, td, ignore_fk, table_names)
     return meta

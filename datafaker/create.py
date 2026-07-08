@@ -38,18 +38,21 @@ serial_re = re.compile(r"\bSERIAL\b")
 
 
 @compiles(CreateTable, "mssql")
-def remove_mssql_on_delete_cascade(element: CreateTable, compiler: Any, **kw: Any) -> str:
+def compile_mssql_create_table(element: CreateTable, compiler: Any, **kw: Any) -> str:
     """
-    Strip ON DELETE CASCADE from MS-SQL table DDL.
+    Post-process MS-SQL CREATE TABLE DDL:
 
-    MS-SQL rejects multiple cascading FK paths to the same table (error 1785).
-    OMOP-style schemas commonly have many FK columns on one table all pointing at
-    the same vocabulary table, which triggers this limit.  Dropping CASCADE is
-    safe for datafaker because referential integrity is enforced by insert order,
-    not by the database engine.
+    1. Strip ON DELETE CASCADE — MS-SQL rejects multiple cascading FK paths to
+       the same table (error 1785). Referential integrity is enforced by insert
+       order in datafaker, so CASCADE is not needed.
+    2. Strip IDENTITY — datafaker generates PK values explicitly via
+       ColumnValueProvider.increment(), so auto-generation is not needed and
+       would cause INSERT to fail without SET IDENTITY_INSERT ON.
     """
     text: str = compiler.visit_create_table(element, **kw)
-    return text.replace(" ON DELETE CASCADE", "")
+    text = text.replace(" ON DELETE CASCADE", "")
+    text = re.sub(r"\s+IDENTITY(\(\d+,\s*\d+\))?", "", text)
+    return text
 
 
 @compiles(CreateSchema, "mssql")

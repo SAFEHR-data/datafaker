@@ -143,7 +143,10 @@ class TestCLI(DatafakerTestCase):
     @patch.dict(os.environ, {"SRC_SCHEMA": "myschema"}, clear=True)
     def test_make_tables_errors_if_src_dsn_missing(self) -> None:
         """Test the make-tables sub-command refuses to work if SRC_DSN is not set."""
-
+        self.assertFalse(
+            Path("tests/examples/does-not-exist.yaml").exists(),
+            "Precondition failed: tests/examples/does-not-exist.yaml must not exist",
+        )
         self.assertRaises(
             SettingsError,
             runner.invoke,
