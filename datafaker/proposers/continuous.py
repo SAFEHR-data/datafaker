@@ -5,11 +5,12 @@ from abc import abstractmethod
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
-from sqlalchemy import Column, Engine, RowMapping, Table, case, func, null, select, text
+from sqlalchemy import Column, Engine, RowMapping, Table, case, func, null, select, text, Dialect
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.types import Integer, Numeric
 from typing_extensions import Self
 
+from datafaker.dialects import StdDev
 from datafaker.proposers.base import (
     Buckets,
     NumericType,
@@ -29,27 +30,27 @@ class ContinuousDistributionProposer(Proposer):
     def __init__(
         self,
         table_name: str,
-        column_name: str,
+        column: Column,
         buckets: Buckets,
-        dialect_name: str = "",
+        dialect: Dialect,
     ):
         """Initialise a ContinuousDistributionProposer."""
         super().__init__()
         self.table_name = table_name
-        self.column_name = column_name
+        self.column = column
         self.buckets = buckets
-        self._dialect_name = dialect_name
+        self._dialect = dialect
 
     def nominal_kwargs(self) -> dict[str, Any]:
         """Get the arguments to be entered into ``config.yaml``."""
         return {
             "mean": (
                 f'SRC_STATS["auto__{self.table_name}"]["results"]'
-                f'[0]["mean__{self.column_name}"]'
+                f'[0]["mean__{self.column.name}"]'
             ),
             "sd": (
                 f'SRC_STATS["auto__{self.table_name}"]["results"]'
-                f'[0]["stddev__{self.column_name}"]'
+                f'[0]["stddev__{self.column.name}"]'
             ),
         }
 
@@ -65,15 +66,17 @@ class ContinuousDistributionProposer(Proposer):
     def select_aggregate_clauses(self) -> dict[str, dict[str, str]]:
         """Get the query fragments the generators need to call."""
         clauses = super().select_aggregate_clauses()
+        sd = StdDev(self.column).compile(dialect=self._dialect)
+        mean = func.avg(self.column).compile(dialect=self._dialect)
         return {
             **clauses,
-            f"mean__{self.column_name}": {
-                "clause": f"AVG({self.column_name})",
-                "comment": f"Mean of {self.column_name} from table {self.table_name}",
+            f"mean__{self.column.name}": {
+                "clause": str(mean),
+                "comment": f"Mean of {self.column.name} from table {self.table_name}",
             },
-            f"stddev__{self.column_name}": {
-                "clause": f"{'STDEV' if self._dialect_name == 'mssql' else 'STDDEV'}({self.column_name})",
-                "comment": f"Standard deviation of {self.column_name} from table {self.table_name}",
+            f"stddev__{self.column.name}": {
+                "clause": str(sd),
+                "comment": f"Standard deviation of {self.column.name} from table {self.table_name}",
             },
         }
 
@@ -147,13 +150,13 @@ class ContinuousDistributionProposerFactory(ProposerFactory):
         self,
         engine: Engine,
         src_table: Table,
-        column_name: str,
+        column: Column,
         buckets: Buckets,
     ) -> Sequence[Proposer]:
-        dialect_name = engine.dialect.name
+        dialect = engine.dialect
         return [
-            GaussianProposer(src_table.name, column_name, buckets, dialect_name=dialect_name),
-            UniformProposer(src_table.name, column_name, buckets, dialect_name=dialect_name),
+            GaussianProposer(src_table.name, column, buckets, dialect=dialect),
+            UniformProposer(src_table.name, column, buckets, dialect=dialect),
         ]
 
     def get_proposers(
@@ -171,7 +174,7 @@ class ContinuousDistributionProposerFactory(ProposerFactory):
         if buckets is None:
             return []
         return self._get_generators_from_buckets(
-            engine, table, column.name, buckets
+            engine, table, column, buckets
         )
 
 
@@ -201,20 +204,20 @@ class LogNormalProposer(Proposer):
     def __init__(
         self,
         table_name: str,
-        column_name: str,
+        column: str,
         buckets: Buckets,
         logmean: float,
         logstddev: float,
-        dialect_name: str = "",
+        dialect: Dialect,
     ):
         """Initialise a LogNormalProposer."""
         super().__init__()
         self.table_name = table_name
-        self.column_name = column_name
+        self.column = column
         self.buckets = buckets
         self.logmean = logmean
         self.logstddev = logstddev
-        self._dialect_name = dialect_name
+        self._dialect = dialect
 
     def function_name(self) -> str:
         """Get the name of the generator function to call."""
@@ -229,11 +232,11 @@ class LogNormalProposer(Proposer):
         return {
             "logmean": (
                 f'SRC_STATS["auto__{self.table_name}"]["results"][0]'
-                f'["logmean__{self.column_name}"]'
+                f'["logmean__{self.column.name}"]'
             ),
             "logsd": (
                 f'SRC_STATS["auto__{self.table_name}"]["results"][0]'
-                f'["logstddev__{self.column_name}"]'
+                f'["logstddev__{self.column.name}"]'
             ),
         }
 
@@ -249,21 +252,21 @@ class LogNormalProposer(Proposer):
         clauses = super().select_aggregate_clauses()
         return {
             **clauses,
-            f"logmean__{self.column_name}": {
+            f"logmean__{self.column.name}": {
                 "clause": (
-                    f"AVG(CASE WHEN 0<{self.column_name} THEN LN({self.column_name})"
+                    f"AVG(CASE WHEN 0<{self.column.name} THEN LN({self.column.name})"
                     " ELSE NULL END)"
                 ),
-                "comment": f"Mean of logs of {self.column_name} from table {self.table_name}",
+                "comment": f"Mean of logs of {self.column.name} from table {self.table_name}",
             },
-            f"logstddev__{self.column_name}": {
+            f"logstddev__{self.column.name}": {
                 "clause": (
-                    f"{'STDEV' if self._dialect_name == 'mssql' else 'STDDEV'}"
-                    f"(CASE WHEN 0<{self.column_name}"
-                    f" THEN LN({self.column_name}) ELSE NULL END)"
+                    f"{'STDEVP' if self._dialect.name == 'mssql' else 'STDDEV'}"
+                    f"(CASE WHEN 0<{self.column.name}"
+                    f" THEN LN({self.column.name}) ELSE NULL END)"
                 ),
                 "comment": (
-                    f"Standard deviation of logs of {self.column_name}"
+                    f"Standard deviation of logs of {self.column.name}"
                     f" from table {self.table_name}"
                 ),
             },
@@ -283,11 +286,11 @@ class ContinuousLogDistributionProposerFactory(ContinuousDistributionProposerFac
         self,
         engine: Engine,
         src_table: Table,
-        column_name: str,
+        column: Column,
         buckets: Buckets,
     ) -> Sequence[Proposer]:
         col = case(
-            (src_table.c[column_name] > 0, func.log(src_table.c[column_name])),
+            (column > 0, func.log(column)),
             else_=null(),
         )
         stmt = select(
@@ -301,11 +304,11 @@ class ContinuousLogDistributionProposerFactory(ContinuousDistributionProposerFac
         return [
             LogNormalProposer(
                 src_table.name,
-                column_name,
+                column,
                 buckets,
                 float(result.logmean),
                 float(result.logstddev),
-                dialect_name=engine.dialect.name,
+                dialect=engine.dialect,
             )
         ]
 
@@ -317,14 +320,14 @@ class MultivariateNormalProposer(Proposer):
     def __init__(
         self,
         table_name: str,
-        column_names: list[str],
+        columns: list[Column],
         query: str,
         covariates: RowMapping,
         function_name: str,
     ) -> None:
         """Initialise a MultivariateNormalProposer."""
         self._table = table_name
-        self._columns = column_names
+        self._columns = columns
         self._query = query
         self._covariates = covariates
         self._function_name = function_name
@@ -341,7 +344,7 @@ class MultivariateNormalProposer(Proposer):
 
     def custom_queries(self) -> dict[str, Any]:
         """Get the queries the generators need to call."""
-        cols = ", ".join(self._columns)
+        cols = ", ".join([c.name for c in self._columns])
         return {
             f"auto__cov__{self._table}": {
                 "comments": [
@@ -408,7 +411,7 @@ class CovariateQuery:
         self,
         table: str,
         factory: MultivariateNormalGeneratorFactoryBase,
-        dialect_name: str = "",
+        dialect: Dialect,
     ) -> None:
         """
         Initialize the query for the basics for multivariate normal/lognormal parameters.
@@ -416,7 +419,7 @@ class CovariateQuery:
         :param table: The name of the table to be queried.
         :param factory: The generator factory, perhaps with overridden
         ``query_var`` and ``query_predicate`` methods.
-        :param dialect_name: The SQLAlchemy dialect name (e.g. ``"mssql"``).
+        :param dialect: The SQLAlchemy dialect name (e.g. ``mssql.dialect()``).
         """
         self.table = table
         self._columns: Sequence[Column] = []
@@ -426,7 +429,7 @@ class CovariateQuery:
         self.suppress_count = 1
         self._sample_count: int | None = None
         self._factory = factory
-        self._dialect_name = dialect_name
+        self._dialect = dialect
         self._predicate_fn = lambda x: x + " IS NOT NULL"
 
     def get_query_comment(self) -> str:
@@ -581,7 +584,7 @@ class CovariateQuery:
             where = " WHERE " + where
         if self._sample_count is None:
             return f'"{self.table}"{where}'
-        if self._dialect_name == "mssql":
+        if self._dialect.name == "mssql":
             return (
                 f"(SELECT TOP {self._sample_count} * FROM {self.table}{where}"
                 f" ORDER BY NEWID()) AS _sampled"
@@ -646,10 +649,9 @@ class MultivariateNormalProposerFactory(MultivariateNormalGeneratorFactoryBase):
             ct = get_column_type(c)
             if not isinstance(ct, Numeric) and not isinstance(ct, Integer):
                 return []
-        column_names = [c.name for c in columns]
         table = columns[0].table.name
         table_sql = schema_qualified_name(table, engine)
-        cq = CovariateQuery(table_sql, self, dialect_name=engine.dialect.name).columns(columns)
+        cq = CovariateQuery(table_sql, self, dialect=engine.dialect).columns(columns)
         query = cq.get()
         with engine.connect() as connection:
             try:
@@ -662,7 +664,7 @@ class MultivariateNormalProposerFactory(MultivariateNormalGeneratorFactoryBase):
             return [
                 MultivariateNormalProposer(
                     table,
-                    column_names,
+                    columns,
                     query,
                     covariates,
                     self.function_name(),

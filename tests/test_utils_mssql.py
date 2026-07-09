@@ -1,7 +1,8 @@
 """Tests for MS-SQL driver support helpers in datafaker.utils."""
+from importlib import resources
 import sys
 import unittest
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 from datafaker.db_utils import create_db_engine, get_metadata, get_sync_engine
 from tests.utils import TestMSSQL
 
@@ -173,12 +174,14 @@ class TestSchemaTranslateMap(unittest.TestCase):
         self.assertIn("schema_translate_map", opts)
         self.assertEqual(opts["schema_translate_map"], {None: "myschema"})
 
-    def test_duckdb_schema_sets_search_path(self) -> None:
-        """For non-MSSQL dialects, schema_name is applied via search_path session setting."""
+    def test_duckdb_parquet_dir_sets_search_path(self) -> None:
+        """For DuckDB, parquet_dir is applied via file_search_path session setting."""
 
+        test_module = resources.files(sys.modules["tests"])
+        parq_dir = test_module.joinpath("examples", "duckdb")
         with patch("datafaker.db_utils.set_db_settings") as mock_set:
             engine = get_sync_engine(
-                create_db_engine("duckdb:///:memory:", schema_name="myschema")
+                create_db_engine("duckdb:///:memory:", schema_name="myschema", parquet_dir=parq_dir)
             )
             # Force a connection so the connect-event handler fires
             with engine.connect() as conn:
@@ -187,8 +190,8 @@ class TestSchemaTranslateMap(unittest.TestCase):
         calls = mock_set.call_args_list
         self.assertTrue(calls, "set_db_settings should have been called at least once")
         settings_passed = calls[0].args[1] if len(calls[0].args) > 1 else calls[0].kwargs.get("settings", {})
-        self.assertIn("search_path", settings_passed)
-        self.assertEqual(settings_passed["search_path"], "myschema")
+        self.assertIn("file_search_path", settings_passed)
+        self.assertEqual(settings_passed["file_search_path"], f"'{parq_dir}'")
 
     def test_mssql_dsn_schema_sets_translate_map(self) -> None:
         """schema_translate_map is set even for an MS-SQL DSN (engine creation, no connect)."""

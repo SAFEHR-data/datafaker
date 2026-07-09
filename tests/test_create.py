@@ -179,7 +179,7 @@ class TestPopulate(DatafakerTestCase):
                 mock_metadata = MagicMock(spec=MetaData)
                 mock_gen = MagicMock(spec=TableGenerator)
                 mock_gen.num_rows_per_pass = num_rows_per_pass
-                mock_gen.return_value = {}
+                mock_gen.generate_row.return_value = {}
                 row_counts = Counter(
                     {table_name: num_initial_rows} if num_initial_rows > 0 else {}
                 )
@@ -215,7 +215,7 @@ class TestPopulate(DatafakerTestCase):
                     row_counts,
                 )
                 self.assertListEqual(
-                    [call(mock_gen.return_value)]
+                    [call(mock_gen.generate_row.return_value)]
                     * (num_stories_per_pass + num_rows_per_pass),
                     mock_values.call_args_list,
                 )
@@ -245,8 +245,8 @@ class TestPopulate(DatafakerTestCase):
             [call(mock_table_two), call(mock_table_three)], mock_insert.call_args_list
         )
 
-        mock_gen_two.assert_called_once()
-        mock_gen_three.assert_called_once()
+        mock_gen_two.generate_row.assert_called_once()
+        mock_gen_three.generate_row.assert_called_once()
 
 
 class MockFunctionUsingConnection:

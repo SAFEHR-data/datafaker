@@ -8,6 +8,7 @@ from typing import Any, Sequence, Union
 
 from sqlalchemy import Column, CursorResult, Engine, desc, func, literal_column, select, table, text
 
+from datafaker.dialects import Random
 from datafaker.proposers.base import (
     Proposer,
     ProposerFactory,
@@ -340,7 +341,6 @@ class ChoiceProposerFactory(ProposerFactory):
         table_sql = schema_qualified_name(table_name, engine)
         src_table = column.table
         dialect = engine.dialect
-        random_fn = func.newid() if dialect.name == "mssql" else func.random()
         col = literal_column(f'"{column_name}"')
         src_table = column.table  # preserves schema for schema-qualified databases
         generators = []
@@ -395,7 +395,7 @@ class ChoiceProposerFactory(ProposerFactory):
             inner = (
                 select(col.label("v"))
                 .select_from(src_table)
-                .order_by(random_fn)
+                .order_by(Random())
                 .limit(self.SAMPLE_COUNT)
                 .subquery("_inner")
             )

@@ -190,7 +190,7 @@ class TestCountsDialect(unittest.TestCase):
         shell._table_entries = [MagicMock()]
         shell.table_index = 0
         shell.table_name.return_value = "person"
-        shell.get_nullable_columns.return_value = ["gender_concept_id"]
+        shell.get_nullable_columns.return_value.name = ["gender_concept_id"]
         shell.table_metadata.return_value = tbl
         shell.print = MagicMock()
         shell.print_table = MagicMock()

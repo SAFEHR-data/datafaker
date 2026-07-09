@@ -309,13 +309,17 @@ class TestMSSQL(TestDatabaseBase):
         """Store the base DSN for use by all instances."""
         cls._base_dsn = cls.get_test_db_dsn()
 
+    def _generate_prefix(self) -> None:
+        self.prefix = f"tmp{''.join(random.choices(string.digits, k=3))}_"
+
     def __init__(self):
         super().__init__()
         self.db_names = []
-        self.prefix = f"tmp{''.join(random.choices(string.digits, k=3))}_"
+        self._generate_prefix()
 
     def open(self) -> None:
         """Nothing to open — SQL Server runs externally."""
+        self._generate_prefix()
 
     def close(self) -> None:
         self._drop_databases_then(self.db_names, [])
@@ -616,6 +620,14 @@ class RequiresDBTestCase(
         assert self.dst_database is not None
         return self.dst_database.get_dsn(self.dst_name)
 
+    def _create_engine(self) -> None:
+        self.engine = create_db_engine(
+            self.database.get_dsn(self.database_name),
+            schema_name=self.schema_name,
+            use_asyncio=self.use_asyncio,
+        )
+        self.sync_engine = get_sync_engine(self.engine)
+
     def setUp(self) -> None:
         super().setUp()
         if self.database is None:
@@ -624,12 +636,7 @@ class RequiresDBTestCase(
             self.database.open()
         if self.dump_file_path is not None:
             self.database.run_sql(self.get_abs_example_dir() / self.dump_file_path)
-        self.engine = create_db_engine(
-            self.database.get_dsn(self.database_name),
-            schema_name=self.schema_name,
-            use_asyncio=self.use_asyncio,
-        )
-        self.sync_engine = get_sync_engine(self.engine)
+        self._create_engine()
         self.metadata.reflect(self.sync_engine)
 
     def sql(self, sql: str) -> None:
@@ -648,6 +655,15 @@ class RequiresDBTestCase(
         """
         print_sql_results(self.dst_engine, sql)
 
+    def _create_engine_dst(self):
+        self.dst_engine = get_sync_engine(
+            create_db_engine_dst(
+                self.dst_dsn,
+                schema_name=self.dst_schema_name,
+                use_asyncio=self.use_asyncio,
+            )
+        )
+
     def make_destination_database(self, name: str) -> None:
         """Make an empty destination database."""
         self.dst_name = name
@@ -656,13 +672,7 @@ class RequiresDBTestCase(
         else:
             self.dst_database.open()
         self.dst_database.create_empty(name, self.dst_schema_name)
-        self.dst_engine = get_sync_engine(
-            create_db_engine_dst(
-                self.dst_dsn,
-                schema_name=self.dst_schema_name,
-                use_asyncio=self.use_asyncio,
-            )
-        )
+        self._create_engine_dst()
 
     def tearDown(self) -> None:
         assert self.database is not None
@@ -760,7 +770,7 @@ class GeneratesDBTestCase(RequiresDBTestCase):
         self, config: Mapping[str, Any], num_passes: int = 1
     ) -> Mapping[str, Any]:
         """
-        Replaces the DB's source data with generated data.
+        Replaces the destination DB's data with fresh generated data.
         :return: A Python dictionary representation of the src-stats.yaml file, for what it's worth.
         """
         self.set_configuration(config)

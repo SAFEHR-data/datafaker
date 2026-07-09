@@ -3,64 +3,16 @@ import datetime
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from sqlalchemy import Column, Engine, ForeignKey, MetaData, dialects, func, select
+from sqlalchemy import Column, Engine, ForeignKey, MetaData, func, select, Dialect
 from sqlalchemy.ext.compiler import compiles
-from sqlalchemy.sql.elements import ColumnElement
-from sqlalchemy.sql.visitors import InternalTraversal
 from sqlalchemy.types import Date, DateTime
 
+from datafaker.dialects import SecondsDifference, StdDev
 from datafaker.proposers.base import Buckets, Proposer, ProposerFactory, get_column_type
 from datafaker.providers import AnchoredProvider
 from datafaker.utils import get_property
 
 RelatedColumn = tuple[ForeignKey | None, Column]
-
-
-class SecondsDifference(ColumnElement[int]):  # pylint: disable=too-many-ancestors
-    """Represent getting the difference between times in seconds."""
-
-    expr1: ColumnElement[Date | DateTime]
-    expr2: ColumnElement[Date | DateTime]
-
-    _traverse_internals = [
-        ("expr1", InternalTraversal.dp_clauseelement),
-        ("expr2", InternalTraversal.dp_clauseelement),
-    ]
-
-    def __init__(
-        self,
-        expr1: ColumnElement[Date | DateTime],
-        expr2: ColumnElement[Date | DateTime],
-    ):
-        """
-        Get a clause for the number of seconds between two times.
-
-        The interval is from ``expr2`` to ``expr1``.
-        """
-        self.expr1 = expr1
-        self.expr2 = expr2
-
-    __sa_operate__ = ColumnElement.operate
-
-
-@compiles(SecondsDifference)
-def compile_seconds_difference(
-    element: SecondsDifference, compiler: Any, **kw: Any
-) -> str:
-    """Create SQL for the difference between two datetimes in seconds."""
-    e1 = compiler.process(element.expr1, **kw)
-    e2 = compiler.process(element.expr2, **kw)
-    return f"CAST(EXTRACT(EPOCH FROM ({e1})) - EXTRACT(EPOCH FROM ({e2})) AS FLOAT)"
-
-
-@compiles(SecondsDifference, "mssql")
-def compile_seconds_difference_mssql(
-    element: SecondsDifference, compiler: Any, **kw: Any
-) -> str:
-    """MSSQL equivalent: EXTRACT(EPOCH FROM …) is not available; use DATEDIFF."""
-    e1 = compiler.process(element.expr1, **kw)
-    e2 = compiler.process(element.expr2, **kw)
-    return f"CAST(DATEDIFF(second, {e2}, {e1}) AS FLOAT)"
 
 
 def _set_roles_for_column(
@@ -139,8 +91,8 @@ class DateAfterProposer(Proposer):
         mean: float,
         column: Column,
         anchor: Column,
+        dialect: Dialect,
         buckets: Buckets | None = None,
-        dialect_name: str = "",
     ):
         """
         Initialise a date after proposer.
@@ -153,7 +105,7 @@ class DateAfterProposer(Proposer):
         self._mean = mean
         self._anchor = anchor
         self._column = column
-        self._dialect_name = dialect_name
+        self._dialect = dialect
         self._provider = AnchoredProvider(metadata=metadata)
         if buckets is None:
             self._fit = None
@@ -205,17 +157,12 @@ class DateAfterProposer(Proposer):
 
         This will only work for anchors in the same table.
         """
-        if self._dialect_name == "mssql":
-            dialect = dialects.mssql.dialect()  # type: ignore
-        else:
-            dialect = dialects.postgresql.dialect()  # type: ignore
-        stddev_fn = func.stdev if self._dialect_name == "mssql" else func.stddev
         mean_q = func.avg(SecondsDifference(self._column, self._anchor))
-        sd_q = stddev_fn(SecondsDifference(self._column, self._anchor))
+        sd_q = StdDev(SecondsDifference(self._column, self._anchor))
 
         return {
             f"mean__{self._column.name}": {
-                "clause": str(mean_q.compile(dialect=dialect)),
+                "clause": str(mean_q.compile(dialect=self._dialect)),
                 "comment": (
                     "Mean of interval between "
                     + self._anchor.name
@@ -226,7 +173,7 @@ class DateAfterProposer(Proposer):
                 ),
             },
             f"stddev__{self._column.name}": {
-                "clause": str(sd_q.compile(dialect=dialect)),
+                "clause": str(sd_q.compile(dialect=self._dialect)),
                 "comment": (
                     "Standard deviation of interval between "
                     + self._anchor.name
@@ -264,12 +211,11 @@ class DateAfterProposerFactory(ProposerFactory):
         self, engine: Engine, column: Column, anchor: Column
     ) -> list[DateAfterProposer]:
         """Create a ``DateAfterProposer`` object."""
-        stddev_fn = func.stdev if engine.dialect.name == "mssql" else func.stddev
         with engine.connect() as connection:
             result = connection.execute(
                 select(
                     func.avg(SecondsDifference(column, anchor)).label("mean"),
-                    stddev_fn(SecondsDifference(column, anchor)).label("sd"),
+                    StdDev(SecondsDifference(column, anchor)).label("sd"),
                 ).select_from(column.table)
             ).first()
             if result is None or result.sd is None:
@@ -284,8 +230,8 @@ class DateAfterProposerFactory(ProposerFactory):
                 result.mean,
                 column,
                 anchor,
-                buckets,
-                dialect_name=engine.dialect.name,
+                dialect=engine.dialect,
+                buckets=buckets,
             )
         ]
 

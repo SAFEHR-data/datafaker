@@ -10,7 +10,7 @@ from sqlalchemy import Connection, insert, inspect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session
-from sqlalchemy.schema import CreateSchema, CreateTable, MetaData, Table
+from sqlalchemy.schema import CreateSchema, MetaData, Table
 
 from datafaker.base import FileUploader
 from datafaker.db_utils import (
@@ -32,59 +32,6 @@ from datafaker.utils import get_property, logger
 
 Story = Generator[Tuple[str, dict[str, Any]], dict[str, Any], None]
 RowCounts = Counter[str]
-
-serial_re = re.compile(r"\bSERIAL\b")
-
-
-
-@compiles(CreateTable, "mssql")
-def compile_mssql_create_table(element: CreateTable, compiler: Any, **kw: Any) -> str:
-    """
-    Post-process MS-SQL CREATE TABLE DDL:
-
-    1. Strip ON DELETE CASCADE — MS-SQL rejects multiple cascading FK paths to
-       the same table (error 1785). Referential integrity is enforced by insert
-       order in datafaker, so CASCADE is not needed.
-    2. Strip IDENTITY — datafaker generates PK values explicitly via
-       ColumnValueProvider.increment(), so auto-generation is not needed and
-       would cause INSERT to fail without SET IDENTITY_INSERT ON.
-    """
-    text: str = compiler.visit_create_table(element, **kw)
-    text = text.replace(" ON DELETE CASCADE", "")
-    text = re.sub(r"\s+IDENTITY(\(\d+,\s*\d+\))?", "", text)
-    return text
-
-
-@compiles(CreateSchema, "mssql")
-def mssql_create_schema(element: CreateSchema, compiler: Any, **kw: Any) -> str:
-    """Correct CREATE SCHEMA IF NOT EXISTS."""
-    name = element.element.replace("'", "''")
-    if element.if_not_exists:
-        return f"IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = '{name}') BEGIN EXEC('CREATE SCHEMA {name}') END"
-    return f"CREATE SCHEMA {name}"
-
-
-@compiles(CreateTable, "duckdb")
-def remove_on_delete_cascade(element: CreateTable, compiler: Any, **kw: Any) -> str:
-    """
-    Intercede in compilation for column creation.
-
-    DuckDB does not understand cascades, and we don't care about
-    that in datafaker so we remove ``ON DELETE CASCASE``.
-
-    DuckDB does not understand ``SERIAL`` and we don't care
-    about autoincrementing, so we will replace it simply with
-    ``INTEGER``.
-
-    Ideally ``duckdb_engine`` would remove these for us.
-    :param element: The CreateTable being executed.
-    :param compiler: Actually a DDLCompiler, but that type is not exported.
-    :param kw: Further arguments.
-    :return: Corrected SQL.
-    """
-    text: str = compiler.visit_create_table(element, **kw)
-    t2 = serial_re.sub("INTEGER", text)
-    return t2.replace(" ON DELETE CASCADE", "")
 
 
 def create_db_tables(metadata: MetaData) -> None:
@@ -348,7 +295,7 @@ class StoryIterator:
         table = self._table_dict[self._table_name]
         if table.name in self._table_generator_dict:
             table_generator = self._table_generator_dict[table.name]
-            default_values = table_generator(self._dst_conn)
+            default_values = table_generator.generate_row(self._dst_conn)
         else:
             default_values = {}
         insert_values = {**default_values, **self._provided_values}

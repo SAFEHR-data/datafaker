@@ -10,10 +10,10 @@ from typing import Any, Iterable
 import yaml
 from sqlalchemy import Connection, MetaData, func, select
 
+from datafaker.dialects import SecondsDifference, StdDev
 from datafaker.interactive.base import DbCmd
 from datafaker.interactive.generators import GeneratorCmd
 from datafaker.proposers.choice import ChoiceProposerFactory
-from datafaker.proposers.intervals import SecondsDifference
 from tests.utils import (
     GeneratesDBTestCase,
     RequiresDBTestCase,
@@ -167,7 +167,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertEqual(
                 gc.config["src-stats"][0]["query"],
                 (
-                    f"SELECT AVG({column}) AS mean__{column}, STDDEV({column})"
+                    f"SELECT avg({table}.{column}) AS mean__{column}, STDDEV({table}.{column})"
                     f' AS stddev__{column} FROM "{table}"'
                 ),
             )
@@ -191,7 +191,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertEqual(
                 gc.config["src-stats"][0]["query"],
                 (
-                    f"SELECT AVG({column}) AS mean__{column}, STDDEV({column})"
+                    f"SELECT avg({table}.{column}) AS mean__{column}, STDDEV({table}.{column})"
                     f' AS stddev__{column} FROM "{table}"'
                 ),
             )
@@ -471,8 +471,8 @@ WHERE "{column}" IS NOT NULL GROUP BY "{column}") AS _counted ORDER BY _counted.
                 {
                     "AVG(frequency) AS mean__frequency",
                     "STDDEV(frequency) AS stddev__frequency",
-                    f"AVG({column}) AS mean__{column}",
-                    f"STDDEV({column}) AS stddev__{column}",
+                    f"avg(string.{column}) AS mean__{column}",
+                    f"STDDEV(string.{column}) AS stddev__{column}",
                 },
             )
 
@@ -630,7 +630,7 @@ class ConfigureGeneratorsWithSrc2Tests(GeneratesDBTestCase):
             )
             src_result = conn.execute(
                 select(
-                    func.avg(src_diff).label("mean"), func.stddev(src_diff).label("sd")
+                    func.avg(src_diff).label("mean"), StdDev(src_diff).label("sd")
                 ).select_from(self.metadata.tables[table])
             ).one()
         assert self.dst_engine is not None
@@ -641,7 +641,7 @@ class ConfigureGeneratorsWithSrc2Tests(GeneratesDBTestCase):
             )
             dst_result = conn.execute(
                 select(
-                    func.avg(dst_diff).label("mean"), func.stddev(dst_diff).label("sd")
+                    func.avg(dst_diff).label("mean"), StdDev(dst_diff).label("sd")
                 ).select_from(self.dst_metadata.tables[table])
             ).one()
         self.assertAlmostEqual(
@@ -660,6 +660,8 @@ class ConfigureGeneratorsWithSrc2MsSqlTests(ConfigureGeneratorsWithSrc2Tests):
     """Test `configure-generators` with `src2.dump` with DuckDB."""
 
     database_type = TestMSSQL
+    schema_name = None
+
 
 class ChoiceMeasurementTableStats:
     """Measure the data in the ``choice.sql`` schema."""
@@ -852,6 +854,7 @@ class GeneratorsOutputTestsMsSql(GeneratorsOutputTests):
     """As ``GeneratorsOutputTests`` but with MS Sql."""
 
     database_type = TestMSSQL
+    schema_name = None
 
 
 class GeneratorTests(GeneratesDBTestCase):
@@ -992,3 +995,4 @@ class GeneratorTestsMsSql(GeneratorTests):
     """As ``GeneratorTests`` but with M SSql."""
 
     database_type = TestMSSQL
+    schema_name = None

@@ -77,8 +77,3 @@ class TestMSSQLRemoveOnDeleteCascade(unittest.TestCase):
     def test_foreign_key_constraint_preserved(self) -> None:
         ddl = _compile_create_table(self._make_multi_fk_table())
         self.assertIn("FOREIGN KEY", ddl)
-
-    def test_duckdb_cascade_hook_still_works(self) -> None:
-        """The combined mssql hook does not break the DuckDB CASCADE hook."""
-        self.assertTrue(callable(datafaker.create.remove_on_delete_cascade))
-        self.assertTrue(callable(datafaker.create.compile_mssql_create_table))

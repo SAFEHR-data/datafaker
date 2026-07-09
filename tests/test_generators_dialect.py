@@ -3,10 +3,11 @@ import unittest
 import unittest.mock
 from unittest.mock import MagicMock
 
-from sqlalchemy import Column, Integer, MetaData, Table
+from sqlalchemy import Column, Integer, MetaData, Table, literal_column, Dialect
 from sqlalchemy.dialects import mssql, postgresql
 from sqlalchemy.types import DateTime
 
+from datafaker.dialects import SecondsDifference
 
 class TestMimesisDateTimeDialect(unittest.TestCase):
     """MimesisDateTimeGenerator.make_singleton compiles year expressions per dialect."""
@@ -113,7 +114,7 @@ class TestBucketsStddevDialect(unittest.TestCase):
     def test_mssql_uses_stdev(self) -> None:
         """MS-SQL query uses STDEV function (no trailing D)."""
         sql = self._get_executed_sql("mssql")
-        self.assertIn("STDEV(", sql)
+        self.assertIn("STDEVP(", sql)
         self.assertNotIn("STDDEV(", sql)  # function call form only, not the alias
 
 
@@ -229,7 +230,7 @@ class TestChoiceGeneratorFactoryLiveQueries(unittest.TestCase):
         self.assertIn(" TOP ", sqls[0])
         self.assertNotIn("LIMIT", sqls[0])
         self.assertIn(" TOP ", sqls[1])
-        self.assertIn("NEWID()", sqls[1])
+        self.assertIn("RAND()", sqls[1])
         self.assertNotIn("LIMIT", sqls[1])
         self.assertNotIn("RANDOM()", sqls[1])
 
@@ -321,18 +322,18 @@ class TestCovariateQueryDialect(unittest.TestCase):
         factory.query_predicate.return_value = ""
         return factory
 
-    def _inner_query(self, dialect_name: str) -> str:
+    def _inner_query(self, dialect: Dialect) -> str:
         from datafaker.proposers.continuous import CovariateQuery
 
         cq = (
-            CovariateQuery("person", self._make_factory(), dialect_name=dialect_name)
+            CovariateQuery("person", self._make_factory(), dialect=dialect)
             .sample_count(500)
         )
         return cq._inner_query().upper()
 
     def test_mssql_uses_top_and_newid(self) -> None:
         """MS-SQL inner query uses SELECT TOP n … ORDER BY NEWID()."""
-        sql = self._inner_query("mssql")
+        sql = self._inner_query(mssql.dialect())
         self.assertIn("TOP 500", sql)
         self.assertIn("NEWID()", sql)
         self.assertNotIn("RANDOM()", sql)
@@ -340,7 +341,7 @@ class TestCovariateQueryDialect(unittest.TestCase):
 
     def test_postgresql_uses_random_and_limit(self) -> None:
         """PostgreSQL inner query uses ORDER BY RANDOM() LIMIT n."""
-        sql = self._inner_query("postgresql")
+        sql = self._inner_query(postgresql.dialect())
         self.assertIn("RANDOM()", sql)
         self.assertIn("LIMIT 500", sql)
         self.assertNotIn("NEWID()", sql)
@@ -352,7 +353,7 @@ class TestCovariateQueryDialect(unittest.TestCase):
 
         for dialect in ("mssql", "postgresql", ""):
             with self.subTest(dialect=dialect):
-                cq = CovariateQuery("person", self._make_factory(), dialect_name=dialect)
+                cq = CovariateQuery("person", self._make_factory(), dialect=dialect)
                 sql = cq._inner_query().upper()
                 self.assertNotIn("RANDOM()", sql)
                 self.assertNotIn("NEWID()", sql)
@@ -363,15 +364,22 @@ class TestCovariateQueryDialect(unittest.TestCase):
 class TestMissingnessQueryDialect(unittest.TestCase):
     """MissingnessType.sampled_query() produces dialect-correct SQL."""
 
+    def setUp(self):
+        super().setUp()
+        self.metadata = MetaData()
+        self.col_a = Column("col_a")
+        self.col_b = Column("col_b")
+        self.table = Table("person", self.metadata, self.col_a, self.col_b)
+
     def test_mssql_uses_top_and_newid(self) -> None:
         """MS-SQL sampled query uses SELECT TOP n … ORDER BY NEWID()."""
         from datafaker.interactive.missingness import MissingnessType
 
         sql = MissingnessType.sampled_query(
-            "person", 1000, ["col_a", "col_b"], dialect_name="mssql"
+            self.table, 1000, [self.col_a, self.col_b], dialect=mssql.dialect()
         ).upper()
-        self.assertIn("TOP 1000", sql)
-        self.assertIn("NEWID()", sql)
+        #self.assertIn("TOP 1000", sql)  MSSQL compiler uses ROW_NUMBER
+        self.assertIn("RAND()", sql)
         self.assertNotIn("RANDOM()", sql)
         self.assertNotIn("LIMIT", sql)
 
@@ -379,21 +387,23 @@ class TestMissingnessQueryDialect(unittest.TestCase):
         """Default (no dialect) sampled query uses RANDOM() and LIMIT."""
         from datafaker.interactive.missingness import MissingnessType
 
-        sql = MissingnessType.sampled_query("person", 1000, ["col_a"]).upper()
+        sql = MissingnessType.sampled_query(self.table, 1000, [self.col_a], dialect=postgresql.dialect()).upper()
         self.assertIn("RANDOM()", sql)
         self.assertIn("LIMIT 1000", sql)
+        self.assertNotIn("RAND()", sql)
         self.assertNotIn("NEWID()", sql)
         self.assertNotIn("TOP", sql)
+        self.assertNotIn("ROW_NUMBER()", sql)
 
     def test_mssql_result_contains_column_null_checks(self) -> None:
         """MS-SQL sampled query retains IS NULL expressions for the named columns."""
         from datafaker.interactive.missingness import MissingnessType
 
         sql = MissingnessType.sampled_query(
-            "person", 500, ["gender_concept_id"], dialect_name="mssql"
+            self.table, 500, [self.col_a], dialect=mssql.dialect()
         )
-        self.assertIn("gender_concept_id IS NULL", sql)
-        self.assertIn("gender_concept_id__is_null", sql)
+        self.assertIn("col_a IS NULL", sql)
+        self.assertIn("col_a__is_null", sql)
 
 
 class TestLogNormalGeneratorSchemaQualified(unittest.TestCase):
@@ -428,7 +438,7 @@ class TestLogNormalGeneratorSchemaQualified(unittest.TestCase):
         buckets = MagicMock(spec=Buckets)
         factory = ContinuousLogDistributionProposerFactory()
         with unittest.mock.patch.object(Buckets, "make_buckets", return_value=buckets):
-            factory._get_generators_from_buckets(engine, tbl, "age", buckets)
+            factory._get_generators_from_buckets(engine, tbl, tbl.c["age"], buckets)
 
         self.assertEqual(len(executed_stmts), 1)
         dialect = postgresql.dialect()
@@ -510,8 +520,8 @@ class TestContinuousStddevDialect(unittest.TestCase):
         """GaussianProposer.select_aggregate_clauses uses STDDEV on PostgreSQL."""
         from datafaker.proposers.continuous import GaussianProposer
 
-        tbl, _ = self._make_table()
-        proposer = GaussianProposer(tbl.name, "age", MagicMock(), dialect_name="postgresql")
+        tbl, col = self._make_table()
+        proposer = GaussianProposer(tbl.name, col, MagicMock(), dialect=postgresql.dialect())
         clause = proposer.select_aggregate_clauses()["stddev__age"]["clause"]
         self.assertIn("STDDEV", clause.upper())
 
@@ -519,18 +529,18 @@ class TestContinuousStddevDialect(unittest.TestCase):
         """GaussianProposer.select_aggregate_clauses uses STDEV on MSSQL."""
         from datafaker.proposers.continuous import GaussianProposer
 
-        tbl, _ = self._make_table()
-        proposer = GaussianProposer(tbl.name, "age", MagicMock(), dialect_name="mssql")
+        tbl, col = self._make_table()
+        proposer = GaussianProposer(tbl.name, col, MagicMock(), dialect=mssql.dialect())
         clause = proposer.select_aggregate_clauses()["stddev__age"]["clause"]
-        self.assertIn("STDEV", clause.upper())
+        self.assertIn("STDEVP", clause.upper())
         self.assertNotIn("STDDEV", clause.upper())
 
     def test_lognormal_postgresql_uses_stddev(self) -> None:
         """LogNormalProposer.select_aggregate_clauses uses STDDEV on PostgreSQL."""
         from datafaker.proposers.continuous import LogNormalProposer
 
-        tbl, _ = self._make_table()
-        proposer = LogNormalProposer(tbl.name, "age", MagicMock(), 1.0, 0.5, dialect_name="postgresql")
+        tbl, col = self._make_table()
+        proposer = LogNormalProposer(tbl.name, col, MagicMock(), 1.0, 0.5, dialect=postgresql.dialect())
         clause = proposer.select_aggregate_clauses()["logstddev__age"]["clause"]
         self.assertIn("STDDEV", clause.upper())
 
@@ -538,10 +548,10 @@ class TestContinuousStddevDialect(unittest.TestCase):
         """LogNormalProposer.select_aggregate_clauses uses STDEV on MSSQL."""
         from datafaker.proposers.continuous import LogNormalProposer
 
-        tbl, _ = self._make_table()
-        proposer = LogNormalProposer(tbl.name, "age", MagicMock(), 1.0, 0.5, dialect_name="mssql")
+        tbl, col = self._make_table()
+        proposer = LogNormalProposer(tbl.name, col, MagicMock(), 1.0, 0.5, dialect=mssql.dialect())
         clause = proposer.select_aggregate_clauses()["logstddev__age"]["clause"]
-        self.assertIn("STDEV", clause.upper())
+        self.assertIn("STDEVP", clause.upper())
         self.assertNotIn("STDDEV", clause.upper())
 
 
@@ -549,8 +559,6 @@ class TestIntervalsDifferenceDialect(unittest.TestCase):
     """SecondsDifference compiles to DATEDIFF on MSSQL and EXTRACT(EPOCH) on PostgreSQL."""
 
     def _make_element(self):
-        from sqlalchemy import literal_column
-        from datafaker.proposers.intervals import SecondsDifference
 
         return SecondsDifference(literal_column("t1"), literal_column("t2"))
 
@@ -584,7 +592,7 @@ class TestIntervalsDifferenceDialect(unittest.TestCase):
             mean=86400.0,
             column=tbl.c.end_date,
             anchor=tbl.c.start_date,
-            dialect_name="mssql",
+            dialect=mssql.dialect(),
         )
         clauses = proposer.select_aggregate_clauses()
         mean_clause = clauses["mean__end_date"]["clause"].upper()
@@ -608,7 +616,7 @@ class TestIntervalsDifferenceDialect(unittest.TestCase):
             mean=86400.0,
             column=tbl.c.end_date,
             anchor=tbl.c.start_date,
-            dialect_name="postgresql",
+            dialect=postgresql.dialect(),
         )
         clauses = proposer.select_aggregate_clauses()
         mean_clause = clauses["mean__end_date"]["clause"].upper()

@@ -184,20 +184,17 @@ class TestMakeStats(RequiresDBTestCase):
     database_name = "src"
     schema_name = "public"
 
-    test_dir = Path("tests/examples")
-    start_dir = os.getcwd()
+    use_temporary_cwd = False
 
     def setUp(self) -> None:
         """Pre-test setup."""
         super().setUp()
-        os.chdir(self.test_dir)
-        conf_path = Path("example_config.yaml")
+        conf_path = self.get_abs_example_dir() / Path("example_config.yaml")
         with open(conf_path, "r", encoding="utf8") as f:
             self.config = yaml.safe_load(f)
 
     def tearDown(self) -> None:
         """Post-test cleanup."""
-        os.chdir(self.start_dir)
         super().tearDown()
 
     def check_make_stats_output(self, src_stats: dict) -> None:
@@ -218,8 +215,8 @@ class TestMakeStats(RequiresDBTestCase):
         self.assertListEqual(
             count_names,
             [
-                {"num": 997, "name": "Anon Patient"},
                 {"num": 1, "name": "Miranda Rando-Generata"},
+                {"num": 997, "name": "Someone Random"},
                 {"num": 1, "name": "Testfried Testermann"},
                 {"num": 1, "name": "Veronica Fyre"},
             ],

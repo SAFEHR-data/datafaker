@@ -56,15 +56,20 @@ class ConfigureMissingnessTests(RequiresDBTestCase):
                 mc.config["src-stats"][0]["name"],
                 "missing_auto__signature_model__0",
             )
+            #breakpoint()
+            q: str = mc.config["src-stats"][0]["query"]
+            q = q.replace("\n", " ").replace("  ", " ").replace("  ", " ")
             self.assertEqual(
-                mc.config["src-stats"][0]["query"],
+                q,
                 (
-                    "SELECT COUNT(*) AS row_count,"
-                    " player_id__is_null, based_on__is_null FROM"
-                    " (SELECT player_id IS NULL AS player_id__is_null,"
-                    " based_on IS NULL AS based_on__is_null FROM"
-                    ' "signature_model" ORDER BY RANDOM() LIMIT 1000)'
-                    " AS __t GROUP BY player_id__is_null, based_on__is_null"
+                    "SELECT count(*) AS row_count,"
+                    " __t.player_id__is_null AS player_id__is_null, "
+                    "__t.based_on__is_null AS based_on__is_null FROM"
+                    " (SELECT signature_model.player_id IS NULL AS player_id__is_null,"
+                    " signature_model.based_on IS NULL AS based_on__is_null FROM"
+                    " signature_model ORDER BY RANDOM() LIMIT 1000)"
+                    " AS __t GROUP BY __t.player_id__is_null,"
+                    " __t.based_on__is_null"
                 ),
             )
 

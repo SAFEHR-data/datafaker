@@ -319,12 +319,12 @@ class DbCmd(ABC, cmd.Cmd):
         self.config["src-stats"] = new_src_stats
         return new_src_stats
 
-    def get_nullable_columns(self, table_name: str) -> list[str]:
+    def get_nullable_columns(self, table_name: str) -> list[sqlalchemy.Column]:
         """Get the names of the nullable columns in the named table."""
         metadata_table = self.metadata.tables[table_name]
         return [
-            str(name)
-            for name, column in metadata_table.columns.items()
+            column
+            for column in metadata_table.columns.values()
             if column.nullable
         ]
 
@@ -354,7 +354,7 @@ class DbCmd(ABC, cmd.Cmd):
         nullable_columns = self.get_nullable_columns(table_name)
         tbl = self.table_metadata()
         count_exprs = [func.count().label("row_count")] + [
-            func.count(tbl.c[col]).label(col) for col in nullable_columns
+            func.count(tbl.c[col.name]).label(col.name) for col in nullable_columns
         ]
         stmt = select(*count_exprs).select_from(tbl)
         with self.sync_engine.connect() as connection:

@@ -18,6 +18,7 @@ from sqlalchemy.sql.visitors import (
 from sqlalchemy.types import Integer, Numeric, String, TypeEngine
 from typing_extensions import Self
 
+from datafaker.dialects import StdDev
 from datafaker.providers import DistributionProvider
 from datafaker.utils import logger
 
@@ -415,13 +416,12 @@ class Buckets:
         :param table: SQLAlchemy table (or joined tables) to pull data from.
         :param column: SQLAlchemy column or expression to measure.
         """
-        stddev_fn = func.stdev if engine.dialect.name == "mssql" else func.stddev
         with engine.connect() as connection:
             result = connection.execute(
                 duckdb_workaround(
                     select(
                         func.avg(column).label("mean"),
-                        stddev_fn(column).label("stddev"),
+                        StdDev(column).label("stddev"),
                         func.count(column).label("count"),  # pylint: disable=not-callable
                     ).select_from(table)
                 )

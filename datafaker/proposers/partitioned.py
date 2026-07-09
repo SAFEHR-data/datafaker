@@ -555,7 +555,7 @@ class NullPartitionedNormalProposerFactory(MultivariateNormalProposerFactory):
         gens: list[Proposer | None] = []
         try:
             with engine.connect() as connection:
-                cov_query = CovariateQuery(table, self)
+                cov_query = CovariateQuery(table, self, engine.dialect)
                 gens.append(
                     self._get_generator(
                         connection,
@@ -574,7 +574,7 @@ class NullPartitionedNormalProposerFactory(MultivariateNormalProposerFactory):
                         name_suffix="sampled",
                     )
                 )
-                cov_query = CovariateQuery(table, self).set_suppress_count(
+                cov_query = CovariateQuery(table, self, engine.dialect).set_suppress_count(
                     self.SUPPRESS_COUNT
                 )
                 gens.append(

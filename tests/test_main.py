@@ -144,7 +144,7 @@ class TestCLI(DatafakerTestCase):
     def test_make_tables_errors_if_src_dsn_missing(self) -> None:
         """Test the make-tables sub-command refuses to work if SRC_DSN is not set."""
         self.assertFalse(
-            Path("tests/examples/does-not-exist.yaml").exists(),
+            (self.get_abs_example_dir() / "does-not-exist.yaml").exists(),
             "Precondition failed: tests/examples/does-not-exist.yaml must not exist",
         )
         self.assertRaises(
@@ -277,7 +277,7 @@ class TestCLI(DatafakerTestCase):
         """Test the validate-config sub-command."""
         result = runner.invoke(
             app,
-            ["validate-config", "tests/examples/example_config.yaml"],
+            ["validate-config", str(self.get_abs_example_dir() / "example_config.yaml")],
             catch_exceptions=False,
         )
 
@@ -287,7 +287,7 @@ class TestCLI(DatafakerTestCase):
         """Test the validate-config sub-command."""
         result = runner.invoke(
             app,
-            ["validate-config", "tests/examples/invalid_config.yaml"],
+            ["validate-config", str(self.get_abs_example_dir() / "invalid_config.yaml")],
             catch_exceptions=False,
         )
 
