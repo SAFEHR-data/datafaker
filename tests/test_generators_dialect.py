@@ -140,13 +140,15 @@ class TestChoiceGeneratorStoredQuery(unittest.TestCase):
         self.assertIn("RANDOM()", sql)
         self.assertIn("LIMIT", sql)
         self.assertNotIn("NEWID()", sql)
+        self.assertNotIn("RAND()", sql)
         self.assertNotIn(" TOP ", sql)
+        self.assertNotIn("ROW_NUMBER()", sql)
 
-    def test_mssql_sample_uses_newid_and_top(self) -> None:
+    def test_mssql_sample_uses_rand_and_top(self) -> None:
         """MS-SQL stored query uses newid() and TOP for sampled path."""
         gen = self._make_gen(mssql.dialect(), sample_count=500)
         sql = gen._query.upper()
-        self.assertIn("NEWID()", sql)
+        self.assertIn("RAND()", sql)
         self.assertIn(" TOP ", sql)
         self.assertNotIn("RANDOM()", sql)
         self.assertNotIn("LIMIT", sql)
@@ -157,11 +159,11 @@ class TestChoiceGeneratorStoredQuery(unittest.TestCase):
         sql = gen._query.upper()
         self.assertNotIn("ORDER BY", sql)
 
-    def test_mssql_sample_and_suppress_uses_newid_and_top(self) -> None:
+    def test_mssql_sample_and_suppress_uses_rand_and_top(self) -> None:
         """MS-SQL sample+suppress path uses newid()/TOP and no LIMIT/RANDOM."""
         gen = self._make_gen(mssql.dialect(), sample_count=500, suppress_count=7)
         sql = gen._query.upper()
-        self.assertIn("NEWID()", sql)
+        self.assertIn("RAND()", sql)
         self.assertIn(" TOP ", sql)
         self.assertNotIn("RANDOM()", sql)
         self.assertNotIn("LIMIT", sql)
@@ -173,9 +175,11 @@ class TestChoiceGeneratorStoredQuery(unittest.TestCase):
                 gen = self._make_gen(dialect)
                 sql = gen._query.upper()
                 self.assertNotIn("RANDOM()", sql)
+                self.assertNotIn("RAND()", sql)
                 self.assertNotIn("NEWID()", sql)
                 self.assertNotIn("LIMIT", sql)
                 self.assertNotIn(" TOP ", sql)
+                self.assertNotIn("ROW_NUMBER()", sql)
 
 
 class TestChoiceGeneratorFactoryLiveQueries(unittest.TestCase):
@@ -224,12 +228,11 @@ class TestChoiceGeneratorFactoryLiveQueries(unittest.TestCase):
             for s in executed
         ]
 
-    def test_mssql_live_queries_use_top_and_newid(self) -> None:
-        """MS-SQL live queries use TOP (not LIMIT) and newid() (not random())."""
+    def test_mssql_live_queries_use_rand_and_top(self) -> None:
+        """MS-SQL live queries use TOP (not LIMIT) and rand() (not random())."""
         sqls = self._captured_sqls(mssql.dialect())
         self.assertIn(" TOP ", sqls[0])
         self.assertNotIn("LIMIT", sqls[0])
-        self.assertIn(" TOP ", sqls[1])
         self.assertIn("RAND()", sqls[1])
         self.assertNotIn("LIMIT", sqls[1])
         self.assertNotIn("RANDOM()", sqls[1])
@@ -325,16 +328,17 @@ class TestCovariateQueryDialect(unittest.TestCase):
     def _inner_query(self, dialect: Dialect) -> str:
         from datafaker.proposers.continuous import CovariateQuery
 
+        metadata = MetaData()
         cq = (
-            CovariateQuery("person", self._make_factory(), dialect=dialect)
+            CovariateQuery(Table("person", metadata, Column("name")), self._make_factory(), dialect=dialect)
             .sample_count(500)
         )
         return cq._inner_query().upper()
 
-    def test_mssql_uses_top_and_newid(self) -> None:
+    def test_mssql_uses_newid_and_top(self) -> None:
         """MS-SQL inner query uses SELECT TOP n … ORDER BY NEWID()."""
         sql = self._inner_query(mssql.dialect())
-        self.assertIn("TOP 500", sql)
+        self.assertIn(" TOP 500 ", sql)
         self.assertIn("NEWID()", sql)
         self.assertNotIn("RANDOM()", sql)
         self.assertNotIn("LIMIT", sql)
@@ -371,14 +375,20 @@ class TestMissingnessQueryDialect(unittest.TestCase):
         self.col_b = Column("col_b")
         self.table = Table("person", self.metadata, self.col_a, self.col_b)
 
-    def test_mssql_uses_top_and_newid(self) -> None:
-        """MS-SQL sampled query uses SELECT TOP n … ORDER BY NEWID()."""
+    def test_mssql_uses_rand_and_rownumber(self) -> None:
+        """
+        Test that MSSQL uses RAND and ROW_NUMBER for sampling.
+
+        SELECT … ROW_NUMBER() AS MSSQL_RN
+        WHERE MSSQL_RN < n ORDER BY RAND().
+        """
         from datafaker.interactive.missingness import MissingnessType
 
         sql = MissingnessType.sampled_query(
             self.table, 1000, [self.col_a, self.col_b], dialect=mssql.dialect()
         ).upper()
-        #self.assertIn("TOP 1000", sql)  MSSQL compiler uses ROW_NUMBER
+        self.assertIn("ROW_NUMBER()", sql)
+        self.assertIn("<= 1000", sql)
         self.assertIn("RAND()", sql)
         self.assertNotIn("RANDOM()", sql)
         self.assertNotIn("LIMIT", sql)
@@ -521,7 +531,7 @@ class TestContinuousStddevDialect(unittest.TestCase):
         from datafaker.proposers.continuous import GaussianProposer
 
         tbl, col = self._make_table()
-        proposer = GaussianProposer(tbl.name, col, MagicMock(), dialect=postgresql.dialect())
+        proposer = GaussianProposer(tbl, col, MagicMock(), dialect=postgresql.dialect())
         clause = proposer.select_aggregate_clauses()["stddev__age"]["clause"]
         self.assertIn("STDDEV", clause.upper())
 
@@ -530,7 +540,7 @@ class TestContinuousStddevDialect(unittest.TestCase):
         from datafaker.proposers.continuous import GaussianProposer
 
         tbl, col = self._make_table()
-        proposer = GaussianProposer(tbl.name, col, MagicMock(), dialect=mssql.dialect())
+        proposer = GaussianProposer(tbl, col, MagicMock(), dialect=mssql.dialect())
         clause = proposer.select_aggregate_clauses()["stddev__age"]["clause"]
         self.assertIn("STDEVP", clause.upper())
         self.assertNotIn("STDDEV", clause.upper())
@@ -540,7 +550,7 @@ class TestContinuousStddevDialect(unittest.TestCase):
         from datafaker.proposers.continuous import LogNormalProposer
 
         tbl, col = self._make_table()
-        proposer = LogNormalProposer(tbl.name, col, MagicMock(), 1.0, 0.5, dialect=postgresql.dialect())
+        proposer = LogNormalProposer(tbl, col, MagicMock(), 1.0, 0.5, dialect=postgresql.dialect())
         clause = proposer.select_aggregate_clauses()["logstddev__age"]["clause"]
         self.assertIn("STDDEV", clause.upper())
 
@@ -549,7 +559,7 @@ class TestContinuousStddevDialect(unittest.TestCase):
         from datafaker.proposers.continuous import LogNormalProposer
 
         tbl, col = self._make_table()
-        proposer = LogNormalProposer(tbl.name, col, MagicMock(), 1.0, 0.5, dialect=mssql.dialect())
+        proposer = LogNormalProposer(tbl, col, MagicMock(), 1.0, 0.5, dialect=mssql.dialect())
         clause = proposer.select_aggregate_clauses()["logstddev__age"]["clause"]
         self.assertIn("STDEVP", clause.upper())
         self.assertNotIn("STDDEV", clause.upper())

@@ -122,13 +122,8 @@ class ChoiceProposer(Proposer):
         self._fit = fit_from_buckets(counts, estimated_counts)
 
         extra_comment = " and their counts" if self.STORE_COUNTS else ""
-        random_fn = (
-            func.newid()
-            if (dialect is not None and dialect.name == "mssql")
-            else func.random()
-        )
         stmt = _choice_stmt(
-            column_name, table_name, self.STORE_COUNTS, sample_count, suppress_count, random_fn,
+            column_name, table_name, self.STORE_COUNTS, sample_count, suppress_count, Random(),
             table_sql=table_sql,
         )
         compile_opts: dict[str, Any] = {"compile_kwargs": {"literal_binds": True}}

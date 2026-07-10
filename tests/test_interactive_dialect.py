@@ -58,13 +58,13 @@ class TestPeekDialect(unittest.TestCase):
         DbCmd.do_peek(shell, " ".join(col_names) if col_names else "")
         return engine._executed, dialect_instance
 
-    def test_mssql_peek_uses_newid_and_top(self) -> None:
-        """MS-SQL do_peek compiles to TOP … NEWID()."""
+    def test_mssql_peek_uses_rand_and_top(self) -> None:
+        """MS-SQL do_peek compiles to RAND() with TOP."""
         executed, dialect = self._run_peek(mssql.dialect())
         self.assertEqual(len(executed), 1)
         sql = _compiled(executed[0], dialect)
-        self.assertIn("TOP", sql)
-        self.assertIn("NEWID()", sql)
+        self.assertIn(" TOP ", sql)
+        self.assertIn("RAND()", sql)
         self.assertNotIn("LIMIT", sql)
         self.assertNotIn("RANDOM()", sql)
 
@@ -76,7 +76,9 @@ class TestPeekDialect(unittest.TestCase):
         self.assertIn("RANDOM()", sql)
         self.assertIn("LIMIT", sql)
         self.assertNotIn("NEWID()", sql)
+        self.assertNotIn("RAND()", sql)
         self.assertNotIn(" TOP ", sql)
+        self.assertNotIn("ROW_NUMBER()", sql)
 
     def test_schema_appears_in_from(self) -> None:
         """Schema-qualified table name appears in the FROM clause on both dialects."""
@@ -88,7 +90,7 @@ class TestPeekDialect(unittest.TestCase):
 
 
 class TestGetColumnDataDialect(unittest.TestCase):
-    """GeneratorCmd._get_column_data() uses NEWID/TOP on MS-SQL and RANDOM/LIMIT on PostgreSQL."""
+    """GeneratorCmd._get_column_data() uses RAND/ROW_NUMBER on MS-SQL and RANDOM/LIMIT on PostgreSQL."""
 
     def _run_get_column_data(self, dialect_instance, schema=None):
         from datafaker.interactive.generators import GeneratorCmd
@@ -103,13 +105,13 @@ class TestGetColumnDataDialect(unittest.TestCase):
         GeneratorCmd._get_column_data(shell, 5)
         return engine._executed, dialect_instance
 
-    def test_mssql_uses_newid_and_top(self) -> None:
-        """MS-SQL _get_column_data compiles to TOP … NEWID()."""
+    def test_mssql_uses_rand_and_top(self) -> None:
+        """MS-SQL _get_column_data compiles to TOP … RAND()."""
         executed, dialect = self._run_get_column_data(mssql.dialect())
         self.assertEqual(len(executed), 1)
         sql = _compiled(executed[0], dialect)
-        self.assertIn("TOP", sql)
-        self.assertIn("NEWID()", sql)
+        self.assertIn(" TOP ", sql)
+        self.assertIn("RAND()", sql)
         self.assertNotIn("LIMIT", sql)
         self.assertNotIn("RANDOM()", sql)
 
@@ -121,7 +123,9 @@ class TestGetColumnDataDialect(unittest.TestCase):
         self.assertIn("RANDOM()", sql)
         self.assertIn("LIMIT", sql)
         self.assertNotIn("NEWID()", sql)
+        self.assertNotIn("RAND()", sql)
         self.assertNotIn(" TOP ", sql)
+        self.assertNotIn("ROW_NUMBER()", sql)
 
     def test_schema_appears_in_from(self) -> None:
         """Schema-qualified table name appears in the FROM clause on both dialects."""
@@ -148,13 +152,13 @@ class TestPrintColumnDataDialect(unittest.TestCase):
         TableCmd.print_column_data(shell, "gender_concept_id", 10, 0)
         return engine._executed, dialect_instance
 
-    def test_mssql_uses_newid_and_top(self) -> None:
-        """MS-SQL print_column_data compiles to TOP … NEWID()."""
+    def test_mssql_uses_rand_and_top(self) -> None:
+        """MS-SQL print_column_data compiles to TOP … RAND()."""
         executed, dialect = self._run_print_column_data(mssql.dialect())
         self.assertEqual(len(executed), 1)
         sql = _compiled(executed[0], dialect)
-        self.assertIn("TOP", sql)
-        self.assertIn("NEWID()", sql)
+        self.assertIn(" TOP ", sql)
+        self.assertIn("RAND()", sql)
         self.assertNotIn("LIMIT", sql)
         self.assertNotIn("RANDOM()", sql)
 
@@ -165,8 +169,10 @@ class TestPrintColumnDataDialect(unittest.TestCase):
         sql = _compiled(executed[0], dialect)
         self.assertIn("RANDOM()", sql)
         self.assertIn("LIMIT", sql)
+        self.assertNotIn("RAND()", sql)
         self.assertNotIn("NEWID()", sql)
         self.assertNotIn(" TOP ", sql)
+        self.assertNotIn("ROW_NUMBER()", sql)
 
     def test_schema_appears_in_from(self) -> None:
         """Schema-qualified table name appears in the FROM clause on both dialects."""

@@ -111,8 +111,8 @@ class MSSQLFunctionalTestCase(GeneratesDBTestCase):
             count = conn.execute(text(f"SELECT COUNT(*) FROM {self.dst_schema_name}.manufacturer")).scalar()
         self.assertGreater(count, 0, "Expected rows in manufacturer after create-data")
 
-    def test_dialect_newid(self) -> None:
-        """ChoiceProposer compiles its query with NEWID() not RANDOM() for mssql."""
+    def test_dialect_rand(self) -> None:
+        """ChoiceProposer compiles its query with RAND() not RANDOM() for mssql."""
         from sqlalchemy.dialects import mssql as mssql_dialect  # noqa: PLC0415
         from datafaker.proposers.choice import ZipfChoiceProposer  # noqa: PLC0415
 
@@ -125,7 +125,7 @@ class MSSQLFunctionalTestCase(GeneratesDBTestCase):
             sample_count=2,
             dialect=dialect,
         )
-        self.assertIn("newid()", proposer._query.lower())
+        self.assertIn("rand()", proposer._query.lower())
         self.assertNotIn("random()", proposer._query.lower())
 
     def test_cascade_stripped(self) -> None:

@@ -12,6 +12,7 @@ from mimesis.providers.base import BaseDataProvider, BaseProvider
 from sqlalchemy import Column, Connection, MetaData
 from sqlalchemy.sql import func, functions, select
 
+from datafaker.dialects import Random
 from datafaker.utils import T, logger
 
 
@@ -28,13 +29,7 @@ class ColumnValueProvider(BaseProvider):
         db_connection: Connection, orm_class: Any, column_name: str
     ) -> Any:
         """Return a random value from the column specified."""
-        # MS-SQL has no random() function; NEWID() produces a per-row random GUID.
-        # RAND() is not usable here because it returns the same value for every row.
-        if db_connection.dialect.name == "mssql":
-            random_fn = func.newid()
-        else:
-            random_fn = functions.random()
-        query = select(orm_class).order_by(random_fn).limit(1)
+        query = select(orm_class).order_by(Random()).limit(1)
         random_row = db_connection.execute(query).first()
 
         if random_row:

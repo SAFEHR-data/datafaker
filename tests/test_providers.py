@@ -85,15 +85,16 @@ class ColumnValueRandomFunctionTestCase(DatafakerTestCase):
         dialect = mssql.dialect() if dialect_name == "mssql" else postgresql.dialect()
         return str(query.compile(dialect=dialect))
 
-    def test_mssql_uses_newid(self) -> None:
+    def test_mssql_uses_rand(self) -> None:
         sql = self._get_order_by_sql("mssql")
-        self.assertIn("newid()", sql.lower())
+        self.assertIn("rand()", sql.lower())
         self.assertNotIn("random()", sql.lower())
 
     def test_postgresql_uses_random(self) -> None:
         sql = self._get_order_by_sql("postgresql")
         self.assertIn("random()", sql.lower())
         self.assertNotIn("newid()", sql.lower())
+        self.assertNotIn("rand()", sql.lower())
 
 
 class TimedeltaProvider(DatafakerTestCase):

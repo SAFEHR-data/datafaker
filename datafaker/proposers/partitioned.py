@@ -551,7 +551,7 @@ class NullPartitionedNormalProposerFactory(MultivariateNormalProposerFactory):
         nullable_columns = self.get_nullable_columns(columns)
         if not nullable_columns:
             return []
-        table = columns[0].table.name
+        table = columns[0].table
         gens: list[Proposer | None] = []
         try:
             with engine.connect() as connection:

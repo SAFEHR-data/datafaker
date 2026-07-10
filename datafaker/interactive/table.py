@@ -3,9 +3,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
-import sqlalchemy
 from sqlalchemy import func, literal_column, select, text
 
+from datafaker.dialects import Random
 from datafaker.interactive.base import (
     TYPE_LETTER,
     TYPE_PROMPT,
@@ -478,9 +478,6 @@ Type 'help data' for examples."""
         :param count: The number of rows to sample.
         :param min_length: The minimum length of text to choose from (0 for any text).
         """
-        random_fn = (
-            func.newid() if self.sync_engine.dialect.name == "mssql" else func.random()
-        )
         col_expr = literal_column(column)
         if 0 < min_length:
             where_clause = func.length(col_expr) >= min_length
@@ -490,7 +487,7 @@ Type 'help data' for examples."""
             select(col_expr)
             .select_from(self.table_metadata())
             .where(where_clause)
-            .order_by(random_fn)
+            .order_by(Random())
             .limit(count)
         )
         with self.sync_engine.connect() as connection:
@@ -503,13 +500,10 @@ Type 'help data' for examples."""
 
         :param count: The number of rows to report.
         """
-        random_fn = (
-            func.newid() if self.sync_engine.dialect.name == "mssql" else func.random()
-        )
         stmt = (
             select(text("*"))
             .select_from(self.table_metadata())
-            .order_by(random_fn)
+            .order_by(Random())
             .limit(count)
         )
         with self.sync_engine.connect() as connection:

@@ -19,6 +19,7 @@ from datafaker.db_utils import (
     fk_refers_to_ignored_table,
     get_sync_engine,
 )
+from datafaker.dialects import Random
 from datafaker.utils import T, get_property
 
 
@@ -410,9 +411,6 @@ class DbCmd(ABC, cmd.Cmd):
         col_names = arg.split()
         if not col_names:
             col_names = self._get_column_names()
-        random_fn = (
-            func.newid() if self.sync_engine.dialect.name == "mssql" else func.random()
-        )
         table = self.table_metadata()
         col_exprs = [table.columns[cn] for cn in col_names]
         nonnull_clauses = [ce.isnot(None) for ce in col_exprs]
@@ -420,7 +418,7 @@ class DbCmd(ABC, cmd.Cmd):
             select(*col_exprs)
             .select_from(table)
             .where(or_(*nonnull_clauses))
-            .order_by(random_fn)
+            .order_by(Random())
             .limit(max_peek_rows)
         )
         with self.sync_engine.connect() as connection:

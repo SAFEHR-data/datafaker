@@ -185,12 +185,40 @@ class IsNull(ColumnElement[float]):  # pylint: disable=too-many-ancestors
 
 
 @compiles(IsNull)
-def compile_stddev(
+def compile_isnull(
     element: IsNull, compiler: Any, **kw: Any
 ) -> str:
     """Create SQL for IS NULL."""
     e = compiler.process(element.expr, **kw)
     return f"{e} IS NULL"
+
+
+class IsNotNull(ColumnElement[float]):  # pylint: disable=too-many-ancestors
+    """Represent IS NOT NULL as an expression."""
+
+    expr: ColumnElement[float]
+
+    _traverse_internals = [
+        ("expr", InternalTraversal.dp_clauseelement),
+    ]
+
+    def __init__(
+        self,
+        expr: ColumnElement[float],
+    ):
+        """Get the clause that is being tested for nonnullness."""
+        self.expr = expr
+
+    __sa_operate__ = ColumnElement.operate
+
+
+@compiles(IsNotNull)
+def compile_isnotnull(
+    element: IsNotNull, compiler: Any, **kw: Any
+) -> str:
+    """Create SQL for IS NULL."""
+    e = compiler.process(element.expr, **kw)
+    return f"{e} IS NOT NULL"
 
 
 class Random(ColumnElement[float]):  # pylint: disable=too-many-ancestors

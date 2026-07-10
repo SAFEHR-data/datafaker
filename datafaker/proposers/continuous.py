@@ -29,14 +29,14 @@ class ContinuousDistributionProposer(Proposer):
 
     def __init__(
         self,
-        table_name: str,
+        table: Table,
         column: Column,
         buckets: Buckets,
         dialect: Dialect,
     ):
         """Initialise a ContinuousDistributionProposer."""
         super().__init__()
-        self.table_name = table_name
+        self.table = table
         self.column = column
         self.buckets = buckets
         self._dialect = dialect
@@ -45,11 +45,11 @@ class ContinuousDistributionProposer(Proposer):
         """Get the arguments to be entered into ``config.yaml``."""
         return {
             "mean": (
-                f'SRC_STATS["auto__{self.table_name}"]["results"]'
+                f'SRC_STATS["auto__{self.table.name}"]["results"]'
                 f'[0]["mean__{self.column.name}"]'
             ),
             "sd": (
-                f'SRC_STATS["auto__{self.table_name}"]["results"]'
+                f'SRC_STATS["auto__{self.table.name}"]["results"]'
                 f'[0]["stddev__{self.column.name}"]'
             ),
         }
@@ -72,11 +72,11 @@ class ContinuousDistributionProposer(Proposer):
             **clauses,
             f"mean__{self.column.name}": {
                 "clause": str(mean),
-                "comment": f"Mean of {self.column.name} from table {self.table_name}",
+                "comment": f"Mean of {self.column.name} from table {self.table.name}",
             },
             f"stddev__{self.column.name}": {
                 "clause": str(sd),
-                "comment": f"Standard deviation of {self.column.name} from table {self.table_name}",
+                "comment": f"Standard deviation of {self.column.name} from table {self.table.name}",
             },
         }
 
@@ -155,8 +155,8 @@ class ContinuousDistributionProposerFactory(ProposerFactory):
     ) -> Sequence[Proposer]:
         dialect = engine.dialect
         return [
-            GaussianProposer(src_table.name, column, buckets, dialect=dialect),
-            UniformProposer(src_table.name, column, buckets, dialect=dialect),
+            GaussianProposer(src_table, column, buckets, dialect=dialect),
+            UniformProposer(src_table, column, buckets, dialect=dialect),
         ]
 
     def get_proposers(
@@ -203,7 +203,7 @@ class LogNormalProposer(Proposer):
     # pylint: disable=too-many-arguments too-many-positional-arguments
     def __init__(
         self,
-        table_name: str,
+        table: Table,
         column: str,
         buckets: Buckets,
         logmean: float,
@@ -212,7 +212,7 @@ class LogNormalProposer(Proposer):
     ):
         """Initialise a LogNormalProposer."""
         super().__init__()
-        self.table_name = table_name
+        self.table = table
         self.column = column
         self.buckets = buckets
         self.logmean = logmean
@@ -231,11 +231,11 @@ class LogNormalProposer(Proposer):
         """Get the arguments to be entered into ``config.yaml``."""
         return {
             "logmean": (
-                f'SRC_STATS["auto__{self.table_name}"]["results"][0]'
+                f'SRC_STATS["auto__{self.table.name}"]["results"][0]'
                 f'["logmean__{self.column.name}"]'
             ),
             "logsd": (
-                f'SRC_STATS["auto__{self.table_name}"]["results"][0]'
+                f'SRC_STATS["auto__{self.table.name}"]["results"][0]'
                 f'["logstddev__{self.column.name}"]'
             ),
         }
@@ -257,7 +257,7 @@ class LogNormalProposer(Proposer):
                     f"AVG(CASE WHEN 0<{self.column.name} THEN LN({self.column.name})"
                     " ELSE NULL END)"
                 ),
-                "comment": f"Mean of logs of {self.column.name} from table {self.table_name}",
+                "comment": f"Mean of logs of {self.column.name} from table {self.table.name}",
             },
             f"logstddev__{self.column.name}": {
                 "clause": (
@@ -267,7 +267,7 @@ class LogNormalProposer(Proposer):
                 ),
                 "comment": (
                     f"Standard deviation of logs of {self.column.name}"
-                    f" from table {self.table_name}"
+                    f" from table {self.table.name}"
                 ),
             },
         }
@@ -303,7 +303,7 @@ class ContinuousLogDistributionProposerFactory(ContinuousDistributionProposerFac
                 return []
         return [
             LogNormalProposer(
-                src_table.name,
+                src_table,
                 column,
                 buckets,
                 float(result.logmean),
@@ -319,14 +319,14 @@ class MultivariateNormalProposer(Proposer):
     # pylint: disable=too-many-arguments too-many-positional-arguments
     def __init__(
         self,
-        table_name: str,
+        table: Table,
         columns: list[Column],
         query: str,
         covariates: RowMapping,
         function_name: str,
     ) -> None:
         """Initialise a MultivariateNormalProposer."""
-        self._table = table_name
+        self._table = table
         self._columns = columns
         self._query = query
         self._covariates = covariates
@@ -649,9 +649,8 @@ class MultivariateNormalProposerFactory(MultivariateNormalGeneratorFactoryBase):
             ct = get_column_type(c)
             if not isinstance(ct, Numeric) and not isinstance(ct, Integer):
                 return []
-        table = columns[0].table.name
-        table_sql = schema_qualified_name(table, engine)
-        cq = CovariateQuery(table_sql, self, dialect=engine.dialect).columns(columns)
+        table = columns[0].table
+        cq = CovariateQuery(table, self, dialect=engine.dialect).columns(columns)
         query = cq.get()
         with engine.connect() as connection:
             try:

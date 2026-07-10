@@ -5,10 +5,10 @@ from collections.abc import Iterable, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, cast
 
-import sqlalchemy
-from sqlalchemy import Column, and_, func, literal_column, select
+from sqlalchemy import Column, and_, literal_column, select
 
 from datafaker.db_utils import MaybeAsyncEngine, primary_private_fks, table_is_private
+from datafaker.dialects import Random
 from datafaker.interactive.base import DbCmd, TableEntry, fk_column_name, or_default
 from datafaker.proposers import everything_factory
 from datafaker.proposers.base import PredefinedProposer, Proposer
@@ -781,16 +781,13 @@ information about the columns in the current table. Use 'peek',
         self, count: int, to_str: Callable[[Any], str] = repr
     ) -> list[list[str]]:
         columns = self._get_column_names()
-        random_fn = (
-            func.newid() if self.sync_engine.dialect.name == "mssql" else func.random()
-        )
         col_exprs = [literal_column(col) for col in columns]
         nonnull_clauses = [literal_column(col).isnot(None) for col in columns]
         stmt = (
             select(*col_exprs)
             .select_from(self.table_metadata())
             .where(and_(*nonnull_clauses))
-            .order_by(random_fn)
+            .order_by(Random())
             .limit(count)
         )
         with self.sync_engine.connect() as connection:

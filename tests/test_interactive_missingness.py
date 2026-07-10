@@ -56,7 +56,6 @@ class ConfigureMissingnessTests(RequiresDBTestCase):
                 mc.config["src-stats"][0]["name"],
                 "missing_auto__signature_model__0",
             )
-            #breakpoint()
             q: str = mc.config["src-stats"][0]["query"]
             q = q.replace("\n", " ").replace("  ", " ").replace("  ", " ")
             self.assertEqual(
