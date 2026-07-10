@@ -350,25 +350,11 @@ class TestMSSQL(TestDatabaseBase):
         with pyodbc.connect(conn_str, autocommit=True) as conn:
             conn.execute(f"USE master")
             for db_name in db_names:
-                # adapted from https://stackoverflow.com/questions/8439650/how-to-drop-all-tables-in-a-sql-server-database
-                conn.execute(f"""DECLARE @sql NVARCHAR(2000)
-
-WHILE(EXISTS(SELECT 1 from INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE CONSTRAINT_TYPE='FOREIGN KEY' AND TABLE_CATALOG='{db_name}'))
+                conn.execute(f"""IF DB_ID('{db_name}') IS NOT NULL
 BEGIN
-    SELECT TOP 1 @sql=('ALTER TABLE [{db_name}].' + TABLE_SCHEMA + '.[' + TABLE_NAME + '] DROP CONSTRAINT [' + CONSTRAINT_NAME + ']')
-    FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
-    WHERE CONSTRAINT_TYPE = 'FOREIGN KEY'
-    EXEC(@sql)
-END
-
-WHILE(EXISTS(SELECT * from INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME != '__MigrationHistory' AND TABLE_NAME != 'database_firewall_rules' AND TABLE_TYPE != 'VIEW' AND TABLE_CATALOG='{db_name}'))
-BEGIN
-    SELECT TOP 1 @sql=('DROP TABLE [{db_name}].' + TABLE_SCHEMA + '.[' + TABLE_NAME + ']')
-    FROM INFORMATION_SCHEMA.TABLES
-    WHERE TABLE_NAME != '__MigrationHistory' AND TABLE_NAME != 'database_firewall_rules' 
-    EXEC(@sql)
+    ALTER DATABASE [{db_name}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+    DROP DATABASE [{db_name}];
 END""")
-                conn.execute("DROP DATABASE IF EXISTS [{db_name}]")
             for exec in execs:
                 sql = exec.strip()
                 if sql:
