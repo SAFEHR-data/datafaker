@@ -23,6 +23,31 @@ runner = CliRunner(mix_stderr=False)
 class TestCLI(DatafakerTestCase):
     """Tests for the command-line interface."""
 
+    @patch("datafaker.main.read_config_file")
+    @patch("datafaker.main.dict_to_metadata")
+    @patch("datafaker.main.load_metadata_config")
+    @patch("datafaker.main.create_db_vocab")
+    def test_create_vocab(
+        self,
+        mock_create: MagicMock,
+        mock_mdict: MagicMock,
+        mock_meta: MagicMock,
+        mock_config: MagicMock,
+    ) -> None:
+        """Test the create-vocab sub-command."""
+        result = runner.invoke(
+            app,
+            [
+                "create-vocab",
+            ],
+            catch_exceptions=False,
+        )
+
+        mock_create.assert_called_once_with(
+            mock_meta.return_value, mock_mdict.return_value, mock_config.return_value
+        )
+        self.assertSuccess(result)
+
     @patch("datafaker.main.create_db_tables")
     @patch("datafaker.main.read_config_file")
     @patch("datafaker.main.load_metadata_for_output")

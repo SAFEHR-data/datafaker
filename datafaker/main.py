@@ -24,13 +24,18 @@ from datafaker.dump import (
     TableWriter,
     get_parquet_table_writer,
 )
+from datafaker.install import install_stories_from
 from datafaker.interactive import (
     update_config_generators,
     update_config_tables,
     update_missingness,
 )
 from datafaker.interactive.base import DbCmd
-from datafaker.make import make_src_stats, make_tables_file, make_vocabulary_tables
+from datafaker.make import (
+    make_src_stats,
+    make_tables_file,
+    make_vocabulary_tables,
+)
 from datafaker.remove import remove_db_data, remove_db_tables, remove_db_vocab
 from datafaker.settings import (
     SettingsError,
@@ -265,7 +270,7 @@ def create_tables(
         $ datafaker create-tables
     """
     logger.debug("Creating tables.")
-    config = read_config_file(config_file) if config_file is not None else {}
+    config = read_config_file(config_file)
     orm_metadata = load_metadata_for_output(orm_file, config)
     create_db_tables(orm_metadata)
     logger.debug("Tables created.")
@@ -710,7 +715,7 @@ def remove_data(
     """Truncate non-vocabulary tables in the destination schema."""
     if yes:
         logger.debug("Truncating non-vocabulary tables.")
-        config = read_config_file(config_file) if config_file is not None else {}
+        config = read_config_file(config_file)
         metadata = load_metadata_for_output(orm_file, config)
         remove_db_data(metadata, config)
         logger.debug("Non-vocabulary tables truncated.")
@@ -737,7 +742,7 @@ def remove_vocab(
     """Truncate vocabulary tables in the destination schema."""
     if yes:
         logger.debug("Truncating vocabulary tables.")
-        config = read_config_file(config_file) if config_file is not None else {}
+        config = read_config_file(config_file)
         meta_dict = load_metadata_config(orm_file, config)
         orm_metadata = dict_to_metadata(meta_dict, config)
         remove_db_vocab(orm_metadata, meta_dict, config)
@@ -812,7 +817,7 @@ def list_tables(
     tables: TableType = Option(TableType.GENERATED, help="Which tables to list"),
 ) -> None:
     """List the names of tables described in the metadata file."""
-    config = read_config_file(config_file) if config_file is not None else {}
+    config = read_config_file(config_file)
     orm_metadata = load_metadata(orm_file, config)
     all_table_names = set(orm_metadata.tables.keys())
     vocab_table_names = {
@@ -828,6 +833,26 @@ def list_tables(
         names = vocab_table_names
     for name in sorted(names):
         print(name)
+
+
+@app.command()
+def install_stories(
+    config_file: Path = Option(CONFIG_FILENAME, help="The configuration file"),
+    story_file: Path = Argument(help="The Python file containing stories"),
+) -> None:
+    """Add the story file's name and any contained query to the configuration file."""
+    config_file_path = Path(config_file)
+    config = {}
+    if config_file_path.exists():
+        config = yaml.load(
+            config_file_path.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader
+        )
+    if not install_stories_from(config, story_file):
+        logger.debug("Cancelled")
+        sys.exit(1)
+    content = yaml.dump(config)
+    config_file_path.write_text(content, encoding="utf-8")
+    logger.debug("Stories configured in %s.", config_file)
 
 
 @app.command()
