@@ -2,6 +2,7 @@
 import re
 from pathlib import Path
 
+import duckdb_sqlalchemy
 import pandas as pd
 from sqlalchemy import (
     Column,
@@ -16,12 +17,11 @@ from sqlalchemy import (
     select,
     text,
 )
-from sqlalchemy.dialects import postgresql
 
 from datafaker.db_utils import create_db_engine, get_sync_engine
 from datafaker.interactive.generators import get_aggregate_query
 from datafaker.proposers import ProposerFactory, everything_factory
-from datafaker.proposers.base import Proposer, duckdb_workaround
+from datafaker.proposers.base import Proposer
 from tests.utils import DatafakerTestCase
 
 select_re = re.compile(
@@ -34,7 +34,7 @@ class ProposerUnitTests(DatafakerTestCase):
     """Proposer test case."""
 
     def test_duckdb_workaround(self) -> None:
-        """Test the duckdb_workaround function."""
+        """Test the duckdb workaround where Tables always get aliased."""
         tabname = "tab1"
         colname = "col1"
         metadata = MetaData()
@@ -42,9 +42,8 @@ class ProposerUnitTests(DatafakerTestCase):
         column = Column(colname, Text())
         table.append_column(column)
         stmt = select(column)
-        stmt_a = duckdb_workaround(stmt)
-        pgd = postgresql.dialect()
-        sql = stmt_a.compile(dialect=pgd)
+        ddbd = duckdb_sqlalchemy.Dialect()
+        sql = stmt.compile(dialect=ddbd)
         grps = select_re.match(str(sql))
         assert grps is not None
         tcs = grps.group(1).split(".")

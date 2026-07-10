@@ -1,14 +1,81 @@
 """Dialect differences."""
+from collections.abc import Mapping
 import re
 from typing import Any
 
+from sqlalchemy import Column, Select, Table, Join
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.schema import CreateSchema, CreateTable
 from sqlalchemy.sql.elements import ColumnElement
-from sqlalchemy.sql.visitors import InternalTraversal
+from sqlalchemy.sql.selectable import NamedFromClause
+from sqlalchemy.sql.visitors import (
+    ExternallyTraversible,
+    InternalTraversal,
+    replacement_traverse,
+    traverse,
+)
 from sqlalchemy.types import Date, DateTime
 
 serial_re = re.compile(r"\bSERIAL\b")
+
+
+class TableReplacer:
+    """
+    Replaces tables with aliased tables.
+
+    We need this to work around a DuckDB problem:
+    If we are using the ORM code to select a column ``c`` from a table
+    ``t.parquet``, then DuckDB expects the SQL
+    ``SELECT "t.parquet".c FROM "t.parquet"`` if ``t.parquet`` is an actual
+    table in the database, or ``SELECT t.c FROM "t.parquet"`` if ``t.parquet``
+    names a file. The best way around this seems to be to use an aliased table,
+    which works in both cases: ``SELECT a.c FROM "t.parquet" AS a``, and the
+    best way for that to happen seems to be to use ``replacement_traverse``.
+    """
+
+    def __init__(self, table: Table) -> None:
+        """Initialise with the table to be aliased."""
+        self.table = table
+        self.atable = self.table.alias(f"_{table.name}__alias")
+
+    def replace(
+        self, obj: ExternallyTraversible, **_kw: Any
+    ) -> ExternallyTraversible | None:
+        """Replace columns with the same column on the aliased table."""
+        if isinstance(obj, Column):
+            if obj.table == self.table:
+                return self.atable.columns[obj.name]
+        elif isinstance(obj, Table) and obj == self.table:
+            return self.atable
+        elif isinstance(obj, NamedFromClause):
+            # Return the same object rather than None
+            # to supress descent into this object
+            return obj
+        return None
+
+    def aliased_table(self) -> NamedFromClause:
+        """Get the aliased table."""
+        return self.atable
+
+
+@compiles(Select, "duckdb")
+def duckdb_workaround(element: Select, compiler: Any, **kw: Any) -> Any:
+    """
+    Transform a SQLAlchemy ORM statement to work around DuckDB issues.
+
+    :param stmt: An ORM statement, such as the return value of ``select``.
+    :return: An ORM statement, transformed if necessary.
+    """
+    #sel =  compiler.visit_select(element, **kw)
+    #breakpoint()
+    #return sel
+    tables: set[Table] = set()
+    traverse(element, {}, {"table": tables.add})
+    for t in tables:
+        tr = TableReplacer(t)
+        opts: Mapping[str, Any] = {}
+        element = replacement_traverse(element, opts, tr.replace)  # type: ignore
+    return compiler.visit_select(element, **kw)
 
 
 @compiles(CreateTable, "mssql")
