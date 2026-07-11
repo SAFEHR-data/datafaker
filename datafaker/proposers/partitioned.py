@@ -526,7 +526,9 @@ class NullPartitionedNormalProposerFactory(MultivariateNormalProposerFactory):
             )
         if not self._execute_partition_queries(connection, partitions):
             return None
-        query = self.get_partition_count_query(nullable_columns, cov_query.table, where)
+        query = self.get_partition_count_query(
+            nullable_columns, cov_query.table.name, where
+        )
         return NullPartitionedNormalProposer(
             f"{cov_query.table}__{columns[0].name}",
             partitions,
@@ -574,9 +576,9 @@ class NullPartitionedNormalProposerFactory(MultivariateNormalProposerFactory):
                         name_suffix="sampled",
                     )
                 )
-                cov_query = CovariateQuery(table, self, engine.dialect).set_suppress_count(
-                    self.SUPPRESS_COUNT
-                )
+                cov_query = CovariateQuery(
+                    table, self, engine.dialect
+                ).set_suppress_count(self.SUPPRESS_COUNT)
                 gens.append(
                     self._get_generator(
                         connection,

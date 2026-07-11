@@ -189,8 +189,8 @@ class MimesisDateTimeProposer(MimesisProposerBase):
         """Make the appropriate generation configuration for this column."""
         col_expr = literal_column(column.name)
         year_expr = cast(extract("year", col_expr), Integer())
-        min_expr = func.min(year_expr)
-        max_expr = func.max(year_expr)
+        min_expr = func.min(year_expr)  # pylint: disable=E1111
+        max_expr = func.max(year_expr)  # pylint: disable=E1111
         stmt = select(min_expr.label("start"), max_expr.label("end")).select_from(
             column.table
         )
@@ -199,8 +199,12 @@ class MimesisDateTimeProposer(MimesisProposerBase):
             if result is None or result.start is None or result.end is None:
                 return []
         dialect = engine.dialect
-        min_year = str(min_expr.compile(dialect=dialect, compile_kwargs={"literal_binds": True}))
-        max_year = str(max_expr.compile(dialect=dialect, compile_kwargs={"literal_binds": True}))
+        min_year = str(
+            min_expr.compile(dialect=dialect, compile_kwargs={"literal_binds": True})
+        )
+        max_year = str(
+            max_expr.compile(dialect=dialect, compile_kwargs={"literal_binds": True})
+        )
         return [
             MimesisDateTimeProposer(
                 column,

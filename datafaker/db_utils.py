@@ -144,7 +144,9 @@ def create_db_engine(
     kwargs.setdefault("pool_pre_ping", True)
     try:
         if use_asyncio:
-            engine: MaybeAsyncEngine = create_async_engine(make_async_dsn(db_dsn), **kwargs)
+            engine: MaybeAsyncEngine = create_async_engine(
+                make_async_dsn(db_dsn), **kwargs
+            )
         else:
             engine = create_engine(db_dsn, **kwargs)
     except NoSuchModuleError as exc:
@@ -426,7 +428,9 @@ def reinstate_vocab_foreign_key_constraints(
                     fk = ForeignKeyConstraint(
                         columns=[column_name],
                         name=make_foreign_key_name(vocab_table_name, column_name),
-                        refcolumns=[unqualify_fk_target(t, table_names) for t in fk_targets],
+                        refcolumns=[
+                            unqualify_fk_target(t, table_names) for t in fk_targets
+                        ],
                     )
                     logger.debug("Restoring foreign key constraint %s", fk.name)
                     with Session(dst_engine) as session:

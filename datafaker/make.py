@@ -14,7 +14,7 @@ import snsql
 import typer
 import yaml
 from mimesis.providers.base import BaseProvider
-from sqlalchemy import CursorResult, Engine, Integer, MetaData, UniqueConstraint, text
+from sqlalchemy import CursorResult, Engine, MetaData, text
 from sqlalchemy.dialects import mssql, postgresql
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine

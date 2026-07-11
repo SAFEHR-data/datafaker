@@ -277,7 +277,10 @@ class TestCLI(DatafakerTestCase):
         """Test the validate-config sub-command."""
         result = runner.invoke(
             app,
-            ["validate-config", str(self.get_abs_example_dir() / "example_config.yaml")],
+            [
+                "validate-config",
+                str(self.get_abs_example_dir() / "example_config.yaml"),
+            ],
             catch_exceptions=False,
         )
 
@@ -287,7 +290,10 @@ class TestCLI(DatafakerTestCase):
         """Test the validate-config sub-command."""
         result = runner.invoke(
             app,
-            ["validate-config", str(self.get_abs_example_dir() / "invalid_config.yaml")],
+            [
+                "validate-config",
+                str(self.get_abs_example_dir() / "invalid_config.yaml"),
+            ],
             catch_exceptions=False,
         )
 

@@ -31,7 +31,12 @@ from datafaker.make import FunctionCall, StoryGeneratorInfo, _get_generator_for_
 from datafaker.populate import TableGenerator
 from datafaker.serialize_metadata import dict_to_metadata, metadata_to_dict
 from datafaker.settings import SettingsError
-from tests.utils import DatafakerTestCase, GeneratesDBTestCase, RequiresDBTestCase, TestMSSQL
+from tests.utils import (
+    DatafakerTestCase,
+    GeneratesDBTestCase,
+    RequiresDBTestCase,
+    TestMSSQL,
+)
 
 
 class TestCreate(GeneratesDBTestCase):
@@ -520,6 +525,9 @@ class CreateDataTestCase(RequiresDBTestCase):
             metadata,
         )
 
+
 class CreateDataTestCaseMsSql(CreateDataTestCase):
+    """CreateData but for MSSQL."""
+
     database_type = TestMSSQL
     schema_name = None

@@ -1,17 +1,18 @@
 """Tests for MS-SQL driver support helpers in datafaker.utils."""
-from importlib import resources
-import sys
 import unittest
 from unittest.mock import MagicMock, patch
+
+from sqlalchemy.engine import make_url
+
 from datafaker.db_utils import create_db_engine, get_metadata, get_sync_engine
-from tests.utils import TestMSSQL
+from datafaker.utils import make_async_dsn
+from tests.utils import DatafakerTestCase, TestMSSQL
+
 
 class TestMakeAsyncDsn(unittest.TestCase):
     """Tests for make_async_dsn."""
 
     def _call(self, dsn: str) -> str:
-        from datafaker.utils import make_async_dsn
-
         return make_async_dsn(dsn)
 
     def test_postgresql_bare_dialect(self) -> None:
@@ -29,7 +30,6 @@ class TestMakeAsyncDsn(unittest.TestCase):
 
     def test_postgresql_preserves_credentials_and_path(self) -> None:
         """Host, port and database name are preserved (password is masked in repr)."""
-        from sqlalchemy.engine import make_url
 
         result_url = make_url(self._call("postgresql://alice:secret@dbhost:5433/mydb"))
         self.assertEqual(result_url.host, "dbhost")
@@ -62,95 +62,7 @@ class TestMakeAsyncDsn(unittest.TestCase):
             self._call("duckdb:///path/to/file.db")
 
 
-class TestIsUndefinedObjectError(unittest.TestCase):
-    """Tests for _is_undefined_object_error."""
-
-    def _call(self, exc: Exception) -> bool:
-        from datafaker.utils import _is_undefined_object_error
-
-        return _is_undefined_object_error(exc)
-
-    def test_pgcode_42704_returns_true(self) -> None:
-        """Any exception with pgcode 42704 is treated as UndefinedObject."""
-        exc = Exception("undefined object")
-        exc.pgcode = "42704"  # type: ignore[attr-defined]
-        self.assertTrue(self._call(exc))
-
-    def test_other_pgcode_returns_false(self) -> None:
-        """Exceptions with a different pgcode are not matched."""
-        exc = Exception("some other error")
-        exc.pgcode = "23505"  # type: ignore[attr-defined]
-        self.assertFalse(self._call(exc))
-
-    def test_no_pgcode_returns_false(self) -> None:
-        """Exceptions without a pgcode attribute are not matched."""
-        self.assertFalse(self._call(ValueError("no pgcode here")))
-
-    def test_psycopg2_undefined_object_returns_true(self) -> None:
-        """A real psycopg2 UndefinedObject exception is matched (if psycopg2 installed)."""
-        try:
-            import psycopg2.errors  # type: ignore[import]
-        except ImportError:
-            self.skipTest("psycopg2 not installed")
-
-        exc = psycopg2.errors.UndefinedObject("constraint does not exist")
-        self.assertTrue(self._call(exc))
-
-    def test_works_without_psycopg2(self) -> None:
-        """_is_undefined_object_error falls back to pgcode check when psycopg2 is absent."""
-        with patch.dict(sys.modules, {"psycopg2": None, "psycopg2.errors": None}):
-            exc = Exception("constraint does not exist")
-            exc.pgcode = "42704"  # type: ignore[attr-defined]
-            from datafaker.utils import _is_undefined_object_error
-
-            self.assertTrue(_is_undefined_object_error(exc))
-
-    def test_import_does_not_require_psycopg2(self) -> None:
-        """datafaker.utils can be imported even when psycopg2 is unavailable."""
-        with patch.dict(sys.modules, {"psycopg2": None, "psycopg2.errors": None}):
-            import importlib
-
-            import datafaker.utils as utils_mod
-
-            importlib.reload(utils_mod)
-
-    def test_pyodbc_style_error_without_pgcode_returns_false(self) -> None:
-        """A pyodbc-style error has SQLSTATE in args[0] but no pgcode attribute.
-
-        pyodbc does not set pgcode, so the current implementation cannot
-        distinguish a 'constraint does not exist' pyodbc error from any other
-        exception without pgcode.  This test documents that known limitation.
-        """
-        exc = Exception("constraint does not exist")
-        # pyodbc puts SQLSTATE in args[0]; MS-SQL error 3728 maps to SQLSTATE 42000
-        exc.args = ("42000", "[42000] [SQL Server] ... is not a constraint. (3728)")
-        self.assertFalse(self._call(exc))
-
-    def test_pgcode_none_returns_false(self) -> None:
-        """pgcode=None is not treated as a match."""
-        exc = Exception("undefined object")
-        exc.pgcode = None  # type: ignore[attr-defined]
-        self.assertFalse(self._call(exc))
-
-    def test_sqlalchemy_wrapper_not_matched_only_orig_is(self) -> None:
-        """The helper expects the unwrapped DBAPI error (e.orig), not the SQLAlchemy wrapper.
-
-        The call site in utils.py passes e.orig, not e, so the SQLAlchemy
-        ProgrammingError itself should not match even when e.orig would.
-        """
-        from sqlalchemy.exc import ProgrammingError
-
-        orig = Exception("underlying DBAPI error")
-        orig.pgcode = "42704"  # type: ignore[attr-defined]
-        sa_exc = ProgrammingError("statement", {}, orig)
-
-        # The SQLAlchemy exception itself has no pgcode.
-        self.assertFalse(self._call(sa_exc))
-        # Passing e.orig directly does match.
-        self.assertTrue(self._call(sa_exc.orig))
-
-
-class TestSchemaTranslateMap(unittest.TestCase):
+class TestSchemaTranslateMap(DatafakerTestCase):
     """Tests for the cross-dialect schema routing in create_db_engine."""
 
     def _make_engine(self, dsn: str, schema_name: str | None = None):
@@ -168,7 +80,7 @@ class TestSchemaTranslateMap(unittest.TestCase):
             engine = self._make_engine(
                 TestMSSQL.get_test_db_dsn(), schema_name="myschema"
             )
-        except Exception:
+        except Exception:  # pylint: disable=W0718
             self.skipTest("mssql+pyodbc driver not available in this environment")
         opts = engine.get_execution_options()
         self.assertIn("schema_translate_map", opts)
@@ -177,11 +89,12 @@ class TestSchemaTranslateMap(unittest.TestCase):
     def test_duckdb_parquet_dir_sets_search_path(self) -> None:
         """For DuckDB, parquet_dir is applied via file_search_path session setting."""
 
-        test_module = resources.files(sys.modules["tests"])
-        parq_dir = test_module.joinpath("examples", "duckdb")
+        parq_dir = self.get_abs_example_dir() / "duckdb"
         with patch("datafaker.db_utils.set_db_settings") as mock_set:
             engine = get_sync_engine(
-                create_db_engine("duckdb:///:memory:", schema_name="myschema", parquet_dir=parq_dir)
+                create_db_engine(
+                    "duckdb:///:memory:", schema_name="myschema", parquet_dir=parq_dir
+                )
             )
             # Force a connection so the connect-event handler fires
             with engine.connect() as conn:
@@ -189,7 +102,11 @@ class TestSchemaTranslateMap(unittest.TestCase):
 
         calls = mock_set.call_args_list
         self.assertTrue(calls, "set_db_settings should have been called at least once")
-        settings_passed = calls[0].args[1] if len(calls[0].args) > 1 else calls[0].kwargs.get("settings", {})
+        settings_passed = (
+            calls[0].args[1]
+            if len(calls[0].args) > 1
+            else calls[0].kwargs.get("settings", {})
+        )
         self.assertIn("file_search_path", settings_passed)
         self.assertEqual(settings_passed["file_search_path"], f"'{parq_dir}'")
 
@@ -202,7 +119,7 @@ class TestSchemaTranslateMap(unittest.TestCase):
             engine = get_sync_engine(
                 create_db_engine("mssql+pyodbc://user:pass@host/db", schema_name="dbo")
             )
-        except Exception:
+        except Exception:  # pylint: disable=W0718
             self.skipTest("mssql+pyodbc driver not available in this environment")
 
         opts = engine.get_execution_options()
@@ -219,9 +136,9 @@ class TestGetMetadataSchema(unittest.TestCase):
         mock_engine.connect.return_value.__enter__ = MagicMock(return_value=MagicMock())
         mock_engine.connect.return_value.__exit__ = MagicMock(return_value=False)
 
-        with patch("datafaker.db_utils.MetaData") as MockMetaData:
+        with patch("datafaker.db_utils.MetaData") as mock_meta_data:
             mock_md = MagicMock()
-            MockMetaData.return_value = mock_md
+            mock_meta_data.return_value = mock_md
             mock_md.reflect.return_value = None
 
             get_metadata(mock_engine, schema_name="myschema")
@@ -233,9 +150,9 @@ class TestGetMetadataSchema(unittest.TestCase):
 
         mock_engine = MagicMock()
 
-        with patch("datafaker.db_utils.MetaData") as MockMetaData:
+        with patch("datafaker.db_utils.MetaData") as mock_meta_data:
             mock_md = MagicMock()
-            MockMetaData.return_value = mock_md
+            mock_meta_data.return_value = mock_md
             mock_md.reflect.return_value = None
 
             get_metadata(mock_engine)

@@ -3,7 +3,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
-from sqlalchemy import func, literal_column, select, text
+from sqlalchemy import func, literal_column, select
 
 from datafaker.dialects import Random
 from datafaker.interactive.base import (
@@ -500,12 +500,7 @@ Type 'help data' for examples."""
 
         :param count: The number of rows to report.
         """
-        stmt = (
-            select(text("*"))
-            .select_from(self.table_metadata())
-            .order_by(Random())
-            .limit(count)
-        )
+        stmt = select(self.table_metadata()).order_by(Random()).limit(count)
         with self.sync_engine.connect() as connection:
             result = connection.execute(stmt)
             if result is None:

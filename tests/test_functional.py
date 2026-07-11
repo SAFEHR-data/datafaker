@@ -581,6 +581,7 @@ class DuckDbFunctionalTestCase(DBFunctionalTestCase):
 
     database_type = TestDuckDb
 
+
 class MsSqlFunctionalTestCase(DBFunctionalTestCase):
     """End-to-end tests for the MsSql workflow."""
 

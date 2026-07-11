@@ -3,7 +3,9 @@
 These tests require a running SQL Server instance.  Set the ``MSSQL_TEST_DSN``
 environment variable to a ``mssql+pyodbc://`` connection string to enable them:
 
-    export MSSQL_TEST_DSN="mssql+pyodbc://sa:Datafaker!Test123@localhost:1433/master?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
+    export MSSQL_TEST_DSN="mssql+pyodbc://sa:Datafaker!Test123@\
+    localhost:1433/master?driver=ODBC+Driver+18+for+SQL+Server\
+    &TrustServerCertificate=yes"
 
 With docker-compose:
 
@@ -14,17 +16,15 @@ import asyncio
 import os
 from tempfile import mkstemp
 
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, MetaData, String, Table, text
+import yaml
 from sqlalchemy import create_engine as sa_create_engine
+from sqlalchemy import text
+from sqlalchemy.dialects import mssql as mssql_dialect  # noqa: PLC0415
 from sqlalchemy.schema import CreateTable
 
-import datafaker.create  # noqa: F401 — registers @compiles hooks (e.g. strip ON DELETE CASCADE)
-from datafaker.db_utils import create_db_engine, create_db_engine_dst, get_sync_engine
 from datafaker.make import make_src_stats, make_tables_file
+from datafaker.proposers.choice import ZipfChoiceProposer  # noqa: PLC0415
 from tests.utils import DatafakerTestCase, GeneratesDBTestCase, TestMSSQL
-
-import yaml
-
 
 _EXPECTED_TABLES = frozenset(
     {"manufacturer", "model", "string", "player", "signature_model"}
@@ -51,7 +51,9 @@ class MSSQLFunctionalTestCase(GeneratesDBTestCase):
         # Write orm.yaml so generate_data() has the file it expects.
         (self.orm_fd, self.orm_file_path) = mkstemp(".yaml", "orm_", text=True)
         with os.fdopen(self.orm_fd, "w", encoding="utf-8") as fh:
-            fh.write(make_tables_file(self.dsn, self.schema_name, engine=self.sync_engine))
+            fh.write(
+                make_tables_file(self.dsn, self.schema_name, engine=self.sync_engine)
+            )
 
     def tearDown(self) -> None:
         # Dispose connection pools so the next setUp can drop these databases.
@@ -74,7 +76,7 @@ class MSSQLFunctionalTestCase(GeneratesDBTestCase):
         engine = sa_create_engine(self.dsn)
         with engine.connect() as conn:
             row = conn.execute(text("SELECT 1 AS n")).fetchone()
-        self.assertIsNotNone(row)
+        assert row is not None
         self.assertEqual(row[0], 1)
 
     def test_make_tables(self) -> None:
@@ -108,13 +110,13 @@ class MSSQLFunctionalTestCase(GeneratesDBTestCase):
         # Verify that at least the manufacturer table received rows.
         assert self.dst_engine is not None
         with self.dst_engine.connect() as conn:
-            count = conn.execute(text(f"SELECT COUNT(*) FROM {self.dst_schema_name}.manufacturer")).scalar()
+            count = conn.execute(
+                text(f"SELECT COUNT(*) FROM {self.dst_schema_name}.manufacturer")
+            ).scalar()
         self.assertGreater(count, 0, "Expected rows in manufacturer after create-data")
 
     def test_dialect_rand(self) -> None:
         """ChoiceProposer compiles its query with RAND() not RANDOM() for mssql."""
-        from sqlalchemy.dialects import mssql as mssql_dialect  # noqa: PLC0415
-        from datafaker.proposers.choice import ZipfChoiceProposer  # noqa: PLC0415
 
         dialect = mssql_dialect.dialect()
         proposer = ZipfChoiceProposer(
@@ -125,12 +127,11 @@ class MSSQLFunctionalTestCase(GeneratesDBTestCase):
             sample_count=2,
             dialect=dialect,
         )
-        self.assertIn("rand()", proposer._query.lower())
-        self.assertNotIn("random()", proposer._query.lower())
+        self.assertIn("rand()", proposer._query.lower())  # pylint: disable=W0212
+        self.assertNotIn("random()", proposer._query.lower())  # pylint: disable=W0212
 
     def test_cascade_stripped(self) -> None:
         """The @compiles(CreateTable, 'mssql') hook strips ON DELETE CASCADE."""
-        from sqlalchemy.dialects import mssql as mssql_dialect  # noqa: PLC0415
 
         model_table = self.metadata.tables["model"]
         ddl = str(CreateTable(model_table).compile(dialect=mssql_dialect.dialect()))

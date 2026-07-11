@@ -1,9 +1,9 @@
 """Dialect differences."""
-from collections.abc import Mapping
 import re
+from collections.abc import Mapping
 from typing import Any
 
-from sqlalchemy import Column, Select, Table, Join
+from sqlalchemy import Column, Select, Table
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.schema import CreateSchema, CreateTable
 from sqlalchemy.sql.elements import ColumnElement
@@ -66,9 +66,9 @@ def duckdb_workaround(element: Select, compiler: Any, **kw: Any) -> Any:
     :param stmt: An ORM statement, such as the return value of ``select``.
     :return: An ORM statement, transformed if necessary.
     """
-    #sel =  compiler.visit_select(element, **kw)
-    #breakpoint()
-    #return sel
+    # sel =  compiler.visit_select(element, **kw)
+    # breakpoint()
+    # return sel
     tables: set[Table] = set()
     traverse(element, {}, {"table": tables.add})
     for t in tables:
@@ -81,7 +81,7 @@ def duckdb_workaround(element: Select, compiler: Any, **kw: Any) -> Any:
 @compiles(CreateTable, "mssql")
 def compile_mssql_create_table(element: CreateTable, compiler: Any, **kw: Any) -> str:
     """
-    Post-process MS-SQL CREATE TABLE DDL:
+    Post-process MS-SQL CREATE TABLE DDL.
 
     1. Strip ON DELETE CASCADE — MS-SQL rejects multiple cascading FK paths to
        the same table (error 1785). Referential integrity is enforced by insert
@@ -97,11 +97,15 @@ def compile_mssql_create_table(element: CreateTable, compiler: Any, **kw: Any) -
 
 
 @compiles(CreateSchema, "mssql")
-def mssql_create_schema(element: CreateSchema, compiler: Any, **kw: Any) -> str:
+def mssql_create_schema(element: CreateSchema, _compiler: Any, **_kw: Any) -> str:
     """Correct CREATE SCHEMA IF NOT EXISTS."""
     name = element.element.replace("'", "''")
     if element.if_not_exists:
-        return f"IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = '{name}') BEGIN EXEC('CREATE SCHEMA {name}') END"
+        return (
+            "IF NOT EXISTS (SELECT 1 FROM sys.schemas"
+            f" WHERE name = '{name}')"
+            f" BEGIN EXEC('CREATE SCHEMA {name}') END"
+        )
     return f"CREATE SCHEMA {name}"
 
 
@@ -126,126 +130,6 @@ def remove_on_delete_cascade(element: CreateTable, compiler: Any, **kw: Any) -> 
     text: str = compiler.visit_create_table(element, **kw)
     t2 = serial_re.sub("INTEGER", text)
     return t2.replace(" ON DELETE CASCADE", "")
-
-
-class StdDev(ColumnElement[float]):  # pylint: disable=too-many-ancestors
-    """Represent getting the difference between times in seconds."""
-
-    expr: ColumnElement[float]
-
-    _traverse_internals = [
-        ("expr", InternalTraversal.dp_clauseelement),
-    ]
-
-    def __init__(
-        self,
-        expr: ColumnElement[float],
-    ):
-        """Get a clause for the standard deviation of a sample of values."""
-        self.expr = expr
-
-    __sa_operate__ = ColumnElement.operate
-
-
-@compiles(StdDev)
-def compile_stddev(
-    element: StdDev, compiler: Any, **kw: Any
-) -> str:
-    """Create SQL for standard deviation."""
-    e = compiler.process(element.expr, **kw)
-    return f"STDDEV({e})"
-
-
-@compiles(StdDev, "mssql")
-def compile_stddev_mssql(
-    element: StdDev, compiler: Any, **kw: Any
-) -> str:
-    """MSSQL equivalent: STDEVP."""
-    e = compiler.process(element.expr, **kw)
-    return f"STDEVP({e})"
-
-
-class IsNull(ColumnElement[float]):  # pylint: disable=too-many-ancestors
-    """Represent IS NULL as an expression."""
-
-    expr: ColumnElement[float]
-
-    _traverse_internals = [
-        ("expr", InternalTraversal.dp_clauseelement),
-    ]
-
-    def __init__(
-        self,
-        expr: ColumnElement[float],
-    ):
-        """Get the clause that is being tested for nullness."""
-        self.expr = expr
-
-    __sa_operate__ = ColumnElement.operate
-
-
-@compiles(IsNull)
-def compile_isnull(
-    element: IsNull, compiler: Any, **kw: Any
-) -> str:
-    """Create SQL for IS NULL."""
-    e = compiler.process(element.expr, **kw)
-    return f"{e} IS NULL"
-
-
-class IsNotNull(ColumnElement[float]):  # pylint: disable=too-many-ancestors
-    """Represent IS NOT NULL as an expression."""
-
-    expr: ColumnElement[float]
-
-    _traverse_internals = [
-        ("expr", InternalTraversal.dp_clauseelement),
-    ]
-
-    def __init__(
-        self,
-        expr: ColumnElement[float],
-    ):
-        """Get the clause that is being tested for nonnullness."""
-        self.expr = expr
-
-    __sa_operate__ = ColumnElement.operate
-
-
-@compiles(IsNotNull)
-def compile_isnotnull(
-    element: IsNotNull, compiler: Any, **kw: Any
-) -> str:
-    """Create SQL for IS NULL."""
-    e = compiler.process(element.expr, **kw)
-    return f"{e} IS NOT NULL"
-
-
-class Random(ColumnElement[float]):  # pylint: disable=too-many-ancestors
-    """Represent a random number between 0 and 1."""
-
-    _traverse_internals = []
-
-    def __init__(
-        self,
-    ):
-        """Get a clause for random values."""
-
-
-@compiles(Random)
-def compile_random(
-    element: Random, compiler: Any, **kw: Any
-) -> str:
-    """Create SQL for random."""
-    return "RANDOM()"
-
-
-@compiles(Random, "mssql")
-def compile_random_mssql(
-    element: Random, compiler: Any, **kw: Any
-) -> str:
-    """MSSQL equivalent: RAND."""
-    return "RAND()"
 
 
 class SecondsDifference(ColumnElement[int]):  # pylint: disable=too-many-ancestors
@@ -293,3 +177,113 @@ def compile_seconds_difference_mssql(
     e1 = compiler.process(element.expr1, **kw)
     e2 = compiler.process(element.expr2, **kw)
     return f"CAST(DATEDIFF(second, {e2}, {e1}) AS FLOAT)"
+
+
+class StdDev(ColumnElement[float]):  # pylint: disable=too-many-ancestors
+    """Represent getting the difference between times in seconds."""
+
+    expr: ColumnElement[int | float] | SecondsDifference
+
+    _traverse_internals = [
+        ("expr", InternalTraversal.dp_clauseelement),
+    ]
+
+    def __init__(
+        self,
+        expr: ColumnElement[int | float] | SecondsDifference,
+    ):
+        """Get a clause for the standard deviation of a sample of values."""
+        self.expr = expr
+
+    __sa_operate__ = ColumnElement.operate
+
+
+@compiles(StdDev)
+def compile_stddev(element: StdDev, compiler: Any, **kw: Any) -> str:
+    """Create SQL for standard deviation."""
+    e = compiler.process(element.expr, **kw)
+    return f"STDDEV({e})"
+
+
+@compiles(StdDev, "mssql")
+def compile_stddev_mssql(element: StdDev, compiler: Any, **kw: Any) -> str:
+    """MSSQL equivalent: STDEVP."""
+    e = compiler.process(element.expr, **kw)
+    return f"STDEVP({e})"
+
+
+class IsNull(ColumnElement[float]):  # pylint: disable=too-many-ancestors
+    """Represent IS NULL as an expression."""
+
+    expr: ColumnElement[float]
+
+    _traverse_internals = [
+        ("expr", InternalTraversal.dp_clauseelement),
+    ]
+
+    def __init__(
+        self,
+        expr: ColumnElement[float],
+    ):
+        """Get the clause that is being tested for nullness."""
+        self.expr = expr
+
+    __sa_operate__ = ColumnElement.operate
+
+
+@compiles(IsNull)
+def compile_isnull(element: IsNull, compiler: Any, **kw: Any) -> str:
+    """Create SQL for IS NULL."""
+    e = compiler.process(element.expr, **kw)
+    return f"{e} IS NULL"
+
+
+class IsNotNull(ColumnElement[float]):  # pylint: disable=too-many-ancestors
+    """Represent IS NOT NULL as an expression."""
+
+    expr: ColumnElement[float]
+
+    _traverse_internals = [
+        ("expr", InternalTraversal.dp_clauseelement),
+    ]
+
+    def __init__(
+        self,
+        expr: ColumnElement[float],
+    ):
+        """Get the clause that is being tested for nonnullness."""
+        self.expr = expr
+
+    __sa_operate__ = ColumnElement.operate
+
+
+@compiles(IsNotNull)
+def compile_isnotnull(element: IsNotNull, compiler: Any, **kw: Any) -> str:
+    """Create SQL for IS NULL."""
+    e = compiler.process(element.expr, **kw)
+    return f"{e} IS NOT NULL"
+
+
+class Random(ColumnElement[float]):  # pylint: disable=too-many-ancestors
+    """Represent a random number between 0 and 1."""
+
+    _traverse_internals = []
+
+    def __init__(
+        self,
+    ):
+        """Get a clause for random values."""
+
+    __sa_operate__ = ColumnElement.operate
+
+
+@compiles(Random)
+def compile_random(_element: Random, _compiler: Any, **_kw: Any) -> str:
+    """Create SQL for random."""
+    return "RANDOM()"
+
+
+@compiles(Random, "mssql")
+def compile_random_mssql(_element: Random, _compiler: Any, **_kw: Any) -> str:
+    """MSSQL equivalent: RAND."""
+    return "RAND()"

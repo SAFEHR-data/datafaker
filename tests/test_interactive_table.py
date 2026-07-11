@@ -267,13 +267,13 @@ class ConfigureTablesSrcTests(ConfigureTablesTests):
             self.assertEqual(len(tc.column_items), 1)
             self.assertEqual(len(tc.column_items[0]), to_get_count)
             tc.reset()
-            tc.do_data(f"1000 name 13")
+            tc.do_data("1000 name 13")
             self.assertEqual(len(tc.column_items), 1)
             self.assertEqual(
                 set(tc.column_items[0]), set(filter(lambda n: 13 <= len(n), name_set))
             )
             tc.reset()
-            tc.do_data(f"1000 name 16")
+            tc.do_data("1000 name 16")
             self.assertEqual(len(tc.column_items), 1)
             self.assertEqual(
                 set(tc.column_items[0]), set(filter(lambda n: 16 <= len(n), name_set))

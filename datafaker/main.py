@@ -31,6 +31,7 @@ from datafaker.interactive import (  # update_missingness,
 from datafaker.interactive.base import DbCmd
 from datafaker.make import make_src_stats, make_tables_file, make_vocabulary_tables
 from datafaker.remove import remove_db_data, remove_db_tables, remove_db_vocab
+from datafaker.serialize_metadata import dict_to_metadata, should_ignore_fk
 from datafaker.settings import (
     SettingsError,
     get_destination_dsn,
@@ -38,7 +39,6 @@ from datafaker.settings import (
     get_source_dsn,
     get_source_schema,
 )
-from datafaker.serialize_metadata import dict_to_metadata, should_ignore_fk
 from datafaker.utils import (
     CONFIG_SCHEMA_PATH,
     conf_logger,
@@ -47,6 +47,7 @@ from datafaker.utils import (
     logger,
     read_config_file,
 )
+
 # pylint: disable=too-many-arguments
 
 ORM_FILENAME: Final[str] = "orm.yaml"

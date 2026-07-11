@@ -91,7 +91,7 @@ def string_type(type_: type) -> ParserType:
             # PostgreSQL: COLLATE "name" (quoted)
             parsy.string(' COLLATE "') >> parsy.regex(r'[^"]*') << parsy.string('"'),
             # MS-SQL: COLLATE name (unquoted identifier)
-            parsy.string(" COLLATE ") >> parsy.regex(r'\S+'),
+            parsy.string(" COLLATE ") >> parsy.regex(r"\S+"),
         ).optional()
         return type_(length=length, collation=collation)
 
@@ -132,16 +132,13 @@ def time_type(type_: type, tz_type: type) -> ParserType:
     return pgt_parser
 
 
-@parsy.generate("VARBINARY")
+@parsy.generate("VARBINARY")  # type: ignore
 def _mssql_varbinary_parser() -> typing.Generator[ParserType, None, typing.Any]:
     """Parse VARBINARY, VARBINARY(n), or VARBINARY(max/MAX)."""
     yield parsy.string("VARBINARY")
     length: int | None = yield (
         parsy.string("(")
-        >> (
-            (parsy.string("max") | parsy.string("MAX")).result(None)
-            | integer()
-        )
+        >> ((parsy.string("max") | parsy.string("MAX")).result(None) | integer())
         << parsy.string(")")
     ).optional()
     return mssql.VARBINARY(length=length)
@@ -171,9 +168,13 @@ SIMPLE_TYPE_PARSER = parsy.alt(
     # PostgreSQL-specific types — mapped to cross-dialect equivalents so that
     # an orm.yaml produced from a PostgreSQL source can be used with MS-SQL.
     # PostgreSQL recreates these correctly; MSSQL gets a functional fallback.
-    parsy.string("TSVECTOR").result(sqltypes.Text),        # no MS-SQL equivalent; degrade to Text
-    parsy.string("BYTEA").result(sqltypes.LargeBinary),    # MS-SQL: VARBINARY(MAX)
-    parsy.string("CIDR").result(sqltypes.String(43)),      # no MS-SQL equivalent; store as VARCHAR(43)
+    parsy.string("TSVECTOR").result(
+        sqltypes.Text
+    ),  # no MS-SQL equivalent; degrade to Text
+    parsy.string("BYTEA").result(sqltypes.LargeBinary),  # MS-SQL: VARBINARY(MAX)
+    parsy.string("CIDR").result(
+        sqltypes.String(43)
+    ),  # no MS-SQL equivalent; store as VARCHAR(43)
     # PostgreSQL SERIAL pseudo-types — map to plain integers.  datafaker does
     # not rely on server-side autoincrement; the @compiles hook in dialects.py
     # strips IDENTITY from MS-SQL DDL so explicit INSERTs work without
@@ -185,7 +186,7 @@ SIMPLE_TYPE_PARSER = parsy.alt(
     numeric_type(sqltypes.NUMERIC),
     numeric_type(sqltypes.DECIMAL),
     numeric_type(postgresql.BIT),
-    numeric_type(sqltypes.REAL),   # was postgresql.REAL; sqltypes.REAL is cross-dialect
+    numeric_type(sqltypes.REAL),  # was postgresql.REAL; sqltypes.REAL is cross-dialect
     # MS-SQL-specific types
     simple(mssql.UNIQUEIDENTIFIER),
     _mssql_varbinary_parser,
@@ -250,13 +251,6 @@ def column_to_dict(column: Column, dialect: Dialect) -> dict[str, typing.Any]:
     return result
 
 
-def _unqualify_fk_target(
-    fk: str, table_names: typing.Optional[frozenset] = None
-) -> str:
-    """Thin alias kept for call-site compatibility; logic lives in utils.unqualify_fk_target."""
-    return unqualify_fk_target(fk, table_names)
-
-
 def dict_to_column(
     table_name: str,
     col_name: str,
@@ -288,7 +282,7 @@ def dict_to_column(
     if "foreign_keys" in rep:
         args = [
             ForeignKey(
-                _unqualify_fk_target(fk, table_names),
+                unqualify_fk_target(fk, table_names),
                 name=make_foreign_key_name(table_name, col_name),
                 ondelete="CASCADE",
             )
@@ -393,7 +387,7 @@ def should_ignore_fk(tables_dict: dict[str, TableT], fk: str) -> bool:
     # name for configs that don't include a schema prefix.
     td = tables_dict.get(table)
     if td is None:
-        bare = table.split(".")[-1]
+        bare = table.rsplit(".", maxsplit=1)[-1]
         td = tables_dict.get(bare, {})
     return get_property(td, "ignore", False)
 

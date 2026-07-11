@@ -1,5 +1,4 @@
 """Functions and classes to create and populate the target database."""
-import re
 from collections import Counter
 from pathlib import Path
 from typing import Any, Generator, Iterable, Iterator, Mapping, Sequence, Tuple
@@ -8,7 +7,6 @@ import typer
 import yaml
 from sqlalchemy import Connection, insert, inspect
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema, MetaData, Table
 

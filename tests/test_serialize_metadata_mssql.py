@@ -1,10 +1,12 @@
 """Tests for MS-SQL type support in datafaker.serialize_metadata."""
+# pylint: disable=missing-function-docstring
 import unittest
 
 from sqlalchemy.dialects import mssql, postgresql
 from sqlalchemy.sql import sqltypes
 
-from datafaker.serialize_metadata import _unqualify_fk_target, dict_to_metadata, type_parser
+from datafaker.serialize_metadata import dict_to_metadata, type_parser
+from datafaker.utils import unqualify_fk_target
 
 
 def parse(type_str: str):
@@ -116,7 +118,7 @@ class TestPostgreSQLTypeDegradation(unittest.TestCase):
         self.assertIs(parse("SMALLSERIAL"), sqltypes.SMALLINT)
 
 
-class TestExistingPostgreSQLTypesRoundTrip(unittest.TestCase):
+class TestExistingPostgreSQLTypesRoundTrip(unittest.TestCase):  # pylint: disable=R0904
     """Pre-existing PostgreSQL type strings still parse correctly (regression tests)."""
 
     def test_integer(self) -> None:
@@ -262,29 +264,42 @@ class TestUnqualifyFkTarget(unittest.TestCase):
     """Schema prefix is stripped from 3-part FK targets."""
 
     def test_three_part_target_drops_schema(self) -> None:
-        self.assertEqual(_unqualify_fk_target("mimic100.concept.concept_id"), "concept.concept_id")
+        self.assertEqual(
+            unqualify_fk_target("mimic100.concept.concept_id"), "concept.concept_id"
+        )
 
     def test_two_part_target_unchanged(self) -> None:
-        self.assertEqual(_unqualify_fk_target("concept.concept_id"), "concept.concept_id")
+        self.assertEqual(
+            unqualify_fk_target("concept.concept_id"), "concept.concept_id"
+        )
 
     def test_single_part_unchanged(self) -> None:
-        self.assertEqual(_unqualify_fk_target("concept_id"), "concept_id")
+        self.assertEqual(unqualify_fk_target("concept_id"), "concept_id")
 
 
 class TestSchemaQualifiedFKResolution(unittest.TestCase):
     """Schema-qualified FK targets resolve correctly when building MetaData."""
 
     def test_schema_qualified_fk_resolves_in_metadata(self) -> None:
+        """Test that foreign keys resolve correctly in generated MetaData."""
         orm_dict = {
             "tables": {
                 "concept": {
                     "columns": {
-                        "concept_id": {"type": "BIGINT", "primary": True, "nullable": False},
+                        "concept_id": {
+                            "type": "BIGINT",
+                            "primary": True,
+                            "nullable": False,
+                        },
                     }
                 },
                 "person": {
                     "columns": {
-                        "person_id": {"type": "BIGINT", "primary": True, "nullable": False},
+                        "person_id": {
+                            "type": "BIGINT",
+                            "primary": True,
+                            "nullable": False,
+                        },
                         "gender_concept_id": {
                             "type": "BIGINT",
                             "primary": False,

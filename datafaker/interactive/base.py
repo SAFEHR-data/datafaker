@@ -10,7 +10,7 @@ from typing import Any, Optional, Type
 
 import sqlalchemy
 from prettytable import PrettyTable
-from sqlalchemy import Engine, ForeignKey, MetaData, Table, func, literal_column, or_, select
+from sqlalchemy import Engine, ForeignKey, MetaData, Table, func, or_, select
 from sqlalchemy.exc import DatabaseError, SQLAlchemyError
 from typing_extensions import Self
 
@@ -323,11 +323,7 @@ class DbCmd(ABC, cmd.Cmd):
     def get_nullable_columns(self, table_name: str) -> list[sqlalchemy.Column]:
         """Get the names of the nullable columns in the named table."""
         metadata_table = self.metadata.tables[table_name]
-        return [
-            column
-            for column in metadata_table.columns.values()
-            if column.nullable
-        ]
+        return [column for column in metadata_table.columns.values() if column.nullable]
 
     def find_entry_index_by_table_name(self, table_name: str) -> int | None:
         """Get the index of the table entry of the named table."""
@@ -354,8 +350,9 @@ class DbCmd(ABC, cmd.Cmd):
         table_name = self.table_name()
         nullable_columns = self.get_nullable_columns(table_name)
         tbl = self.table_metadata()
-        count_exprs = [func.count().label("row_count")] + [
-            func.count(tbl.c[col.name]).label(col.name) for col in nullable_columns
+        count_exprs = [func.count().label("row_count")] + [  # pylint: disable=E1102
+            func.count(tbl.c[col.name]).label(col.name)  # pylint: disable=E1102
+            for col in nullable_columns
         ]
         stmt = select(*count_exprs).select_from(tbl)
         with self.sync_engine.connect() as connection:

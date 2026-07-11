@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import cast
 
 from sqlalchemy import Column, Dialect, Table, func, select
-from sqlalchemy.sql.elements import literal, literal_column
+from sqlalchemy.sql.elements import literal_column
 
 from datafaker.dialects import IsNull, Random
 from datafaker.interactive.base import DbCmd, TableEntry
@@ -39,9 +39,22 @@ class MissingnessType:
         :return: The SQL query to do the sampling.
         """
         results = [IsNull(c).label(c.name + "__is_null") for c in columns]
-        subquery = select(*results).select_from(table).order_by(Random()).limit(literal_column(str(count))).subquery("__t")
+        subquery = (
+            select(*results)
+            .select_from(table)
+            .order_by(Random())
+            .limit(literal_column(str(count)))
+            .subquery("__t")
+        )
         result_labels = [subquery.c[r.name].label(r.name) for r in results]
-        query = select(func.count().label("row_count"), *result_labels).select_from(subquery).group_by(*result_labels).compile(dialect=dialect)
+        query = (
+            select(
+                func.count().label("row_count"), *result_labels  # pylint: disable=E1102
+            )
+            .select_from(subquery)
+            .group_by(*result_labels)
+            .compile(dialect=dialect)
+        )
         return str(query)
 
 
@@ -116,7 +129,7 @@ data from the database. Use 'quit' to exit this tool."""
                 columns=[],
             )
         elif len(mgs) == 1:
-            table = self.metadata.tables[self.table_name]
+            table = self.metadata.tables[table_name]
             mg = mgs[0]
             mg_name = mg.get("name", None)
             if isinstance(mg_name, str):
@@ -199,10 +212,7 @@ data from the database. Use 'quit' to exit this tool."""
                         "kwargs": {
                             "patterns": f'SRC_STATS["{src_stat_key}"]["results"]'
                         },
-                        "columns": [
-                            c.name
-                            for c in entry.new_type.columns
-                        ],
+                        "columns": [c.name for c in entry.new_type.columns],
                     }
                 ]
                 src_stats.append(

@@ -3,8 +3,7 @@ import datetime
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from sqlalchemy import Column, Engine, ForeignKey, MetaData, func, select, Dialect
-from sqlalchemy.ext.compiler import compiles
+from sqlalchemy import Column, Dialect, Engine, ForeignKey, MetaData, func, select
 from sqlalchemy.types import Date, DateTime
 
 from datafaker.dialects import SecondsDifference, StdDev

@@ -1,12 +1,9 @@
 """Tests for MS-SQL DDL compilation in datafaker.create."""
 import unittest
 
-from sqlalchemy import Column, ForeignKey, Integer, MetaData, String, Table
+from sqlalchemy import Column, ForeignKey, Integer, MetaData, Table
 from sqlalchemy.dialects import mssql
 from sqlalchemy.schema import CreateTable
-
-# Importing create registers the @compiles hooks globally.
-import datafaker.create  # noqa: F401
 
 
 def _compile_create_table(table: Table) -> str:
@@ -57,23 +54,30 @@ class TestMSSQLRemoveOnDeleteCascade(unittest.TestCase):
 
     def _make_multi_fk_table(self) -> Table:
         meta = MetaData()
-        concept = Table(
-            "concept",
-            meta,
-            Column("concept_id", Integer(), primary_key=True),
-        )
+        concept_id = Column("concept_id", Integer())
+        Table("concept", meta, concept_id)
         return Table(
             "person",
             meta,
             Column("person_id", Integer(), primary_key=True),
-            Column("gender_concept_id", Integer(), ForeignKey("concept.concept_id", ondelete="CASCADE")),
-            Column("race_concept_id", Integer(), ForeignKey("concept.concept_id", ondelete="CASCADE")),
+            Column(
+                "gender_concept_id",
+                Integer(),
+                ForeignKey(concept_id, ondelete="CASCADE"),
+            ),
+            Column(
+                "race_concept_id",
+                Integer(),
+                ForeignKey(concept_id, ondelete="CASCADE"),
+            ),
         )
 
     def test_cascade_absent_from_mssql_ddl(self) -> None:
+        """Test that CASCADE does not appear in the CREATE TABLE statement."""
         ddl = _compile_create_table(self._make_multi_fk_table())
         self.assertNotIn("ON DELETE CASCADE", ddl)
 
     def test_foreign_key_constraint_preserved(self) -> None:
+        """Test that a foreign key appears in the CREATE TABLE statement."""
         ddl = _compile_create_table(self._make_multi_fk_table())
         self.assertIn("FOREIGN KEY", ddl)

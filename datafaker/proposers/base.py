@@ -308,7 +308,6 @@ class Buckets:
         mean: float,
         stddev: float,
         count: int,
-        src_table: Any = None,
     ):
         """Initialise a Buckets object."""
         bottom = mean - 2 * stddev

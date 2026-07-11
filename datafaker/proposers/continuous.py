@@ -5,7 +5,18 @@ from abc import abstractmethod
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
-from sqlalchemy import Column, Engine, RowMapping, Table, case, func, null, select, text, Dialect
+from sqlalchemy import (
+    Column,
+    Dialect,
+    Engine,
+    RowMapping,
+    Table,
+    case,
+    func,
+    null,
+    select,
+    text,
+)
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.types import Integer, Numeric
 from typing_extensions import Self
@@ -19,7 +30,7 @@ from datafaker.proposers.base import (
     dist_gen,
     get_column_type,
 )
-from datafaker.utils import logger, schema_qualified_name
+from datafaker.utils import logger
 
 
 class ContinuousDistributionProposer(Proposer):
@@ -173,9 +184,7 @@ class ContinuousDistributionProposerFactory(ProposerFactory):
         buckets = Buckets.make_buckets(engine, table, column)
         if buckets is None:
             return []
-        return self._get_generators_from_buckets(
-            engine, table, column, buckets
-        )
+        return self._get_generators_from_buckets(engine, table, column, buckets)
 
 
 class LogNormalProposer(Proposer):
@@ -204,7 +213,7 @@ class LogNormalProposer(Proposer):
     def __init__(
         self,
         table: Table,
-        column: str,
+        column: Column,
         buckets: Buckets,
         logmean: float,
         logstddev: float,
@@ -409,7 +418,7 @@ class CovariateQuery:
 
     def __init__(
         self,
-        table: str,
+        table: Table,
         factory: MultivariateNormalGeneratorFactoryBase,
         dialect: Dialect,
     ) -> None:

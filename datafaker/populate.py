@@ -257,7 +257,7 @@ class TableGenerator:
         """Set all the Python symbols that must be known to the configuration."""
         self.context = {**context}
 
-    def generate_row(self, db_conn: sqlalchemy.Connection) -> dict[str, Any]:
+    def generate_row(self, _db_conn: sqlalchemy.Connection) -> dict[str, Any]:
         """Generate some rows of the relevant table in the database."""
         result: dict[str, Any] = {}
         self.context["GENERATED_ROW"] = result

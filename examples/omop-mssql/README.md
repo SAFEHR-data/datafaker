@@ -53,7 +53,6 @@ PostgreSQL uses `SERIAL` for autoincrement columns. The code already strips `SER
 
 **Deferred.** `set_db_settings` is only ever called for DuckDB connections (`parquet_dir` source feature); MS-SQL connections never reach it. Fixing the `autocommit` toggle in isolation would also leave the `SET {k} TO {v}` SQL syntax broken for MS-SQL (which requires `SET {k} {v}`). Both issues should be addressed together if `set_db_settings` is ever extended to MS-SQL.
 
-
 ## Setup
 
 ### 1. Install the MS-SQL Python extras
@@ -112,11 +111,9 @@ cp examples/omop-mssql/.env.example examples/omop-mssql/.env
 
 Edit `.env` with your server hostname, credentials, database name and schema names. The DSN format is:
 
-```
-mssql+pyodbc://<username>:<password>@<host>:1433/<database>?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes
+`mssql+pyodbc://<username>:<password>@<host>:1433/<database>?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes`
 
 > **Note for Docker on macOS:** use `127.0.0.1` rather than `localhost`. macOS resolves `localhost` to `::1` (IPv6) but Docker Desktop's port forwarding only reliably maps the IPv4 address.
-```
 
 Run datafaker commands from the `examples/omop-mssql/` directory so that the `.env` file is picked up automatically.
 

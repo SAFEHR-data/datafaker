@@ -1,9 +1,10 @@
 """Tests for the providers module."""
 import datetime as dt
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from sqlalchemy import Column, Integer, MetaData, Text, insert
+from sqlalchemy.dialects import mssql, postgresql
 from sqlalchemy.ext.declarative import declarative_base
 
 from datafaker import providers
@@ -81,16 +82,18 @@ class ColumnValueRandomFunctionTestCase(DatafakerTestCase):
         conn = self._make_connection(dialect_name)
         providers.ColumnValueProvider.column_value(conn, Person, "sex")
         query = conn.execute.call_args[0][0]
-        from sqlalchemy.dialects import mssql, postgresql
+
         dialect = mssql.dialect() if dialect_name == "mssql" else postgresql.dialect()
         return str(query.compile(dialect=dialect))
 
     def test_mssql_uses_rand(self) -> None:
+        """Test that the column provider uses RAND for the Postgres dialect."""
         sql = self._get_order_by_sql("mssql")
         self.assertIn("rand()", sql.lower())
         self.assertNotIn("random()", sql.lower())
 
     def test_postgresql_uses_random(self) -> None:
+        """Test that the column provider uses RANDOM for the Postgres dialect."""
         sql = self._get_order_by_sql("postgresql")
         self.assertIn("random()", sql.lower())
         self.assertNotIn("newid()", sql.lower())

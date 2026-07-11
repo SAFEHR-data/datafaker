@@ -1,9 +1,14 @@
 """Tests for dialect-correct SQL in interactive shell methods."""
+# pylint: disable=protected-access
 import unittest
 from unittest.mock import MagicMock
 
 from sqlalchemy import Column, Integer, MetaData, Table
 from sqlalchemy.dialects import mssql, postgresql
+
+from datafaker.interactive.base import DbCmd
+from datafaker.interactive.generators import GeneratorCmd
+from datafaker.interactive.table import TableCmd
 
 
 def _make_engine(dialect) -> MagicMock:
@@ -15,7 +20,7 @@ def _make_engine(dialect) -> MagicMock:
     conn.__exit__ = MagicMock(return_value=False)
     executed = []
 
-    def capture(stmt, *args, **kwargs):
+    def capture(stmt, *_args, **_kwargs):
         executed.append(stmt)
         result = MagicMock()
         result.keys.return_value = []
@@ -35,15 +40,15 @@ def _make_table(schema=None) -> Table:
 
 
 def _compiled(stmt, dialect) -> str:
-    return str(stmt.compile(dialect=dialect, compile_kwargs={"literal_binds": True})).upper()
+    return str(
+        stmt.compile(dialect=dialect, compile_kwargs={"literal_binds": True})
+    ).upper()
 
 
 class TestPeekDialect(unittest.TestCase):
     """DbCmd.do_peek() uses NEWID/TOP on MS-SQL and RANDOM/LIMIT on PostgreSQL."""
 
     def _run_peek(self, dialect_instance, col_names=None, schema=None):
-        from datafaker.interactive.base import DbCmd
-
         engine = _make_engine(dialect_instance)
         shell = MagicMock(spec=DbCmd)
         shell.sync_engine = engine
@@ -90,11 +95,9 @@ class TestPeekDialect(unittest.TestCase):
 
 
 class TestGetColumnDataDialect(unittest.TestCase):
-    """GeneratorCmd._get_column_data() uses RAND/ROW_NUMBER on MS-SQL and RANDOM/LIMIT on PostgreSQL."""
+    """Check that GeneratorCmd._get_column_data() produces the correct dialect."""
 
     def _run_get_column_data(self, dialect_instance, schema=None):
-        from datafaker.interactive.generators import GeneratorCmd
-
         engine = _make_engine(dialect_instance)
         shell = MagicMock(spec=GeneratorCmd)
         shell.sync_engine = engine
@@ -140,8 +143,6 @@ class TestPrintColumnDataDialect(unittest.TestCase):
     """TableCmd.print_column_data() uses NEWID/TOP on MS-SQL and RANDOM/LIMIT on PostgreSQL."""
 
     def _run_print_column_data(self, dialect_instance, schema=None):
-        from datafaker.interactive.table import TableCmd
-
         engine = _make_engine(dialect_instance)
         shell = MagicMock(spec=TableCmd)
         shell.sync_engine = engine
@@ -187,8 +188,6 @@ class TestCountsDialect(unittest.TestCase):
     """DbCmd.do_counts() compiles a schema-qualified COUNT query."""
 
     def _run_counts(self, dialect_instance, schema=None):
-        from datafaker.interactive.base import DbCmd
-
         engine = _make_engine(dialect_instance)
         tbl = _make_table(schema=schema)
         shell = MagicMock(spec=DbCmd)

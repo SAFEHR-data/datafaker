@@ -9,7 +9,7 @@ import sys
 import time
 import traceback
 from abc import ABC, abstractmethod
-from collections.abc import MutableSequence, Sequence
+from collections.abc import MutableSequence, Sequence, Set
 from functools import lru_cache
 from importlib import resources
 from pathlib import Path
@@ -19,11 +19,11 @@ from typing import Any, Mapping
 from unittest import SkipTest, TestCase
 
 import duckdb
+import sqlalchemy
 import testing.postgresql
 import yaml
 from prettytable import PrettyTable
-import pyodbc
-from sqlalchemy import Engine, MetaData, text, RowMapping
+from sqlalchemy import Engine, MetaData, create_engine
 from sqlalchemy.engine import make_url
 from sqlalchemy_utils import create_database
 
@@ -94,7 +94,11 @@ class TestDatabaseBase(ABC):
     def run_sql(self, sql_file: Path) -> None:
         """Run the provided SQL file on the test database."""
 
-    def create_empty(self, name: str, schema_name: str | None) -> None:
+    def create_empty(  # pylint: disable=unused-argument
+        self,
+        name: str,
+        schema_name: str | None,
+    ) -> None:
         """Create an empty database and return the DSN string."""
         dsn = self.get_dsn(name)
         create_database(dsn)
@@ -239,7 +243,11 @@ class TestDuckDb(TestDatabaseBase):
         duckdb_con.execute(sanitized)
         duckdb_con.close()
 
-    def create_empty(self, name: str, schema_name: str | None) -> None:
+    def create_empty(  # pylint: disable=unused-argument
+        self,
+        name: str,
+        schema_name: str | None,
+    ) -> None:
         """
         The standard SQLAlchemy database creation tool doesn't work for DuckDB.
 
@@ -262,15 +270,22 @@ class TestMSSQL(TestDatabaseBase):
     _ENV_VAR = "MSSQL_TEST_DSN"
     _base_dsn: str = ""
     _CREATE_DATABASE_RE = re.compile(r"CREATE\s+DATABASE\s+([A-Za-z0-9_]+)\s+WITH\s.*;")
-    _ALTER_DATABASE_RE = re.compile(r"ALTER\s+DATABASE\s+([A-Za-z0-9_]+)\s+OWNER\s+TO\s.*;")
+    _ALTER_DATABASE_RE = re.compile(
+        r"ALTER\s+DATABASE\s+([A-Za-z0-9_]+)\s+OWNER\s+TO\s.*;"
+    )
     _CONNECT_RE = re.compile(r"^\\connect\s+([A-Za-z0-9_]+)\s*$", re.MULTILINE)
     _PUBLIC_SCHEMA = re.compile(r"(\s)public\.")
     _GO_RE = re.compile(r"^\s*GO\s*$", re.MULTILINE)
     _EOL_RE = re.compile(r";$", re.MULTILINE)
     _TIMESTAMP_RE = re.compile(r"(TIMESTAMP)\s+WITH\s+TIME\s+ZONE", re.IGNORECASE)
-    _ALTER_OWNER_RE = re.compile(r"ALTER\s+(TABLE|DATABASE)\s+[A-Za-z0-9_.]+\s+OWNER\s+TO\s+[A-Za-z0-9_]+\s*;")
+    _ALTER_OWNER_RE = re.compile(
+        r"ALTER\s+(TABLE|DATABASE)\s+[A-Za-z0-9_.]+\s+OWNER\s+TO\s+[A-Za-z0-9_]+\s*;"
+    )
     _ALTER_ONLY_RE = re.compile(r"ALTER\s+TABLE\s+ONLY\s+")
-    _CREATE_INDEX_RE = re.compile(r"(CREATE\s+INDEX\s+[A-Za-z0-9_.]+\s+ON\s+[A-Za-z0-9_.]+\s+)USING\s+[A-Za-z0-9_.]+\s+(\([A-Za-z0-9_., ]+\))\s*;")
+    _CREATE_INDEX_RE = re.compile(
+        r"(CREATE\s+INDEX\s+[A-Za-z0-9_.]+\s+ON\s+[A-Za-z0-9_.]+\s+)"
+        r"USING\s+[A-Za-z0-9_.]+\s+(\([A-Za-z0-9_., ]+\))\s*;"
+    )
     _BOOLEAN_RE = re.compile(r"\bboolean\b", re.IGNORECASE)
     _TRUE_RE = re.compile(r"\btrue\b", re.IGNORECASE)
     _FALSE_RE = re.compile(r"\bfalse\b", re.IGNORECASE)
@@ -279,12 +294,13 @@ class TestMSSQL(TestDatabaseBase):
 
     @classmethod
     def get_test_db_dsn(cls) -> str:
+        """Get the DSN for the master database to connect to."""
         return os.environ.get(
             cls._ENV_VAR,
             "mssql+pyodbc://sa:Datafaker!Test123"
             "@127.0.0.1:21433/master"
             "?driver=ODBC+Driver+18+for+SQL+Server"
-            "&TrustServerCertificate=yes"
+            "&TrustServerCertificate=yes",
         )
 
     @classmethod
@@ -292,13 +308,11 @@ class TestMSSQL(TestDatabaseBase):
         """Return a skip message if SQL Server is not reachable."""
         dsn = cls.get_test_db_dsn()
         try:
-            import pyodbc as _pyodbc  # noqa: F401
+            import pyodbc as _pyodbc  # noqa: F401 pylint: disable=import-outside-toplevel
         except ImportError:
             return "pyodbc not installed; run: poetry install --extras mssql"
         try:
-            from sqlalchemy import create_engine as _ce
-
-            with _ce(dsn).connect():
+            with create_engine(dsn).connect():
                 pass
         except Exception as exc:  # pylint: disable=broad-except
             return f"cannot connect to MS-SQL ({exc})"
@@ -331,7 +345,9 @@ class TestMSSQL(TestDatabaseBase):
             return self._base_dsn
 
         url = make_url(self._base_dsn)
-        return url.set(database=self.prefix + database_name).render_as_string(hide_password=False)
+        return url.set(database=self.prefix + database_name).render_as_string(
+            hide_password=False
+        )
 
     def _get_connection_string(self, db_name: str) -> str:
         """Get a connection string for the named database."""
@@ -346,22 +362,31 @@ class TestMSSQL(TestDatabaseBase):
 
     def _drop_databases_then(self, db_names: list[str], execs: list[str]) -> None:
         """Drop the database ``db_name`` and maybe execute a command."""
+        import pyodbc  # noqa: F401 pylint: disable=import-outside-toplevel
+
         conn_str = self._get_connection_string("master")
-        with pyodbc.connect(conn_str, autocommit=True) as conn:
-            conn.execute(f"USE master")
+        with pyodbc.connect(  # pylint: disable=c-extension-no-member
+            conn_str,
+            autocommit=True,
+        ) as conn:
+            conn.execute("USE master")
             for db_name in db_names:
-                conn.execute(f"""IF DB_ID('{db_name}') IS NOT NULL
+                conn.execute(
+                    f"""IF DB_ID('{db_name}') IS NOT NULL
 BEGIN
     ALTER DATABASE [{db_name}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
     DROP DATABASE [{db_name}];
-END""")
-            for exec in execs:
-                sql = exec.strip()
+END"""
+                )
+            for ex in execs:
+                sql = ex.strip()
                 if sql:
                     conn.execute(sql)
 
     def create_empty(self, name: str, schema_name: str | None) -> None:
         """Drop (if exists) and create a fresh SQL Server database named ``name``."""
+        import pyodbc  # noqa: F401 pylint: disable=import-outside-toplevel
+
         qname = self.prefix + name
         instructions = [
             f"CREATE DATABASE [{qname}]",
@@ -377,26 +402,31 @@ END""")
         # immediately produces TCP resets.
         db_conn_str = self._get_connection_string(qname)
         deadline = time.monotonic() + 30
+
         while True:
             try:
-                with pyodbc.connect(db_conn_str, autocommit=True, timeout=5) as probe:
+                with pyodbc.connect(  # pylint: disable=c-extension-no-member
+                    db_conn_str,
+                    autocommit=True,
+                    timeout=5,
+                ) as probe:
                     probe.execute("SELECT 1")
                 break
-            except pyodbc.Error:
+            except pyodbc.Error:  # pylint: disable=c-extension-no-member
                 if time.monotonic() > deadline:
                     raise
                 time.sleep(0.5)
 
     def run_sql(self, sql_file: Path) -> None:
         """Execute a T-SQL file via pyodbc, splitting batches on GO."""
-        url = make_url(self._base_dsn)
-        db_name = url.database or "master"
         sql = sql_file.read_text(encoding="utf-8")
         # Which databases are we creating?
         db_names = self._CREATE_DATABASE_RE.findall(sql)
         self.db_names = [self.prefix + name for name in db_names]
         # Get rid of parameters MSSQL does not understand
-        sql = self._CREATE_DATABASE_RE.sub(f"CREATE DATABASE {self.prefix}\\1;\nGO\n", sql)
+        sql = self._CREATE_DATABASE_RE.sub(
+            f"CREATE DATABASE {self.prefix}\\1;\nGO\n", sql
+        )
         # Get rid of ownership change
         sql = self._ALTER_DATABASE_RE.sub("", sql)
         # Turn \connect into USE
@@ -515,7 +545,7 @@ class DatafakerTestCase(TestCase):
         else:
             self.assertGreater(left, right)
 
-    def assert_subset(self, set1: set[T], set2: set[T], msg: str | None = None) -> None:
+    def assert_subset(self, set1: Set[T], set2: Set[T], msg: str | None = None) -> None:
         """Assert a set is a (non-strict) subset.
 
         :param set1: The asserted subset.
@@ -524,7 +554,7 @@ class DatafakerTestCase(TestCase):
         differences.
         """
         try:
-            difference = set1.difference(set2)
+            difference = set1 - set2
         except TypeError as e:
             self.fail(f"invalid type when attempting set difference: {e}")
         except AttributeError as e:
@@ -542,22 +572,48 @@ class DatafakerTestCase(TestCase):
         standard_msg = "\n".join(lines)
         self.fail(self._formatMessage(msg, standard_msg))
 
+    def assert_str_in(self, needle: str | None, haystack: str | None) -> None:
+        """Assert that the string ``needle`` is in the string ``haystack``."""
+        if needle is None or haystack is None or needle not in haystack:
+            self.fail(f"Expected {repr(needle)} to be found in {repr(haystack)}")
+
+    def assert_str_not_in(self, needle: str, haystack: str) -> None:
+        """Assert that the string ``needle`` is not in the string ``haystack``."""
+        if needle in haystack:
+            pos = haystack.index(needle)
+            length = len(needle)
+            trimmed = haystack
+            if 120 < len(haystack):
+                if 50 < pos:
+                    trimmed = "... " + trimmed[pos - 46 :]
+                    pos = 50
+                if 120 < len(trimmed):
+                    trimmed = trimmed[:116] + " ..."
+                    if 117 < pos + length:
+                        length = 117 - pos
+            self.fail(
+                f'Expected "{needle}" not to be found but:\n'
+                + f"{trimmed}\n{' ' * pos}{'^' * length}"
+            )
+
+
 def print_sql_results(engine: Engine, sql: str) -> None:
     """
     Pretty print the result of some sql.
     """
     with engine.connect() as conn:
-        results = conn.execute(text(sql)).fetchall()
+        results = conn.execute(sqlalchemy.text(sql)).fetchall()
         if len(results) == 0:
             print("No results returned")
             return
         pt = PrettyTable(results[0]._fields)
         to_print = min(len(results), 20)
-        pt.add_rows(results[:to_print])
+        pt.add_rows(results[:to_print])  # type: ignore
         print(pt)
         skipped = len(results) - to_print
         if skipped:
             print(f"... and {skipped} more rows")
+
 
 class RequiresDBTestCase(
     DatafakerTestCase
@@ -607,6 +663,7 @@ class RequiresDBTestCase(
         return self.dst_database.get_dsn(self.dst_name)
 
     def _create_engine(self) -> None:
+        assert self.database is not None
         self.engine = create_db_engine(
             self.database.get_dsn(self.database_name),
             schema_name=self.schema_name,
@@ -639,7 +696,10 @@ class RequiresDBTestCase(
 
         This method is useful during debugging.
         """
-        print_sql_results(self.dst_engine, sql)
+        if self.dst_engine is not None:
+            print_sql_results(self.dst_engine, sql)
+        else:
+            print("No destination engine")
 
     def _create_engine_dst(self):
         self.dst_engine = get_sync_engine(

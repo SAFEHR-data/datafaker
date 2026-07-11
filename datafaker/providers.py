@@ -10,7 +10,7 @@ import numpy as np
 from mimesis import Datetime, Text
 from mimesis.providers.base import BaseDataProvider, BaseProvider
 from sqlalchemy import Column, Connection, MetaData
-from sqlalchemy.sql import func, functions, select
+from sqlalchemy.sql import func, select
 
 from datafaker.dialects import Random
 from datafaker.utils import T, logger

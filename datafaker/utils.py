@@ -1,6 +1,5 @@
 """Utility functions."""
 import ast
-import typing
 import importlib.util
 import io
 import json
@@ -9,6 +8,7 @@ import random
 import re
 import string
 import sys
+import typing
 from collections.abc import Mapping, MutableSequence, Sequence, Sized
 from pathlib import Path
 from types import ModuleType
@@ -116,24 +116,6 @@ def make_async_dsn(db_dsn: str) -> str:
             f"Add an entry to _ASYNC_DRIVER_MAP in datafaker/utils.py."
         )
     return str(url.set(drivername=async_driver))
-
-
-def _is_undefined_object_error(exc: Exception) -> bool:
-    """Return True if *exc* represents a 'constraint does not exist' error.
-
-    Checks for psycopg2's UndefinedObject when psycopg2 is installed, and falls
-    back to inspecting the SQLSTATE pgcode attribute so the function works without
-    psycopg2 (e.g. in an MS-SQL environment).
-    """
-    try:
-        import psycopg2.errors  # type: ignore[import]
-
-        if isinstance(exc, psycopg2.errors.UndefinedObject):
-            return True
-    except ImportError:
-        pass
-    # SQLSTATE 42704 = undefined_object — present on psycopg2 and pyodbc errors
-    return getattr(exc, "pgcode", None) == "42704"
 
 
 def schema_qualified_name(table_name: str, engine: Any) -> str:
@@ -582,9 +564,7 @@ def generators_require_stats(config: Mapping) -> bool:
     return "SRC_STATS" in symbols
 
 
-def unqualify_fk_target(
-    fk: str, table_names: typing.Optional[frozenset] = None
-) -> str:
+def unqualify_fk_target(fk: str, table_names: typing.Optional[frozenset] = None) -> str:
     """
     Drop the schema qualifier from a 3-part FK target.
 
