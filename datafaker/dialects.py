@@ -66,9 +66,6 @@ def duckdb_workaround(element: Select, compiler: Any, **kw: Any) -> Any:
     :param stmt: An ORM statement, such as the return value of ``select``.
     :return: An ORM statement, transformed if necessary.
     """
-    # sel =  compiler.visit_select(element, **kw)
-    # breakpoint()
-    # return sel
     tables: set[Table] = set()
     traverse(element, {}, {"table": tables.add})
     for t in tables:

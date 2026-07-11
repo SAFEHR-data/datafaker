@@ -511,7 +511,7 @@ class TestPredefinedGeneratorSchemaQualified(DatafakerTestCase):
                     "query": (
                         "SELECT AVG(age) AS mean__age,"
                         + " STDDEV(age) AS sd__age FROM "
-                        + table_sql_name,
+                        + table_sql_name
                     ),
                     "comments": [],
                 }
