@@ -20,6 +20,7 @@ jobs:
         run: |
           sudo systemctl start postgresql.service
       - name: Setup MSSQL
+        id: setup-mssql
         uses: rails-sqlserver/setup-mssql@v1
         with:
           components: sqlcmd,sqlengine
@@ -43,5 +44,7 @@ jobs:
         shell: bash
         env:
             MSSQL_TEST_DSN: "mssql+pyodbc://sa:Datafaker!Test123@127.0.0.1:1433/master?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
+        wait:
+          - setup-mssql
         run: |
           poetry run python -m unittest
