@@ -22,7 +22,7 @@ jobs:
       - name: Setup MSSQL
         uses: rails-sqlserver/setup-mssql@v1
         with:
-          components: sqlengine
+          components: sqlcmd,sqlengine
           force-encryption: true
           sa-password: "Datafaker!Test123"
           version: 2022
