@@ -11,7 +11,7 @@ from typer.testing import CliRunner
 
 from datafaker.dump import CsvTableWriter, get_parquet_table_writer
 from datafaker.main import app
-from tests.utils import DatafakerTestCase, RequiresDBTestCase, DuckTestDb, MsSqlTestDb
+from tests.utils import DatafakerTestCase, DuckTestDb, MsSqlTestDb, RequiresDBTestCase
 
 
 class DumpTests(RequiresDBTestCase):

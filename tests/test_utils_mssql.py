@@ -117,7 +117,10 @@ class TestSchemaTranslateMap(DatafakerTestCase):
         # so this is safe to run even without an ODBC driver installed.
         try:
             engine = get_sync_engine(
-                create_db_engine("mssql+pyodbc://user:pass@host/db?driver=ODBC+Driver+18+for+SQL+Server", schema_name="dbo")
+                create_db_engine(
+                    "mssql+pyodbc://user:pass@host/db?driver=ODBC+Driver+18+for+SQL+Server",
+                    schema_name="dbo",
+                )
             )
         except Exception:  # pylint: disable=W0718
             self.skipTest("mssql+pyodbc driver not available in this environment")

@@ -10,7 +10,7 @@ from sqlalchemy import create_engine, inspect
 from typer.testing import CliRunner, Result
 
 from datafaker.main import app
-from tests.utils import RequiresDBTestCase, DuckTestDb, MsSqlTestDb
+from tests.utils import DuckTestDb, MsSqlTestDb, RequiresDBTestCase
 
 # pylint: disable=subprocess-run-check
 
