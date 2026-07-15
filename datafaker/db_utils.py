@@ -10,8 +10,16 @@ from typing import Any, Iterable, Optional, Union
 import sqlalchemy.dialects
 import yaml
 
-# pylint: disable=no-name-in-module
-from psycopg2.errors import UndefinedObject  # ty: ignore[unresolved-import]
+try:
+    # pylint: disable=no-name-in-module
+    from psycopg2.errors import UndefinedObject  # ty: ignore[unresolved-import]
+except ImportError:
+    # psycopg2 is only installed with the "postgres" extra; this error can
+    # only be raised by the psycopg2 driver, so it never matches otherwise.
+    class UndefinedObject:  # type: ignore[no-redef]
+        """Placeholder when psycopg2 is not installed."""
+
+
 from sqlalchemy import Connection, Engine, ForeignKey, create_engine, event, select
 from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.exc import (
