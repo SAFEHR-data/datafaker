@@ -34,8 +34,8 @@ from datafaker.settings import SettingsError
 from tests.utils import (
     DatafakerTestCase,
     GeneratesDBTestCase,
-    RequiresDBTestCase,
     MsSqlTestDb,
+    RequiresDBTestCase,
 )
 
 

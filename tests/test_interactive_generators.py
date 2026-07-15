@@ -15,11 +15,11 @@ from datafaker.interactive.base import DbCmd
 from datafaker.interactive.generators import GeneratorCmd
 from datafaker.proposers.choice import ChoiceProposerFactory
 from tests.utils import (
+    DuckTestDb,
     GeneratesDBTestCase,
+    MsSqlTestDb,
     RequiresDBTestCase,
     TestDbCmdMixin,
-    DuckTestDb,
-    MsSqlTestDb,
 )
 
 

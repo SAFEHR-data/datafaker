@@ -12,8 +12,8 @@ from datafaker.main import app
 from datafaker.settings import Settings, SettingsError
 from tests.utils import (
     DatafakerTestCase,
-    GeneratesDBTestCase,
     DuckTestDb,
+    GeneratesDBTestCase,
     MsSqlTestDb,
     get_test_settings,
 )
