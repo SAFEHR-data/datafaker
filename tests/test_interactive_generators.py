@@ -18,8 +18,8 @@ from tests.utils import (
     GeneratesDBTestCase,
     RequiresDBTestCase,
     TestDbCmdMixin,
-    TestDuckDb,
-    TestMSSQL,
+    DuckTestDb,
+    MsSqlTestDb,
 )
 
 
@@ -654,13 +654,13 @@ class ConfigureGeneratorsWithSrc2Tests(GeneratesDBTestCase):
 class ConfigureGeneratorsWithSrc2DuckDbTests(ConfigureGeneratorsWithSrc2Tests):
     """Test `configure-generators` with `src2.dump` with DuckDB."""
 
-    database_type = TestDuckDb
+    database_type = DuckTestDb
 
 
 class ConfigureGeneratorsWithSrc2MsSqlTests(ConfigureGeneratorsWithSrc2Tests):
     """Test `configure-generators` with `src2.dump` with DuckDB."""
 
-    database_type = TestMSSQL
+    database_type = MsSqlTestDb
     schema_name = None
 
 
@@ -848,13 +848,13 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
 class GeneratorsOutputTestsDuckDb(GeneratorsOutputTests):
     """As ``GeneratorsOutputTests`` but with DuckDB."""
 
-    database_type = TestDuckDb
+    database_type = DuckTestDb
 
 
 class GeneratorsOutputTestsMsSql(GeneratorsOutputTests):
     """As ``GeneratorsOutputTests`` but with MS Sql."""
 
-    database_type = TestMSSQL
+    database_type = MsSqlTestDb
     schema_name = None
 
 
@@ -955,7 +955,7 @@ class GeneratorTests(GeneratesDBTestCase):
 
     def test_varchar_ns_are_truncated(self) -> None:
         """Tests that mimesis generators for VARCHAR(N) truncate to N characters"""
-        if self.database_type is TestDuckDb:
+        if self.database_type is DuckTestDb:
             # DuckDB does not support limited width VARCHARs
             return
         generator = "generic.text.quote"
@@ -989,11 +989,11 @@ class GeneratorTests(GeneratesDBTestCase):
 class GeneratorTestsDuckDb(GeneratorTests):
     """As ``GeneratorTests`` but with DuckDB."""
 
-    database_type = TestDuckDb
+    database_type = DuckTestDb
 
 
 class GeneratorTestsMsSql(GeneratorTests):
     """As ``GeneratorTests`` but with M SSql."""
 
-    database_type = TestMSSQL
+    database_type = MsSqlTestDb
     schema_name = None

@@ -104,7 +104,7 @@ class TestDatabaseBase(ABC):
         create_database(dsn)
 
 
-class TestPostgres(TestDatabaseBase):
+class PostgresTestDb(TestDatabaseBase):
     """Postgres test database."""
 
     Postgresql = None
@@ -178,7 +178,7 @@ class TestPostgres(TestDatabaseBase):
         assert completed_process.stderr == b"", completed_process.stderr
 
 
-class TestDuckDb(TestDatabaseBase):
+class DuckTestDb(TestDatabaseBase):
     """Test DuckDB database."""
 
     SQL_REMOVALS_RE = re.compile(
@@ -195,7 +195,7 @@ class TestDuckDb(TestDatabaseBase):
         return None
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        """Initialize TestDuckDb"""
+        """Initialize DuckTestDb"""
         super().__init__(*args, **kwargs)
         self._duckdb_con: Any = None
         self._db_dir = Path(mkdtemp("duck"))
@@ -256,7 +256,7 @@ class TestDuckDb(TestDatabaseBase):
         return
 
 
-class TestMSSQL(TestDatabaseBase):
+class MsSqlTestDb(TestDatabaseBase):
     """MS-SQL Server test database.
 
     Requires the ``MSSQL_TEST_DSN`` environment variable to be set to a
@@ -628,7 +628,7 @@ class RequiresDBTestCase(
     reflected from that engine.
     """
 
-    database_type: type[TestDatabaseBase] = TestPostgres
+    database_type: type[TestDatabaseBase] = PostgresTestDb
     dst_schema_name: str | None = None
 
     @classmethod

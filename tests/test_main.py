@@ -13,8 +13,8 @@ from datafaker.settings import Settings, SettingsError
 from tests.utils import (
     DatafakerTestCase,
     GeneratesDBTestCase,
-    TestDuckDb,
-    TestMSSQL,
+    DuckTestDb,
+    MsSqlTestDb,
     get_test_settings,
 )
 
@@ -559,10 +559,10 @@ class TestsCliCreate(GeneratesDBTestCase):
 class TestCliCreateDuckDb(TestsCliCreate):
     """Tests that use the CLI to generate output in a DuckDB database."""
 
-    database_type = TestDuckDb
+    database_type = DuckTestDb
 
 
 class TestCliCreateMsSql(TestsCliCreate):
     """Tests that use the CLI to generate output in an MS Sql database."""
 
-    database_type = TestMSSQL
+    database_type = MsSqlTestDb

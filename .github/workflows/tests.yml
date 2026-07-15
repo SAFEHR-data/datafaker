@@ -19,14 +19,9 @@ jobs:
         shell: bash
         run: |
           sudo systemctl start postgresql.service
-      - name: Setup MSSQL
-        id: setup-mssql
-        uses: rails-sqlserver/setup-mssql@v1
+      - uses: hoverkraft-tech/compose-action@11beaa1c2dae4e8ed7b1665aa074723b6cecb0e4 # v3.0.0
         with:
-          components: sqlcmd,sqlengine
-          force-encryption: true
-          sa-password: "Datafaker!Test123"
-          version: 2022
+          compose-file: ./docker-compose.yml
       - name: Install poetry
         shell: bash
         run: |
@@ -42,7 +37,5 @@ jobs:
           python -m poetry install --all-extras
       - name: Run tests
         shell: bash
-        env:
-            MSSQL_TEST_DSN: "mssql+pyodbc://sa:Datafaker!Test123@127.0.0.1:1433/master?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
         run: |
-          poetry run python -m unittest
+          poetry run python -m pytest -rs

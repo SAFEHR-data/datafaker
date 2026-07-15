@@ -10,7 +10,7 @@ from sqlalchemy import create_engine, inspect
 from typer.testing import CliRunner, Result
 
 from datafaker.main import app
-from tests.utils import RequiresDBTestCase, TestDuckDb, TestMSSQL
+from tests.utils import RequiresDBTestCase, DuckTestDb, MsSqlTestDb
 
 # pylint: disable=subprocess-run-check
 
@@ -579,11 +579,11 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
 class DuckDbFunctionalTestCase(DBFunctionalTestCase):
     """End-to-end tests for the DuckDB workflow."""
 
-    database_type = TestDuckDb
+    database_type = DuckTestDb
 
 
 class MsSqlFunctionalTestCase(DBFunctionalTestCase):
     """End-to-end tests for the MsSql workflow."""
 
     schema_name = None
-    database_type = TestMSSQL
+    database_type = MsSqlTestDb

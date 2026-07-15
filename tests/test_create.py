@@ -35,7 +35,7 @@ from tests.utils import (
     DatafakerTestCase,
     GeneratesDBTestCase,
     RequiresDBTestCase,
-    TestMSSQL,
+    MsSqlTestDb,
 )
 
 
@@ -529,5 +529,5 @@ class CreateDataTestCase(RequiresDBTestCase):
 class CreateDataTestCaseMsSql(CreateDataTestCase):
     """CreateData but for MSSQL."""
 
-    database_type = TestMSSQL
+    database_type = MsSqlTestDb
     schema_name = None

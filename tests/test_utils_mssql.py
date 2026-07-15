@@ -6,7 +6,7 @@ from sqlalchemy.engine import make_url
 
 from datafaker.db_utils import create_db_engine, get_metadata, get_sync_engine
 from datafaker.utils import make_async_dsn
-from tests.utils import DatafakerTestCase, TestMSSQL
+from tests.utils import DatafakerTestCase, MsSqlTestDb
 
 
 class TestMakeAsyncDsn(unittest.TestCase):
@@ -78,7 +78,7 @@ class TestSchemaTranslateMap(DatafakerTestCase):
         """When schema_name is given, MSSQL uses schema_translate_map (not search_path)."""
         try:
             engine = self._make_engine(
-                TestMSSQL.get_test_db_dsn(), schema_name="myschema"
+                MsSqlTestDb.get_test_db_dsn(), schema_name="myschema"
             )
         except Exception:  # pylint: disable=W0718
             self.skipTest("mssql+pyodbc driver not available in this environment")

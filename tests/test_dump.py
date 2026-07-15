@@ -11,7 +11,7 @@ from typer.testing import CliRunner
 
 from datafaker.dump import CsvTableWriter, get_parquet_table_writer
 from datafaker.main import app
-from tests.utils import DatafakerTestCase, RequiresDBTestCase, TestDuckDb, TestMSSQL
+from tests.utils import DatafakerTestCase, RequiresDBTestCase, DuckTestDb, MsSqlTestDb
 
 
 class DumpTests(RequiresDBTestCase):
@@ -87,20 +87,20 @@ class DumpTests(RequiresDBTestCase):
 class DumpTestsDuckDb(DumpTests):
     """DumpTests against DuckDB."""
 
-    database_type = TestDuckDb
+    database_type = DuckTestDb
 
 
 class DumpTestsMsSql(DumpTests):
     """DumpTests against MS Sql."""
 
-    database_type = TestMSSQL
+    database_type = MsSqlTestDb
     schema_name = None
 
 
 class EndToEndParquetTestCase(DatafakerTestCase):
     """Read in parquet, make some generators, output parquet."""
 
-    database_type = TestDuckDb
+    database_type = DuckTestDb
     examples_dir = Path("examples/duckdb")
 
     def set_working_dir(self) -> None:
