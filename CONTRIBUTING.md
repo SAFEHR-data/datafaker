@@ -41,10 +41,16 @@ Please install the following software on your workstation:
 
 ## Running unit tests
 
-Executing unit tests is straightforward:
+Executing unit tests is straightforward. For example inside a Poetry shell you can run:
 
 ```bash
-python -m unittest discover --verbose tests/
+pytest -rs
+```
+
+or outside:
+
+```bash
+poetry run pytest -rs
 ```
 
 ## Building documentation locally

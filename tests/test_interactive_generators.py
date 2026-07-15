@@ -23,7 +23,7 @@ from tests.utils import (
 )
 
 
-class TestGeneratorCmd(GeneratorCmd, TestDbCmdMixin):
+class MockGeneratorCmd(GeneratorCmd, TestDbCmdMixin):
     """GeneratorCmd but mocked"""
 
     def get_proposals(self) -> dict[str, tuple[int, str, list[str]]]:
@@ -44,9 +44,9 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
     database_name = "instrument"
     schema_name = "public"
 
-    def _get_cmd(self, config: MutableMapping[str, Any]) -> TestGeneratorCmd:
+    def _get_cmd(self, config: MutableMapping[str, Any]) -> MockGeneratorCmd:
         """Get the command we are using for this test case."""
-        return TestGeneratorCmd(
+        return MockGeneratorCmd(
             DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
         )
 
@@ -586,9 +586,9 @@ class ConfigureGeneratorsWithSrc2Tests(GeneratesDBTestCase):
     copy_files = ["row_generators.py", "story_generators.py"]
     copy_from_directory = Path("examples")
 
-    def _get_cmd(self, config: MutableMapping[str, Any]) -> TestGeneratorCmd:
+    def _get_cmd(self, config: MutableMapping[str, Any]) -> MockGeneratorCmd:
         """Get the command we are using for this test case."""
-        return TestGeneratorCmd(
+        return MockGeneratorCmd(
             DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
         )
 
@@ -692,12 +692,12 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
         ChoiceProposerFactory.SAMPLE_COUNT = 500
         ChoiceProposerFactory.SUPPRESS_COUNT = 5
 
-    def _get_cmd(self, config: MutableMapping[str, Any]) -> TestGeneratorCmd:
-        return TestGeneratorCmd(
+    def _get_cmd(self, config: MutableMapping[str, Any]) -> MockGeneratorCmd:
+        return MockGeneratorCmd(
             DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
         )
 
-    def _propose(self, gc: TestGeneratorCmd) -> dict[str, tuple[int, str, list[str]]]:
+    def _propose(self, gc: MockGeneratorCmd) -> dict[str, tuple[int, str, list[str]]]:
         gc.reset()
         gc.do_propose("")
         return gc.get_proposals()
@@ -865,9 +865,9 @@ class GeneratorTests(GeneratesDBTestCase):
     database_name = "instrument"
     schema_name = "public"
 
-    def _get_cmd(self, config: MutableMapping[str, Any]) -> TestGeneratorCmd:
+    def _get_cmd(self, config: MutableMapping[str, Any]) -> MockGeneratorCmd:
         """We are using configure-generators."""
-        return TestGeneratorCmd(
+        return MockGeneratorCmd(
             DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
         )
 

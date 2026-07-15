@@ -10,7 +10,7 @@ from datafaker.interactive.base import DbCmd
 from tests.utils import GeneratesDBTestCase, RequiresDBTestCase, TestDbCmdMixin
 
 
-class TestMissingnessCmd(MissingnessCmd, TestDbCmdMixin):
+class MockMissingnessCmd(MissingnessCmd, TestDbCmdMixin):
     """MissingnessCmd but mocked"""
 
 
@@ -21,9 +21,9 @@ class ConfigureMissingnessTests(RequiresDBTestCase):
     database_name = "instrument"
     schema_name = "public"
 
-    def _get_cmd(self, config: MutableMapping[str, Any]) -> TestMissingnessCmd:
+    def _get_cmd(self, config: MutableMapping[str, Any]) -> MockMissingnessCmd:
         """We are using configure-missingness."""
-        return TestMissingnessCmd(
+        return MockMissingnessCmd(
             DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
         )
 
@@ -80,8 +80,8 @@ class ConfigureMissingnessTestsWithGeneration(GeneratesDBTestCase):
     database_name = "instrument"
     schema_name = "public"
 
-    def _get_cmd(self, config: MutableMapping[str, Any]) -> TestMissingnessCmd:
-        return TestMissingnessCmd(
+    def _get_cmd(self, config: MutableMapping[str, Any]) -> MockMissingnessCmd:
+        return MockMissingnessCmd(
             DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
         )
 

@@ -8,7 +8,7 @@ from sqlalchemy import Connection, MetaData, insert, select
 
 from datafaker.interactive.base import DbCmd
 from datafaker.proposers import NullPartitionedNormalProposerFactory
-from tests.test_interactive_generators import TestGeneratorCmd
+from tests.test_interactive_generators import MockGeneratorCmd
 from tests.utils import GeneratesDBTestCase
 
 
@@ -139,13 +139,13 @@ class NullPartitionedTests(GeneratesDBTestCase):
         NullPartitionedNormalProposerFactory.SAMPLE_COUNT = 8
         NullPartitionedNormalProposerFactory.SUPPRESS_COUNT = 2
 
-    def _get_cmd(self, config: MutableMapping[str, Any]) -> TestGeneratorCmd:
+    def _get_cmd(self, config: MutableMapping[str, Any]) -> MockGeneratorCmd:
         """Get the configure-generators object as our command."""
-        return TestGeneratorCmd(
+        return MockGeneratorCmd(
             DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
         )
 
-    def _propose(self, gc: TestGeneratorCmd) -> dict[str, tuple[int, str, list[str]]]:
+    def _propose(self, gc: MockGeneratorCmd) -> dict[str, tuple[int, str, list[str]]]:
         gc.reset()
         gc.do_propose("")
         return gc.get_proposals()
@@ -237,7 +237,7 @@ class NullPartitionedTests(GeneratesDBTestCase):
             conn.commit()
 
     def merge_columns(
-        self, gc: TestGeneratorCmd, table: str, columns: list[str]
+        self, gc: MockGeneratorCmd, table: str, columns: list[str]
     ) -> None:
         """Merge columns in a table"""
         gc.do_next(f"{table}.{columns[0]}")

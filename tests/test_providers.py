@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 from sqlalchemy import Column, Integer, MetaData, Text, insert
 from sqlalchemy.dialects import mssql, postgresql
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 
 from datafaker import providers
 from tests.utils import DatafakerTestCase, RequiresDBTestCase
