@@ -53,7 +53,10 @@ class MissingnessType:
             )
             .select_from(subquery)
             .group_by(*result_labels)
-            .compile(dialect=dialect)
+            .compile(
+                dialect=dialect,
+                compile_kwargs={"literal_binds": True},
+            )
         )
         return str(query)
 

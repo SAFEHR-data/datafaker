@@ -394,8 +394,8 @@ class MultivariateNormalGeneratorFactoryBase(ProposerFactory):
         """Get the SQLAlchemy expression for whether this column should be queried."""
 
     @abstractmethod
-    def query_var(self, column: str) -> str:
-        """Get the SQL expression of the value to query for this column."""
+    def query_var(self, column: Column) -> Any:
+        """Get the SQLAlchemy expression of the value to query for this column."""
 
     @abstractmethod
     def query_comment(self) -> str:
@@ -439,7 +439,6 @@ class CovariateQuery:
         self.table = table
         self._columns: Sequence[Column] = []
         self._predicates: Iterable[Any] = []
-        self._group_by_clause = ""
         self._constant_clauses: dict[int, Column] = {}
         self.suppress_count = 1
         self._sample_count: int | None = None
@@ -497,15 +496,6 @@ class CovariateQuery:
         self._predicates = predicates
         return self
 
-    def group_by(self, clause: str) -> Self:
-        """
-        Set the `GROUP BY` clause to the query for this partition.
-
-        :param group_by_clause: Any GROUP BY clause to the query getting the partition.
-        """
-        self._group_by_clause = clause
-        return self
-
     def constant_clauses(self, clauses: dict[int, Column]) -> Self:
         """
         Set constant clauses.
@@ -544,13 +534,13 @@ class CovariateQuery:
         constants = ""
         for index, col in self._constant_clauses.items():
             col_name = col.name
-            constants += f", _q.{col_name} AS k{index}"
+            constants += f", k{index}"
             if col_name in col_to_named_fk:
                 fk_target = col_to_named_fk[col_name]
                 fk_target_table = fk_target.table.name
                 name_joins += (
                     f" JOIN {fk_target_table} AS _j{index}"
-                    f" ON _q.{col_name}=_j{index}.{fk_target.name}"
+                    f" ON _q.k{index}=_j{index}.{fk_target.name}"
                 )
                 constants += (
                     f", _j{index}.{named_tables[fk_target_table]}"
@@ -573,7 +563,6 @@ class CovariateQuery:
             for iy in range(len(self._columns))
             for ix in range(iy + 1)
         )
-        subquery = self._inner_query().subquery("_inner")
         # if there are any numeric columns we need at least
         # two rows to make any (co)variances at all
         suppress_clause = (
@@ -582,15 +571,21 @@ class CovariateQuery:
         rank = len(self._columns)
         named_tables = self._factory.get_named_tables()
         name_joins, constants = self._get_constants_and_joins(named_tables)
-        return (
-            f"SELECT {rank} AS rank{constants}, _q.count AS count{means}{covs}"
-            f" FROM ({self._middle_query(subquery)})"
-            f" AS _q{name_joins}{suppress_clause}"
+        middle = self._middle_query(self._inner_query()).compile(
+            dialect=self._dialect,
+            compile_kwargs={"literal_binds": True},
         )
+        query = (
+            f"SELECT {rank} AS rank{constants}, _q.count AS count{means}{covs}"
+            f" FROM ({middle}) AS _q{name_joins}{suppress_clause}"
+        )
+        return query
 
     def _inner_query(self) -> Select:
         """Get the rows from the table that we are interested in."""
-        sel = Select(self.table)
+        constants = [col.label(f"k{i}") for i, col in self._constant_clauses.items()]
+        values = [col.label(f"v{i}") for i, col in enumerate(self._columns)]
+        sel = select(*constants, *values).select_from(self.table)
         preds = itertools.chain(
             (self._factory.query_predicate(col) for col in self._columns),
             self._predicates,
@@ -601,27 +596,33 @@ class CovariateQuery:
             sel = sel.order_by(Random()).limit(self._sample_count)
         return sel
 
-    def _middle_query(self, inner_query: Any) -> str:
+    def _middle_query(self, inner_query: Any) -> Any:
         """Get the basic statistics (and constants) from the inner query."""
-        multiples = "".join(
-            (
-                f", SUM({self._factory.query_var(colx.name)}"
-                f" * {self._factory.query_var(coly.name)}) AS s{ix}_{iy}"
-            )
-            for iy, coly in enumerate(self._columns)
-            for ix, colx in enumerate(self._columns[: iy + 1])
-        )
-        avgs = "".join(
-            f", AVG({self._factory.query_var(col.name)}) AS m{i}"
-            for i, col in enumerate(self._columns)
-        )
-        constants = "".join(", " + col.name for col in self._constant_clauses.values())
-        inner_query_str = inner_query.compile(
-            dialect=self._dialect, compile_kwargs={"literal_binds": True}
-        )
-        return (
-            f"SELECT COUNT(*) AS count{multiples}{avgs}{constants}"
-            f" FROM ({inner_query_str}) AS _sampled{self._group_by_clause}"
+        inner = inner_query.subquery("_sampled")
+        col_count = len(self._columns)
+        multiples = [
+            func.sum(
+                self._factory.query_var(inner.c[f"v{ix}"])
+                * self._factory.query_var(inner.c[f"v{iy}"])
+            ).label(f"s{ix}_{iy}")
+            for iy in range(col_count)
+            for ix in range(iy + 1)
+        ]
+        avgs = [
+            func.avg(self._factory.query_var(inner.c[f"v{i}"])).label(f"m{i}")
+            for i in range(col_count)
+        ]
+        constants = [inner.c[f"k{k}"] for k in self._constant_clauses.keys()]
+        query = select(
+            func.count().label("count"),  # pylint: disable=not-callable
+            *multiples,
+            *avgs,
+            *constants,
+        ).select_from(inner)
+        if len(self._constant_clauses) == 0:
+            return query
+        return query.group_by(
+            *[inner.c[f"k{k}"] for k in self._constant_clauses.keys()]
         )
 
 
@@ -636,7 +637,7 @@ class MultivariateNormalProposerFactory(MultivariateNormalGeneratorFactoryBase):
         """Get the SQLAlchemy expression for whether this column should be queried."""
         return IsNotNull(column)
 
-    def query_var(self, column: str) -> str:
+    def query_var(self, column: Column) -> Any:
         """Get the SQL expression of the value to query for this column."""
         return column
 
@@ -692,9 +693,9 @@ class MultivariateLogNormalProposerFactory(MultivariateNormalProposerFactory):
         """Get the SQLAlchemy expression for whether this column should be queried."""
         return coalesce(column > 0, False)
 
-    def query_var(self, column: str) -> str:
+    def query_var(self, column: Column) -> Any:
         """Get the expression to query for, for this column."""
-        return f"LN({column})"
+        return func.ln(column)
 
     def query_comment(self) -> str:
         """Return the human-readable comment for this generator."""

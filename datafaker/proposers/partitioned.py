@@ -6,7 +6,7 @@ from itertools import chain, combinations
 from typing import Any, Union
 
 import sqlalchemy
-from sqlalchemy import Column, Connection, Engine, RowMapping, text
+from sqlalchemy import Column, Connection, Engine, RowMapping, func, text
 from sqlalchemy.exc import DatabaseError
 from sqlalchemy.sql.functions import coalesce
 from sqlalchemy.types import Integer, Numeric
@@ -369,7 +369,6 @@ class NullPatternPartition:
         nonnull_columns = {nc.column.name for nc in partition_nonnulls}
         self.included_numeric: list[Column] = []
         self.included_choice: dict[int, str] = {}
-        self.group_by_clause = ""
         self.constant_clauses: dict[int, Column] = {}
         self.excluded: dict[str, str] = {}
         self.predicates: list[Any] = []
@@ -382,10 +381,6 @@ class NullPatternPartition:
                 else:
                     index = len(self.included_numeric) + len(self.included_choice)
                     self.included_choice[index] = col_name
-                    if self.group_by_clause:
-                        self.group_by_clause += ", " + col_name
-                    else:
-                        self.group_by_clause = " GROUP BY " + col_name
                     self.constant_clauses[index] = column
                 self.predicates.append(IsNotNull(column))
             else:
@@ -419,7 +414,7 @@ class NullPartitionedNormalProposerFactory(MultivariateNormalProposerFactory):
             return coalesce(column != column + 1, False)
         return IsNotNull(column)
 
-    def query_var(self, column: str) -> str:
+    def query_var(self, column: Column) -> Any:
         """Return the expression we are querying for in this column."""
         return column
 
@@ -521,8 +516,6 @@ class NullPartitionedNormalProposerFactory(MultivariateNormalProposerFactory):
                 partition_def.included_numeric,
             ).predicates(
                 partition_def.predicates,
-            ).group_by(
-                partition_def.group_by_clause,
             ).constant_clauses(
                 partition_def.constant_clauses,
             )
@@ -655,9 +648,9 @@ class NullPartitionedLogNormalProposerFactory(NullPartitionedNormalProposerFacto
             return coalesce(column != column + 1 and column > 0, False)
         return IsNotNull(column)
 
-    def query_var(self, column: str) -> str:
+    def query_var(self, column: Column) -> Any:
         """Get the variable or expression we are querying for this column."""
-        return f"LN({column})"
+        return func.ln(column)
 
     def query_comment(self) -> str:
         """Return the human-readable comment for this generator."""
