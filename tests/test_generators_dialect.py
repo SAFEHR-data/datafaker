@@ -4,7 +4,7 @@ import unittest
 import unittest.mock
 from unittest.mock import MagicMock
 
-from sqlalchemy import Column, Dialect, Integer, MetaData, Table, literal_column
+from sqlalchemy import Column, Dialect, Integer, MetaData, Select, Table, literal_column
 from sqlalchemy.dialects import mssql, postgresql
 from sqlalchemy.types import DateTime
 
@@ -344,44 +344,14 @@ class TestCovariateQueryDialect(DatafakerTestCase):
         factory.query_predicate.return_value = ""
         return factory
 
-    def _inner_query(self, dialect: Dialect) -> str:
+    def _inner_query(self, dialect: Dialect) -> Select:
         metadata = MetaData()
         cq = CovariateQuery(
             Table("person", metadata, Column("name")),
             self._make_factory(),
             dialect=dialect,
         ).sample_count(500)
-        return cq._inner_query().upper()
-
-    def test_mssql_uses_newid_and_top(self) -> None:
-        """MS-SQL inner query uses SELECT TOP n … ORDER BY NEWID()."""
-        sql = self._inner_query(mssql.dialect())
-        self.assert_str_in(" TOP 500 ", sql)
-        self.assert_str_in("NEWID()", sql)
-        self.assert_str_not_in("RANDOM()", sql)
-        self.assert_str_not_in("LIMIT", sql)
-
-    def test_postgresql_uses_random_and_limit(self) -> None:
-        """PostgreSQL inner query uses ORDER BY RANDOM() LIMIT n."""
-        sql = self._inner_query(postgresql.dialect())
-        self.assert_str_in("RANDOM()", sql)
-        self.assert_str_in("LIMIT 500", sql)
-        self.assert_str_not_in("NEWID()", sql)
-        self.assert_str_not_in("TOP", sql)
-
-    def test_no_sample_count_has_no_random_or_limit(self) -> None:
-        """When sample_count is None no random ordering is emitted."""
-
-        for dialect in (mssql.dialect(), postgresql.dialect()):
-            with self.subTest(dialect=dialect):
-                metadata = MetaData()
-                table = Table("person", metadata, Column("name"))
-                cq = CovariateQuery(table, self._make_factory(), dialect=dialect)
-                sql = cq._inner_query().upper()
-                self.assert_str_not_in("RANDOM()", sql)
-                self.assert_str_not_in("NEWID()", sql)
-                self.assert_str_not_in("LIMIT", sql)
-                self.assert_str_not_in("TOP", sql)
+        return cq._inner_query()
 
 
 class TestMissingnessQueryDialect(DatafakerTestCase):

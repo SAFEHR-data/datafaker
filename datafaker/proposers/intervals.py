@@ -161,7 +161,11 @@ class DateAfterProposer(Proposer):
 
         return {
             f"mean__{self._column.name}": {
-                "clause": str(mean_q.compile(dialect=self._dialect)),
+                "clause": str(
+                    mean_q.compile(
+                        dialect=self._dialect, compile_kwargs={"literal_binds": True}
+                    )
+                ),
                 "comment": (
                     "Mean of interval between "
                     + self._anchor.name
@@ -172,7 +176,11 @@ class DateAfterProposer(Proposer):
                 ),
             },
             f"stddev__{self._column.name}": {
-                "clause": str(sd_q.compile(dialect=self._dialect)),
+                "clause": str(
+                    sd_q.compile(
+                        dialect=self._dialect, compile_kwargs={"literal_binds": True}
+                    )
+                ),
                 "comment": (
                     "Standard deviation of interval between "
                     + self._anchor.name

@@ -134,6 +134,10 @@ class MSSQLFunctionalTestCase(GeneratesDBTestCase):
         """The @compiles(CreateTable, 'mssql') hook strips ON DELETE CASCADE."""
 
         model_table = self.metadata.tables["model"]
-        ddl = str(CreateTable(model_table).compile(dialect=mssql_dialect.dialect()))
+        ddl = str(
+            CreateTable(model_table).compile(
+                dialect=mssql_dialect.dialect(), compile_kwargs={"literal_binds": True}
+            )
+        )
         self.assertIn("FOREIGN KEY", ddl)
         self.assertNotIn("ON DELETE CASCADE", ddl)

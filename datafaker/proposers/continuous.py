@@ -10,6 +10,7 @@ from sqlalchemy import (
     Dialect,
     Engine,
     RowMapping,
+    Select,
     Table,
     case,
     func,
@@ -18,10 +19,11 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.sql.functions import coalesce
 from sqlalchemy.types import Integer, Numeric
 from typing_extensions import Self
 
-from datafaker.dialects import StdDev
+from datafaker.dialects import IsNotNull, Random, StdDev
 from datafaker.proposers.base import (
     Buckets,
     NumericType,
@@ -77,8 +79,12 @@ class ContinuousDistributionProposer(Proposer):
     def select_aggregate_clauses(self) -> dict[str, dict[str, str]]:
         """Get the query fragments the generators need to call."""
         clauses = super().select_aggregate_clauses()
-        sd = StdDev(self.column).compile(dialect=self._dialect)
-        mean = func.avg(self.column).compile(dialect=self._dialect)
+        sd = StdDev(self.column).compile(
+            dialect=self._dialect, compile_kwargs={"literal_binds": True}
+        )
+        mean = func.avg(self.column).compile(
+            dialect=self._dialect, compile_kwargs={"literal_binds": True}
+        )
         return {
             **clauses,
             f"mean__{self.column.name}": {
@@ -384,8 +390,8 @@ class MultivariateNormalGeneratorFactoryBase(ProposerFactory):
     """Generator factory that makes distributions and maybe partitions."""
 
     @abstractmethod
-    def query_predicate(self, column: Column) -> str:
-        """Get the SQL expression for whether this column should be queried."""
+    def query_predicate(self, column: Column) -> Any:
+        """Get the SQLAlchemy expression for whether this column should be queried."""
 
     @abstractmethod
     def query_var(self, column: str) -> str:
@@ -432,7 +438,7 @@ class CovariateQuery:
         """
         self.table = table
         self._columns: Sequence[Column] = []
-        self._predicates: Iterable[str] = []
+        self._predicates: Iterable[Any] = []
         self._group_by_clause = ""
         self._constant_clauses: dict[int, Column] = {}
         self.suppress_count = 1
@@ -482,7 +488,7 @@ class CovariateQuery:
         self._sample_count = count
         return self
 
-    def predicates(self, predicates: Iterable[str]) -> Self:
+    def predicates(self, predicates: Iterable[Any]) -> Self:
         """
         Set the predicates to filter the queried table by.
 
@@ -567,7 +573,7 @@ class CovariateQuery:
             for iy in range(len(self._columns))
             for ix in range(iy + 1)
         )
-        subquery = self._inner_query()
+        subquery = self._inner_query().subquery("_inner")
         # if there are any numeric columns we need at least
         # two rows to make any (co)variances at all
         suppress_clause = (
@@ -582,28 +588,20 @@ class CovariateQuery:
             f" AS _q{name_joins}{suppress_clause}"
         )
 
-    def _inner_query(self) -> str:
+    def _inner_query(self) -> Select:
         """Get the rows from the table that we are interested in."""
+        sel = Select(self.table)
         preds = itertools.chain(
             (self._factory.query_predicate(col) for col in self._columns),
             self._predicates,
         )
-        where = " AND ".join(preds) if preds else ""
-        if where:
-            where = " WHERE " + where
-        if self._sample_count is None:
-            return f'"{self.table}"{where}'
-        if self._dialect.name == "mssql":
-            return (
-                f"(SELECT TOP {self._sample_count} * FROM {self.table}{where}"
-                f" ORDER BY NEWID()) AS _sampled"
-            )
-        return (
-            f'(SELECT * FROM "{self.table}"{where} ORDER BY RANDOM()'
-            f" LIMIT {self._sample_count}) AS _sampled"
-        )
+        if preds:
+            sel = sel.filter(*preds)
+        if self._sample_count is not None:
+            sel = sel.order_by(Random()).limit(self._sample_count)
+        return sel
 
-    def _middle_query(self, inner_query: str) -> str:
+    def _middle_query(self, inner_query: Any) -> str:
         """Get the basic statistics (and constants) from the inner query."""
         multiples = "".join(
             (
@@ -618,9 +616,12 @@ class CovariateQuery:
             for i, col in enumerate(self._columns)
         )
         constants = "".join(", " + col.name for col in self._constant_clauses.values())
+        inner_query_str = inner_query.compile(
+            dialect=self._dialect, compile_kwargs={"literal_binds": True}
+        )
         return (
             f"SELECT COUNT(*) AS count{multiples}{avgs}{constants}"
-            f" FROM {inner_query}{self._group_by_clause}"
+            f" FROM ({inner_query_str}) AS _sampled{self._group_by_clause}"
         )
 
 
@@ -631,9 +632,9 @@ class MultivariateNormalProposerFactory(MultivariateNormalGeneratorFactoryBase):
         """Get the name of the generator function to call."""
         return "multivariate_normal"
 
-    def query_predicate(self, column: Column) -> str:
-        """Get the SQL expression for whether this column should be queried."""
-        return column.name + " IS NOT NULL"
+    def query_predicate(self, column: Column) -> Any:
+        """Get the SQLAlchemy expression for whether this column should be queried."""
+        return IsNotNull(column)
 
     def query_var(self, column: str) -> str:
         """Get the SQL expression of the value to query for this column."""
@@ -687,9 +688,9 @@ class MultivariateLogNormalProposerFactory(MultivariateNormalProposerFactory):
         """Get the name of the generator function to call."""
         return "multivariate_lognormal"
 
-    def query_predicate(self, column: Column) -> str:
-        """Get the SQL expression for whether this column should be queried."""
-        return f"COALESCE(0 < {column.name}, FALSE)"
+    def query_predicate(self, column: Column) -> Any:
+        """Get the SQLAlchemy expression for whether this column should be queried."""
+        return coalesce(column > 0, False)
 
     def query_var(self, column: str) -> str:
         """Get the expression to query for, for this column."""

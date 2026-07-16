@@ -8,8 +8,10 @@ from typing import Any, Union
 import sqlalchemy
 from sqlalchemy import Column, Connection, Engine, RowMapping, text
 from sqlalchemy.exc import DatabaseError
+from sqlalchemy.sql.functions import coalesce
 from sqlalchemy.types import Integer, Numeric
 
+from datafaker.dialects import IsNotNull, IsNull
 from datafaker.proposers.base import Proposer, dist_gen, get_column_type
 from datafaker.proposers.continuous import (
     CovariateQuery,
@@ -370,7 +372,7 @@ class NullPatternPartition:
         self.group_by_clause = ""
         self.constant_clauses: dict[int, Column] = {}
         self.excluded: dict[str, str] = {}
-        self.predicates: list[str] = []
+        self.predicates: list[Any] = []
         self.nones: dict[int, None] = {}
         for col_index, column in enumerate(columns):
             col_name = column.name
@@ -385,10 +387,10 @@ class NullPatternPartition:
                     else:
                         self.group_by_clause = " GROUP BY " + col_name
                     self.constant_clauses[index] = column
-                self.predicates.append(f"{col_name} IS NOT NULL")
+                self.predicates.append(IsNotNull(column))
             else:
                 self.excluded[col_name] = f"{col_name} IS NULL"
-                self.predicates.append(f"{col_name} IS NULL")
+                self.predicates.append(IsNull(column))
                 self.nones[col_index] = None
 
 
@@ -410,12 +412,12 @@ class NullPartitionedNormalProposerFactory(MultivariateNormalProposerFactory):
         """Get the name of the generator function to call."""
         return "grouped_multivariate_normal"
 
-    def query_predicate(self, column: Column) -> str:
-        """Get a SQL expression that is true when ``column`` is available for analysis."""
+    def query_predicate(self, column: Column) -> Any:
+        """Get a SQLAlchemy expression that is true when ``column`` is available for analysis."""
         if is_numeric(column):
             # x <> x + 1 ensures that x is not infinity or NaN
-            return f"COALESCE({column.name} <> {column.name} + 1, FALSE)"
-        return f"{column.name} IS NOT NULL"
+            return coalesce(column != column + 1, False)
+        return IsNotNull(column)
 
     def query_var(self, column: str) -> str:
         """Return the expression we are querying for in this column."""
@@ -466,8 +468,20 @@ class NullPartitionedNormalProposerFactory(MultivariateNormalProposerFactory):
                 )
         return out
 
+    def _get_query_predicate(
+        self, nc: NullableColumn, dialect: sqlalchemy.Dialect
+    ) -> str:
+        subquery = self.query_predicate(nc.column).compile(
+            dialect=dialect, compile_kwargs={"literal_binds": True}
+        )
+        return f"CASE WHEN {subquery} THEN {nc.bitmask} ELSE 0 END"
+
     def get_partition_count_query(
-        self, ncs: list[NullableColumn], table: str, where: str | None = None
+        self,
+        dialect: sqlalchemy.Dialect,
+        ncs: list[NullableColumn],
+        table: str,
+        where: str | None = None,
     ) -> str:
         """
         Get a SQL expression returning columns ``count`` and ``index``.
@@ -476,10 +490,7 @@ class NullPartitionedNormalProposerFactory(MultivariateNormalProposerFactory):
         ``index`` is the bitmask of all those nullable columns that are not null for
         this partition, and ``count`` is the total number of rows in this partition.
         """
-        index_exp = " + ".join(
-            f"CASE WHEN {self.query_predicate(nc.column)} THEN {nc.bitmask} ELSE 0 END"
-            for nc in ncs
-        )
+        index_exp = " + ".join(self._get_query_predicate(nc, dialect) for nc in ncs)
         if where is None:
             return (
                 f'SELECT COUNT(*) AS count, {index_exp} AS "index" FROM "{table}"'
@@ -527,7 +538,7 @@ class NullPartitionedNormalProposerFactory(MultivariateNormalProposerFactory):
         if not self._execute_partition_queries(connection, partitions):
             return None
         query = self.get_partition_count_query(
-            nullable_columns, cov_query.table.name, where
+            connection.dialect, nullable_columns, cov_query.table.name, where
         )
         return NullPartitionedNormalProposer(
             f"{cov_query.table}__{columns[0].name}",
@@ -611,7 +622,7 @@ class NullPartitionedNormalProposerFactory(MultivariateNormalProposerFactory):
         """
         Execute the query in each partition, filling in the covariates.
 
-        :return: True if all the partitions work, False if any of them fail.
+        :return: False if all the partitions fail, True if any of them work.
         """
         found_nonzero = False
         for rp in partitions.values():
@@ -637,12 +648,12 @@ class NullPartitionedLogNormalProposerFactory(NullPartitionedNormalProposerFacto
         """Get the name of the generator function to call."""
         return "grouped_multivariate_lognormal"
 
-    def query_predicate(self, column: Column) -> str:
+    def query_predicate(self, column: Column) -> Any:
         """Get the SQL expression testing if the value in this column should be used."""
         if is_numeric(column):
             # x <> x + 1 ensures that x is not infinity or NaN
-            return f"COALESCE({column.name} <> {column.name} + 1 AND 0 < {column.name}, FALSE)"
-        return f"{column.name} IS NOT NULL"
+            return coalesce(column != column + 1 and column > 0, False)
+        return IsNotNull(column)
 
     def query_var(self, column: str) -> str:
         """Get the variable or expression we are querying for this column."""

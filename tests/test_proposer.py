@@ -43,7 +43,7 @@ class ProposerUnitTests(DatafakerTestCase):
         table.append_column(column)
         stmt = select(column)
         ddbd = duckdb_sqlalchemy.Dialect()
-        sql = stmt.compile(dialect=ddbd)
+        sql = stmt.compile(dialect=ddbd, compile_kwargs={"literal_binds": True})
         grps = select_re.match(str(sql))
         assert grps is not None
         tcs = grps.group(1).split(".")

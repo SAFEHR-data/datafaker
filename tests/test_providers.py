@@ -84,7 +84,9 @@ class ColumnValueRandomFunctionTestCase(DatafakerTestCase):
         query = conn.execute.call_args[0][0]
 
         dialect = mssql.dialect() if dialect_name == "mssql" else postgresql.dialect()
-        return str(query.compile(dialect=dialect))
+        return str(
+            query.compile(dialect=dialect, compile_kwargs={"literal_binds": True})
+        )
 
     def test_mssql_uses_rand(self) -> None:
         """Test that the column provider uses RAND for the Postgres dialect."""

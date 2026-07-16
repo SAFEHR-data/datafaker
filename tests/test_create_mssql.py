@@ -8,7 +8,11 @@ from sqlalchemy.schema import CreateTable
 
 def _compile_create_table(table: Table) -> str:
     """Compile a CreateTable statement against the MS-SQL dialect."""
-    return str(CreateTable(table).compile(dialect=mssql.dialect()))
+    return str(
+        CreateTable(table).compile(
+            dialect=mssql.dialect(), compile_kwargs={"literal_binds": True}
+        )
+    )
 
 
 class TestMSSQLIdentityAbsent(unittest.TestCase):
