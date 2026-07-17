@@ -1,7 +1,7 @@
 """Dialect differences."""
 import re
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, Optional, TypeVar
 
 from sqlalchemy import Column, Select, Table
 from sqlalchemy.ext.compiler import compiles
@@ -15,6 +15,8 @@ from sqlalchemy.sql.visitors import (
     traverse,
 )
 from sqlalchemy.types import Date, DateTime
+
+T = TypeVar("T")
 
 serial_re = re.compile(r"\bSERIAL\b")
 
@@ -272,6 +274,41 @@ class Random(ColumnElement[float]):  # pylint: disable=too-many-ancestors
         """Get a clause for random values."""
 
     __sa_operate__ = ColumnElement.operate
+
+
+class NullIf(ColumnElement[Optional[T]]):  # pylint: disable=too-many-ancestors
+    """Represent NULLIF."""
+
+    expr1: ColumnElement[T]
+    expr2: ColumnElement[T]
+
+    _traverse_internals = [
+        ("expr1", InternalTraversal.dp_clauseelement),
+        ("expr2", InternalTraversal.dp_clauseelement),
+    ]
+
+    def __init__(
+        self,
+        expr1: ColumnElement[T],
+        expr2: ColumnElement[T],
+    ):
+        """
+        Get a NULLIF clause.
+
+        If ``expr1`` = ``expr2`` the result is NULL, otherwise ``expr1``.
+        """
+        self.expr1 = expr1
+        self.expr2 = expr2
+
+    __sa_operate__ = ColumnElement.operate
+
+
+@compiles(NullIf)
+def compile_null_if(element: NullIf, compiler: Any, **kw: Any) -> str:
+    """Create SQL for NULLIF."""
+    e1 = compiler.process(element.expr1, **kw)
+    e2 = compiler.process(element.expr2, **kw)
+    return f"NULLIF({e1}, {e2})"
 
 
 @compiles(Random)

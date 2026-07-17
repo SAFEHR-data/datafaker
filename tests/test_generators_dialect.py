@@ -4,7 +4,7 @@ import unittest
 import unittest.mock
 from unittest.mock import MagicMock
 
-from sqlalchemy import Column, Dialect, Integer, MetaData, Select, Table, literal_column
+from sqlalchemy import Column, Integer, MetaData, Select, Table, literal_column
 from sqlalchemy.dialects import mssql, postgresql
 from sqlalchemy.types import DateTime
 
@@ -344,12 +344,11 @@ class TestCovariateQueryDialect(DatafakerTestCase):
         factory.query_predicate.return_value = ""
         return factory
 
-    def _inner_query(self, dialect: Dialect) -> Select:
+    def _inner_query(self) -> Select:
         metadata = MetaData()
         cq = CovariateQuery(
             Table("person", metadata, Column("name")),
             self._make_factory(),
-            dialect=dialect,
         ).sample_count(500)
         return cq._inner_query()
 

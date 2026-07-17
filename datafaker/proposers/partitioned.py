@@ -550,7 +550,12 @@ class NullPartitionedNormalProposerFactory(MultivariateNormalProposerFactory):
                 partition_def.constant_clauses,
             )
             partitions[partition_def.index] = RowPartition(
-                query=cov_query.get(),
+                query=str(
+                    cov_query.get().compile(
+                        dialect=connection.dialect,
+                        compile_kwargs={"literal_binds": True},
+                    )
+                ),
                 query_comment=cov_query.get_query_comment(),
                 included_numeric=partition_def.included_numeric,
                 included_choice=partition_def.included_choice,
@@ -594,7 +599,7 @@ class NullPartitionedNormalProposerFactory(MultivariateNormalProposerFactory):
         gens: list[Proposer | None] = []
         try:
             with engine.connect() as connection:
-                cov_query = CovariateQuery(table, self, engine.dialect)
+                cov_query = CovariateQuery(table, self)
                 gens.append(
                     self._get_generator(
                         connection,
@@ -614,7 +619,8 @@ class NullPartitionedNormalProposerFactory(MultivariateNormalProposerFactory):
                     )
                 )
                 cov_query = CovariateQuery(
-                    table, self, engine.dialect
+                    table,
+                    self,
                 ).set_suppress_count(self.SUPPRESS_COUNT)
                 gens.append(
                     self._get_generator(

@@ -14,16 +14,16 @@ from sqlalchemy import (
     Table,
     case,
     func,
+    literal,
     null,
     select,
-    text,
 )
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.sql.functions import coalesce
 from sqlalchemy.types import Integer, Numeric
 from typing_extensions import Self
 
-from datafaker.dialects import IsNotNull, Random, StdDev
+from datafaker.dialects import IsNotNull, NullIf, Random, StdDev
 from datafaker.proposers.base import (
     Buckets,
     NumericType,
@@ -334,13 +334,15 @@ class MultivariateNormalProposer(Proposer):
     # pylint: disable=too-many-arguments too-many-positional-arguments
     def __init__(
         self,
+        dialect: Dialect,
         table: Table,
         columns: list[Column],
-        query: str,
+        query: Any,
         covariates: RowMapping,
         function_name: str,
     ) -> None:
         """Initialise a MultivariateNormalProposer."""
+        self._dialect = dialect
         self._table = table
         self._columns = columns
         self._query = query
@@ -366,7 +368,12 @@ class MultivariateNormalProposer(Proposer):
                     f"Means and covariate matrix for the columns {cols},"
                     " so that we can produce the relatedness between these in the fake data."
                 ],
-                "query": self._query,
+                "query": str(
+                    self._query.compile(
+                        dialect=self._dialect,
+                        compile_kwargs={"literal_binds": True},
+                    )
+                ),
             }
         }
 
@@ -426,7 +433,6 @@ class CovariateQuery:
         self,
         table: Table,
         factory: MultivariateNormalGeneratorFactoryBase,
-        dialect: Dialect,
     ) -> None:
         """
         Initialize the query for the basics for multivariate normal/lognormal parameters.
@@ -443,7 +449,6 @@ class CovariateQuery:
         self.suppress_count = 1
         self._sample_count: int | None = None
         self._factory = factory
-        self._dialect = dialect
         self._predicate_fn = lambda x: x + " IS NOT NULL"
 
     def get_query_comment(self) -> str:
@@ -509,18 +514,19 @@ class CovariateQuery:
         return self
 
     def _get_constants_and_joins(
-        self, named_tables: Mapping[str, Column]
-    ) -> tuple[str, str]:
+        self, named_tables: Mapping[str, Column], subquery: Any
+    ) -> tuple[list[Column], list[Table]]:
         """
         Extra JOINs to give names to foreign keys.
 
         This enables information governance people can understand the results better.
         :param named_tables: A mapping of tables that have names to columns
         that supply those names.
-        :return: A pair of strings; one is constants in the SELECT clause, the second is
-        JOIN clauses to join tables to the outer query in order to make names appear
+        :return: A pair; the first is constants in the SELECT clause, the second is
+        tables to join to the outer query in order to make names appear
         in the output.
         """
+        # Column names -> Foreign Keys to named_tables
         col_to_named_fks = {
             col.name: [
                 fk.column
@@ -529,56 +535,54 @@ class CovariateQuery:
             ]
             for col in self._constant_clauses.values()
         }
+        # Column names -> single FK to named_tables
         col_to_named_fk = {col: fks[0] for col, fks in col_to_named_fks.items() if fks}
-        name_joins = ""
-        constants = ""
+        name_joins: list[Table] = []
+        constants: list[Any] = []
         for index, col in self._constant_clauses.items():
             col_name = col.name
-            constants += f", k{index}"
+            constants.append(subquery.c[f"k{index}"])
             if col_name in col_to_named_fk:
                 fk_target = col_to_named_fk[col_name]
-                fk_target_table = fk_target.table.name
-                name_joins += (
-                    f" JOIN {fk_target_table} AS _j{index}"
-                    f" ON _q.k{index}=_j{index}.{fk_target.name}"
+                name_joins.append(fk_target.table)
+                constants.append(
+                    named_tables[fk_target.table.name].label(
+                        f"k{index}_{col_name}__name"
+                    )
                 )
-                constants += (
-                    f", _j{index}.{named_tables[fk_target_table].name}"
-                    f" AS k{index}_{col_name}__name"
-                )
-        return name_joins, constants
+        return constants, name_joins
 
-    def get(self) -> str:
+    def get(self) -> Any:
         """
         Get the SQL query.
 
-        :return: The SQL query for this partition.
+        :return: The SQLAlchemy query for this partition.
         """
-        means = "".join(f", _q.m{i}" for i in range(len(self._columns)))
-        covs = "".join(
+        middle = self._middle_query(self._inner_query()).subquery("_q")
+        means = middle.c[*(f"m{i}" for i in range(len(self._columns)))]
+        covs = [
             (
-                f", (_q.s{ix}_{iy} - _q.count * _q.m{ix} * _q.m{iy})"
-                f"/NULLIF(_q.count - 1, 0) AS c{ix}_{iy}"
-            )
+                (
+                    middle.c[f"s{ix}_{iy}"]
+                    - middle.c["count"] * middle.c[f"m{ix}"] * middle.c[f"m{iy}"]
+                )
+                / NullIf(middle.c["count"] - 1, literal(0))
+            ).label(f"c{ix}_{iy}")
             for iy in range(len(self._columns))
             for ix in range(iy + 1)
-        )
-        # if there are any numeric columns we need at least
-        # two rows to make any (co)variances at all
-        suppress_clause = (
-            f" WHERE {self.suppress_count} < _q.count" if self._columns else ""
-        )
+        ]
         rank = len(self._columns)
         named_tables = self._factory.get_named_tables()
-        name_joins, constants = self._get_constants_and_joins(named_tables)
-        middle = self._middle_query(self._inner_query()).compile(
-            dialect=self._dialect,
-            compile_kwargs={"literal_binds": True},
-        )
-        query = (
-            f"SELECT {rank} AS rank{constants}, _q.count AS count{means}{covs}"
-            f" FROM ({middle}) AS _q{name_joins}{suppress_clause}"
-        )
+        constants, name_joins = self._get_constants_and_joins(named_tables, middle)
+        query = select(
+            literal(rank).label("rank"), middle.c["count"], *constants, *means, *covs
+        ).select_from(middle)
+        for j in name_joins:
+            query = query.join(j)
+        # if there are any numeric columns we need at least
+        # two rows to make any (co)variances at all
+        if self._columns:
+            query = query.where(middle.c["count"] > self.suppress_count)
         return query
 
     def _inner_query(self) -> Select:
@@ -661,11 +665,11 @@ class MultivariateNormalProposerFactory(MultivariateNormalGeneratorFactoryBase):
             if not isinstance(ct, Numeric) and not isinstance(ct, Integer):
                 return []
         table = columns[0].table
-        cq = CovariateQuery(table, self, dialect=engine.dialect).columns(columns)
+        cq = CovariateQuery(table, self).columns(columns)
         query = cq.get()
         with engine.connect() as connection:
             try:
-                covariates = connection.execute(text(query)).mappings().first()
+                covariates = connection.execute(query).mappings().first()
             except SQLAlchemyError as e:
                 logger.debug("SQL query %s failed with error %s", query, e)
                 return []
@@ -673,6 +677,7 @@ class MultivariateNormalProposerFactory(MultivariateNormalGeneratorFactoryBase):
                 return []
             return [
                 MultivariateNormalProposer(
+                    connection.dialect,
                     table,
                     columns,
                     query,
