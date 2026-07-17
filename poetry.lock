@@ -663,13 +663,13 @@ all = ["adbc-driver-manager", "fsspec", "ipython", "numpy", "pandas", "pyarrow"]
 
 [[package]]
 name = "duckdb-sqlalchemy"
-version = "1.5.4.3"
+version = "1.5.4.4"
 description = "DuckDB SQLAlchemy dialect for DuckDB and MotherDuck"
 optional = false
 python-versions = "<4,>=3.9"
 files = [
-    {file = "duckdb_sqlalchemy-1.5.4.3-py3-none-any.whl", hash = "sha256:215f738c2fb5669cf72c2a0621f0e1de67fbc4cf8d82a99504174134967d0391"},
-    {file = "duckdb_sqlalchemy-1.5.4.3.tar.gz", hash = "sha256:60b24f947f7e67cbffe824ff0ffef93bf0c89ee86ed6fec5a2b2469424132b2c"},
+    {file = "duckdb_sqlalchemy-1.5.4.4-py3-none-any.whl", hash = "sha256:68c76f9bc79b445b98bf3a965403476754f19e1249c4253463bbdfee52c862f3"},
+    {file = "duckdb_sqlalchemy-1.5.4.4.tar.gz", hash = "sha256:809d0eb1b4c7dbe242f7e7ff169122257317756e668eacde4c3b1414065c4dca"},
 ]
 
 [package.dependencies]
@@ -678,7 +678,7 @@ packaging = ">=21"
 sqlalchemy = {version = ">=2.0.0", markers = "python_version < \"3.14\""}
 
 [package.extras]
-dev = ["fsspec (>=2025.2.0,<2027.0.0)", "github-action-utils (>=1.1.0,<2.0.0)", "hypothesis (>=6.75.2,<7.0.0)", "jupysql (>=0.11.1,<0.12.0)", "nox (>=2026.4.10,<2027.0.0)", "numpy (>=1.24,<2.0)", "numpy (>=1.26,<3.0)", "numpy (>=2.0,<3.0)", "pandas (>=1,<2.0)", "pandas (>=2.2,<4.0)", "pyarrow (>=22.0.0)", "pytest (>=8.0.0,<10.0.0)", "pytest-cov (>=7.1.0,<8.0.0)", "pytest-remotedata (>=0.4.0,<0.5.0)", "pytest-snapshot (>=0.9.0,<1.0.0)", "pytz (>=2024.2)", "toml (>=0.10.2,<0.11.0)", "ty (==0.0.58)"]
+dev = ["fsspec (>=2025.2.0,<2027.0.0)", "github-action-utils (>=1.1.0,<2.0.0)", "hypothesis (>=6.75.2,<7.0.0)", "jupysql (>=0.11.1,<0.12.0)", "nox (>=2026.4.10,<2027.0.0)", "numpy (>=1.24,<2.0)", "numpy (>=1.26,<3.0)", "numpy (>=2.0,<3.0)", "pandas (>=1,<2.0)", "pandas (>=2.2,<4.0)", "pyarrow (>=22.0.0)", "pytest (>=8.0.0,<10.0.0)", "pytest-cov (>=7.1.0,<8.0.0)", "pytest-remotedata (>=0.4.0,<0.5.0)", "pytest-snapshot (>=0.9.0,<1.0.0)", "pytz (>=2024.2)", "toml (>=0.10.2,<0.11.0)", "ty (==0.0.60)"]
 devtools = ["nox (>=2026.4.10,<2027.0.0)", "pdbpp (>=0.11.0,<0.13.0)", "pre-commit (>=4.6.0,<4.7.0)"]
 
 [[package]]
@@ -760,13 +760,13 @@ lzo = ["python-lzo"]
 
 [[package]]
 name = "filelock"
-version = "3.29.7"
+version = "3.30.2"
 description = "A platform independent file lock."
 optional = false
 python-versions = ">=3.10"
 files = [
-    {file = "filelock-3.29.7-py3-none-any.whl", hash = "sha256:987db6f789a3a2a59f55081801b2b3697cb97e2a736b5f1a9e99b559285fbc51"},
-    {file = "filelock-3.29.7.tar.gz", hash = "sha256:5b481979797ae69e72f0b389d89a80bdd585c260c5b3f1fb9c0a5ba9bb3f195d"},
+    {file = "filelock-3.30.2-py3-none-any.whl", hash = "sha256:a64b58f75048ec39589983e97f5117163f822261dcb6ba843e098f05aac9663f"},
+    {file = "filelock-3.30.2.tar.gz", hash = "sha256:1ea7c857465c897a4a6e64c1aace28ff6b83f5bc66c1c06ea148efa65bc2ec5d"},
 ]
 
 [[package]]
@@ -2892,13 +2892,13 @@ files = [
 
 [[package]]
 name = "tomlkit"
-version = "0.15.0"
+version = "0.15.1"
 description = "Style preserving TOML library"
 optional = false
 python-versions = ">=3.9"
 files = [
-    {file = "tomlkit-0.15.0-py3-none-any.whl", hash = "sha256:4dbc8f0fc024412b57ced8757ac7461305126a648ff8c2c807fcb8e133a78738"},
-    {file = "tomlkit-0.15.0.tar.gz", hash = "sha256:7d1a9ecba3086638211b13814ea79c90dd54dd11993564376f3aa92271f5c7a3"},
+    {file = "tomlkit-0.15.1-py3-none-any.whl", hash = "sha256:177a05aece5a8ca5266fd3c448abb47b8d352f09d477d3ca8332db4d89b24304"},
+    {file = "tomlkit-0.15.1.tar.gz", hash = "sha256:e25bbf38843005246210a12982776f27f99cb9be67160e14434d0c0d21ee1e97"},
 ]
 
 [[package]]

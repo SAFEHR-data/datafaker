@@ -6,7 +6,19 @@ from itertools import chain, combinations
 from typing import Any, Union
 
 import sqlalchemy
-from sqlalchemy import Column, Connection, Engine, RowMapping, func, text
+from sqlalchemy import (
+    Column,
+    Connection,
+    Dialect,
+    Engine,
+    MetaData,
+    RowMapping,
+    Table,
+    case,
+    func,
+    select,
+    text,
+)
 from sqlalchemy.exc import DatabaseError
 from sqlalchemy.sql.functions import coalesce
 from sqlalchemy.types import Integer, Numeric
@@ -158,7 +170,7 @@ class PartitionCountQuery:
     def __init__(
         self,
         connection: Connection,
-        query: str,
+        query: Any,
         nullable_columns: Iterable[NullableColumn],
         overall_comment: str,
     ) -> None:
@@ -166,12 +178,12 @@ class PartitionCountQuery:
         Initialise the partition count query.
 
         :param connection: Database connection.
-        :param query: The query getting the row counts of the null pattern partitions.
+        :param query: The SQLAlchemy query getting the row counts of the null pattern partitions.
         :param table_name: The name of the table being queried.
         :param nullable_columns: The columns that are being checked for nullness.
         """
         self.query = query
-        rows = connection.execute(text(query)).mappings().fetchall()
+        rows = connection.execute(query).mappings().fetchall()
         self.results = [dict(row) for row in rows]
         self.comments = [
             overall_comment,
@@ -204,6 +216,7 @@ class NullPartitionedNormalProposer(Proposer):
     # pylint: disable=too-many-arguments too-many-positional-arguments
     def __init__(
         self,
+        dialect: Dialect,
         query_name: str,
         partitions: dict[int, RowPartition],
         function_name: str = "grouped_multivariate_lognormal",
@@ -211,6 +224,7 @@ class NullPartitionedNormalProposer(Proposer):
         partition_count_query: PartitionCountQuery | None = None,
     ):
         """Initialise a NullPartitionedNormalGenerator."""
+        self._dialect = dialect
         self._query_name = query_name
         self._partitions = partitions
         self._function_name = function_name
@@ -285,10 +299,13 @@ class NullPartitionedNormalProposer(Proposer):
         }
         if not self._partition_count_query:
             return partitions
+        pc_query = self._partition_count_query.query.compile(
+            dialect=self._dialect, compile_kwargs={"literal_binds": True}
+        )
         return {
             self._count_query_name(): {
                 "comments": self._partition_count_query.comments,
-                "query": self._partition_count_query.query,
+                "query": str(pc_query),
             },
             **partitions,
         }
@@ -430,24 +447,41 @@ class NullPartitionedNormalProposerFactory(MultivariateNormalProposerFactory):
             " that covers the columns {columns}."
         )
 
-    def get_named_tables(self) -> Mapping[str, str]:
+    def get_named_tables(self) -> Mapping[str, Column]:
         """
         Get a mapping showing which tables have naming columns.
 
         Based on the configuration file.
 
-        :return: A map mapping names of named tables to the names of their
-        naming columns.
+        :return: A map mapping names of named tables to their naming
+         columns.
         """
         return self._named_tables
 
-    def __init__(self, config: Mapping[str, Any]) -> None:
+    def __init__(self, config: Mapping[str, Any], metadata: MetaData) -> None:
         """Initialize the null partitioned generator factory."""
         tables: dict[str, Any] = get_property(config, "tables", {})
-        self._named_tables = {
-            table_name: table_conf["name_column"]
+        named_tables: list[tuple[str, str]] = [
+            (table_name, table_conf["name_column"])
             for table_name, table_conf in tables.items()
             if isinstance(table_conf, Mapping) and "name_column" in table_conf
+        ]
+        delkeys: set[str] = set()
+        for table_name, column_name in named_tables:
+            if table_name not in metadata.tables:
+                logger.warning("Configured table %s not present in database.")
+                delkeys.add(table_name)
+            elif column_name not in metadata.tables[table_name].columns:
+                logger.warning(
+                    "name_column %s configured in table %s is not a column in this table.",
+                    column_name,
+                    table_name,
+                )
+                delkeys.add(table_name)
+        self._named_tables = {
+            t: metadata.tables[t].columns[c]
+            for t, c in named_tables
+            if t not in delkeys
         }
 
     def get_nullable_columns(self, columns: list[Column]) -> list[NullableColumn]:
@@ -463,39 +497,38 @@ class NullPartitionedNormalProposerFactory(MultivariateNormalProposerFactory):
                 )
         return out
 
-    def _get_query_predicate(
-        self, nc: NullableColumn, dialect: sqlalchemy.Dialect
-    ) -> str:
-        subquery = self.query_predicate(nc.column).compile(
-            dialect=dialect, compile_kwargs={"literal_binds": True}
+    def _get_query_predicate(self, nc: NullableColumn) -> Any:
+        return case(
+            (self.query_predicate(nc.column), nc.bitmask),
+            else_=0,
         )
-        return f"CASE WHEN {subquery} THEN {nc.bitmask} ELSE 0 END"
 
     def get_partition_count_query(
         self,
-        dialect: sqlalchemy.Dialect,
         ncs: list[NullableColumn],
-        table: str,
-        where: str | None = None,
-    ) -> str:
+        table: Table,
+        suppress_count: int = 0,
+    ) -> Any:
         """
-        Get a SQL expression returning columns ``count`` and ``index``.
+        Get a SQLAlchemy expression returning columns ``count`` and ``index``.
 
         Each row returned represents one of the null pattern partitions.
         ``index`` is the bitmask of all those nullable columns that are not null for
         this partition, and ``count`` is the total number of rows in this partition.
         """
-        index_exp = " + ".join(self._get_query_predicate(nc, dialect) for nc in ncs)
-        if where is None:
-            return (
-                f'SELECT COUNT(*) AS count, {index_exp} AS "index" FROM "{table}"'
-                ' GROUP BY "index"'
+        index_exp = sum(self._get_query_predicate(nc) for nc in ncs)
+        sel = (
+            select(
+                func.count().label("count"),  # pylint: disable=not-callable
+                index_exp.label("index"),
             )
-        return (
-            'SELECT count, "index" FROM (SELECT COUNT(*) AS count,'
-            f' {index_exp} AS "index"'
-            f' FROM "{table}" GROUP BY "index") AS _q {where}'
+            .select_from(table)
+            .group_by("index")
         )
+        if 1 < suppress_count:
+            sb = sel.subquery("_q")
+            sel = select(sb.c["count", "index"]).where(sb.c["count"] > suppress_count)
+        return sel
 
     # pylint: disable=too-many-arguments too-many-positional-arguments
     def _get_generator(
@@ -506,9 +539,6 @@ class NullPartitionedNormalProposerFactory(MultivariateNormalProposerFactory):
         nullable_columns: list[NullableColumn],
         name_suffix: str | None = None,
     ) -> NullPartitionedNormalProposer | None:
-        where = ""
-        if 1 < cov_query.suppress_count:
-            where = f' WHERE {cov_query.suppress_count} < "count"'
         partitions: dict[int, RowPartition] = {}
         for partition_nonnulls in powerset(nullable_columns):
             partition_def = NullPatternPartition(columns, partition_nonnulls)
@@ -531,9 +561,12 @@ class NullPartitionedNormalProposerFactory(MultivariateNormalProposerFactory):
         if not self._execute_partition_queries(connection, partitions):
             return None
         query = self.get_partition_count_query(
-            connection.dialect, nullable_columns, cov_query.table.name, where
+            nullable_columns,
+            cov_query.table,
+            cov_query.suppress_count,
         )
         return NullPartitionedNormalProposer(
+            connection.dialect,
             f"{cov_query.table}__{columns[0].name}",
             partitions,
             self.function_name(),

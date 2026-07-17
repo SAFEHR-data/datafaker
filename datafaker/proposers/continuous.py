@@ -406,14 +406,14 @@ class MultivariateNormalGeneratorFactoryBase(ProposerFactory):
         which will be a string like ``apples, pears and bananas``.
         """
 
-    def get_named_tables(self) -> Mapping[str, str]:
+    def get_named_tables(self) -> Mapping[str, Column]:
         """
         Get a mapping showing which tables have naming columns.
 
         A naming column is a column that provides a nice name for the row.
         We could call tables containing such a column as a "named table".
-        :return: A map mapping names of named tables to the names of their
-        naming columns.
+        :return: A map mapping names of named tables to their naming
+        columns.
         """
         return {}
 
@@ -436,7 +436,7 @@ class CovariateQuery:
         ``query_var`` and ``query_predicate`` methods.
         :param dialect: The SQLAlchemy dialect name (e.g. ``mssql.dialect()``).
         """
-        self.table = table
+        self.table: Table = table
         self._columns: Sequence[Column] = []
         self._predicates: Iterable[Any] = []
         self._constant_clauses: dict[int, Column] = {}
@@ -509,7 +509,7 @@ class CovariateQuery:
         return self
 
     def _get_constants_and_joins(
-        self, named_tables: Mapping[str, str]
+        self, named_tables: Mapping[str, Column]
     ) -> tuple[str, str]:
         """
         Extra JOINs to give names to foreign keys.
@@ -543,7 +543,7 @@ class CovariateQuery:
                     f" ON _q.k{index}=_j{index}.{fk_target.name}"
                 )
                 constants += (
-                    f", _j{index}.{named_tables[fk_target_table]}"
+                    f", _j{index}.{named_tables[fk_target_table].name}"
                     f" AS k{index}_{col_name}__name"
                 )
         return name_joins, constants
