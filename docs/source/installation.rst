@@ -22,7 +22,7 @@ Then close your command shell and open another. Now you can use ``pipx``.
 
 .. code-block:: console
 
-   $ pipx install git+https://github.com/tim-band/sqlsynthgen
+   $ pipx install git+https://github.com/safehr-data/datafaker
 
 Check that you can view the help message with:
 
