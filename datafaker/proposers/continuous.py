@@ -559,7 +559,7 @@ class CovariateQuery:
         :return: The SQLAlchemy query for this partition.
         """
         middle = self._middle_query(self._inner_query()).subquery("_q")
-        means = middle.c[*(f"m{i}" for i in range(len(self._columns)))]
+        means = [middle.c[f"m{i}"] for i in range(len(self._columns))]
         covs = [
             (
                 (
