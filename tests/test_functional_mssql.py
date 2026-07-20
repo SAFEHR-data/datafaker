@@ -116,7 +116,7 @@ class MSSQLFunctionalTestCase(GeneratesDBTestCase):
         self.assertGreater(count, 0, "Expected rows in manufacturer after create-data")
 
     def test_dialect_rand(self) -> None:
-        """ChoiceProposer compiles its query with RAND() not RANDOM() for mssql."""
+        """ChoiceProposer compiles its query with NEWID() not RANDOM() for mssql."""
 
         dialect = mssql_dialect.dialect()
         proposer = ZipfChoiceProposer(
@@ -127,7 +127,7 @@ class MSSQLFunctionalTestCase(GeneratesDBTestCase):
             sample_count=2,
             dialect=dialect,
         )
-        self.assertIn("rand()", proposer._query.lower())  # pylint: disable=W0212
+        self.assertIn("newid()", proposer._query.lower())  # pylint: disable=W0212
         self.assertNotIn("random()", proposer._query.lower())  # pylint: disable=W0212
 
     def test_cascade_stripped(self) -> None:

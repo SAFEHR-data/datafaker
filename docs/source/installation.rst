@@ -30,5 +30,18 @@ Check that you can view the help message with:
 
    $ datafaker --help
 
+If you need to use PostgreSQL you need to inject an extra package:
+
+.. code-block:: console
+
+   $ pipx inject datafaker psycopg2
+
+If you need to use MS SQL (such as SQL Server) you need to inject
+a different extra package:
+
+.. code-block:: console
+
+   $ pipx inject datafaker aioodbc
+
 It can also be used directly within a Docker container by downloading image ``timband/datafaker``.
 See the :ref:`quickstart guide <page-quickstart>` for more information.

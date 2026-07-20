@@ -62,7 +62,6 @@ def _choice_stmt(  # pylint: disable=R0913,R0917
     store_counts: bool,
     sample_count: int | None,
     suppress_count: int,
-    random_fn: Any,
     table_sql: str | None = None,
 ) -> Any:
     """Build a SQLAlchemy SELECT for gathering choice value distributions.
@@ -78,7 +77,7 @@ def _choice_stmt(  # pylint: disable=R0913,R0917
             select(col.label("value"))
             .where(col.isnot(None))
             .select_from(tbl)
-            .order_by(random_fn)
+            .order_by(Random())
             .limit(sample_count)
             .subquery("_inner")
         )
@@ -144,7 +143,6 @@ class ChoiceProposer(Proposer):
             self.STORE_COUNTS,
             sample_count,
             suppress_count,
-            Random(),
             table_sql=table_sql,
         )
         compile_opts: dict[str, Any] = {"compile_kwargs": {"literal_binds": True}}

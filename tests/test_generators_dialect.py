@@ -166,7 +166,7 @@ class TestChoiceGeneratorStoredQuery(DatafakerTestCase):
         """MS-SQL stored query uses newid() and TOP for sampled path."""
         gen = self._make_gen(mssql.dialect(), sample_count=500)
         sql = gen._query.upper()
-        self.assert_str_in("RAND()", sql)
+        self.assert_str_in("NEWID()", sql)
         self.assert_str_in(" TOP ", sql)
         self.assert_str_not_in("RANDOM()", sql)
         self.assert_str_not_in("LIMIT", sql)
@@ -181,7 +181,7 @@ class TestChoiceGeneratorStoredQuery(DatafakerTestCase):
         """MS-SQL sample+suppress path uses newid()/TOP and no LIMIT/RANDOM."""
         gen = self._make_gen(mssql.dialect(), sample_count=500, suppress_count=7)
         sql = gen._query.upper()
-        self.assert_str_in("RAND()", sql)
+        self.assert_str_in("NEWID()", sql)
         self.assert_str_in(" TOP ", sql)
         self.assert_str_not_in("RANDOM()", sql)
         self.assert_str_not_in("LIMIT", sql)
@@ -252,7 +252,7 @@ class TestChoiceGeneratorFactoryLiveQueries(DatafakerTestCase):
         sqls = self._captured_sqls(mssql.dialect())
         self.assert_str_in(" TOP ", sqls[0])
         self.assert_str_not_in("LIMIT", sqls[0])
-        self.assert_str_in("RAND()", sqls[1])
+        self.assert_str_in("NEWID()", sqls[1])
         self.assert_str_not_in("LIMIT", sqls[1])
         self.assert_str_not_in("RANDOM()", sqls[1])
 
@@ -368,7 +368,7 @@ class TestMissingnessQueryDialect(DatafakerTestCase):
         Test that MSSQL uses RAND and ROW_NUMBER for sampling.
 
         SELECT … ROW_NUMBER() AS MSSQL_RN
-        WHERE MSSQL_RN < n ORDER BY RAND().
+        WHERE MSSQL_RN < n ORDER BY NEWID().
         """
 
         sql = MissingnessType.sampled_query(
@@ -376,7 +376,7 @@ class TestMissingnessQueryDialect(DatafakerTestCase):
         ).upper()
         self.assert_str_in("ROW_NUMBER()", sql)
         self.assert_str_in("<= 1000", sql)
-        self.assert_str_in("RAND()", sql)
+        self.assert_str_in("NEWID()", sql)
         self.assert_str_not_in("RANDOM()", sql)
         self.assert_str_not_in("LIMIT", sql)
 

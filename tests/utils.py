@@ -111,6 +111,10 @@ class PostgresTestDb(TestDatabaseBase):
 
     @classmethod
     def skip(cls) -> str | None:
+        try:
+            import psycopg2 as _psycopg2  # noqa: F401 pylint: disable=import-outside-toplevel
+        except ImportError:
+            return "psycopg2 not installed; run: poetry install --all-extras"
         if shutil.which("psql"):
             return None
         return "need to find 'psql': install PostgreSQL to enable"
@@ -310,7 +314,7 @@ class MsSqlTestDb(TestDatabaseBase):
         try:
             import pyodbc as _pyodbc  # noqa: F401 pylint: disable=import-outside-toplevel
         except ImportError:
-            return "pyodbc not installed; run: poetry install --extras mssql"
+            return "pyodbc not installed; run: poetry install --all-extras"
         try:
             with create_engine(dsn).connect():
                 pass

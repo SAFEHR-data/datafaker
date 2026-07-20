@@ -64,12 +64,12 @@ class TestPeekDialect(unittest.TestCase):
         return engine._executed, dialect_instance
 
     def test_mssql_peek_uses_rand_and_top(self) -> None:
-        """MS-SQL do_peek compiles to RAND() with TOP."""
+        """MS-SQL do_peek compiles to NEWID() with TOP."""
         executed, dialect = self._run_peek(mssql.dialect())
         self.assertEqual(len(executed), 1)
         sql = _compiled(executed[0], dialect)
         self.assertIn(" TOP ", sql)
-        self.assertIn("RAND()", sql)
+        self.assertIn("NEWID()", sql)
         self.assertNotIn("LIMIT", sql)
         self.assertNotIn("RANDOM()", sql)
 
@@ -109,12 +109,12 @@ class TestGetColumnDataDialect(unittest.TestCase):
         return engine._executed, dialect_instance
 
     def test_mssql_uses_rand_and_top(self) -> None:
-        """MS-SQL _get_column_data compiles to TOP … RAND()."""
+        """MS-SQL _get_column_data compiles to TOP … NEWID()."""
         executed, dialect = self._run_get_column_data(mssql.dialect())
         self.assertEqual(len(executed), 1)
         sql = _compiled(executed[0], dialect)
         self.assertIn(" TOP ", sql)
-        self.assertIn("RAND()", sql)
+        self.assertIn("NEWID()", sql)
         self.assertNotIn("LIMIT", sql)
         self.assertNotIn("RANDOM()", sql)
 
@@ -154,12 +154,12 @@ class TestPrintColumnDataDialect(unittest.TestCase):
         return engine._executed, dialect_instance
 
     def test_mssql_uses_rand_and_top(self) -> None:
-        """MS-SQL print_column_data compiles to TOP … RAND()."""
+        """MS-SQL print_column_data compiles to TOP … NEWID()."""
         executed, dialect = self._run_print_column_data(mssql.dialect())
         self.assertEqual(len(executed), 1)
         sql = _compiled(executed[0], dialect)
         self.assertIn(" TOP ", sql)
-        self.assertIn("RAND()", sql)
+        self.assertIn("NEWID()", sql)
         self.assertNotIn("LIMIT", sql)
         self.assertNotIn("RANDOM()", sql)
 

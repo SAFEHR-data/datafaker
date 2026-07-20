@@ -622,7 +622,7 @@ def dump_data(
     mtables = convert_table_names_to_tables(table, metadata)
     if not mtables:
         mtables = generated_tables(metadata, config)
-    if output == "-":
+    if output is not None and output.name == "-":
         _dump_csv_to_stdout(mtables[0], metadata, dst_dsn, schema_name)
         return
     writer = _get_writer(parquet, output, metadata, dst_dsn, schema_name)

@@ -264,7 +264,7 @@ def compile_isnotnull(element: IsNotNull, compiler: Any, **kw: Any) -> str:
 
 
 class Random(ColumnElement[float]):  # pylint: disable=too-many-ancestors
-    """Represent a random number between 0 and 1."""
+    """Represent a random value suitable for choosing random rows."""
 
     _traverse_internals = []
 
@@ -319,5 +319,10 @@ def compile_random(_element: Random, _compiler: Any, **_kw: Any) -> str:
 
 @compiles(Random, "mssql")
 def compile_random_mssql(_element: Random, _compiler: Any, **_kw: Any) -> str:
-    """MSSQL equivalent: RAND."""
-    return "RAND()"
+    """
+    MSSQL uses NEWID.
+
+    RAND() is the obvious equivalent, but it does not work because the
+    same random number gets chosen for each row.
+    """
+    return "NEWID()"

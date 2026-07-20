@@ -91,7 +91,7 @@ class ColumnValueRandomFunctionTestCase(DatafakerTestCase):
     def test_mssql_uses_rand(self) -> None:
         """Test that the column provider uses RAND for the Postgres dialect."""
         sql = self._get_order_by_sql("mssql")
-        self.assertIn("rand()", sql.lower())
+        self.assertIn("newid()", sql.lower())
         self.assertNotIn("random()", sql.lower())
 
     def test_postgresql_uses_random(self) -> None:
