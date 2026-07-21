@@ -25,9 +25,9 @@ from datafaker.dump import (
     get_parquet_table_writer,
 )
 from datafaker.interactive import (
-    update_missingness,
     update_config_generators,
     update_config_tables,
+    update_missingness,
 )
 from datafaker.interactive.base import DbCmd
 from datafaker.make import make_src_stats, make_tables_file, make_vocabulary_tables
