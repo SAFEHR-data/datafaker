@@ -8,6 +8,7 @@ from sqlalchemy import select
 from datafaker.interactive import TableCmd
 from datafaker.interactive.base import DbCmd
 from datafaker.serialize_metadata import dict_to_metadata
+from datafaker.theme import set_active_theme, ThemeEntry
 from tests.utils import RequiresDBTestCase, TestDbCmdMixin
 
 
@@ -17,6 +18,10 @@ class MockTableCmd(TableCmd, TestDbCmdMixin):
 
 class ConfigureTablesTests(RequiresDBTestCase):
     """Testing configure-tables."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        set_active_theme(ThemeEntry.NONE)
 
     def _get_cmd(self, config: MutableMapping[str, Any]) -> MockTableCmd:
         return MockTableCmd(

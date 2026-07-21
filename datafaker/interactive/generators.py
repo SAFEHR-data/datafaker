@@ -10,6 +10,7 @@ from sqlalchemy import Column, and_, literal_column, select
 from datafaker.db_utils import MaybeAsyncEngine, primary_private_fks, table_is_private
 from datafaker.dialects import Random
 from datafaker.interactive.base import DbCmd, TableEntry, fk_column_name, or_default
+from datafaker.theme import get_active_theme
 from datafaker.proposers import everything_factory
 from datafaker.proposers.base import PredefinedProposer, Proposer
 from datafaker.utils import (
@@ -85,9 +86,9 @@ information about the columns in the current table. Use 'peek',
     prompt = "(generatorconf) "
     file = None
 
-    PROPOSE_SOURCE_SAMPLE_TEXT = "Sample of actual source data: {0}..."
+    PROPOSE_SOURCE_SAMPLE_TEXT = "Sample of actual source data: {1}{0}..."
     PROPOSE_SOURCE_EMPTY_TEXT = "Source database has no data in this column."
-    PROPOSE_GENERATOR_SAMPLE_TEXT = "{index}. {name}: {fit} {sample} ..."
+    PROPOSE_GENERATOR_SAMPLE_TEXT = "{index}. {theme_func}{name}: {theme_fit}{fit} {theme_data}{sample}{theme_reset} ..."
     PRIMARY_PRIVATE_TEXT = "Primary Private"
     SECONDARY_PRIVATE_TEXT = "Secondary Private on columns {0}"
     NOT_PRIVATE_TEXT = "Not private"
@@ -266,18 +267,19 @@ information about the columns in the current table. Use 'peek',
     def set_prompt(self) -> None:
         """Set the prompt according to the current table, column and generator."""
         (table_name, prop_info) = self._get_table_and_proposer()
+        theme = get_active_theme()
         if table_name is None:
-            self.prompt = "(generators) "
+            self.prompt = f"{theme.prompt}(generators){theme.reset} "
             return
         if prop_info is None:
-            self.prompt = f"({table_name}) "
+            self.prompt = f"{theme.prompt}({table_name}){theme.reset} "
             return
         table = self.table_metadata()
         columns = [
             c + "[pk]" if table.columns[c].primary_key else c for c in prop_info.columns
         ]
         gen = f" ({prop_info.proposer.name()})" if prop_info.proposer else ""
-        self.prompt = f"({table_name}.{','.join(columns)}{gen}) "
+        self.prompt = f"{theme.prompt}({table_name}.{','.join(columns)}{gen}){theme.reset} "
 
     def _remove_auto_src_stats(self) -> list[MutableMapping[str, Any]]:
         """
@@ -655,13 +657,14 @@ information about the columns in the current table. Use 'peek',
             ]
         }
         props: list[Proposer] = self._get_proposer_proposals()
+        theme = get_active_theme()
         table_name = self.table_name()
         for argument in args:
             if argument.isdigit():
                 n = int(argument)
                 if 0 < n <= len(props):
                     prop = props[n - 1]
-                    comparison[f"{n}. {prop.name()}"] = prop.generate_data(limit)
+                    comparison[f"{n}. {theme.function}{prop.name()}"] = prop.generate_data(limit)
                     self._print_values_queried(table_name, n, prop)
         self.print_table_by_columns(comparison)
 
@@ -677,17 +680,22 @@ information about the columns in the current table. Use 'peek',
         :param n: A number to print at the start of the output.
         :param gen: The proposer to report.
         """
+        theme = get_active_theme()
         if not prop.select_aggregate_clauses() and not prop.custom_queries():
             self.print(
-                "{0}. {1} requires no data from the source database.",
+                "{0}. {2}{1}{3} requires no data from the source database.",
                 n,
                 prop.name(),
+                theme.function,
+                theme.reset,
             )
         else:
             self.print(
-                "{0}. {1} requires the following data from the source database:",
+                "{0}. {2}{1}{3} requires the following data from the source database:",
                 n,
                 prop.name(),
+                theme.function,
+                theme.reset,
             )
             self._print_select_aggregate_query(table_name, prop)
             self._print_custom_queries(prop)
@@ -709,11 +717,15 @@ information about the columns in the current table. Use 'peek',
             nominal,
             actual,
         )
+        theme = get_active_theme()
         for cq_key, cq in cqs.items():
             self.print(
-                "{0}; providing the following values: {1}",
+                "{2}{0}{3}; providing the following values: {4}{1}",
                 cq["query"],
                 cq_key2args[cq_key],
+                theme.query,
+                theme.reset,
+                theme.data,
             )
 
     def _get_custom_queries_from(
@@ -775,7 +787,15 @@ information about the columns in the current table. Use 'peek',
                     n,
                 )
         select_q = get_aggregate_query([prop], table_name, self.engine)
-        self.print("{0}; providing the following values: {1}", select_q, vals)
+        theme = get_active_theme()
+        self.print(
+            "{2}{0}{3}; providing the following values: {4}{1}",
+            select_q,
+            vals,
+            theme.query,
+            theme.reset,
+            theme.data,
+        )
 
     def _get_column_data(
         self, count: int, to_str: Callable[[Any], str] = repr
@@ -802,12 +822,13 @@ information about the columns in the current table. Use 'peek',
         The results can be compared (against a sample of the real data in
         the column and against each other) with the 'compare' command.
         """
+        theme = get_active_theme()
         limit = 5
         props = self._get_proposer_proposals()
         sample = self._get_column_data(limit)
         if sample:
             rep = [x[0] if len(x) == 1 else ",".join(x) for x in sample]
-            self.print(self.PROPOSE_SOURCE_SAMPLE_TEXT, "; ".join(rep))
+            self.print(self.PROPOSE_SOURCE_SAMPLE_TEXT, "; ".join(rep), theme.data)
         else:
             self.print(self.PROPOSE_SOURCE_EMPTY_TEXT)
         if not props:
@@ -826,6 +847,10 @@ information about the columns in the current table. Use 'peek',
                 name=prop.name(),
                 fit=fit_s,
                 sample="; ".join(map(repr, prop.generate_data(limit))),
+                theme_func=theme.function,
+                theme_fit=theme.query,
+                theme_data=theme.data,
+                theme_reset=theme.reset,
             )
 
     def do_p(self, arg: str) -> None:

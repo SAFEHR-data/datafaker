@@ -14,6 +14,7 @@ from datafaker.dialects import SecondsDifference, StdDev
 from datafaker.interactive.base import DbCmd
 from datafaker.interactive.generators import GeneratorCmd
 from datafaker.proposers.choice import ChoiceProposerFactory
+from datafaker.theme import set_active_theme, ThemeEntry
 from tests.utils import (
     DuckTestDb,
     GeneratesDBTestCase,
@@ -43,6 +44,10 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
     dump_file_path = "instrument.sql"
     database_name = "instrument"
     schema_name = "public"
+
+    def setUp(self) -> None:
+        super().setUp()
+        set_active_theme(ThemeEntry.NONE)
 
     def _get_cmd(self, config: MutableMapping[str, Any]) -> MockGeneratorCmd:
         """Get the command we are using for this test case."""
@@ -586,6 +591,10 @@ class ConfigureGeneratorsWithSrc2Tests(GeneratesDBTestCase):
     copy_files = ["row_generators.py", "story_generators.py"]
     copy_from_directory = Path("examples")
 
+    def setUp(self) -> None:
+        super().setUp()
+        set_active_theme(ThemeEntry.NONE)
+
     def _get_cmd(self, config: MutableMapping[str, Any]) -> MockGeneratorCmd:
         """Get the command we are using for this test case."""
         return MockGeneratorCmd(
@@ -689,6 +698,7 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
 
     def setUp(self) -> None:
         super().setUp()
+        set_active_theme(ThemeEntry.NONE)
         ChoiceProposerFactory.SAMPLE_COUNT = 500
         ChoiceProposerFactory.SUPPRESS_COUNT = 5
 
@@ -864,6 +874,10 @@ class GeneratorTests(GeneratesDBTestCase):
     dump_file_path = "instrument.sql"
     database_name = "instrument"
     schema_name = "public"
+
+    def setUp(self) -> None:
+        super().setUp()
+        set_active_theme(ThemeEntry.NONE)
 
     def _get_cmd(self, config: MutableMapping[str, Any]) -> MockGeneratorCmd:
         """We are using configure-generators."""

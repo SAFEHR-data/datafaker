@@ -39,6 +39,7 @@ prettytable = "^3.15.1"
 fastparquet = "^2024.11.0"
 duckdb-sqlalchemy = "^1.5.2.2"
 ty = "^0.0.43"
+colorama = "^0.4.6"
 
 [tool.poetry.group.dev.dependencies]
 isort = "^5.10.1"
