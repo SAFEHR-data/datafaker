@@ -161,6 +161,10 @@ def create_db_engine(
         logger.error("Failed to connect to the database: %s", exc)
         logger.error("Perhaps the dialect '%s' is invalid.", db_dsn.split(":")[0])
         raise Exit(1) from exc
+    except ModuleNotFoundError as exc:
+        logger.error("Failed to connect to the database: %s", exc)
+        logger.error("Please install the packages required for dialect '%s'.", db_dsn.split(":")[0])
+        raise Exit(1) from exc
     except ValueError as exc:
         logger.error("DSN %s is malformed: %s", db_dsn, exc)
         raise Exit(1) from exc
