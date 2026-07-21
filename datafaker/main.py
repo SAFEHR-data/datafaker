@@ -40,7 +40,7 @@ from datafaker.settings import (
     get_source_dsn,
     get_source_schema,
 )
-from datafaker.theme import set_active_theme, ThemeEntry
+from datafaker.theme import ThemeEntry, set_active_theme
 from datafaker.utils import (
     CONFIG_SCHEMA_PATH,
     conf_logger,
@@ -58,6 +58,7 @@ STATS_FILENAME: Final[str] = "src-stats.yaml"
 DF_FILENAME: Final[str] = "df.py"
 
 app = Typer(no_args_is_help=True)
+
 
 def datafaker() -> None:
     """Run the app and catch internal exceptions."""

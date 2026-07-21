@@ -4,12 +4,13 @@ from enum import Enum
 
 import colorama
 
-
 colorama.just_fix_windows_console()
 
 
 @dataclass
 class Theme:
+    """A colour theme for DataFaker terminal output."""
+
     prompt: str
     column: str
     data: str
@@ -30,22 +31,22 @@ class ThemeEntry(str, Enum):
 THEME: dict[str, Theme] = {
     ThemeEntry.NONE: Theme("", "", "", "", "", "", ""),
     ThemeEntry.DARK: Theme(
-        prompt=colorama.Fore.CYAN + colorama.Style.NORMAL,
-        column=colorama.Fore.GREEN + colorama.Style.NORMAL,
-        data=colorama.Fore.YELLOW + colorama.Style.NORMAL,
-        function=colorama.Fore.MAGENTA + colorama.Style.NORMAL,
-        query=colorama.Fore.GREEN + colorama.Style.NORMAL,
-        line=colorama.Fore.WHITE + colorama.Style.DIM,
-        reset=colorama.Style.RESET_ALL,
+        prompt=colorama.Fore.CYAN + colorama.Style.NORMAL,  # type: ignore
+        column=colorama.Fore.GREEN + colorama.Style.NORMAL,  # type: ignore
+        data=colorama.Fore.YELLOW + colorama.Style.NORMAL,  # type: ignore
+        function=colorama.Fore.MAGENTA + colorama.Style.NORMAL,  # type: ignore
+        query=colorama.Fore.GREEN + colorama.Style.NORMAL,  # type: ignore
+        line=colorama.Fore.WHITE + colorama.Style.DIM,  # type: ignore
+        reset=colorama.Style.RESET_ALL,  # type: ignore
     ),
     ThemeEntry.LIGHT: Theme(
-        prompt=colorama.Fore.BLUE,
-        column=colorama.Fore.GREEN,
-        data=colorama.Fore.BLACK,
-        function=colorama.Fore.MAGENTA,
-        query=colorama.Fore.MAGENTA,
-        line=colorama.Fore.LIGHTBLACK_EX,
-        reset=colorama.Style.RESET_ALL,
+        prompt=colorama.Fore.BLUE,  # type: ignore
+        column=colorama.Fore.GREEN,  # type: ignore
+        data=colorama.Fore.BLACK,  # type: ignore
+        function=colorama.Fore.MAGENTA,  # type: ignore
+        query=colorama.Fore.MAGENTA,  # type: ignore
+        line=colorama.Fore.LIGHTBLACK_EX,  # type: ignore
+        reset=colorama.Style.RESET_ALL,  # type: ignore
     ),
 }
 
@@ -54,10 +55,11 @@ theme_active = THEME[ThemeEntry.NONE]
 
 
 def set_active_theme(te: ThemeEntry):
-    global theme_active
+    """Set the active theme by key."""
+    global theme_active  # pylint: disable=global-statement
     theme_active = THEME[te]
 
 
 def get_active_theme() -> Theme:
-    global theme_active
+    """Get the active theme."""
     return theme_active

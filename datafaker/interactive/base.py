@@ -226,10 +226,7 @@ class DbCmd(ABC, cmd.Cmd):
         """Print the rows resulting from a database query."""
         theme = get_active_theme()
         self.print_table(
-            [
-                f"{theme.column}{heading}"
-                for heading in result.keys()
-            ],
+            [f"{theme.column}{heading}" for heading in result.keys()],
             [list(row) for row in result.all()],
         )
 
@@ -296,7 +293,14 @@ class DbCmd(ABC, cmd.Cmd):
         self.print_table(
             [
                 f"{theme.reset}{heading}"
-                for heading in ["name", "type", "primary", "nullable", "foreign key", "roles"]
+                for heading in [
+                    "name",
+                    "type",
+                    "primary",
+                    "nullable",
+                    "foreign key",
+                    "roles",
+                ]
             ],
             [
                 [
@@ -450,10 +454,7 @@ class DbCmd(ABC, cmd.Cmd):
                 return
             theme = get_active_theme()
             self.print_table(
-                [
-                    f"{theme.column}{k}"
-                    for k in result.keys()
-                ],
+                [f"{theme.column}{k}" for k in result.keys()],
                 result.fetchmany(max_peek_rows),
             )
 

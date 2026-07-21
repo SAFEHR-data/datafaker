@@ -8,7 +8,7 @@ from sqlalchemy import Connection, MetaData, insert, select
 
 from datafaker.interactive.base import DbCmd
 from datafaker.proposers import NullPartitionedNormalProposerFactory
-from datafaker.theme import set_active_theme, ThemeEntry
+from datafaker.theme import ThemeEntry, set_active_theme
 from tests.test_interactive_generators import MockGeneratorCmd
 from tests.utils import GeneratesDBTestCase
 

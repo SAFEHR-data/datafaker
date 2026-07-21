@@ -8,7 +8,7 @@ from sqlalchemy import select
 from datafaker.interactive import TableCmd
 from datafaker.interactive.base import DbCmd
 from datafaker.serialize_metadata import dict_to_metadata
-from datafaker.theme import set_active_theme, ThemeEntry
+from datafaker.theme import ThemeEntry, set_active_theme
 from tests.utils import RequiresDBTestCase, TestDbCmdMixin
 
 

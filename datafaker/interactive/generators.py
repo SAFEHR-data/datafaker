@@ -10,9 +10,9 @@ from sqlalchemy import Column, and_, literal_column, select
 from datafaker.db_utils import MaybeAsyncEngine, primary_private_fks, table_is_private
 from datafaker.dialects import Random
 from datafaker.interactive.base import DbCmd, TableEntry, fk_column_name, or_default
-from datafaker.theme import get_active_theme
 from datafaker.proposers import everything_factory
 from datafaker.proposers.base import PredefinedProposer, Proposer
+from datafaker.theme import get_active_theme
 from datafaker.utils import (
     get_columns_assigned,
     get_row_generators,
@@ -88,7 +88,10 @@ information about the columns in the current table. Use 'peek',
 
     PROPOSE_SOURCE_SAMPLE_TEXT = "Sample of actual source data: {1}{0}..."
     PROPOSE_SOURCE_EMPTY_TEXT = "Source database has no data in this column."
-    PROPOSE_GENERATOR_SAMPLE_TEXT = "{index}. {theme_func}{name}: {theme_fit}{fit} {theme_data}{sample}{theme_reset} ..."
+    PROPOSE_GENERATOR_SAMPLE_TEXT = (
+        "{index}. {theme_func}{name}:"
+        " {theme_fit}{fit} {theme_data}{sample}{theme_reset} ..."
+    )
     PRIMARY_PRIVATE_TEXT = "Primary Private"
     SECONDARY_PRIVATE_TEXT = "Secondary Private on columns {0}"
     NOT_PRIVATE_TEXT = "Not private"
@@ -279,7 +282,9 @@ information about the columns in the current table. Use 'peek',
             c + "[pk]" if table.columns[c].primary_key else c for c in prop_info.columns
         ]
         gen = f" ({prop_info.proposer.name()})" if prop_info.proposer else ""
-        self.prompt = f"{theme.prompt}({table_name}.{','.join(columns)}{gen}){theme.reset} "
+        self.prompt = (
+            f"{theme.prompt}({table_name}.{','.join(columns)}{gen}){theme.reset} "
+        )
 
     def _remove_auto_src_stats(self) -> list[MutableMapping[str, Any]]:
         """
@@ -664,7 +669,9 @@ information about the columns in the current table. Use 'peek',
                 n = int(argument)
                 if 0 < n <= len(props):
                     prop = props[n - 1]
-                    comparison[f"{n}. {theme.function}{prop.name()}"] = prop.generate_data(limit)
+                    comparison[
+                        f"{n}. {theme.function}{prop.name()}"
+                    ] = prop.generate_data(limit)
                     self._print_values_queried(table_name, n, prop)
         self.print_table_by_columns(comparison)
 
