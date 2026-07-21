@@ -24,7 +24,8 @@ from datafaker.dump import (
     TableWriter,
     get_parquet_table_writer,
 )
-from datafaker.interactive import (  # update_missingness,
+from datafaker.interactive import (
+    update_missingness,
     update_config_generators,
     update_config_tables,
 )
@@ -142,7 +143,7 @@ def main(
     conf_logger(verbose)
 
 
-@app.command(rich_help_panel="Configure")
+@app.command(rich_help_panel="Configure and Extract")
 def make_tables(
     orm_file: Path = Option(ORM_FILENAME, help="Path to write the ORM yaml file to"),
     force: bool = Option(
@@ -179,7 +180,7 @@ def make_tables(
     logger.debug("%s created.", orm_file)
 
 
-@app.command(rich_help_panel="Configure")
+@app.command(rich_help_panel="Configure and Extract")
 def make_vocab(
     orm_file: Path = Option(
         ORM_FILENAME,
@@ -218,7 +219,7 @@ def make_vocab(
     )
 
 
-@app.command(rich_help_panel="Configure")
+@app.command(rich_help_panel="Configure and Extract")
 def configure_tables(
     config_file: Path = Option(
         CONFIG_FILENAME,
@@ -256,7 +257,7 @@ def configure_tables(
     logger.debug("Tables configured in %s.", config_file)
 
 
-@app.command(rich_help_panel="Configure")
+@app.command(rich_help_panel="Configure and Extract")
 def configure_generators(
     config_file: Path = Option(
         CONFIG_FILENAME,
@@ -303,7 +304,46 @@ def configure_generators(
     logger.debug("Generators configured in %s.", config_file)
 
 
-@app.command(rich_help_panel="Extract")
+@app.command(rich_help_panel="Configure and Extract")
+def configure_missing(
+    config_file: Path = Option(
+        CONFIG_FILENAME,
+        help="Path to write the configuration file to",
+        dir_okay=False,
+    ),
+    orm_file: Path = Option(
+        ORM_FILENAME,
+        help="The name of the ORM yaml file",
+        dir_okay=False,
+    ),
+) -> None:
+    """Interactively set the missingness of the generated data."""
+    logger.debug("Configuring missingness in %s.", config_file)
+    config: dict[str, Any] = {}
+    if config_file.exists():
+        config_any = yaml.load(
+            config_file.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader
+        )
+        if isinstance(config_any, dict):
+            config = config_any
+    meta_dict = load_metadata_config(orm_file, config)
+    metadata = dict_to_metadata(meta_dict, None)
+    config_updated = update_missingness(
+        get_source_dsn(),
+        get_source_schema(),
+        metadata,
+        config,
+        Path(meta_dict["parquet-dir"]) if "parquet-dir" in meta_dict else None,
+    )
+    if config_updated is None:
+        logger.debug("Cancelled")
+        return
+    content = yaml.dump(config_updated)
+    config_file.write_text(content, encoding="utf-8")
+    logger.debug("Generators missingness in %s.", config_file)
+
+
+@app.command(rich_help_panel="Configure and Extract")
 def make_stats(
     orm_file: Path = Option(
         ORM_FILENAME,
@@ -394,40 +434,6 @@ def create_vocab(
     vocabs_loaded = create_db_vocab(orm_metadata, meta_dict, config)
     num_vocabs = len(vocabs_loaded)
     logger.debug("%s %s loaded.", num_vocabs, "table" if num_vocabs == 1 else "tables")
-
-
-@app.command(rich_help_panel="Create Synthetic Database")
-def create_generators(
-    _orm_file: Path = Option(
-        ORM_FILENAME,
-        help="The name of the ORM yaml file",
-        dir_okay=False,
-    ),
-    _df_file: Path = Option(
-        None,
-        help="Path to write Python generators to.",
-        dir_okay=False,
-    ),
-    _config_file: Path = Option(
-        CONFIG_FILENAME,
-        help="The configuration file",
-        dir_okay=False,
-    ),
-    _stats_file: Optional[Path] = Option(
-        None,
-        help=(
-            "Statistics file (output of make-stats); default is src-stats.yaml if the "
-            "config file references SRC_STATS, or None otherwise."
-        ),
-        show_default=False,
-        dir_okay=False,
-    ),
-    _force: bool = Option(
-        False, "--force", "-f", help="Overwrite any existing Python generators file."
-    ),
-) -> None:
-    """Obsolete command."""
-    logger.error("This command is deprecated; it does nothing.")
 
 
 @app.command(rich_help_panel="Create Synthetic Database")
@@ -651,7 +657,7 @@ def validate_config(
     logger.debug("Config file is valid.")
 
 
-@app.command(rich_help_panel="Remove")
+@app.command(rich_help_panel="Remove Destination Data")
 def remove_data(
     orm_file: Path = Option(
         ORM_FILENAME,
@@ -678,7 +684,7 @@ def remove_data(
         logger.info("Would truncate non-vocabulary tables if called with --yes.")
 
 
-@app.command(rich_help_panel="Remove")
+@app.command(rich_help_panel="Remove Destination Data")
 def remove_vocab(
     orm_file: Path = Option(
         ORM_FILENAME,
@@ -706,7 +712,7 @@ def remove_vocab(
         logger.info("Would truncate vocabulary tables if called with --yes.")
 
 
-@app.command(rich_help_panel="Remove")
+@app.command(rich_help_panel="Remove Destination Data")
 def remove_tables(
     orm_file: Path = Option(
         ORM_FILENAME,
@@ -803,42 +809,3 @@ def version() -> None:
 
 if __name__ == "__main__":
     datafaker()
-
-
-# @app.command(rich_help_panel="Discovery and Configuration")
-# def configure_missing(
-#     config_file: Path = Option(
-#         CONFIG_FILENAME,
-#         help="Path to write the configuration file to",
-#         dir_okay=False,
-#     ),
-#     orm_file: Path = Option(
-#         ORM_FILENAME,
-#         help="The name of the ORM yaml file",
-#         dir_okay=False,
-#     ),
-# ) -> None:
-#     """Interactively set the missingness of the generated data."""
-#     logger.debug("Configuring missingness in %s.", config_file)
-#     config: dict[str, Any] = {}
-#     if config_file.exists():
-#         config_any = yaml.load(
-#             config_file.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader
-#         )
-#         if isinstance(config_any, dict):
-#             config = config_any
-#     meta_dict = load_metadata_config(orm_file, config)
-#     metadata = dict_to_metadata(meta_dict, None)
-#     config_updated = update_missingness(
-#         get_source_dsn(),
-#         get_source_schema(),
-#         metadata,
-#         config,
-#         Path(meta_dict["parquet-dir"]) if "parquet-dir" in meta_dict else None,
-#     )
-#     if config_updated is None:
-#         logger.debug("Cancelled")
-#         return
-#     content = yaml.dump(config_updated)
-#     config_file.write_text(content, encoding="utf-8")
-#     logger.debug("Generators missingness in %s.", config_file)
