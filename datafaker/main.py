@@ -65,6 +65,16 @@ def datafaker() -> None:
         app()
     except OperationalError as exc:
         logger.error(str(exc))
+        if (
+            type(exc.orig).__module__ == "pyodbc"
+            and isinstance(exc.orig, BaseException)
+            and 0 < len(exc.orig.args)
+            and exc.orig.args[0] == "HYT00"
+        ):
+            logger.error(
+                "Please ensure that the ODBC driver is installed and registered."
+            )
+            logger.error("(see the installation instructions)")
         # Outside of app() typer.Exit(1) doesn't work
         sys.exit(1)
     except SettingsError as exc:
