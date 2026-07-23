@@ -1,5 +1,4 @@
 """Functions and classes to create and populate the target database."""
-import re
 from collections import Counter
 from pathlib import Path
 from typing import Any, Generator, Iterable, Iterator, Mapping, Sequence, Tuple
@@ -8,9 +7,8 @@ import typer
 import yaml
 from sqlalchemy import Connection, insert, inspect
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session
-from sqlalchemy.schema import CreateSchema, CreateTable, MetaData, Table
+from sqlalchemy.schema import CreateSchema, MetaData, Table
 
 from datafaker.base import FileUploader
 from datafaker.db_utils import (
@@ -32,31 +30,6 @@ from datafaker.utils import get_property, logger
 
 Story = Generator[Tuple[str, dict[str, Any]], dict[str, Any], None]
 RowCounts = Counter[str]
-
-serial_re = re.compile(r"\bSERIAL\b")
-
-
-@compiles(CreateTable, "duckdb")
-def remove_on_delete_cascade(element: CreateTable, compiler: Any, **kw: Any) -> str:
-    """
-    Intercede in compilation for column creation.
-
-    DuckDB does not understand cascades, and we don't care about
-    that in datafaker so we remove ``ON DELETE CASCASE``.
-
-    DuckDB does not understand ``SERIAL`` and we don't care
-    about autoincrementing, so we will replace it simply with
-    ``INTEGER``.
-
-    Ideally ``duckdb_engine`` would remove these for us.
-    :param element: The CreateTable being executed.
-    :param compiler: Actually a DDLCompiler, but that type is not exported.
-    :param kw: Further arguments.
-    :return: Corrected SQL.
-    """
-    text: str = compiler.visit_create_table(element, **kw)
-    t2 = serial_re.sub("INTEGER", text)
-    return t2.replace(" ON DELETE CASCADE", "")
 
 
 def create_db_tables(metadata: MetaData) -> None:
@@ -320,7 +293,7 @@ class StoryIterator:
         table = self._table_dict[self._table_name]
         if table.name in self._table_generator_dict:
             table_generator = self._table_generator_dict[table.name]
-            default_values = table_generator(self._dst_conn)
+            default_values = table_generator.generate_row(self._dst_conn)
         else:
             default_values = {}
         insert_values = {**default_values, **self._provided_values}
@@ -403,7 +376,7 @@ def populate(
         with dst_conn.begin():
             try:
                 for _ in range(table_generator.num_rows_per_pass):
-                    stmt = insert(table).values(table_generator(dst_conn))
+                    stmt = insert(table).values(table_generator.generate_row(dst_conn))
                     dst_conn.execute(stmt)
                     row_counts[table.name] = row_counts.get(table.name, 0) + 1
                 dst_conn.commit()

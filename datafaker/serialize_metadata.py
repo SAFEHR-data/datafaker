@@ -7,7 +7,7 @@ from typing import Any
 
 import parsy
 from sqlalchemy import Column, Dialect, Engine, ForeignKey, MetaData, Table
-from sqlalchemy.dialects import oracle, postgresql
+from sqlalchemy.dialects import mssql, oracle, postgresql
 from sqlalchemy.sql import schema, sqltypes
 
 from datafaker.db_utils import constraint_name
@@ -16,6 +16,7 @@ from datafaker.utils import (
     get_property,
     make_foreign_key_name,
     split_column_full_name,
+    unqualify_fk_target,
 )
 
 TableT = dict[str, typing.Any]
@@ -74,7 +75,9 @@ def string_type(type_: type) -> ParserType:
     Make a parser for a SQL string type.
 
     Parses TYPE_NAME, TYPE_NAME(32), TYPE_NAME COLLATE "fr"
-    or TYPE_NAME(32) COLLATE "fr"
+    or TYPE_NAME(32) COLLATE "fr" (PostgreSQL style, quoted collation name)
+    or TYPE_NAME(32) COLLATE SQL_Latin1_General_CP1_CI_AS
+    (MS-SQL style, unquoted collation name)
     """
 
     @generate(type_.__name__)
@@ -84,15 +87,18 @@ def string_type(type_: type) -> ParserType:
         length: int | None = yield (
             parsy.string("(") >> integer() << parsy.string(")")
         ).optional()
-        collation: str | None = yield (
-            parsy.string(' COLLATE "') >> parsy.regex(r'[^"]*') << parsy.string('"')
+        collation: str | None = yield parsy.alt(
+            # PostgreSQL: COLLATE "name" (quoted)
+            parsy.string(' COLLATE "') >> parsy.regex(r'[^"]*') << parsy.string('"'),
+            # MS-SQL: COLLATE name (unquoted identifier)
+            parsy.string(" COLLATE ") >> parsy.regex(r"\S+"),
         ).optional()
         return type_(length=length, collation=collation)
 
     return st_parser
 
 
-def time_type(type_: type, pg_type: type) -> ParserType:
+def time_type(type_: type, tz_type: type) -> ParserType:
     """
     Make a parser for a SQL date/time type.
 
@@ -100,10 +106,10 @@ def time_type(type_: type, pg_type: type) -> ParserType:
     or TYPE_NAME(32) WITH TIME ZONE
 
     :param type_: The SQLAlchemy type we would like to parse.
-    :param pg_type: The PostgreSQL type we would like to parse if precision
-    or timezone is provided.
+    :param tz_type: The type to instantiate when precision or timezone is
+    provided (e.g. ``postgresql.types.TIMESTAMP``).
     :return: ``type_`` if neither precision nor timezone are provided in the
-    parsed text, ``pg_type(precision, timezone)`` otherwise.
+    parsed text, ``tz_type(precision, timezone)`` otherwise.
     """
 
     @generate(type_.__name__)
@@ -121,20 +127,37 @@ def time_type(type_: type, pg_type: type) -> ParserType:
         if precision is None and not timezone:
             # normal sql type
             return type_
-        return pg_type(precision=precision, timezone=timezone)
+        return tz_type(precision=precision, timezone=timezone)
 
     return pgt_parser
+
+
+@parsy.generate("VARBINARY")  # type: ignore
+def _mssql_varbinary_parser() -> typing.Generator[ParserType, None, typing.Any]:
+    """Parse VARBINARY, VARBINARY(n), or VARBINARY(max/MAX)."""
+    yield parsy.string("VARBINARY")
+    length: int | None = yield (
+        parsy.string("(")
+        >> ((parsy.string("max") | parsy.string("MAX")).result(None) | integer())
+        << parsy.string(")")
+    ).optional()
+    return mssql.VARBINARY(length=length)
 
 
 SIMPLE_TYPE_PARSER = parsy.alt(
     parsy.string("DOUBLE PRECISION").result(
         sqltypes.DOUBLE_PRECISION
     ),  # must be before DOUBLE
-    simple(sqltypes.FLOAT),
+    numeric_type(sqltypes.FLOAT),
     simple(sqltypes.DOUBLE),
     simple(sqltypes.INTEGER),
     simple(sqltypes.SMALLINT),
     simple(sqltypes.BIGINT),
+    # DATETIME2 and DATETIMEOFFSET must come before DATETIME — parsy.alt() is
+    # ordered and does not backtrack once a parser has consumed input, so the
+    # longer names must be tried first.
+    numeric_type(mssql.DATETIMEOFFSET),
+    numeric_type(mssql.DATETIME2),
     simple(sqltypes.DATETIME),
     simple(sqltypes.DATE),
     simple(sqltypes.CLOB),
@@ -142,13 +165,40 @@ SIMPLE_TYPE_PARSER = parsy.alt(
     simple(sqltypes.UUID),
     simple(sqltypes.BLOB),
     simple(sqltypes.BOOLEAN),
-    simple(postgresql.TSVECTOR),
-    simple(postgresql.BYTEA),
-    simple(postgresql.CIDR),
+    # PostgreSQL-specific types — mapped to cross-dialect equivalents so that
+    # an orm.yaml produced from a PostgreSQL source can be used with MS-SQL.
+    # PostgreSQL recreates these correctly; MSSQL gets a functional fallback.
+    parsy.string("TSVECTOR").result(
+        sqltypes.Text
+    ),  # no MS-SQL equivalent; degrade to Text
+    parsy.string("BYTEA").result(sqltypes.LargeBinary),  # MS-SQL: VARBINARY(MAX)
+    parsy.string("CIDR").result(
+        sqltypes.String(43)
+    ),  # no MS-SQL equivalent; store as VARCHAR(43)
+    # PostgreSQL SERIAL pseudo-types — map to plain integers.  datafaker does
+    # not rely on server-side autoincrement; the @compiles hook in dialects.py
+    # strips IDENTITY from MS-SQL DDL so explicit INSERTs work without
+    # SET IDENTITY_INSERT.  BIGSERIAL/SMALLSERIAL listed before SERIAL so
+    # the common "SERIAL" prefix is tried last (defensive ordering).
+    parsy.string("BIGSERIAL").result(sqltypes.BIGINT),
+    parsy.string("SMALLSERIAL").result(sqltypes.SMALLINT),
+    parsy.string("SERIAL").result(sqltypes.INTEGER),
     numeric_type(sqltypes.NUMERIC),
     numeric_type(sqltypes.DECIMAL),
     numeric_type(postgresql.BIT),
-    numeric_type(postgresql.REAL),
+    numeric_type(sqltypes.REAL),  # was postgresql.REAL; sqltypes.REAL is cross-dialect
+    # MS-SQL-specific types
+    simple(mssql.UNIQUEIDENTIFIER),
+    _mssql_varbinary_parser,
+    numeric_type(mssql.BINARY),
+    simple(mssql.MONEY),
+    simple(mssql.SMALLMONEY),
+    simple(mssql.IMAGE),
+    simple(mssql.TINYINT),
+    simple(mssql.SMALLDATETIME),
+    simple(mssql.NTEXT),
+    simple(mssql.SQL_VARIANT),
+    simple(mssql.ROWVERSION),
     string_type(sqltypes.CHAR),
     string_type(sqltypes.NCHAR),
     string_type(sqltypes.VARCHAR),
@@ -206,6 +256,7 @@ def dict_to_column(
     col_name: str,
     rep: dict,
     ignore_fk: typing.Callable[[str], bool],
+    table_names: typing.Optional[frozenset] = None,
 ) -> Column:
     """
     Produce column from aspects of its dict description.
@@ -231,7 +282,7 @@ def dict_to_column(
     if "foreign_keys" in rep:
         args = [
             ForeignKey(
-                fk,
+                unqualify_fk_target(fk, table_names),
                 name=make_foreign_key_name(table_name, col_name),
                 ondelete="CASCADE",
             )
@@ -246,6 +297,7 @@ def dict_to_column(
         type_=type_,
         primary_key=rep.get("primary", False),
         nullable=rep.get("nullable", None),
+        autoincrement=False,
     )
 
 
@@ -282,13 +334,14 @@ def dict_to_table(
     meta: MetaData,
     table_dict: TableT,
     ignore_fk: typing.Callable[[str], bool],
+    table_names: typing.Optional[frozenset] = None,
 ) -> Table:
     """Create a Table from its description."""
     return Table(
         name,
         meta,
         *[
-            dict_to_column(name, colname, col, ignore_fk)
+            dict_to_column(name, colname, col, ignore_fk, table_names)
             for (colname, col) in table_dict.get("columns", {}).items()
         ],
         *[dict_to_unique(constraint) for constraint in table_dict.get("unique", [])],
@@ -328,7 +381,14 @@ def should_ignore_fk(tables_dict: dict[str, TableT], fk: str) -> bool:
     :param fk: The name of the foreign key.
     """
     (table, _column) = split_column_full_name(fk)
-    td: dict[str, TableT] = get_property(tables_dict, table, {})
+    # FK targets may be schema-qualified (e.g. "mimic100.concept").
+    # Try the fully-qualified name first so users can be explicit in config
+    # (e.g. "mimic100.concept: ignore: true"); fall back to the bare table
+    # name for configs that don't include a schema prefix.
+    td = tables_dict.get(table)
+    if td is None:
+        bare = table.rsplit(".", maxsplit=1)[-1]
+        td = tables_dict.get(bare, {})
     return get_property(td, "ignore", False)
 
 
@@ -355,7 +415,8 @@ def dict_to_metadata(
         ignore_fk = partial(should_ignore_fk, tables_config)
     else:
         ignore_fk = _always_false
+    table_names = frozenset(tables_dict.keys())
     meta = MetaData()
     for k, td in tables_dict.items():
-        dict_to_table(k, meta, td, ignore_fk)
+        dict_to_table(k, meta, td, ignore_fk, table_names)
     return meta

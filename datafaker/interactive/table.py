@@ -3,8 +3,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
-import sqlalchemy
+from sqlalchemy import func, literal_column, select
 
+from datafaker.dialects import Random
 from datafaker.interactive.base import (
     TYPE_LETTER,
     TYPE_PROMPT,
@@ -477,16 +478,20 @@ Type 'help data' for examples."""
         :param count: The number of rows to sample.
         :param min_length: The minimum length of text to choose from (0 for any text).
         """
-        where = f"WHERE {column} IS NOT NULL"
+        col_expr = literal_column(column)
         if 0 < min_length:
-            where = f"WHERE LENGTH({column}) >= {min_length}"
+            where_clause = func.length(col_expr) >= min_length
+        else:
+            where_clause = col_expr.isnot(None)
+        stmt = (
+            select(col_expr)
+            .select_from(self.table_metadata())
+            .where(where_clause)
+            .order_by(Random())
+            .limit(count)
+        )
         with self.sync_engine.connect() as connection:
-            result = connection.execute(
-                sqlalchemy.text(
-                    f'SELECT {column} FROM "{self.table_name()}"'
-                    f" {where} ORDER BY RANDOM() LIMIT {count}"
-                )
-            )
+            result = connection.execute(stmt)
             self.columnize([str(x[0]) for x in result.all()])
 
     def print_row_data(self, count: int) -> None:
@@ -495,12 +500,9 @@ Type 'help data' for examples."""
 
         :param count: The number of rows to report.
         """
+        stmt = select(self.table_metadata()).order_by(Random()).limit(count)
         with self.sync_engine.connect() as connection:
-            result = connection.execute(
-                sqlalchemy.text(
-                    f'SELECT * FROM "{self.table_name()}" ORDER BY RANDOM() LIMIT {count}'
-                )
-            )
+            result = connection.execute(stmt)
             if result is None:
                 self.print("No rows in this table!")
                 return

@@ -5,10 +5,10 @@ from collections.abc import Iterable, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, cast
 
-import sqlalchemy
-from sqlalchemy import Column
+from sqlalchemy import Column, and_, literal_column, select
 
 from datafaker.db_utils import MaybeAsyncEngine, primary_private_fks, table_is_private
+from datafaker.dialects import Random
 from datafaker.interactive.base import DbCmd, TableEntry, fk_column_name, or_default
 from datafaker.proposers import everything_factory
 from datafaker.proposers.base import PredefinedProposer, Proposer
@@ -16,6 +16,7 @@ from datafaker.utils import (
     get_columns_assigned,
     get_row_generators,
     logger,
+    schema_qualified_name,
     split_column_full_name,
 )
 
@@ -61,8 +62,9 @@ def get_aggregate_query(
     ]
     if not clauses:
         return None
+    qualified = schema_qualified_name(table_name, engine)
     alias = f' AS "{table_name}"' if engine.dialect.name == "duckdb" else ""
-    return f'SELECT {", ".join(clauses)} FROM "{table_name}"{alias}'
+    return f'SELECT {", ".join(clauses)} FROM "{qualified}"{alias}'
 
 
 # pylint: disable=too-many-public-methods
@@ -779,15 +781,17 @@ information about the columns in the current table. Use 'peek',
         self, count: int, to_str: Callable[[Any], str] = repr
     ) -> list[list[str]]:
         columns = self._get_column_names()
-        columns_string = ", ".join(columns)
-        pred = " AND ".join(f"{column} IS NOT NULL" for column in columns)
+        col_exprs = [literal_column(col) for col in columns]
+        nonnull_clauses = [literal_column(col).isnot(None) for col in columns]
+        stmt = (
+            select(*col_exprs)
+            .select_from(self.table_metadata())
+            .where(and_(*nonnull_clauses))
+            .order_by(Random())
+            .limit(count)
+        )
         with self.sync_engine.connect() as connection:
-            result = connection.execute(
-                sqlalchemy.text(
-                    f'SELECT {columns_string} FROM "{self.table_name()}"'
-                    f" WHERE {pred} ORDER BY RANDOM() LIMIT {count}"
-                )
-            )
+            result = connection.execute(stmt)
             return [[to_str(x) for x in xs] for xs in result.all()]
 
     def do_propose(self, _arg: str) -> None:

@@ -10,8 +10,9 @@ import numpy as np
 from mimesis import Datetime, Text
 from mimesis.providers.base import BaseDataProvider, BaseProvider
 from sqlalchemy import Column, Connection, MetaData
-from sqlalchemy.sql import func, functions, select
+from sqlalchemy.sql import func, select
 
+from datafaker.dialects import Random
 from datafaker.utils import T, logger
 
 
@@ -28,7 +29,7 @@ class ColumnValueProvider(BaseProvider):
         db_connection: Connection, orm_class: Any, column_name: str
     ) -> Any:
         """Return a random value from the column specified."""
-        query = select(orm_class).order_by(functions.random()).limit(1)
+        query = select(orm_class).order_by(Random()).limit(1)
         random_row = db_connection.execute(query).first()
 
         if random_row:

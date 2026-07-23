@@ -10,8 +10,16 @@ from typing import Any, Iterable, Optional, Union
 import sqlalchemy.dialects
 import yaml
 
-# pylint: disable=no-name-in-module
-from psycopg2.errors import UndefinedObject  # ty: ignore[unresolved-import]
+try:
+    # pylint: disable=no-name-in-module
+    from psycopg2.errors import UndefinedObject  # ty: ignore[unresolved-import]
+except ImportError:
+    # psycopg2 is only installed with the "postgres" extra; this error can
+    # only be raised by the psycopg2 driver, so it never matches otherwise.
+    class UndefinedObject:  # type: ignore[no-redef]
+        """Placeholder when psycopg2 is not installed."""
+
+
 from sqlalchemy import Connection, Engine, ForeignKey, create_engine, event, select
 from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.exc import (
@@ -38,7 +46,9 @@ from datafaker.utils import (
     get_ignored_table_names,
     get_vocabulary_table_names,
     logger,
+    make_async_dsn,
     make_foreign_key_name,
+    unqualify_fk_target,
 )
 
 # Define some types used repeatedly in the code base
@@ -139,15 +149,20 @@ def create_db_engine(
     **kwargs: Any,
 ) -> MaybeAsyncEngine:
     """Create a SQLAlchemy Engine."""
+    kwargs.setdefault("pool_pre_ping", True)
     try:
         if use_asyncio:
-            async_dsn = db_dsn.replace("postgresql://", "postgresql+asyncpg://")
-            engine: MaybeAsyncEngine = create_async_engine(async_dsn, **kwargs)
+            engine: MaybeAsyncEngine = create_async_engine(
+                make_async_dsn(db_dsn), **kwargs
+            )
         else:
             engine = create_engine(db_dsn, **kwargs)
     except NoSuchModuleError as exc:
         logger.error("Failed to connect to the database: %s", exc)
         logger.error("Perhaps the dialect '%s' is invalid.", db_dsn.split(":")[0])
+        raise Exit(1) from exc
+    except ModuleNotFoundError as exc:
+        logger.error("Failed to connect to the database: %s", exc)
         raise Exit(1) from exc
     except ValueError as exc:
         logger.error("DSN %s is malformed: %s", db_dsn, exc)
@@ -155,7 +170,10 @@ def create_db_engine(
 
     settings = {}
     if schema_name is not None:
-        settings["search_path"] = schema_name
+        if get_sync_engine(engine).dialect.name == "mssql":
+            engine = engine.execution_options(schema_translate_map={None: schema_name})
+        else:
+            settings["search_path"] = schema_name
     if parquet_dir is not None:
         joined = ",".join(_find_parquet_directories(parquet_dir))
         # double up single quotes
@@ -202,11 +220,11 @@ def create_db_engine_dst(
     return create_db_engine(db_dsn, schema_name, use_asyncio)
 
 
-def get_metadata(engine: Engine) -> MetaData:
+def get_metadata(engine: Engine, schema_name: Optional[str] = None) -> MetaData:
     """Get the MetaData object associated with the engine passed."""
     md = MetaData()
     try:
-        md.reflect(engine)
+        md.reflect(engine, schema=schema_name)
     except OperationalError as exc:
         logger.error("Cannot connect to database: %s", exc)
         raise Exit(1) from exc
@@ -417,10 +435,13 @@ def reinstate_vocab_foreign_key_constraints(
             ].items():
                 fk_targets = column_dict.get("foreign_keys", [])
                 if fk_targets:
+                    table_names = frozenset(meta_dict.get("tables", {}).keys())
                     fk = ForeignKeyConstraint(
                         columns=[column_name],
                         name=make_foreign_key_name(vocab_table_name, column_name),
-                        refcolumns=fk_targets,
+                        refcolumns=[
+                            unqualify_fk_target(t, table_names) for t in fk_targets
+                        ],
                     )
                     logger.debug("Restoring foreign key constraint %s", fk.name)
                     with Session(dst_engine) as session:

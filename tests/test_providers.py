@@ -1,9 +1,11 @@
 """Tests for the providers module."""
 import datetime as dt
 from typing import Any
+from unittest.mock import MagicMock
 
 from sqlalchemy import Column, Integer, MetaData, Text, insert
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.dialects import mssql, postgresql
+from sqlalchemy.orm import declarative_base
 
 from datafaker import providers
 from tests.utils import DatafakerTestCase, RequiresDBTestCase
@@ -65,6 +67,39 @@ class ColumnValueProviderTestCase(RequiresDBTestCase):
             generated_value: Any = provider.column_value(connection, Person, "sex")
 
         self.assertIsNone(generated_value)
+
+
+class ColumnValueRandomFunctionTestCase(DatafakerTestCase):
+    """column_value uses the correct random function for each dialect."""
+
+    def _make_connection(self, dialect_name: str) -> MagicMock:
+        conn = MagicMock()
+        conn.dialect.name = dialect_name
+        conn.execute.return_value.first.return_value = None
+        return conn
+
+    def _get_order_by_sql(self, dialect_name: str) -> str:
+        conn = self._make_connection(dialect_name)
+        providers.ColumnValueProvider.column_value(conn, Person, "sex")
+        query = conn.execute.call_args[0][0]
+
+        dialect = mssql.dialect() if dialect_name == "mssql" else postgresql.dialect()
+        return str(
+            query.compile(dialect=dialect, compile_kwargs={"literal_binds": True})
+        )
+
+    def test_mssql_uses_rand(self) -> None:
+        """Test that the column provider uses RAND for the Postgres dialect."""
+        sql = self._get_order_by_sql("mssql")
+        self.assertIn("newid()", sql.lower())
+        self.assertNotIn("random()", sql.lower())
+
+    def test_postgresql_uses_random(self) -> None:
+        """Test that the column provider uses RANDOM for the Postgres dialect."""
+        sql = self._get_order_by_sql("postgresql")
+        self.assertIn("random()", sql.lower())
+        self.assertNotIn("newid()", sql.lower())
+        self.assertNotIn("rand()", sql.lower())
 
 
 class TimedeltaProvider(DatafakerTestCase):

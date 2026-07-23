@@ -11,7 +11,7 @@ from typer.testing import CliRunner
 
 from datafaker.dump import CsvTableWriter, get_parquet_table_writer
 from datafaker.main import app
-from tests.utils import DatafakerTestCase, RequiresDBTestCase, TestDuckDb
+from tests.utils import DatafakerTestCase, DuckTestDb, MsSqlTestDb, RequiresDBTestCase
 
 
 class DumpTests(RequiresDBTestCase):
@@ -52,12 +52,14 @@ class DumpTests(RequiresDBTestCase):
             reader = csv.reader(table_fh)
             content = list(reader)
             self.assertListEqual(content[0], ["id", "name", "founded"])
-            self.assertListEqual(
-                content[1], ["1", "Blender", "1951-01-08 12:05:06+00:00"]
-            )
-            self.assertListEqual(
-                content[2], ["2", "Gibbs", "1959-03-04 15:08:09+00:00"]
-            )
+            self.assertEqual(len(content[1]), 3)
+            self.assertEqual(content[1][0], "1")
+            self.assertEqual(content[1][1], "Blender")
+            self.assertRegex(content[1][2], r"1951\-01\-08 12:05:06(\+00:00)?")
+            self.assertEqual(len(content[2]), 3)
+            self.assertEqual(content[2][0], "2")
+            self.assertEqual(content[2][1], "Gibbs")
+            self.assertRegex(content[2][2], r"1959\-03\-04 15:08:09(\+00:00)?")
 
     def test_dump_data_parquet(self) -> None:
         """Test dump-data for Parquet output."""
@@ -85,13 +87,20 @@ class DumpTests(RequiresDBTestCase):
 class DumpTestsDuckDb(DumpTests):
     """DumpTests against DuckDB."""
 
-    database_type = TestDuckDb
+    database_type = DuckTestDb
+
+
+class DumpTestsMsSql(DumpTests):
+    """DumpTests against MS Sql."""
+
+    database_type = MsSqlTestDb
+    schema_name = None
 
 
 class EndToEndParquetTestCase(DatafakerTestCase):
     """Read in parquet, make some generators, output parquet."""
 
-    database_type = TestDuckDb
+    database_type = DuckTestDb
     examples_dir = Path("examples/duckdb")
 
     def set_working_dir(self) -> None:

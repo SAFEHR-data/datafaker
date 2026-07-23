@@ -15,7 +15,7 @@ import typer
 import yaml
 from mimesis.providers.base import BaseProvider
 from sqlalchemy import CursorResult, Engine, MetaData, text
-from sqlalchemy.dialects import postgresql
+from sqlalchemy.dialects import mssql, postgresql
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from sqlalchemy.schema import (
@@ -195,11 +195,8 @@ def _get_row_generator(
     return row_gen_info, columns_covered
 
 
-def _get_default_generator(column: Column) -> RowGeneratorInfo:
+def _get_default_generator(column: Column) -> RowGeneratorInfo | None:
     """Get default generator information, for the given column."""
-    # If it's a primary key column, we presume that primary keys are populated
-    # automatically.
-
     # If it's a foreign key column, pull random values from the column it
     # references.
     variable_names: list[str] = []
@@ -312,10 +309,7 @@ class GeneratorInfo:
 
     # Name or function to generate random objects of this type (not using summary data)
     generator: str | Callable[[Column], tuple[str, dict[str, str]]]
-    # SQL query that gets the data to supply as arguments to the generator
-    # ({column} and {table} will be interpolated)
-    summary_query: str | None = None
-    # Dictionary of the names returned from the summary_query to arg types.
+    # Dictionary of arg types for any summary query.
     # An arg type is a callable turning the returned value into a Python type to
     # pass as an argument to the generator.
     arg_types: dict[str, Callable] = field(default_factory=dict)
@@ -352,12 +346,10 @@ _COLUMN_TYPE_TO_GENERATOR_INFO: dict[Any, GeneratorInfo] = {
     ),
     sqltypes.Date: GeneratorInfo(
         generator="generic.datetime.date",
-        summary_query=_YEAR_SUMMARY_QUERY,
         arg_types={"start": int, "end": int},
     ),
     sqltypes.DateTime: GeneratorInfo(
         generator="generic.datetime.datetime",
-        summary_query=_YEAR_SUMMARY_QUERY,
         arg_types={"start": int, "end": int},
     ),
     sqltypes.Integer: GeneratorInfo(  # must be before Numeric
@@ -377,6 +369,9 @@ _COLUMN_TYPE_TO_GENERATOR_INFO: dict[Any, GeneratorInfo] = {
         generator="generic.cryptographic.uuid",
     ),
     postgresql.UUID: GeneratorInfo(
+        generator="generic.cryptographic.uuid",
+    ),
+    mssql.UNIQUEIDENTIFIER: GeneratorInfo(
         generator="generic.cryptographic.uuid",
     ),
     sqltypes.String: GeneratorInfo(
@@ -508,7 +503,9 @@ def _get_generator_for_table(
 
     for column in table.columns:
         if column.name not in columns_covered:
-            table_data.row_gens.append(_get_default_generator(column))
+            gen = _get_default_generator(column)
+            if gen is not None:
+                table_data.row_gens.append(gen)
 
     return table_data
 
@@ -701,11 +698,13 @@ def make_tables_file(
     db_dsn: str,
     schema_name: Optional[str],
     parquet_dir: Optional[Path] = None,
+    engine: Optional[Engine] = None,
 ) -> str:
     """Construct the YAML file representing the schema."""
-    engine = get_sync_engine(create_db_engine(db_dsn, schema_name=schema_name))
+    if engine is None:
+        engine = get_sync_engine(create_db_engine(db_dsn, schema_name=schema_name))
 
-    metadata = get_metadata(engine)
+    metadata = get_metadata(engine, schema_name=schema_name)
     meta_dict = metadata_to_dict(metadata, schema_name, engine, parquet_dir)
 
     if parquet_dir is not None:
@@ -846,10 +845,8 @@ async def make_src_stats_connection(
     )
     src_stats = {
         query_block["name"]: {
-            "queries": {
-                "date": date_string,
-                "query": query_block["query"],
-            },
+            "query_date": date_string,
+            "query": query_block["query"],
             "comments": query_block.get("comments", []),
             "results": fix_types(result),
         }

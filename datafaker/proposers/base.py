@@ -9,15 +9,10 @@ import mimesis
 import mimesis.locales
 from sqlalchemy import Column, Engine, Join, Table, func, select
 from sqlalchemy.exc import DatabaseError
-from sqlalchemy.sql.selectable import NamedFromClause
-from sqlalchemy.sql.visitors import (
-    ExternallyTraversible,
-    replacement_traverse,
-    traverse,
-)
 from sqlalchemy.types import Integer, Numeric, String, TypeEngine
 from typing_extensions import Self
 
+from datafaker.dialects import StdDev
 from datafaker.providers import DistributionProvider
 from datafaker.utils import logger
 
@@ -127,9 +122,6 @@ class Proposer(ABC):
 
         - SELECT AVG("table".column) FROM "table" WHERE "table".column > 3
         - SELECT AVG(a.column) FROM table AS a WHERE a.column > 3
-
-        Or, if you are using the SQLAlchemy ORM, pass the query through
-          ``duckdb_workaround`` before compiling it.
         """
         return {}
 
@@ -163,7 +155,9 @@ class PredefinedProposer(Proposer):
     that have been defined previously.
     """
 
-    SELECT_AGGREGATE_RE = re.compile(r"SELECT (.*) FROM ([A-Za-z_][A-Za-z0-9_]*)")
+    SELECT_AGGREGATE_RE = re.compile(
+        r"SELECT (.*) FROM ((?:[A-Za-z_][A-Za-z0-9_]*\.)?[A-Za-z_][A-Za-z0-9_]*)"
+    )
     AS_CLAUSE_RE = re.compile(r" *(.+) +AS +([A-Za-z_][A-Za-z0-9_]*) *")
     SRC_STAT_NAME_RE = re.compile(r'\bSRC_STATS\["([^]]*)"\].*')
 
@@ -220,7 +214,7 @@ class PredefinedProposer(Proposer):
                 # This query is one that this generator is interested in
                 sam = None if query is None else self.SELECT_AGGREGATE_RE.match(query)
                 # sam.group(2) is the table name from the FROM clause of the query
-                if sam and name == f"auto__{sam.group(2)}":
+                if sam and name == f"auto__{sam.group(2).split('.')[-1]}":
                     # name is auto__{table_name}, so it's a select_aggregate,
                     # so we split up its clauses
                     sacs = [
@@ -290,57 +284,6 @@ class ProposerFactory(ABC):
         """Get the proposers appropriate to these columns."""
 
 
-class TableReplacer:
-    """
-    Replaces tables with aliased tables.
-
-    We need this to work around a DuckDB problem:
-    If we are using the ORM code to select a column ``c`` from a table
-    ``t.parquet``, then DuckDB expects the SQL
-    ``SELECT "t.parquet".c FROM "t.parquet"`` if ``t.parquet`` is an actual
-    table in the database, or ``SELECT t.c FROM "t.parquet"`` if ``t.parquet``
-    names a file. The best way around this seems to be to use an aliased table,
-    which works in both cases: ``SELECT a.c FROM "t.parquet" AS a``, and the
-    best way for that to happen seems to be to use ``replacement_traverse``.
-    """
-
-    def __init__(self, table: Table) -> None:
-        """Initialise with the table to be aliased."""
-        self.table = table
-        self.atable = table.alias(f"_{table.name}__alias")
-
-    def replace(
-        self, obj: ExternallyTraversible, **_kw: Any
-    ) -> ExternallyTraversible | None:
-        """Replace columns with the same column on the aliased table."""
-        if isinstance(obj, Column):
-            if obj.table == self.table:
-                return self.atable.columns[obj.name]
-        elif isinstance(obj, Table):
-            return self.atable
-        return None
-
-    def aliased_table(self) -> NamedFromClause:
-        """Get the aliased table."""
-        return self.atable
-
-
-def duckdb_workaround(stmt: ExternallyTraversible) -> Any:
-    """
-    Transform a SQLAlchemy ORM statement to work around DuckDB issues.
-
-    :param stmt: An ORM statement, such as the return value of ``select``.
-    :return: An ORM statement, transformed if necessary.
-    """
-    tables: list[Table] = []
-    traverse(stmt, {}, {"table": tables.append})
-    for t in tables:
-        tr = TableReplacer(t)
-        opts: Mapping[str, Any] = {}
-        stmt = replacement_traverse(stmt, opts, tr.replace)  # type: ignore
-    return stmt
-
-
 def fit_from_buckets(xs: Sequence[NumericType], ys: Sequence[NumericType]) -> float:
     """Calculate the fit by comparing a pair of lists of buckets."""
     sum_diff_squared = sum(map(lambda t, a: (t - a) * (t - a), xs, ys))
@@ -392,8 +335,8 @@ class Buckets:
                     # catches errors if SQLAlchemy returns something that
                     # isn't a number for some other unknown reason.
                     pass
-            self.mean = mean
-            self.stddev = stddev
+        self.mean = mean
+        self.stddev = stddev
 
     @classmethod
     def make_buckets(
@@ -414,15 +357,11 @@ class Buckets:
         """
         with engine.connect() as connection:
             result = connection.execute(
-                duckdb_workaround(
-                    select(
-                        func.avg(column).label("mean"),
-                        func.stddev(column).label("stddev"),
-                        func.count(column).label(  # pylint: disable=not-callable
-                            "count"
-                        ),
-                    ).select_from(table)
-                )
+                select(
+                    func.avg(column).label("mean"),
+                    StdDev(column).label("stddev"),
+                    func.count(column).label("count"),  # pylint: disable=not-callable
+                ).select_from(table)
             ).first()
             if result is None or result.stddev is None or getattr(result, "count") < 2:
                 return None

@@ -4,6 +4,10 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import cast
 
+from sqlalchemy import Column, Dialect, Table, func, select
+from sqlalchemy.sql.elements import literal_column
+
+from datafaker.dialects import IsNull, Random
 from datafaker.interactive.base import DbCmd, TableEntry
 
 
@@ -12,36 +16,49 @@ class MissingnessType:
     """The functions required for applying missingness."""
 
     SAMPLED = "column_presence.sampled"
-    SAMPLED_QUERY = (
-        "SELECT COUNT(*) AS row_count, {result_names} FROM "
-        '(SELECT {column_is_nulls} FROM "{table}" ORDER BY RANDOM() LIMIT {count})'
-        " AS __t GROUP BY {result_names}"
-    )
     name: str
     query: str
     comments: list[str]
-    columns: list[str]
+    columns: list[Column]
 
     @classmethod
-    def sampled_query(cls, table: str, count: int, column_names: Iterable[str]) -> str:
+    def sampled_query(
+        cls,
+        table: Table,
+        count: int,
+        columns: Iterable[Column],
+        dialect: Dialect,
+    ) -> str:
         """
         Construct a query to make a sampling of the named rows of the table.
 
-        :param table: The name of the table to sample.
+        :param table: The table to sample.
         :param count: The number of samples to get.
-        :param column_names: The columns to fetch.
+        :param columns: The columns to fetch.
+        :param dialect: The SQLAlchemy dialect (e.g. ``mssql.dialect()``).
         :return: The SQL query to do the sampling.
         """
-        result_names = ", ".join([f"{c}__is_null" for c in column_names])
-        column_is_nulls = ", ".join(
-            [f"{c} IS NULL AS {c}__is_null" for c in column_names]
+        results = [IsNull(c).label(c.name + "__is_null") for c in columns]
+        subquery = (
+            select(*results)
+            .select_from(table)
+            .order_by(Random())
+            .limit(literal_column(str(count)))
+            .subquery("__t")
         )
-        return cls.SAMPLED_QUERY.format(
-            result_names=result_names,
-            column_is_nulls=column_is_nulls,
-            table=table,
-            count=count,
+        result_labels = [subquery.c[r.name].label(r.name) for r in results]
+        query = (
+            select(
+                func.count().label("row_count"), *result_labels  # pylint: disable=E1102
+            )
+            .select_from(subquery)
+            .group_by(*result_labels)
+            .compile(
+                dialect=dialect,
+                compile_kwargs={"literal_binds": True},
+            )
         )
+        return str(query)
 
 
 @dataclass
@@ -115,6 +132,7 @@ data from the database. Use 'quit' to exit this tool."""
                 columns=[],
             )
         elif len(mgs) == 1:
+            table = self.metadata.tables[table_name]
             mg = mgs[0]
             mg_name = mg.get("name", None)
             if isinstance(mg_name, str):
@@ -125,7 +143,10 @@ data from the database. Use 'quit' to exit this tool."""
                         name=mg_name,
                         query=query,
                         comments=comments,
-                        columns=mg.get("columns_assigned", []),
+                        columns=[
+                            table.columns[colname]
+                            for colname in mg.get("columns_assigned", [])
+                        ],
                     )
         if old is None:
             return None
@@ -194,7 +215,7 @@ data from the database. Use 'quit' to exit this tool."""
                         "kwargs": {
                             "patterns": f'SRC_STATS["{src_stat_key}"]["results"]'
                         },
-                        "columns": entry.new_type.columns,
+                        "columns": [c.name for c in entry.new_type.columns],
                     }
                 ]
                 src_stats.append(
@@ -327,9 +348,10 @@ data from the database. Use 'quit' to exit this tool."""
         self._set_type(
             MissingnessType.SAMPLED,
             MissingnessType.sampled_query(
-                entry.name,
+                self.metadata.tables[entry.name],
                 count,
                 self.get_nullable_columns(entry.name),
+                dialect=self.sync_engine.dialect,
             ),
             [
                 "The missingness patterns and how often they appear in a"

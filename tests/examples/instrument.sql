@@ -14,8 +14,8 @@ ALTER TABLE ONLY public.manufacturer ADD CONSTRAINT manufacturer_pkey PRIMARY KE
 
 ALTER TABLE public.manufacturer OWNER TO postgres;
 
-INSERT INTO public.manufacturer VALUES (1, 'Blender', 'January 8 04:05:06 1951 PST');
-INSERT INTO public.manufacturer VALUES (2, 'Gibbs', 'March 4 07:08:09 1959 PST');
+INSERT INTO public.manufacturer VALUES (1, 'Blender', '1951-01-08 12:05:06+00:00');
+INSERT INTO public.manufacturer VALUES (2, 'Gibbs', '1959-03-04 15:08:09+00:00');
 
 CREATE TABLE public.model (
     id INTEGER NOT NULL,
@@ -30,9 +30,9 @@ ALTER TABLE ONLY public.model
 
 ALTER TABLE public.model OWNER TO postgres;
 
-INSERT INTO public.model VALUES (1, 'S-Type', 1, 'April 20 04:05:06 1952 PST');
-INSERT INTO public.model VALUES (2, 'Pulse', 1, 'December 2 02:15:06 1953 PST');
-INSERT INTO public.model VALUES (3, 'Paul Leslie', 2, 'February 20 04:05:06 1960 PST');
+INSERT INTO public.model VALUES (1, 'S-Type', 1, '1952-04-20 04:05:06+00:00');
+INSERT INTO public.model VALUES (2, 'Pulse', 1, '1953-12-02 02:15:06+00:00');
+INSERT INTO public.model VALUES (3, 'Paul Leslie', 2, '1960-02-20 04:05:06+00:00');
 
 CREATE TABLE public.string (
     id INTEGER NOT NULL,

@@ -10,19 +10,20 @@ from typing import Any, Iterable
 import yaml
 from sqlalchemy import Connection, MetaData, func, select
 
+from datafaker.dialects import SecondsDifference, StdDev
 from datafaker.interactive.base import DbCmd
 from datafaker.interactive.generators import GeneratorCmd
 from datafaker.proposers.choice import ChoiceProposerFactory
-from datafaker.proposers.intervals import SecondsDifference
 from tests.utils import (
+    DuckTestDb,
     GeneratesDBTestCase,
+    MsSqlTestDb,
     RequiresDBTestCase,
     TestDbCmdMixin,
-    TestDuckDb,
 )
 
 
-class TestGeneratorCmd(GeneratorCmd, TestDbCmdMixin):
+class MockGeneratorCmd(GeneratorCmd, TestDbCmdMixin):
     """GeneratorCmd but mocked"""
 
     def get_proposals(self) -> dict[str, tuple[int, str, list[str]]]:
@@ -43,9 +44,9 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
     database_name = "instrument"
     schema_name = "public"
 
-    def _get_cmd(self, config: MutableMapping[str, Any]) -> TestGeneratorCmd:
+    def _get_cmd(self, config: MutableMapping[str, Any]) -> MockGeneratorCmd:
         """Get the command we are using for this test case."""
-        return TestGeneratorCmd(
+        return MockGeneratorCmd(
             DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
         )
 
@@ -166,7 +167,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertEqual(
                 gc.config["src-stats"][0]["query"],
                 (
-                    f"SELECT AVG({column}) AS mean__{column}, STDDEV({column})"
+                    f"SELECT avg({table}.{column}) AS mean__{column}, STDDEV({table}.{column})"
                     f' AS stddev__{column} FROM "{table}"'
                 ),
             )
@@ -190,7 +191,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertEqual(
                 gc.config["src-stats"][0]["query"],
                 (
-                    f"SELECT AVG({column}) AS mean__{column}, STDDEV({column})"
+                    f"SELECT avg({table}.{column}) AS mean__{column}, STDDEV({table}.{column})"
                     f' AS stddev__{column} FROM "{table}"'
                 ),
             )
@@ -227,9 +228,11 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertEqual(
                 gc.config["src-stats"][0]["query"],
                 (
-                    f'SELECT {column} AS value FROM "{table}"'
-                    f" WHERE {column} IS NOT NULL"
-                    f" GROUP BY value ORDER BY COUNT({column}) DESC"
+                    "SELECT _counted.value \n"
+                    f'FROM (SELECT "{column}" AS value, count("{column}") AS count \n'
+                    f"FROM {table} \n"
+                    f'WHERE "{column}" IS NOT NULL GROUP BY "{column}") '
+                    "AS _counted ORDER BY _counted.count DESC"
                 ),
             )
 
@@ -469,8 +472,8 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
                 {
                     "AVG(frequency) AS mean__frequency",
                     "STDDEV(frequency) AS stddev__frequency",
-                    f"AVG({column}) AS mean__{column}",
-                    f"STDDEV({column}) AS stddev__{column}",
+                    f"avg(string.{column}) AS mean__{column}",
+                    f"STDDEV(string.{column}) AS stddev__{column}",
                 },
             )
 
@@ -583,9 +586,9 @@ class ConfigureGeneratorsWithSrc2Tests(GeneratesDBTestCase):
     copy_files = ["row_generators.py", "story_generators.py"]
     copy_from_directory = Path("examples")
 
-    def _get_cmd(self, config: MutableMapping[str, Any]) -> TestGeneratorCmd:
+    def _get_cmd(self, config: MutableMapping[str, Any]) -> MockGeneratorCmd:
         """Get the command we are using for this test case."""
-        return TestGeneratorCmd(
+        return MockGeneratorCmd(
             DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
         )
 
@@ -628,7 +631,7 @@ class ConfigureGeneratorsWithSrc2Tests(GeneratesDBTestCase):
             )
             src_result = conn.execute(
                 select(
-                    func.avg(src_diff).label("mean"), func.stddev(src_diff).label("sd")
+                    func.avg(src_diff).label("mean"), StdDev(src_diff).label("sd")
                 ).select_from(self.metadata.tables[table])
             ).one()
         assert self.dst_engine is not None
@@ -639,7 +642,7 @@ class ConfigureGeneratorsWithSrc2Tests(GeneratesDBTestCase):
             )
             dst_result = conn.execute(
                 select(
-                    func.avg(dst_diff).label("mean"), func.stddev(dst_diff).label("sd")
+                    func.avg(dst_diff).label("mean"), StdDev(dst_diff).label("sd")
                 ).select_from(self.dst_metadata.tables[table])
             ).one()
         self.assertAlmostEqual(
@@ -651,7 +654,14 @@ class ConfigureGeneratorsWithSrc2Tests(GeneratesDBTestCase):
 class ConfigureGeneratorsWithSrc2DuckDbTests(ConfigureGeneratorsWithSrc2Tests):
     """Test `configure-generators` with `src2.dump` with DuckDB."""
 
-    database_type = TestDuckDb
+    database_type = DuckTestDb
+
+
+class ConfigureGeneratorsWithSrc2MsSqlTests(ConfigureGeneratorsWithSrc2Tests):
+    """Test `configure-generators` with `src2.dump` with DuckDB."""
+
+    database_type = MsSqlTestDb
+    schema_name = None
 
 
 class ChoiceMeasurementTableStats:
@@ -682,12 +692,12 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
         ChoiceProposerFactory.SAMPLE_COUNT = 500
         ChoiceProposerFactory.SUPPRESS_COUNT = 5
 
-    def _get_cmd(self, config: MutableMapping[str, Any]) -> TestGeneratorCmd:
-        return TestGeneratorCmd(
+    def _get_cmd(self, config: MutableMapping[str, Any]) -> MockGeneratorCmd:
+        return MockGeneratorCmd(
             DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
         )
 
-    def _propose(self, gc: TestGeneratorCmd) -> dict[str, tuple[int, str, list[str]]]:
+    def _propose(self, gc: MockGeneratorCmd) -> dict[str, tuple[int, str, list[str]]]:
         gc.reset()
         gc.do_propose("")
         return gc.get_proposals()
@@ -838,7 +848,14 @@ class GeneratorsOutputTests(GeneratesDBTestCase):
 class GeneratorsOutputTestsDuckDb(GeneratorsOutputTests):
     """As ``GeneratorsOutputTests`` but with DuckDB."""
 
-    database_type = TestDuckDb
+    database_type = DuckTestDb
+
+
+class GeneratorsOutputTestsMsSql(GeneratorsOutputTests):
+    """As ``GeneratorsOutputTests`` but with MS Sql."""
+
+    database_type = MsSqlTestDb
+    schema_name = None
 
 
 class GeneratorTests(GeneratesDBTestCase):
@@ -848,9 +865,9 @@ class GeneratorTests(GeneratesDBTestCase):
     database_name = "instrument"
     schema_name = "public"
 
-    def _get_cmd(self, config: MutableMapping[str, Any]) -> TestGeneratorCmd:
+    def _get_cmd(self, config: MutableMapping[str, Any]) -> MockGeneratorCmd:
         """We are using configure-generators."""
-        return TestGeneratorCmd(
+        return MockGeneratorCmd(
             DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
         )
 
@@ -938,7 +955,7 @@ class GeneratorTests(GeneratesDBTestCase):
 
     def test_varchar_ns_are_truncated(self) -> None:
         """Tests that mimesis generators for VARCHAR(N) truncate to N characters"""
-        if self.database_type is TestDuckDb:
+        if self.database_type is DuckTestDb:
             # DuckDB does not support limited width VARCHARs
             return
         generator = "generic.text.quote"
@@ -972,4 +989,11 @@ class GeneratorTests(GeneratesDBTestCase):
 class GeneratorTestsDuckDb(GeneratorTests):
     """As ``GeneratorTests`` but with DuckDB."""
 
-    database_type = TestDuckDb
+    database_type = DuckTestDb
+
+
+class GeneratorTestsMsSql(GeneratorTests):
+    """As ``GeneratorTests`` but with M SSql."""
+
+    database_type = MsSqlTestDb
+    schema_name = None

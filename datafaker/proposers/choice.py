@@ -6,14 +6,26 @@ import typing
 from abc import abstractmethod
 from typing import Any, Sequence, Union
 
-from sqlalchemy import Column, CursorResult, Engine, text
+from sqlalchemy import (
+    Column,
+    CursorResult,
+    Engine,
+    desc,
+    func,
+    literal_column,
+    select,
+    table,
+    text,
+)
 
+from datafaker.dialects import Random
 from datafaker.proposers.base import (
     Proposer,
     ProposerFactory,
     dist_gen,
     fit_from_buckets,
 )
+from datafaker.utils import schema_qualified_name
 
 NumericType = Union[int, float]
 
@@ -44,6 +56,61 @@ def zipf_distribution(total: int, bins: int) -> typing.Generator[int, None, None
             yield x
 
 
+def _choice_stmt(  # pylint: disable=R0913,R0917
+    column_name: str,
+    table_name: str,
+    store_counts: bool,
+    sample_count: int | None,
+    suppress_count: int,
+    table_sql: str | None = None,
+) -> Any:
+    """Build a SQLAlchemy SELECT for gathering choice value distributions.
+
+    Compiles to dialect-correct SQL: LIMIT/random() on PostgreSQL/DuckDB,
+    TOP/newid() on MS-SQL.  MS-SQL also forbids ORDER BY inside a subquery
+    without TOP; this function never emits such a clause.
+    """
+    col = literal_column(f'"{column_name}"')
+    tbl = text(table_sql) if table_sql else table(table_name)
+    if sample_count is not None:
+        sample_sub = (
+            select(col.label("value"))
+            .where(col.isnot(None))
+            .select_from(tbl)
+            .order_by(Random())
+            .limit(sample_count)
+            .subquery("_inner")
+        )
+        counted_sub = (
+            select(
+                sample_sub.c.value,
+                func.count(sample_sub.c.value).label("count"),  # pylint: disable=E1102
+            )
+            .group_by(sample_sub.c.value)
+            .subquery("_counted")
+        )
+    else:
+        counted_sub = (
+            select(
+                col.label("value"),
+                func.count(col).label("count"),  # pylint: disable=E1102
+            )
+            .where(col.isnot(None))
+            .select_from(tbl)
+            .group_by(col)
+            .subquery("_counted")
+        )
+    out_cols = [counted_sub.c.value]
+    if store_counts:
+        out_cols.append(counted_sub.c["count"])
+    stmt = select(*out_cols).select_from(counted_sub)
+    if suppress_count > 0:
+        stmt = stmt.where(counted_sub.c["count"] > suppress_count)
+    else:
+        stmt = stmt.order_by(desc(counted_sub.c["count"]))
+    return stmt
+
+
 class ChoiceProposer(Proposer):
     """Base proposer for all proposers producing choices of items."""
 
@@ -58,6 +125,8 @@ class ChoiceProposer(Proposer):
         counts: list[int],
         sample_count: int | None = None,
         suppress_count: int = 0,
+        dialect: Any = None,
+        table_sql: str | None = None,
     ) -> None:
         """Initialise a ChoiceProposer."""
         super().__init__()
@@ -67,33 +136,28 @@ class ChoiceProposer(Proposer):
         estimated_counts = self.get_estimated_counts(counts)
         self._fit = fit_from_buckets(counts, estimated_counts)
 
-        extra_results = ""
-        extra_expo = ""
-        extra_comment = ""
-        if self.STORE_COUNTS:
-            extra_results = f", COUNT({column_name}) AS count"
-            extra_expo = ", count"
-            extra_comment = " and their counts"
+        extra_comment = " and their counts" if self.STORE_COUNTS else ""
+        stmt = _choice_stmt(
+            column_name,
+            table_name,
+            self.STORE_COUNTS,
+            sample_count,
+            suppress_count,
+            table_sql=table_sql,
+        )
+        compile_opts: dict[str, Any] = {"compile_kwargs": {"literal_binds": True}}
+        if dialect is not None:
+            compile_opts["dialect"] = dialect
+        self._query = str(stmt.compile(**compile_opts))
+
         if suppress_count == 0:
             if sample_count is None:
-                self._query = (
-                    f'SELECT {column_name} AS value{extra_results} FROM "{table_name}"'
-                    f" WHERE {column_name} IS NOT NULL GROUP BY value"
-                    f" ORDER BY COUNT({column_name}) DESC"
-                )
                 self._comment = (
                     f"All the values{extra_comment} that appear in column {column_name}"
                     f" of table {table_name}"
                 )
                 self._annotation = None
             else:
-                self._query = (
-                    f"SELECT {column_name} AS value{extra_results} FROM"
-                    f' (SELECT {column_name} FROM "{table_name}"'
-                    f" WHERE {column_name} IS NOT NULL"
-                    f" ORDER BY RANDOM() LIMIT {sample_count})"
-                    f" AS _inner GROUP BY value ORDER BY COUNT({column_name}) DESC"
-                )
                 self._comment = (
                     f"The values{extra_comment} that appear in column {column_name}"
                     f" of a random sample of {sample_count} rows of table {table_name}"
@@ -101,26 +165,12 @@ class ChoiceProposer(Proposer):
                 self._annotation = "sampled"
         else:
             if sample_count is None:
-                self._query = (
-                    f"SELECT value{extra_expo} FROM"
-                    f" (SELECT {column_name} AS value, COUNT({column_name}) AS count"
-                    f' FROM "{table_name}" WHERE {column_name} IS NOT NULL'
-                    f" GROUP BY value ORDER BY count DESC) AS _inner"
-                    f" WHERE {suppress_count} < count"
-                )
                 self._comment = (
                     f"All the values{extra_comment} that appear in column {column_name}"
                     f" of table {table_name} more than {suppress_count} times"
                 )
                 self._annotation = "suppressed"
             else:
-                self._query = (
-                    f"SELECT value{extra_expo} FROM (SELECT value, COUNT(value) AS count FROM"
-                    f' (SELECT {column_name} AS value FROM "{table_name}"'
-                    f" WHERE {column_name} IS NOT NULL ORDER BY RANDOM() LIMIT {sample_count})"
-                    f" AS _inner GROUP BY value ORDER BY count DESC)"
-                    f" AS _inner WHERE {suppress_count} < count"
-                )
                 self._comment = (
                     f"The values{extra_comment} that appear more than {suppress_count} times"
                     f" in column {column_name}, out of a random sample of {sample_count} rows"
@@ -293,7 +343,7 @@ class ChoiceProposerFactory(ProposerFactory):
     SAMPLE_COUNT = MAXIMUM_CHOICES
     SUPPRESS_COUNT = 7
 
-    def get_proposers(
+    def get_proposers(  # pylint: disable=too-many-locals
         self, columns: list[Column], engine: Engine
     ) -> Sequence[Proposer]:
         """Get the generators appropriate to these columns."""
@@ -302,27 +352,51 @@ class ChoiceProposerFactory(ProposerFactory):
         column = columns[0]
         column_name = column.name
         table_name = column.table.name
+        table_sql = schema_qualified_name(table_name, engine)
+        src_table = column.table
+        dialect = engine.dialect
+        col = literal_column(f'"{column_name}"')
+        src_table = column.table  # preserves schema for schema-qualified databases
         generators = []
         with engine.connect() as connection:
-            results = connection.execute(
-                text(
-                    f'SELECT "{column_name}" AS v, COUNT("{column_name}")'
-                    f' AS f FROM "{table_name}" GROUP BY v'
-                    f" ORDER BY f DESC LIMIT {MAXIMUM_CHOICES + 1}"
+            stmt_count = (
+                select(
+                    col.label("v"),
+                    func.count(col).label("f"),  # pylint: disable=E1102
                 )
+                .select_from(src_table)
+                .group_by(col)
+                .order_by(desc(func.count(col)))  # pylint: disable=E1102
+                .limit(MAXIMUM_CHOICES + 1)
             )
+            results = connection.execute(stmt_count)
             if results is not None and results.rowcount <= MAXIMUM_CHOICES:
                 vg = ValueGatherer(results, self.SUPPRESS_COUNT)
                 if vg.counts:
                     generators += [
                         ZipfChoiceProposer(
-                            table_name, column_name, vg.values, vg.counts
+                            table_name,
+                            column_name,
+                            vg.values,
+                            vg.counts,
+                            dialect=dialect,
+                            table_sql=table_sql,
                         ),
                         UniformChoiceProposer(
-                            table_name, column_name, vg.values, vg.counts
+                            table_name,
+                            column_name,
+                            vg.values,
+                            vg.counts,
+                            dialect=dialect,
+                            table_sql=table_sql,
                         ),
                         WeightedChoiceProposer(
-                            table_name, column_name, vg.cvs, vg.counts
+                            table_name,
+                            column_name,
+                            vg.cvs,
+                            vg.counts,
+                            dialect=dialect,
+                            table_sql=table_sql,
                         ),
                     ]
                 if vg.counts_not_suppressed:
@@ -333,6 +407,8 @@ class ChoiceProposerFactory(ProposerFactory):
                             vg.values_not_suppressed,
                             vg.counts_not_suppressed,
                             suppress_count=self.SUPPRESS_COUNT,
+                            dialect=dialect,
+                            table_sql=table_sql,
                         ),
                         UniformChoiceProposer(
                             table_name,
@@ -340,6 +416,8 @@ class ChoiceProposerFactory(ProposerFactory):
                             vg.values_not_suppressed,
                             vg.counts_not_suppressed,
                             suppress_count=self.SUPPRESS_COUNT,
+                            dialect=dialect,
+                            table_sql=table_sql,
                         ),
                         WeightedChoiceProposer(
                             table_name=table_name,
@@ -347,16 +425,26 @@ class ChoiceProposerFactory(ProposerFactory):
                             values=vg.cvs_not_suppressed,
                             counts=vg.counts_not_suppressed,
                             suppress_count=self.SUPPRESS_COUNT,
+                            dialect=dialect,
+                            table_sql=table_sql,
                         ),
                     ]
-            sampled_results = connection.execute(
-                text(
-                    f"SELECT v, COUNT(v) AS f FROM"
-                    f' (SELECT "{column_name}" as v FROM "{table_name}"'
-                    f" ORDER BY RANDOM() LIMIT {self.SAMPLE_COUNT})"
-                    f" AS _inner GROUP BY v ORDER BY f DESC"
-                )
+            inner = (
+                select(col.label("v"))
+                .select_from(src_table)
+                .order_by(Random())
+                .limit(self.SAMPLE_COUNT)
+                .subquery("_inner")
             )
+            stmt_sample = (
+                select(
+                    inner.c.v, func.count(inner.c.v).label("f")  # pylint: disable=E1102
+                )  # pylint: disable=E1102
+                .select_from(inner)
+                .group_by(inner.c.v)
+                .order_by(desc(func.count(inner.c.v)))  # pylint: disable=E1102
+            )
+            sampled_results = connection.execute(stmt_sample)
             if sampled_results is not None:
                 vg = ValueGatherer(sampled_results, self.SUPPRESS_COUNT)
                 if vg.counts:
@@ -367,6 +455,8 @@ class ChoiceProposerFactory(ProposerFactory):
                             vg.values,
                             vg.counts,
                             sample_count=self.SAMPLE_COUNT,
+                            dialect=dialect,
+                            table_sql=table_sql,
                         ),
                         UniformChoiceProposer(
                             table_name,
@@ -374,6 +464,8 @@ class ChoiceProposerFactory(ProposerFactory):
                             vg.values,
                             vg.counts,
                             sample_count=self.SAMPLE_COUNT,
+                            dialect=dialect,
+                            table_sql=table_sql,
                         ),
                         WeightedChoiceProposer(
                             table_name,
@@ -381,6 +473,8 @@ class ChoiceProposerFactory(ProposerFactory):
                             vg.cvs,
                             vg.counts,
                             sample_count=self.SAMPLE_COUNT,
+                            dialect=dialect,
+                            table_sql=table_sql,
                         ),
                     ]
                 if vg.counts_not_suppressed:
@@ -392,6 +486,8 @@ class ChoiceProposerFactory(ProposerFactory):
                             vg.counts_not_suppressed,
                             sample_count=self.SAMPLE_COUNT,
                             suppress_count=self.SUPPRESS_COUNT,
+                            dialect=dialect,
+                            table_sql=table_sql,
                         ),
                         UniformChoiceProposer(
                             table_name,
@@ -400,6 +496,8 @@ class ChoiceProposerFactory(ProposerFactory):
                             vg.counts_not_suppressed,
                             sample_count=self.SAMPLE_COUNT,
                             suppress_count=self.SUPPRESS_COUNT,
+                            dialect=dialect,
+                            table_sql=table_sql,
                         ),
                         WeightedChoiceProposer(
                             table_name=table_name,
@@ -408,6 +506,8 @@ class ChoiceProposerFactory(ProposerFactory):
                             counts=vg.counts_not_suppressed,
                             sample_count=self.SAMPLE_COUNT,
                             suppress_count=self.SUPPRESS_COUNT,
+                            dialect=dialect,
+                            table_sql=table_sql,
                         ),
                     ]
         return generators

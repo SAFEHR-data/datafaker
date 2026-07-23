@@ -12,8 +12,9 @@ from datafaker.main import app
 from datafaker.settings import Settings, SettingsError
 from tests.utils import (
     DatafakerTestCase,
+    DuckTestDb,
     GeneratesDBTestCase,
-    TestDuckDb,
+    MsSqlTestDb,
     get_test_settings,
 )
 
@@ -142,7 +143,10 @@ class TestCLI(DatafakerTestCase):
     @patch.dict(os.environ, {"SRC_SCHEMA": "myschema"}, clear=True)
     def test_make_tables_errors_if_src_dsn_missing(self) -> None:
         """Test the make-tables sub-command refuses to work if SRC_DSN is not set."""
-
+        self.assertFalse(
+            (self.get_abs_example_dir() / "does-not-exist.yaml").exists(),
+            "Precondition failed: tests/examples/does-not-exist.yaml must not exist",
+        )
         self.assertRaises(
             SettingsError,
             runner.invoke,
@@ -273,7 +277,10 @@ class TestCLI(DatafakerTestCase):
         """Test the validate-config sub-command."""
         result = runner.invoke(
             app,
-            ["validate-config", "tests/examples/example_config.yaml"],
+            [
+                "validate-config",
+                str(self.get_abs_example_dir() / "example_config.yaml"),
+            ],
             catch_exceptions=False,
         )
 
@@ -283,7 +290,10 @@ class TestCLI(DatafakerTestCase):
         """Test the validate-config sub-command."""
         result = runner.invoke(
             app,
-            ["validate-config", "tests/examples/invalid_config.yaml"],
+            [
+                "validate-config",
+                str(self.get_abs_example_dir() / "invalid_config.yaml"),
+            ],
             catch_exceptions=False,
         )
 
@@ -549,4 +559,10 @@ class TestsCliCreate(GeneratesDBTestCase):
 class TestCliCreateDuckDb(TestsCliCreate):
     """Tests that use the CLI to generate output in a DuckDB database."""
 
-    database_type = TestDuckDb
+    database_type = DuckTestDb
+
+
+class TestCliCreateMsSql(TestsCliCreate):
+    """Tests that use the CLI to generate output in an MS Sql database."""
+
+    database_type = MsSqlTestDb

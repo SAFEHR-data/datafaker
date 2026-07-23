@@ -8,6 +8,7 @@ import random
 import re
 import string
 import sys
+import typing
 from collections.abc import Mapping, MutableSequence, Sequence, Sized
 from pathlib import Path
 from types import ModuleType
@@ -16,6 +17,7 @@ from typing import Any, Callable, Final, Generator, Generic, Iterable, TypeVar
 import yaml
 from jsonschema.exceptions import ValidationError
 from jsonschema.validators import validate
+from sqlalchemy.engine import make_url
 
 from datafaker.settings import SettingsError
 
@@ -90,6 +92,44 @@ def import_file(file_path: str) -> ModuleType:
     except FileNotFoundError as e:
         raise SettingsError(f"No module found '{file_path}'") from e
     return module
+
+
+_ASYNC_DRIVER_MAP: dict[str, str] = {
+    "postgresql": "postgresql+asyncpg",
+    "mssql": "mssql+aioodbc",
+}
+
+
+def make_async_dsn(db_dsn: str) -> str:
+    """Return an async-driver DSN for the given sync DSN.
+
+    Replaces the driver component based on the dialect so that both PostgreSQL
+    and MS-SQL connections can be made async without hardcoding dialect names at
+    each call site.  Raises ``ValueError`` for dialects with no known async driver.
+    """
+    url = make_url(db_dsn)
+    dialect = url.drivername.split("+")[0]
+    async_driver = _ASYNC_DRIVER_MAP.get(dialect)
+    if async_driver is None:
+        raise ValueError(
+            f"No async driver is registered for dialect '{dialect}'. "
+            f"Add an entry to _ASYNC_DRIVER_MAP in datafaker/utils.py."
+        )
+    return str(url.set(drivername=async_driver))
+
+
+def schema_qualified_name(table_name: str, engine: Any) -> str:
+    """Return schema-qualified table name using the engine's schema_translate_map.
+
+    When create_db_engine sets schema_translate_map={None: schema_name}, this
+    reads it back so raw SQL strings (which schema_translate_map doesn't rewrite)
+    can include the correct qualifier.
+    """
+    schema_map = engine.get_execution_options().get("schema_translate_map", {})
+    schema = schema_map.get(None)
+    if schema and "." not in table_name:
+        return f"{schema}.{table_name}"
+    return table_name
 
 
 def info_or_lower(record: logging.LogRecord) -> bool:
@@ -522,6 +562,27 @@ def generators_require_stats(config: Mapping) -> bool:
     for error in errors:
         logger.error(*error)
     return "SRC_STATS" in symbols
+
+
+def unqualify_fk_target(fk: str, table_names: typing.Optional[frozenset] = None) -> str:
+    """
+    Drop the schema qualifier from a 3-part FK target.
+
+    Converts ``schema.table.column`` → ``table.column`` so that SQLAlchemy
+    can resolve the reference against a MetaData whose tables were registered
+    without a schema prefix. 2-part ``table.column`` targets are returned
+    unchanged.
+
+    When ``table_names`` is supplied, a 3-part target whose first two parts
+    form a known table name (e.g. ``manufacturer.parquet``) is left unchanged
+    because the dot is part of the table name, not a schema prefix.
+    """
+    parts = fk.split(".")
+    if len(parts) == 3:
+        if table_names is not None and f"{parts[0]}.{parts[1]}" in table_names:
+            return fk
+        return f"{parts[1]}.{parts[2]}"
+    return fk
 
 
 def split_column_full_name(col_fullname: str) -> tuple[str, str]:

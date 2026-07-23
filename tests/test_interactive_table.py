@@ -11,15 +11,15 @@ from datafaker.serialize_metadata import dict_to_metadata
 from tests.utils import RequiresDBTestCase, TestDbCmdMixin
 
 
-class TestTableCmd(TableCmd, TestDbCmdMixin):
+class MockTableCmd(TableCmd, TestDbCmdMixin):
     """TableCmd but mocked"""
 
 
 class ConfigureTablesTests(RequiresDBTestCase):
     """Testing configure-tables."""
 
-    def _get_cmd(self, config: MutableMapping[str, Any]) -> TestTableCmd:
-        return TestTableCmd(
+    def _get_cmd(self, config: MutableMapping[str, Any]) -> MockTableCmd:
+        return MockTableCmd(
             DbCmd.Settings(
                 self.dsn,
                 self.schema_name,
@@ -267,13 +267,13 @@ class ConfigureTablesSrcTests(ConfigureTablesTests):
             self.assertEqual(len(tc.column_items), 1)
             self.assertEqual(len(tc.column_items[0]), to_get_count)
             tc.reset()
-            tc.do_data(f"{to_get_count} name 13")
+            tc.do_data("1000 name 13")
             self.assertEqual(len(tc.column_items), 1)
             self.assertEqual(
                 set(tc.column_items[0]), set(filter(lambda n: 13 <= len(n), name_set))
             )
             tc.reset()
-            tc.do_data(f"{to_get_count} name 16")
+            tc.do_data("1000 name 16")
             self.assertEqual(len(tc.column_items), 1)
             self.assertEqual(
                 set(tc.column_items[0]), set(filter(lambda n: 16 <= len(n), name_set))
@@ -393,7 +393,7 @@ class ConfigureTablesInstrumentsTests(ConfigureTablesTests):
                 },
             },
         }
-        with TestTableCmd(
+        with MockTableCmd(
             DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
         ) as tc:
             tc.do_next("manufacturer")
@@ -437,7 +437,7 @@ class ConfigureTablesInstrumentsTests(ConfigureTablesTests):
                 },
             },
         }
-        with TestTableCmd(
+        with MockTableCmd(
             DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
         ) as tc:
             tc.do_next("signature_model")
@@ -472,7 +472,7 @@ class TrickyTests(ConfigureTablesTests):
     database_name = "tricky"
     schema_name = "public"
 
-    def do_and_test_peek_tricky(self, tc: TestTableCmd) -> None:
+    def do_and_test_peek_tricky(self, tc: MockTableCmd) -> None:
         """Peek the "names" table and check the output."""
         tc.reset()
         tc.do_peek("")
@@ -537,7 +537,7 @@ class TrickyTests(ConfigureTablesTests):
         """
         Select with repeated fields (#70).
         """
-        with TestTableCmd(
+        with MockTableCmd(
             DbCmd.Settings(
                 self.dsn,
                 self.schema_name,

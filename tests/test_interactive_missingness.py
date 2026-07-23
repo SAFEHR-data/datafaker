@@ -10,7 +10,7 @@ from datafaker.interactive.base import DbCmd
 from tests.utils import GeneratesDBTestCase, RequiresDBTestCase, TestDbCmdMixin
 
 
-class TestMissingnessCmd(MissingnessCmd, TestDbCmdMixin):
+class MockMissingnessCmd(MissingnessCmd, TestDbCmdMixin):
     """MissingnessCmd but mocked"""
 
 
@@ -21,9 +21,9 @@ class ConfigureMissingnessTests(RequiresDBTestCase):
     database_name = "instrument"
     schema_name = "public"
 
-    def _get_cmd(self, config: MutableMapping[str, Any]) -> TestMissingnessCmd:
+    def _get_cmd(self, config: MutableMapping[str, Any]) -> MockMissingnessCmd:
         """We are using configure-missingness."""
-        return TestMissingnessCmd(
+        return MockMissingnessCmd(
             DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
         )
 
@@ -56,15 +56,19 @@ class ConfigureMissingnessTests(RequiresDBTestCase):
                 mc.config["src-stats"][0]["name"],
                 "missing_auto__signature_model__0",
             )
+            q: str = mc.config["src-stats"][0]["query"]
+            q = q.replace("\n", " ").replace("  ", " ").replace("  ", " ")
             self.assertEqual(
-                mc.config["src-stats"][0]["query"],
+                q,
                 (
-                    "SELECT COUNT(*) AS row_count,"
-                    " player_id__is_null, based_on__is_null FROM"
-                    " (SELECT player_id IS NULL AS player_id__is_null,"
-                    " based_on IS NULL AS based_on__is_null FROM"
-                    ' "signature_model" ORDER BY RANDOM() LIMIT 1000)'
-                    " AS __t GROUP BY player_id__is_null, based_on__is_null"
+                    "SELECT count(*) AS row_count,"
+                    " __t.player_id__is_null AS player_id__is_null, "
+                    "__t.based_on__is_null AS based_on__is_null FROM"
+                    " (SELECT signature_model.player_id IS NULL AS player_id__is_null,"
+                    " signature_model.based_on IS NULL AS based_on__is_null FROM"
+                    " signature_model ORDER BY RANDOM() LIMIT 1000)"
+                    " AS __t GROUP BY __t.player_id__is_null,"
+                    " __t.based_on__is_null"
                 ),
             )
 
@@ -76,8 +80,8 @@ class ConfigureMissingnessTestsWithGeneration(GeneratesDBTestCase):
     database_name = "instrument"
     schema_name = "public"
 
-    def _get_cmd(self, config: MutableMapping[str, Any]) -> TestMissingnessCmd:
-        return TestMissingnessCmd(
+    def _get_cmd(self, config: MutableMapping[str, Any]) -> MockMissingnessCmd:
+        return MockMissingnessCmd(
             DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
         )
 

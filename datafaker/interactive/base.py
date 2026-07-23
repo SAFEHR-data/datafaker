@@ -10,7 +10,7 @@ from typing import Any, Optional, Type
 
 import sqlalchemy
 from prettytable import PrettyTable
-from sqlalchemy import Engine, ForeignKey, MetaData, Table
+from sqlalchemy import Engine, ForeignKey, MetaData, Table, func, or_, select
 from sqlalchemy.exc import DatabaseError, SQLAlchemyError
 from typing_extensions import Self
 
@@ -19,6 +19,7 @@ from datafaker.db_utils import (
     fk_refers_to_ignored_table,
     get_sync_engine,
 )
+from datafaker.dialects import Random
 from datafaker.utils import T, get_property
 
 
@@ -319,14 +320,10 @@ class DbCmd(ABC, cmd.Cmd):
         self.config["src-stats"] = new_src_stats
         return new_src_stats
 
-    def get_nullable_columns(self, table_name: str) -> list[str]:
+    def get_nullable_columns(self, table_name: str) -> list[sqlalchemy.Column]:
         """Get the names of the nullable columns in the named table."""
         metadata_table = self.metadata.tables[table_name]
-        return [
-            str(name)
-            for name, column in metadata_table.columns.items()
-            if column.nullable
-        ]
+        return [column for column in metadata_table.columns.values() if column.nullable]
 
     def find_entry_index_by_table_name(self, table_name: str) -> int | None:
         """Get the index of the table entry of the named table."""
@@ -352,17 +349,14 @@ class DbCmd(ABC, cmd.Cmd):
             return
         table_name = self.table_name()
         nullable_columns = self.get_nullable_columns(table_name)
-        colcounts = [f', COUNT("{nnc}") AS "{nnc}"' for nnc in nullable_columns]
+        tbl = self.table_metadata()
+        count_exprs = [func.count().label("row_count")] + [  # pylint: disable=E1102
+            func.count(tbl.c[col.name]).label(col.name)  # pylint: disable=E1102
+            for col in nullable_columns
+        ]
+        stmt = select(*count_exprs).select_from(tbl)
         with self.sync_engine.connect() as connection:
-            result = (
-                connection.execute(
-                    sqlalchemy.text(
-                        f'SELECT COUNT(*) AS row_count{"".join(colcounts)} FROM "{table_name}"'
-                    )
-                )
-                .mappings()
-                .first()
-            )
+            result = connection.execute(stmt).mappings().first()
             if result is None:
                 self.print("Could not count rows in table {0}", table_name)
                 return
@@ -411,23 +405,24 @@ class DbCmd(ABC, cmd.Cmd):
         max_peek_rows = 25
         if len(self._table_entries) <= self.table_index:
             return
-        table_name = self.table_name()
         col_names = arg.split()
         if not col_names:
             col_names = self._get_column_names()
-        nonnulls = [f'"{cn}" IS NOT NULL' for cn in col_names]
+        table = self.table_metadata()
+        col_exprs = [table.columns[cn] for cn in col_names]
+        nonnull_clauses = [ce.isnot(None) for ce in col_exprs]
+        stmt = (
+            select(*col_exprs)
+            .select_from(table)
+            .where(or_(*nonnull_clauses))
+            .order_by(Random())
+            .limit(max_peek_rows)
+        )
         with self.sync_engine.connect() as connection:
-            cols = ", ".join(f'"{cn}"' for cn in col_names)
-            where = "WHERE" if nonnulls else ""
-            nonnull = " OR ".join(nonnulls)
-            query = sqlalchemy.text(
-                f'SELECT {cols} FROM "{table_name}" {where} {nonnull}'
-                f" ORDER BY RANDOM() LIMIT {max_peek_rows}"
-            )
             try:
-                result = connection.execute(query)
+                result = connection.execute(stmt)
             except SQLAlchemyError as exc:
-                self.print(self.ERROR_FAILED_SQL, exc=exc, query=query)
+                self.print(self.ERROR_FAILED_SQL, exc=exc, query=stmt)
                 return
             self.print_table(list(result.keys()), result.fetchmany(max_peek_rows))
 

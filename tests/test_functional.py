@@ -10,7 +10,7 @@ from sqlalchemy import create_engine, inspect
 from typer.testing import CliRunner, Result
 
 from datafaker.main import app
-from tests.utils import RequiresDBTestCase, TestDuckDb
+from tests.utils import DuckTestDb, MsSqlTestDb, RequiresDBTestCase
 
 # pylint: disable=subprocess-run-check
 
@@ -33,13 +33,12 @@ class DBFunctionalTestCaseBase(RequiresDBTestCase):
     def setUp(self) -> None:
         """Pre-test setup."""
         super().setUp()
-        dst_name = "dst"
-        self.make_destination_database(dst_name)
+        self.make_destination_database("dst")
         self.env = {
             "src_dsn": self.dsn,
             "src_schema": self.schema_name,
             "dst_dsn": self.dst_dsn,
-            "dst_schema": "dstschema",
+            "dst_schema": self.dst_schema_name,
         }
         self.runner = CliRunner(
             mix_stderr=False,
@@ -98,7 +97,6 @@ class DBFunctionalTestCasePg(DBFunctionalTestCaseBase):
 
     dump_file_path = "src.dump"
     database_name = "src"
-    schema_name = "public"
     alt_orm_file_path = Path("my_orm.yaml")
     config_file_path = Path("example_config.yaml")
 
@@ -581,4 +579,11 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
 class DuckDbFunctionalTestCase(DBFunctionalTestCase):
     """End-to-end tests for the DuckDB workflow."""
 
-    database_type = TestDuckDb
+    database_type = DuckTestDb
+
+
+class MsSqlFunctionalTestCase(DBFunctionalTestCase):
+    """End-to-end tests for the MsSql workflow."""
+
+    schema_name = None
+    database_type = MsSqlTestDb

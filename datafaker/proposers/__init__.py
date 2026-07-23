@@ -36,6 +36,8 @@ def everything_factory(config: Mapping, metadata: MetaData) -> ProposerFactory:
     Get a factory that encapsulates all the other factories.
 
     :param config: The ``config.yaml`` configuration.
+    :param metadata: The metadata of the source database.
+    :return: A factory that is capable of returning any applicable proposers.
     """
     return MultiProposerFactory(
         MimesisStringProposerFactory(),
@@ -50,7 +52,7 @@ def everything_factory(config: Mapping, metadata: MetaData) -> ProposerFactory:
         ConstantProposerFactory(),
         MultivariateNormalProposerFactory(),
         MultivariateLogNormalProposerFactory(),
-        NullPartitionedNormalProposerFactory(config),
-        NullPartitionedLogNormalProposerFactory(config),
+        NullPartitionedNormalProposerFactory(config, metadata),
+        NullPartitionedLogNormalProposerFactory(config, metadata),
         DateAfterProposerFactory(config, metadata),
     )

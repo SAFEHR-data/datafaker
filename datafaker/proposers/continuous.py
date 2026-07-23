@@ -5,11 +5,25 @@ from abc import abstractmethod
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
-from sqlalchemy import Column, Engine, RowMapping, text
+from sqlalchemy import (
+    Column,
+    Dialect,
+    Engine,
+    RowMapping,
+    Select,
+    Table,
+    case,
+    func,
+    literal,
+    null,
+    select,
+)
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.sql.functions import coalesce
 from sqlalchemy.types import Integer, Numeric
 from typing_extensions import Self
 
+from datafaker.dialects import IsNotNull, NullIf, Random, StdDev
 from datafaker.proposers.base import (
     Buckets,
     NumericType,
@@ -26,23 +40,30 @@ class ContinuousDistributionProposer(Proposer):
 
     expected_buckets: Sequence[NumericType] = []
 
-    def __init__(self, table_name: str, column_name: str, buckets: Buckets):
+    def __init__(
+        self,
+        table: Table,
+        column: Column,
+        buckets: Buckets,
+        dialect: Dialect,
+    ):
         """Initialise a ContinuousDistributionProposer."""
         super().__init__()
-        self.table_name = table_name
-        self.column_name = column_name
+        self.table = table
+        self.column = column
         self.buckets = buckets
+        self._dialect = dialect
 
     def nominal_kwargs(self) -> dict[str, Any]:
         """Get the arguments to be entered into ``config.yaml``."""
         return {
             "mean": (
-                f'SRC_STATS["auto__{self.table_name}"]["results"]'
-                f'[0]["mean__{self.column_name}"]'
+                f'SRC_STATS["auto__{self.table.name}"]["results"]'
+                f'[0]["mean__{self.column.name}"]'
             ),
             "sd": (
-                f'SRC_STATS["auto__{self.table_name}"]["results"]'
-                f'[0]["stddev__{self.column_name}"]'
+                f'SRC_STATS["auto__{self.table.name}"]["results"]'
+                f'[0]["stddev__{self.column.name}"]'
             ),
         }
 
@@ -58,15 +79,21 @@ class ContinuousDistributionProposer(Proposer):
     def select_aggregate_clauses(self) -> dict[str, dict[str, str]]:
         """Get the query fragments the generators need to call."""
         clauses = super().select_aggregate_clauses()
+        sd = StdDev(self.column).compile(
+            dialect=self._dialect, compile_kwargs={"literal_binds": True}
+        )
+        mean = func.avg(self.column).compile(
+            dialect=self._dialect, compile_kwargs={"literal_binds": True}
+        )
         return {
             **clauses,
-            f"mean__{self.column_name}": {
-                "clause": f"AVG({self.column_name})",
-                "comment": f"Mean of {self.column_name} from table {self.table_name}",
+            f"mean__{self.column.name}": {
+                "clause": str(mean),
+                "comment": f"Mean of {self.column.name} from table {self.table.name}",
             },
-            f"stddev__{self.column_name}": {
-                "clause": f"STDDEV({self.column_name})",
-                "comment": f"Standard deviation of {self.column_name} from table {self.table_name}",
+            f"stddev__{self.column.name}": {
+                "clause": str(sd),
+                "comment": f"Standard deviation of {self.column.name} from table {self.table.name}",
             },
         }
 
@@ -138,14 +165,15 @@ class ContinuousDistributionProposerFactory(ProposerFactory):
 
     def _get_generators_from_buckets(
         self,
-        engine: Engine,  # pylint: disable=unused-argument
-        table_name: str,
-        column_name: str,
+        engine: Engine,
+        src_table: Table,
+        column: Column,
         buckets: Buckets,
     ) -> Sequence[Proposer]:
+        dialect = engine.dialect
         return [
-            GaussianProposer(table_name, column_name, buckets),
-            UniformProposer(table_name, column_name, buckets),
+            GaussianProposer(src_table, column, buckets, dialect=dialect),
+            UniformProposer(src_table, column, buckets, dialect=dialect),
         ]
 
     def get_proposers(
@@ -162,9 +190,7 @@ class ContinuousDistributionProposerFactory(ProposerFactory):
         buckets = Buckets.make_buckets(engine, table, column)
         if buckets is None:
             return []
-        return self._get_generators_from_buckets(
-            engine, table.name, column.name, buckets
-        )
+        return self._get_generators_from_buckets(engine, table, column, buckets)
 
 
 class LogNormalProposer(Proposer):
@@ -192,19 +218,21 @@ class LogNormalProposer(Proposer):
     # pylint: disable=too-many-arguments too-many-positional-arguments
     def __init__(
         self,
-        table_name: str,
-        column_name: str,
+        table: Table,
+        column: Column,
         buckets: Buckets,
         logmean: float,
         logstddev: float,
+        dialect: Dialect,
     ):
         """Initialise a LogNormalProposer."""
         super().__init__()
-        self.table_name = table_name
-        self.column_name = column_name
+        self.table = table
+        self.column = column
         self.buckets = buckets
         self.logmean = logmean
         self.logstddev = logstddev
+        self._dialect = dialect
 
     def function_name(self) -> str:
         """Get the name of the generator function to call."""
@@ -218,12 +246,12 @@ class LogNormalProposer(Proposer):
         """Get the arguments to be entered into ``config.yaml``."""
         return {
             "logmean": (
-                f'SRC_STATS["auto__{self.table_name}"]["results"][0]'
-                f'["logmean__{self.column_name}"]'
+                f'SRC_STATS["auto__{self.table.name}"]["results"][0]'
+                f'["logmean__{self.column.name}"]'
             ),
             "logsd": (
-                f'SRC_STATS["auto__{self.table_name}"]["results"][0]'
-                f'["logstddev__{self.column_name}"]'
+                f'SRC_STATS["auto__{self.table.name}"]["results"][0]'
+                f'["logstddev__{self.column.name}"]'
             ),
         }
 
@@ -239,21 +267,22 @@ class LogNormalProposer(Proposer):
         clauses = super().select_aggregate_clauses()
         return {
             **clauses,
-            f"logmean__{self.column_name}": {
+            f"logmean__{self.column.name}": {
                 "clause": (
-                    f"AVG(CASE WHEN 0<{self.column_name} THEN LN({self.column_name})"
+                    f"AVG(CASE WHEN 0<{self.column.name} THEN LN({self.column.name})"
                     " ELSE NULL END)"
                 ),
-                "comment": f"Mean of logs of {self.column_name} from table {self.table_name}",
+                "comment": f"Mean of logs of {self.column.name} from table {self.table.name}",
             },
-            f"logstddev__{self.column_name}": {
+            f"logstddev__{self.column.name}": {
                 "clause": (
-                    f"STDDEV(CASE WHEN 0<{self.column_name}"
-                    f" THEN LN({self.column_name}) ELSE NULL END)"
+                    f"{'STDEVP' if self._dialect.name == 'mssql' else 'STDDEV'}"
+                    f"(CASE WHEN 0<{self.column.name}"
+                    f" THEN LN({self.column.name}) ELSE NULL END)"
                 ),
                 "comment": (
-                    f"Standard deviation of logs of {self.column_name}"
-                    f" from table {self.table_name}"
+                    f"Standard deviation of logs of {self.column.name}"
+                    f" from table {self.table.name}"
                 ),
             },
         }
@@ -271,28 +300,30 @@ class ContinuousLogDistributionProposerFactory(ContinuousDistributionProposerFac
     def _get_generators_from_buckets(
         self,
         engine: Engine,
-        table_name: str,
-        column_name: str,
+        src_table: Table,
+        column: Column,
         buckets: Buckets,
     ) -> Sequence[Proposer]:
+        col = case(
+            (column > 0, func.log(column)),
+            else_=null(),
+        )
+        stmt = select(
+            func.avg(col).label("logmean"),
+            func.stddev_samp(col).label("logstddev"),
+        ).select_from(src_table)
         with engine.connect() as connection:
-            result = connection.execute(
-                text(
-                    f"SELECT AVG(CASE WHEN 0<{column_name} THEN LN({column_name})"
-                    " ELSE NULL END) AS logmean,"
-                    f" STDDEV(CASE WHEN 0<{column_name} THEN LN({column_name}) ELSE NULL END)"
-                    f' AS logstddev FROM "{table_name}"'
-                )
-            ).first()
+            result = connection.execute(stmt).first()
             if result is None or result.logstddev is None:
                 return []
         return [
             LogNormalProposer(
-                table_name,
-                column_name,
+                src_table,
+                column,
                 buckets,
                 float(result.logmean),
                 float(result.logstddev),
+                dialect=engine.dialect,
             )
         ]
 
@@ -303,15 +334,17 @@ class MultivariateNormalProposer(Proposer):
     # pylint: disable=too-many-arguments too-many-positional-arguments
     def __init__(
         self,
-        table_name: str,
-        column_names: list[str],
-        query: str,
+        dialect: Dialect,
+        table: Table,
+        columns: list[Column],
+        query: Any,
         covariates: RowMapping,
         function_name: str,
     ) -> None:
         """Initialise a MultivariateNormalProposer."""
-        self._table = table_name
-        self._columns = column_names
+        self._dialect = dialect
+        self._table = table
+        self._columns = columns
         self._query = query
         self._covariates = covariates
         self._function_name = function_name
@@ -328,14 +361,19 @@ class MultivariateNormalProposer(Proposer):
 
     def custom_queries(self) -> dict[str, Any]:
         """Get the queries the generators need to call."""
-        cols = ", ".join(self._columns)
+        cols = ", ".join([c.name for c in self._columns])
         return {
             f"auto__cov__{self._table}": {
                 "comments": [
                     f"Means and covariate matrix for the columns {cols},"
                     " so that we can produce the relatedness between these in the fake data."
                 ],
-                "query": self._query,
+                "query": str(
+                    self._query.compile(
+                        dialect=self._dialect,
+                        compile_kwargs={"literal_binds": True},
+                    )
+                ),
             }
         }
 
@@ -359,12 +397,12 @@ class MultivariateNormalGeneratorFactoryBase(ProposerFactory):
     """Generator factory that makes distributions and maybe partitions."""
 
     @abstractmethod
-    def query_predicate(self, column: Column) -> str:
-        """Get the SQL expression for whether this column should be queried."""
+    def query_predicate(self, column: Column) -> Any:
+        """Get the SQLAlchemy expression for whether this column should be queried."""
 
     @abstractmethod
-    def query_var(self, column: str) -> str:
-        """Get the SQL expression of the value to query for this column."""
+    def query_var(self, column: Column) -> Any:
+        """Get the SQLAlchemy expression of the value to query for this column."""
 
     @abstractmethod
     def query_comment(self) -> str:
@@ -375,14 +413,14 @@ class MultivariateNormalGeneratorFactoryBase(ProposerFactory):
         which will be a string like ``apples, pears and bananas``.
         """
 
-    def get_named_tables(self) -> Mapping[str, str]:
+    def get_named_tables(self) -> Mapping[str, Column]:
         """
         Get a mapping showing which tables have naming columns.
 
         A naming column is a column that provides a nice name for the row.
         We could call tables containing such a column as a "named table".
-        :return: A map mapping names of named tables to the names of their
-        naming columns.
+        :return: A map mapping names of named tables to their naming
+        columns.
         """
         return {}
 
@@ -393,7 +431,7 @@ class CovariateQuery:
 
     def __init__(
         self,
-        table: str,
+        table: Table,
         factory: MultivariateNormalGeneratorFactoryBase,
     ) -> None:
         """
@@ -402,11 +440,11 @@ class CovariateQuery:
         :param table: The name of the table to be queried.
         :param factory: The generator factory, perhaps with overridden
         ``query_var`` and ``query_predicate`` methods.
+        :param dialect: The SQLAlchemy dialect name (e.g. ``mssql.dialect()``).
         """
-        self.table = table
+        self.table: Table = table
         self._columns: Sequence[Column] = []
-        self._predicates: Iterable[str] = []
-        self._group_by_clause = ""
+        self._predicates: Iterable[Any] = []
         self._constant_clauses: dict[int, Column] = {}
         self.suppress_count = 1
         self._sample_count: int | None = None
@@ -454,22 +492,13 @@ class CovariateQuery:
         self._sample_count = count
         return self
 
-    def predicates(self, predicates: Iterable[str]) -> Self:
+    def predicates(self, predicates: Iterable[Any]) -> Self:
         """
         Set the predicates to filter the queried table by.
 
         :param predicates: Additional where clauses.
         """
         self._predicates = predicates
-        return self
-
-    def group_by(self, clause: str) -> Self:
-        """
-        Set the `GROUP BY` clause to the query for this partition.
-
-        :param group_by_clause: Any GROUP BY clause to the query getting the partition.
-        """
-        self._group_by_clause = clause
         return self
 
     def constant_clauses(self, clauses: dict[int, Column]) -> Self:
@@ -485,18 +514,19 @@ class CovariateQuery:
         return self
 
     def _get_constants_and_joins(
-        self, named_tables: Mapping[str, str]
-    ) -> tuple[str, str]:
+        self, named_tables: Mapping[str, Column], subquery: Any
+    ) -> tuple[list[Column], list[Table]]:
         """
         Extra JOINs to give names to foreign keys.
 
         This enables information governance people can understand the results better.
         :param named_tables: A mapping of tables that have names to columns
         that supply those names.
-        :return: A pair of strings; one is constants in the SELECT clause, the second is
-        JOIN clauses to join tables to the outer query in order to make names appear
+        :return: A pair; the first is constants in the SELECT clause, the second is
+        tables to join to the outer query in order to make names appear
         in the output.
         """
+        # Column names -> Foreign Keys to named_tables
         col_to_named_fks = {
             col.name: [
                 fk.column
@@ -505,89 +535,98 @@ class CovariateQuery:
             ]
             for col in self._constant_clauses.values()
         }
+        # Column names -> single FK to named_tables
         col_to_named_fk = {col: fks[0] for col, fks in col_to_named_fks.items() if fks}
-        name_joins = ""
-        constants = ""
+        name_joins: list[Table] = []
+        constants: list[Any] = []
         for index, col in self._constant_clauses.items():
             col_name = col.name
-            constants += f", _q.{col_name} AS k{index}"
+            constants.append(subquery.c[f"k{index}"])
             if col_name in col_to_named_fk:
                 fk_target = col_to_named_fk[col_name]
-                fk_target_table = fk_target.table.name
-                name_joins += (
-                    f" JOIN {fk_target_table} AS _j{index}"
-                    f" ON _q.{col_name}=_j{index}.{fk_target.name}"
+                name_joins.append(fk_target.table)
+                constants.append(
+                    named_tables[fk_target.table.name].label(
+                        f"k{index}_{col_name}__name"
+                    )
                 )
-                constants += (
-                    f", _j{index}.{named_tables[fk_target_table]}"
-                    f" AS k{index}_{col_name}__name"
-                )
-        return name_joins, constants
+        return constants, name_joins
 
-    def get(self) -> str:
+    def get(self) -> Any:
         """
         Get the SQL query.
 
-        :return: The SQL query for this partition.
+        :return: The SQLAlchemy query for this partition.
         """
-        means = "".join(f", _q.m{i}" for i in range(len(self._columns)))
-        covs = "".join(
+        middle = self._middle_query(self._inner_query()).subquery("_q")
+        means = [middle.c[f"m{i}"] for i in range(len(self._columns))]
+        covs = [
             (
-                f", (_q.s{ix}_{iy} - _q.count * _q.m{ix} * _q.m{iy})"
-                f"/NULLIF(_q.count - 1, 0) AS c{ix}_{iy}"
-            )
+                (
+                    middle.c[f"s{ix}_{iy}"]
+                    - middle.c["count"] * middle.c[f"m{ix}"] * middle.c[f"m{iy}"]
+                )
+                / NullIf(middle.c["count"] - 1, literal(0))
+            ).label(f"c{ix}_{iy}")
             for iy in range(len(self._columns))
             for ix in range(iy + 1)
-        )
-        subquery = self._inner_query()
-        # if there are any numeric columns we need at least
-        # two rows to make any (co)variances at all
-        suppress_clause = (
-            f" WHERE {self.suppress_count} < _q.count" if self._columns else ""
-        )
+        ]
         rank = len(self._columns)
         named_tables = self._factory.get_named_tables()
-        name_joins, constants = self._get_constants_and_joins(named_tables)
-        return (
-            f"SELECT {rank} AS rank{constants}, _q.count AS count{means}{covs}"
-            f" FROM ({self._middle_query(subquery)})"
-            f" AS _q{name_joins}{suppress_clause}"
-        )
+        constants, name_joins = self._get_constants_and_joins(named_tables, middle)
+        query = select(
+            literal(rank).label("rank"), middle.c["count"], *constants, *means, *covs
+        ).select_from(middle)
+        for j in name_joins:
+            query = query.join(j)
+        # if there are any numeric columns we need at least
+        # two rows to make any (co)variances at all
+        if self._columns:
+            query = query.where(middle.c["count"] > self.suppress_count)
+        return query
 
-    def _inner_query(self) -> str:
+    def _inner_query(self) -> Select:
         """Get the rows from the table that we are interested in."""
+        constants = [col.label(f"k{i}") for i, col in self._constant_clauses.items()]
+        values = [col.label(f"v{i}") for i, col in enumerate(self._columns)]
+        sel = select(*constants, *values).select_from(self.table)
         preds = itertools.chain(
             (self._factory.query_predicate(col) for col in self._columns),
             self._predicates,
         )
-        where = " AND ".join(preds) if preds else ""
-        if where:
-            where = " WHERE " + where
-        if self._sample_count is None:
-            return f'"{self.table}"{where}'
-        return (
-            f'(SELECT * FROM "{self.table}"{where} ORDER BY RANDOM()'
-            f" LIMIT {self._sample_count}) AS _sampled"
-        )
+        if preds:
+            sel = sel.filter(*preds)
+        if self._sample_count is not None:
+            sel = sel.order_by(Random()).limit(self._sample_count)
+        return sel
 
-    def _middle_query(self, inner_query: str) -> str:
+    def _middle_query(self, inner_query: Any) -> Any:
         """Get the basic statistics (and constants) from the inner query."""
-        multiples = "".join(
-            (
-                f", SUM({self._factory.query_var(colx.name)}"
-                f" * {self._factory.query_var(coly.name)}) AS s{ix}_{iy}"
-            )
-            for iy, coly in enumerate(self._columns)
-            for ix, colx in enumerate(self._columns[: iy + 1])
-        )
-        avgs = "".join(
-            f", AVG({self._factory.query_var(col.name)}) AS m{i}"
-            for i, col in enumerate(self._columns)
-        )
-        constants = "".join(", " + col.name for col in self._constant_clauses.values())
-        return (
-            f"SELECT COUNT(*) AS count{multiples}{avgs}{constants}"
-            f" FROM {inner_query}{self._group_by_clause}"
+        inner = inner_query.subquery("_sampled")
+        col_count = len(self._columns)
+        multiples = [
+            func.sum(
+                self._factory.query_var(inner.c[f"v{ix}"])
+                * self._factory.query_var(inner.c[f"v{iy}"])
+            ).label(f"s{ix}_{iy}")
+            for iy in range(col_count)
+            for ix in range(iy + 1)
+        ]
+        avgs = [
+            func.avg(self._factory.query_var(inner.c[f"v{i}"])).label(f"m{i}")
+            for i in range(col_count)
+        ]
+        constants = [inner.c[f"k{k}"] for k in self._constant_clauses.keys()]
+        query = select(
+            func.count().label("count"),  # pylint: disable=not-callable
+            *multiples,
+            *avgs,
+            *constants,
+        ).select_from(inner)
+        if len(self._constant_clauses) == 0:
+            return query
+        return query.group_by(
+            *[inner.c[f"k{k}"] for k in self._constant_clauses.keys()]
         )
 
 
@@ -598,11 +637,11 @@ class MultivariateNormalProposerFactory(MultivariateNormalGeneratorFactoryBase):
         """Get the name of the generator function to call."""
         return "multivariate_normal"
 
-    def query_predicate(self, column: Column) -> str:
-        """Get the SQL expression for whether this column should be queried."""
-        return column.name + " IS NOT NULL"
+    def query_predicate(self, column: Column) -> Any:
+        """Get the SQLAlchemy expression for whether this column should be queried."""
+        return IsNotNull(column)
 
-    def query_var(self, column: str) -> str:
+    def query_var(self, column: Column) -> Any:
         """Get the SQL expression of the value to query for this column."""
         return column
 
@@ -625,13 +664,12 @@ class MultivariateNormalProposerFactory(MultivariateNormalGeneratorFactoryBase):
             ct = get_column_type(c)
             if not isinstance(ct, Numeric) and not isinstance(ct, Integer):
                 return []
-        column_names = [c.name for c in columns]
-        table = columns[0].table.name
+        table = columns[0].table
         cq = CovariateQuery(table, self).columns(columns)
         query = cq.get()
         with engine.connect() as connection:
             try:
-                covariates = connection.execute(text(query)).mappings().first()
+                covariates = connection.execute(query).mappings().first()
             except SQLAlchemyError as e:
                 logger.debug("SQL query %s failed with error %s", query, e)
                 return []
@@ -639,8 +677,9 @@ class MultivariateNormalProposerFactory(MultivariateNormalGeneratorFactoryBase):
                 return []
             return [
                 MultivariateNormalProposer(
+                    connection.dialect,
                     table,
-                    column_names,
+                    columns,
                     query,
                     covariates,
                     self.function_name(),
@@ -655,13 +694,13 @@ class MultivariateLogNormalProposerFactory(MultivariateNormalProposerFactory):
         """Get the name of the generator function to call."""
         return "multivariate_lognormal"
 
-    def query_predicate(self, column: Column) -> str:
-        """Get the SQL expression for whether this column should be queried."""
-        return f"COALESCE(0 < {column.name}, FALSE)"
+    def query_predicate(self, column: Column) -> Any:
+        """Get the SQLAlchemy expression for whether this column should be queried."""
+        return coalesce(column > 0, False)
 
-    def query_var(self, column: str) -> str:
+    def query_var(self, column: Column) -> Any:
         """Get the expression to query for, for this column."""
-        return f"LN({column})"
+        return func.ln(column)
 
     def query_comment(self) -> str:
         """Return the human-readable comment for this generator."""
