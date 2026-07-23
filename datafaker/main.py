@@ -73,7 +73,8 @@ def datafaker() -> None:
             and exc.orig.args[0] == "HYT00"
         ):
             logger.error(
-                "Please ensure that the ODBC driver is installed and registered."
+                "Please ensure that the ODBC driver is installed and registered,"
+                " and that the database server is available at the location specified."
             )
             logger.error("(see the installation instructions)")
         # Outside of app() typer.Exit(1) doesn't work
