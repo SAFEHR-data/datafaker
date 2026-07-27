@@ -127,7 +127,7 @@ class EndToEndParquetTestCase(DatafakerTestCase):
 
     def make_orm_yaml(self, runner: CliRunner) -> None:
         """Make the orm.yaml file, if necessary."""
-        runner.invoke(
+        result = runner.invoke(
             app,
             [
                 "make-tables",
@@ -137,6 +137,7 @@ class EndToEndParquetTestCase(DatafakerTestCase):
                 "orm_auto.yaml",
             ],
         )
+        self.assertSuccess(result)
         # Fix up the orm.yaml; the dates might not have types set
         with Path("orm_auto.yaml").open(encoding="utf-8") as orm_fh:
             orm = yaml.load(orm_fh, yaml.SafeLoader)
