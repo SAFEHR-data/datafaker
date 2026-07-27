@@ -89,7 +89,7 @@ information about the columns in the current table. Use 'peek',
     PROPOSE_SOURCE_SAMPLE_TEXT = "Sample of actual source data: {1}{0}..."
     PROPOSE_SOURCE_EMPTY_TEXT = "Source database has no data in this column."
     PROPOSE_GENERATOR_SAMPLE_TEXT = (
-        "{index}. {theme_func}{name}:"
+        "{theme_reset}{index}. {theme_func}{name}:"
         " {theme_fit}{fit} {theme_data}{sample}{theme_reset} ..."
     )
     PRIMARY_PRIVATE_TEXT = "Primary Private"
