@@ -63,7 +63,7 @@ Running from the ready-built Docker container, make an output directory then use
 .. code-block:: console
 
    $ mkdir output
-   $ docker run --rm --user $(id -u):$(id -g) --network host -e SRC_SCHEMA=myschema -e DST_DSN=postgresql://someuser:somepassword@myserver.mydomain.com:5432/db_name -itv ./output:data --pull always timband/datafaker
+   $ docker run --rm --user $(id -u):$(id -g) --network host -e SRC_SCHEMA=myschema -e DST_DSN=postgresql://someuser:somepassword@myserver.mydomain.com:5432/db_name -itv ./output:/data --pull always timband/datafaker
 
 Now you can use the commands that use the source database (the ones beginning ``configure-`` and ``make-`` but not the ones beginning ``create-`` and ``remove-``).
 
@@ -550,7 +550,7 @@ Running from the ready-built Docker container, from within a directory holding o
 
 .. code-block:: console
 
-   $ docker run --rm --user $(id -u):$(id -g) --network host -e DST_SCHEMA=myschema -e DST_DSN=postgresql://someuser:somepassword@myserver.mydomain.com:5432/dst_db -itv .:data --pull always timband/datafaker
+   $ docker run --rm --user $(id -u):$(id -g) --network host -e DST_SCHEMA=myschema -e DST_DSN=postgresql://someuser:somepassword@myserver.mydomain.com:5432/dst_db -itv ./output:/data --pull always timband/datafaker
 
 (Windows users will need to modify this docker command, perhaps removing the `--user` option and its argument?)
 

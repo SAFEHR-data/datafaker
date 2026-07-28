@@ -15,7 +15,7 @@ classifiers = [
 homepage = "https://github.com/SAFEHR-data/datafaker"
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.14"
+python = ">=3.10,<3.15"
 pydantic = {extras = ["dotenv"], version = "^1.10.2"}
 psycopg2-binary = "^2.9.5"
 pyodbc = "^5.0.0"
@@ -35,11 +35,11 @@ greenlet = "^3.1.1"
 pymysql = "^1.1.0"
 pandas = "^2"
 parsy = "^2.1"
-prettytable = "^3.15.1"
-fastparquet = "^2024.11.0"
+fastparquet = "2026.5.0"
 duckdb-sqlalchemy = "^1.5.2.2"
 ty = "^0.0.43"
 colorama = "^0.4.6"
+prettytable = "^3.18.0"
 
 [tool.poetry.group.dev.dependencies]
 isort = "^5.10.1"
