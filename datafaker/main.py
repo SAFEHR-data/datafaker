@@ -40,6 +40,7 @@ from datafaker.settings import (
     get_source_dsn,
     get_source_schema,
 )
+from datafaker.theme import ThemeEntry, set_active_theme
 from datafaker.utils import (
     CONFIG_SCHEMA_PATH,
     conf_logger,
@@ -148,10 +149,12 @@ def load_metadata_for_output(
 
 @app.callback()
 def main(
-    verbose: bool = Option(False, "--verbose", "-v", help="Print more information.")
+    verbose: bool = Option(False, "--verbose", "-v", help="Print more information."),
+    theme: ThemeEntry = Option(ThemeEntry.DARK, help="The colour scheme"),
 ) -> None:
     """Set the global parameters."""
     conf_logger(verbose)
+    set_active_theme(theme)
 
 
 @app.command(rich_help_panel="Configure and Extract")

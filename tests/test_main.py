@@ -519,8 +519,10 @@ class TestsCliCreate(GeneratesDBTestCase):
         self.runner = CliRunner(
             mix_stderr=False,
             env={
-                "src_dsn": self.dsn,
-                "dst_dsn": self.dst_dsn,
+                "SRC_DSN": self.dsn,
+                "SRC_SCHEMA": None,
+                "DST_DSN": self.dst_dsn,
+                "DST_SCHEMA": None,
             },
         )
 

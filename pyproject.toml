@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "datafaker"
-version = "0.5.0"
+version = "0.5.1"
 description = "Generates fake SQL data"
 authors = ["Tim Band <3266052+tim-band@users.noreply.github.com>"]
 license = "MIT"
@@ -39,6 +39,7 @@ prettytable = "^3.15.1"
 fastparquet = "^2024.11.0"
 duckdb-sqlalchemy = "^1.5.2.2"
 ty = "^0.0.43"
+colorama = "^0.4.6"
 
 [tool.poetry.group.dev.dependencies]
 isort = "^5.10.1"

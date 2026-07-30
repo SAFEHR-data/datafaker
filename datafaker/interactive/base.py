@@ -9,7 +9,7 @@ from types import TracebackType
 from typing import Any, Optional, Type
 
 import sqlalchemy
-from prettytable import PrettyTable
+from prettytable.colortable import ColorTable, Theme
 from sqlalchemy import Engine, ForeignKey, MetaData, Table, func, or_, select
 from sqlalchemy.exc import DatabaseError, SQLAlchemyError
 from typing_extensions import Self
@@ -20,6 +20,7 @@ from datafaker.db_utils import (
     get_sync_engine,
 )
 from datafaker.dialects import Random
+from datafaker.theme import get_active_theme
 from datafaker.utils import T, get_property
 
 
@@ -147,6 +148,13 @@ class DbCmd(ABC, cmd.Cmd):
         self.config: MutableMapping[str, Any] = settings.config
         self.metadata = settings.metadata
         self._table_entries: list[TableEntry] = []
+        theme = get_active_theme()
+        self._table_theme = Theme(
+            default_color=theme.data,
+            vertical_color=theme.line,
+            horizontal_color=theme.line,
+            junction_color=theme.line,
+        )
         tables_config: MutableMapping = self.config.get("tables", {})
         if not isinstance(tables_config, MutableMapping):
             tables_config = {}
@@ -195,7 +203,7 @@ class DbCmd(ABC, cmd.Cmd):
         :param headings: List of headings for the table.
         :param rows: List of rows of values.
         """
-        output = PrettyTable()
+        output = ColorTable(theme=self._table_theme)
         output.field_names = headings
         for row in rows:
             # Hopefully PrettyTable will accept Sequence in the future, not list
@@ -208,7 +216,7 @@ class DbCmd(ABC, cmd.Cmd):
 
         :param columns: Dict of column names to the values in the column.
         """
-        output = PrettyTable()
+        output = ColorTable(theme=self._table_theme)
         row_count = max(len(col) for col in columns.values())
         for field_name, data in columns.items():
             output.add_column(field_name, list(data) + [None] * (row_count - len(data)))
@@ -216,7 +224,11 @@ class DbCmd(ABC, cmd.Cmd):
 
     def print_results(self, result: sqlalchemy.CursorResult) -> None:
         """Print the rows resulting from a database query."""
-        self.print_table(list(result.keys()), [list(row) for row in result.all()])
+        theme = get_active_theme()
+        self.print_table(
+            [f"{theme.column}{heading}" for heading in result.keys()],
+            [list(row) for row in result.all()],
+        )
 
     def ask_save(self) -> str:
         """
@@ -277,8 +289,19 @@ class DbCmd(ABC, cmd.Cmd):
             ["tables", table.name, "columns"],
             {},
         )
+        theme = get_active_theme()
         self.print_table(
-            ["name", "type", "primary", "nullable", "foreign key", "roles"],
+            [
+                f"{theme.reset}{heading}"
+                for heading in [
+                    "name",
+                    "type",
+                    "primary",
+                    "nullable",
+                    "foreign key",
+                    "roles",
+                ]
+            ],
             [
                 [
                     name,
@@ -362,8 +385,9 @@ class DbCmd(ABC, cmd.Cmd):
                 return
             row_count = result.get("row_count", 0)
             self.print(self.ROW_COUNT_MSG, row_count)
+            theme = get_active_theme()
             self.print_table(
-                ["Column", "NULL count"],
+                [f"{theme.reset}Column", f"{theme.reset}NULL count"],
                 [
                     [name, row_count - count]
                     for name, count in result.items()
@@ -387,8 +411,12 @@ class DbCmd(ABC, cmd.Cmd):
                 self.print("Showing the first {} rows", max_select_rows)
             fields = list(result.keys())
             rows = result.fetchmany(max_select_rows)
+            theme = get_active_theme()
             try:
-                self.print_table(fields, rows)
+                self.print_table(
+                    [f"{theme.column}{f}" for f in fields],
+                    rows,
+                )
             except ValueError as exc:
                 self.print(self.ERROR_FAILED_DISPLAY, exc)
                 return
@@ -424,7 +452,11 @@ class DbCmd(ABC, cmd.Cmd):
             except SQLAlchemyError as exc:
                 self.print(self.ERROR_FAILED_SQL, exc=exc, query=stmt)
                 return
-            self.print_table(list(result.keys()), result.fetchmany(max_peek_rows))
+            theme = get_active_theme()
+            self.print_table(
+                [f"{theme.column}{k}" for k in result.keys()],
+                result.fetchmany(max_peek_rows),
+            )
 
     def get_column_completions(self, text: str) -> list[str]:
         """Get completions for text to column names in the current table."""
