@@ -166,10 +166,11 @@ class EndToEndParquetTestCase(DatafakerTestCase):
             mix_stderr=False,
             env={
                 # this file need not exist
-                "src_dsn": "duckdb:///:memory:",
+                "SRC_DSN": "duckdb:///:memory:",
+                "SRC_SCHEMA": None,
                 # this file will be created by Datafaker
-                "dst_dsn": "duckdb:///./fake.db",
-                # "dst_schema": "fake.dstschema", if you must
+                "DST_DSN": "duckdb:///./fake.db",
+                "DST_SCHEMA": "fake.dstschema",
             },
         )
 

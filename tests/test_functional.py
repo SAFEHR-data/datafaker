@@ -35,10 +35,10 @@ class DBFunctionalTestCaseBase(RequiresDBTestCase):
         super().setUp()
         self.make_destination_database("dst")
         self.env = {
-            "src_dsn": self.dsn,
-            "src_schema": self.schema_name,
-            "dst_dsn": self.dst_dsn,
-            "dst_schema": self.dst_schema_name,
+            "SRC_DSN": self.dsn,
+            "SRC_SCHEMA": self.schema_name,
+            "DST_DSN": self.dst_dsn,
+            "DST_SCHEMA": self.dst_schema_name,
         }
         self.runner = CliRunner(
             mix_stderr=False,
@@ -104,7 +104,7 @@ class DBFunctionalTestCasePg(DBFunctionalTestCaseBase):
         """Check that we create a destination schema if it doesn't exist."""
         env = {"dst_schema": "doesntexistyetschema"}
 
-        dst_dsn = self.env["dst_dsn"]
+        dst_dsn = self.env["DST_DSN"]
         assert dst_dsn is not None
 
         engine = create_engine(dst_dsn)
