@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import Column, Dialect, Engine, ForeignKey, MetaData, func, select
 from sqlalchemy.types import Date, DateTime
 
+from datafaker.db_utils import get_fk_column_between
 from datafaker.dialects import SecondsDifference, StdDev
 from datafaker.proposers.base import Buckets, Proposer, ProposerFactory, get_column_type
 from datafaker.providers import AnchoredProvider
@@ -45,21 +46,19 @@ def _set_roles_for_column(
 
 def _get_roles(
     config: Mapping,
-    columns: list[Column],
+    column: Column,
 ) -> dict[str, list[RelatedColumn]]:
     """
     Work out where the roles are relative to this table.
 
     :param config: The configuration from ``config.yaml``.
-    :param columns: The list of columns we are to propose for.
+    :param column: The column we are to propose for.
     :return: dictionary of ``role_name`` -> ``(fk or None, column_name)``
         where ``fk`` is the actual foreign key from the table, and ``None``
         means a column from the same table as the input column(s)
         has the required role.
     """
-    if len(columns) == 0:
-        return {}
-    table = columns[0].table
+    table = column.table
     tables_config: dict[str, Any] = get_property(config, "tables", {})
     table_conf: dict[str, Any] = get_property(
         tables_config, [str(table.name), "columns"], {}
@@ -115,7 +114,9 @@ class DateAfterProposer(Proposer):
 
     def function_name(self) -> str:
         """Get the name of the generator function to call."""
-        return "generic.anchored_provider.normal_date"
+        if self._column.table == self._anchor.table:
+            return "generic.anchored_provider.normal_date"
+        return "generic.anchored_provider.normal_date_fk"
 
     def name(self) -> str:
         """Get the name of the generator."""
@@ -123,22 +124,30 @@ class DateAfterProposer(Proposer):
 
     def nominal_kwargs(self) -> dict[str, Any]:
         """Get the arguments to be entered into ``config.yaml``."""
+        column = self._column
+        anchor = self._anchor
+        (fk_col, fk) = get_fk_column_between(column.table, anchor.table)
+        if fk_col is None or fk is None:
+            return {
+                "mean_seconds": (
+                    f'SRC_STATS["auto__{column.table.name}"]'
+                    f'["results"][0]["mean__{column.name}"]'
+                ),
+                "sd_seconds": (
+                    f'SRC_STATS["auto__{column.table.name}"]'
+                    f'["results"][0]["stddev__{column.name}"]'
+                ),
+                "anchor": f'GENERATED_ROW["{anchor.name}"]',
+            }
+        key = f"auto__interval__{column.table.name}__{column.name}"
         return {
-            "mean_seconds": (
-                'SRC_STATS["auto__'
-                + self._column.table.name
-                + '"]["results"][0]["mean__'
-                + self._column.name
-                + '"]'
-            ),
-            "sd_seconds": (
-                'SRC_STATS["auto__'
-                + self._column.table.name
-                + '"]["results"][0]["stddev__'
-                + self._column.name
-                + '"]'
-            ),
-            "anchor": f'GENERATED_ROW["{self._anchor.name}"]',
+            "dst_db_conn": "dst_db_conn",
+            "anchor_column": anchor.name,
+            "table": anchor.table.name,
+            "mean_seconds": (f'SRC_STATS["{key}"]["results"][0]["mean"]'),
+            "sd_seconds": (f'SRC_STATS["{key}"]["results"][0]["sd"]'),
+            "anchor_row": f'GENERATED_ROW["{fk_col.name}"]',
+            "on_column": fk.column.name,
         }
 
     def actual_kwargs(self) -> dict[str, Any]:
@@ -154,42 +163,72 @@ class DateAfterProposer(Proposer):
         """
         Get the query fragments the generators need to call.
 
-        This will only work for anchors in the same table.
+        This is for anchors in the same table.
         """
-        mean_q = func.avg(SecondsDifference(self._column, self._anchor))
-        sd_q = StdDev(SecondsDifference(self._column, self._anchor))
+        column = self._column
+        anchor = self._anchor
+        if column.table != anchor.table:
+            return {}
+        mean_q = func.avg(SecondsDifference(column, anchor))
+        sd_q = StdDev(SecondsDifference(column, anchor))
 
         return {
-            f"mean__{self._column.name}": {
+            f"mean__{column.name}": {
                 "clause": str(
                     mean_q.compile(
                         dialect=self._dialect, compile_kwargs={"literal_binds": True}
                     )
                 ),
                 "comment": (
-                    "Mean of interval between "
-                    + self._anchor.name
-                    + " and "
-                    + self._column.name
-                    + " from table "
-                    + self._column.table.name
+                    f"Mean of interval between {anchor.name} and"
+                    f" {column.name} from table {column.table.name}."
                 ),
             },
-            f"stddev__{self._column.name}": {
+            f"stddev__{column.name}": {
                 "clause": str(
                     sd_q.compile(
                         dialect=self._dialect, compile_kwargs={"literal_binds": True}
                     )
                 ),
                 "comment": (
-                    "Standard deviation of interval between "
-                    + self._anchor.name
-                    + " and "
-                    + self._column.name
-                    + " from table "
-                    + self._column.table.name
+                    f"Standard deviation of interval between {anchor.name}"
+                    f" and {column.name} from table {column.table.name}."
                 ),
             },
+        }
+
+    def custom_queries(self) -> dict[str, dict[str, Any]]:
+        """
+        Get the query fragments the generators need to call.
+
+        This is for anchors in a related table.
+        """
+        column = self._column
+        anchor = self._anchor
+        if column.table == anchor.table:
+            return {}
+        query = (
+            select(
+                func.avg(SecondsDifference(column, anchor)).label("mean"),
+                StdDev(SecondsDifference(column, anchor)).label("sd"),
+            )
+            .select_from(column.table)
+            .join(anchor.table)
+        )
+        return {
+            f"auto__interval__{column.table.name}__{column.name}": {
+                "comments": [
+                    "Mean and standard deviation of the length of time between"
+                    f" column {anchor.name} of table {anchor.table.name}"
+                    f" and column {column.name} of table {column.table.name}."
+                ],
+                "query": str(
+                    query.compile(
+                        dialect=self._dialect,
+                        compile_kwargs={"literal_binds": True},
+                    )
+                ),
+            }
         }
 
     def fit(self, default: float = -1) -> float:
@@ -218,13 +257,14 @@ class DateAfterProposerFactory(ProposerFactory):
         self, engine: Engine, column: Column, anchor: Column
     ) -> list[DateAfterProposer]:
         """Create a ``DateAfterProposer`` object."""
+        query = select(
+            func.avg(SecondsDifference(column, anchor)).label("mean"),
+            StdDev(SecondsDifference(column, anchor)).label("sd"),
+        ).select_from(column.table)
+        if anchor.table != column.table:
+            query = query.join(anchor.table)
         with engine.connect() as connection:
-            result = connection.execute(
-                select(
-                    func.avg(SecondsDifference(column, anchor)).label("mean"),
-                    StdDev(SecondsDifference(column, anchor)).label("sd"),
-                ).select_from(column.table)
-            ).first()
+            result = connection.execute(query).first()
             if result is None or result.sd is None:
                 return []
         buckets = Buckets.make_buckets(
@@ -247,28 +287,21 @@ class DateAfterProposerFactory(ProposerFactory):
         columns: list[Column],
         engine: Engine,
     ) -> Sequence[Proposer]:
-        """Get ``DateAfterProposers`` suitable for this column."""
+        """Get all proposers of dates that might be anchored to another column."""
         if len(columns) != 1:
             return []
         column = columns[0]
         ct = get_column_type(column)
         if not isinstance(ct, (Date, DateTime)):
             return []
-        roles = _get_roles(self._config, columns)
+        roles = _get_roles(self._config, column)
         if "start" not in roles:
             return []
         other_start_columns = [
-            fk_col for fk_col in roles["start"] if fk_col[1] not in columns
-        ]
-        # For the moment, only anchors in _this_ table
-        anchors = [
-            anchor
-            for fk, anchor in other_start_columns
-            if fk
-            is None  # at the moment we can only cope with columns in the same table
+            fk_col for fk_col in roles["start"] if fk_col[1] != column
         ]
         return [
             prop
-            for anchor in anchors
-            for prop in self.make_date_after_proposers(engine, column, anchor)
+            for anchor in other_start_columns
+            for prop in self.make_date_after_proposers(engine, column, anchor[1])
         ]

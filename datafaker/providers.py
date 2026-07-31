@@ -639,8 +639,8 @@ class AnchoredProvider(BaseProvider):
         mean_seconds: float,
         sd_seconds: float,
         table: str,
-        foreign_key: str,
         on_column: str,
+        row: Any,
         anchor_column: str,
     ) -> dt.datetime | None:
         """
@@ -652,12 +652,12 @@ class AnchoredProvider(BaseProvider):
         :param dst_db_conn: Connection to the destination database.
         :param mean_seconds: Average number of seconds the interval lasts.
         :param sd_seconds: Standard deviation of the intervals' lengths in seconds.
-        :param table: The name of the table for the column we are generating.
-        :param foreign_key: The name of the column in ``table`` providing the
-         foreign key to the table providing the start of the interval.
+        :param table: The name of the table for the anchor column.
         :param on_column: The name of the column in the foreign table
-         that ``foreign_key`` must match.
-        :param anchor_column: The name of the column in the foreign table
+         that ``row`` must match.
+        :param row: The value in the ``on_column`` column in table ``table``
+         for the row providing the start of the interval.
+        :param anchor_column: The name of the column in ``table``
          providing the start of the interval.
         :return: The end of the interval; will be no earlier than the start of the
          interval. This is clamped; note that ``mean_seconds`` and
@@ -665,7 +665,7 @@ class AnchoredProvider(BaseProvider):
         """
         mt = self._metadata.tables[table]
         query = select(mt.c[anchor_column].label("out")).where(
-            mt.c[on_column] == foreign_key
+            mt.c[on_column] == row,
         )
         anchor = dst_db_conn.execute(query).first()
         out = getattr(anchor, "out", None)

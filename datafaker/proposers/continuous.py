@@ -353,17 +353,21 @@ class MultivariateNormalProposer(Proposer):
         """Get the name of the generator function to call."""
         return "dist_gen." + self._function_name
 
+    def src_stats_key(self) -> str:
+        """Get the name for the query results in SRC_STATS."""
+        return f"auto__cov__{self._table.name}__{self._columns[0].name}"
+
     def nominal_kwargs(self) -> dict[str, Any]:
         """Get the arguments to be entered into ``config.yaml``."""
         return {
-            "cov": f'SRC_STATS["auto__cov__{self._table}"]["results"][0]',
+            "cov": f'SRC_STATS["{self.src_stats_key()}]["results"][0]',
         }
 
     def custom_queries(self) -> dict[str, Any]:
         """Get the queries the generators need to call."""
         cols = ", ".join([c.name for c in self._columns])
         return {
-            f"auto__cov__{self._table}": {
+            self.src_stats_key(): {
                 "comments": [
                     f"Means and covariate matrix for the columns {cols},"
                     " so that we can produce the relatedness between these in the fake data."

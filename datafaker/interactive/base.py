@@ -111,6 +111,7 @@ class DbCmd(ABC, cmd.Cmd):
     )
     ERROR_FAILED_SQL = 'SQL query "{query}" caused exception {exc}'
     ERROR_FAILED_DISPLAY = "Error: Failed to display: {}"
+    ERROR_UNKNOWN_COLUMNS = "Error: Unknown columns: {}"
     ROW_COUNT_MSG = "Total row count: {}"
 
     @abstractmethod
@@ -437,6 +438,10 @@ class DbCmd(ABC, cmd.Cmd):
         if not col_names:
             col_names = self._get_column_names()
         table = self.table_metadata()
+        unknown_cols = [cn for cn in col_names if cn not in table.columns]
+        if unknown_cols:
+            self.print(self.ERROR_UNKNOWN_COLUMNS, ", ".join(unknown_cols))
+            return
         col_exprs = [table.columns[cn] for cn in col_names]
         nonnull_clauses = [ce.isnot(None) for ce in col_exprs]
         stmt = (
