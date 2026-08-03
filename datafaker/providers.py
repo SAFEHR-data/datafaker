@@ -640,7 +640,7 @@ class AnchoredProvider(BaseProvider):
         sd_seconds: float,
         table: str,
         on_column: str,
-        row: Any,
+        anchor_row: Any,
         anchor_column: str,
     ) -> dt.datetime | None:
         """
@@ -665,7 +665,7 @@ class AnchoredProvider(BaseProvider):
         """
         mt = self._metadata.tables[table]
         query = select(mt.c[anchor_column].label("out")).where(
-            mt.c[on_column] == row,
+            mt.c[on_column] == anchor_row,
         )
         anchor = dst_db_conn.execute(query).first()
         out = getattr(anchor, "out", None)

@@ -142,12 +142,12 @@ class DateAfterProposer(Proposer):
         key = f"auto__interval__{column.table.name}__{column.name}"
         return {
             "dst_db_conn": "dst_db_conn",
-            "anchor_column": anchor.name,
-            "table": anchor.table.name,
+            "anchor_column": f'"{anchor.name}"',
+            "table": f'"{anchor.table.name}"',
             "mean_seconds": (f'SRC_STATS["{key}"]["results"][0]["mean"]'),
             "sd_seconds": (f'SRC_STATS["{key}"]["results"][0]["sd"]'),
             "anchor_row": f'GENERATED_ROW["{fk_col.name}"]',
-            "on_column": fk.column.name,
+            "on_column": f'"{fk.column.name}"',
         }
 
     def actual_kwargs(self) -> dict[str, Any]:
@@ -261,14 +261,19 @@ class DateAfterProposerFactory(ProposerFactory):
             func.avg(SecondsDifference(column, anchor)).label("mean"),
             StdDev(SecondsDifference(column, anchor)).label("sd"),
         ).select_from(column.table)
+        join_tables = []
         if anchor.table != column.table:
+            join_tables = [anchor.table]
             query = query.join(anchor.table)
         with engine.connect() as connection:
             result = connection.execute(query).first()
             if result is None or result.sd is None:
                 return []
         buckets = Buckets.make_buckets(
-            engine, column.table, SecondsDifference(column, anchor)
+            engine,
+            column.table,
+            SecondsDifference(column, anchor),
+            join_tables,
         )
         return [
             DateAfterProposer(

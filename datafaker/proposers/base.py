@@ -340,7 +340,11 @@ class Buckets:
 
     @classmethod
     def make_buckets(
-        cls, engine: Engine, table: Table | Join, column: Any
+        cls,
+        engine: Engine,
+        table: Table | Join,
+        column: Any,
+        join_tables: list[Table] | None = None,
     ) -> Self | None:
         """
         Construct a Buckets object.
