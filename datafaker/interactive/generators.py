@@ -272,10 +272,10 @@ information about the columns in the current table. Use 'peek',
         (table_name, prop_info) = self._get_table_and_proposer()
         theme = get_active_theme()
         if table_name is None:
-            self.prompt = f"{theme.prompt}(generators){theme.reset} "
+            self.prompt = "(generators) "
             return
         if prop_info is None:
-            self.prompt = f"{theme.prompt}({table_name}){theme.reset} "
+            self.prompt = f"({table_name}) "
             return
         table = self.table_metadata()
         columns = [
@@ -283,7 +283,7 @@ information about the columns in the current table. Use 'peek',
         ]
         gen = f" ({prop_info.proposer.name()})" if prop_info.proposer else ""
         self.prompt = (
-            f"{theme.prompt}({table_name}.{','.join(columns)}{gen}){theme.reset} "
+            f"({table_name}.{','.join(columns)}{gen}) "
         )
 
     def _remove_auto_src_stats(self) -> list[MutableMapping[str, Any]]:
