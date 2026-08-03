@@ -150,7 +150,11 @@ def load_metadata_for_output(
 @app.callback()
 def main(
     verbose: bool = Option(False, "--verbose", "-v", help="Print more information."),
-    theme: ThemeEntry = Option(ThemeEntry.DARK, help="The colour scheme"),
+    theme: ThemeEntry = Option(
+        ThemeEntry.DARK,
+        help="The colour scheme",
+        envvar="DATAFAKER_THEME",
+    ),
 ) -> None:
     """Set the global parameters."""
     conf_logger(verbose)
