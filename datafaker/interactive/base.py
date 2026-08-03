@@ -428,26 +428,16 @@ class DbCmd(ABC, cmd.Cmd):
         """Completions for the ``select`` command."""
         if len(self._table_entries) <= self.table_index:
             return []
-        join_types = [
-            "inner", "outer", "left", "right", "full", "cross", "self"
-        ]
-        table_clause = [
-            "from", "join"
-        ]
-        sql_ops = join_types + table_clause + [
-            "where", "order", "like", "limit", "random()"
-        ]
+        join_types = ["inner", "outer", "left", "right", "full", "cross", "self"]
+        table_clause = ["from", "join"]
+        sql_ops = (
+            join_types + table_clause + ["where", "order", "like", "limit", "random()"]
+        )
         previous_word = ([""] + line[:begidx].rsplit(maxsplit=1))[-1].lower()
         if previous_word in join_types:
-            return [
-                j for j in ["outer", "OUTER", "join", "JOIN"] if j.startswith(text)
-            ]
+            return [j for j in ["outer", "OUTER", "join", "JOIN"] if j.startswith(text)]
         sql_ops += [s.upper() for s in sql_ops]
-        sql_completions = [
-            word
-            for word in sql_ops
-            if word.startswith(text)
-        ]
+        sql_completions = [word for word in sql_ops if word.startswith(text)]
         if previous_word in ["from", "join"]:
             return sql_completions + self.get_table_completions(text)
         return sql_completions + self.get_table_or_column_completions(text)
@@ -501,10 +491,15 @@ class DbCmd(ABC, cmd.Cmd):
     def get_table_completions(self, text: str) -> list[str]:
         """Get table name completions."""
         return [
-            entry.name
-            for entry in self.table_entries
-            if entry.name.startswith(text)
+            entry.name for entry in self._table_entries if entry.name.startswith(text)
         ]
+
+    def get_table_index(self, table_name: str) -> int | None:
+        """Get the index of the named table in the table entries list."""
+        for n, entry in enumerate(self._table_entries):
+            if entry.name == table_name:
+                return n
+        return None
 
     def get_table_or_column_completions(self, text: str) -> list[str]:
         """
@@ -519,14 +514,13 @@ class DbCmd(ABC, cmd.Cmd):
         (first_part, last_part) = split_column_full_name(text)
         if first_part:
             # first_part is table, last_part is column
-            table_index = self._get_table_index(first_part)
+            table_index = self.get_table_index(first_part)
             if table_index is None:
                 return []
-            table_entry = self.table_entries[table_index]
+            table_entry = self._table_entries[table_index]
             return [
                 f"{first_part}.{column}"
-                for prop in table_entry.new_proposers
-                for column in prop.columns
+                for column in self.metadata.tables[table_entry.name].columns.keys()
                 if column.startswith(last_part)
             ]
         # first_part is None, last_part might be table or column.
@@ -534,23 +528,16 @@ class DbCmd(ABC, cmd.Cmd):
         if last_part in table_names:
             # we have a complete table name, so allow the completion with a dot to show this
             table_names.append(f"{last_part}.")
-        current_table = self.get_table()
-        if current_table:
+        if self.table_index < len(self._table_entries):
+            current_table = self._table_entries[self.table_index]
             column_names = [
-                col
-                for prop in current_table.new_proposers
-                for col in prop.columns
-                if col.startswith(last_part)
+                column
+                for column in self.metadata.tables[current_table.name].columns.keys()
+                if column.startswith(last_part)
             ]
         else:
             column_names = []
         return table_names + column_names
-
-    def get_column_completions(self, text: str) -> list[str]:
-        """Get completions for text to column names in the current table."""
-        return [
-            col for col in self.table_metadata().columns.keys() if col.startswith(text)
-        ]
 
     def complete_peek(
         self, text: str, _line: str, _begidx: int, _endidx: int

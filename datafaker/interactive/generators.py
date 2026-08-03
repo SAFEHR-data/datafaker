@@ -270,7 +270,6 @@ information about the columns in the current table. Use 'peek',
     def set_prompt(self) -> None:
         """Set the prompt according to the current table, column and generator."""
         (table_name, prop_info) = self._get_table_and_proposer()
-        theme = get_active_theme()
         if table_name is None:
             self.prompt = "(generators) "
             return
@@ -282,9 +281,7 @@ information about the columns in the current table. Use 'peek',
             c + "[pk]" if table.columns[c].primary_key else c for c in prop_info.columns
         ]
         gen = f" ({prop_info.proposer.name()})" if prop_info.proposer else ""
-        self.prompt = (
-            f"({table_name}.{','.join(columns)}{gen}) "
-        )
+        self.prompt = f"({table_name}.{','.join(columns)}{gen}) "
 
     def _remove_auto_src_stats(self) -> list[MutableMapping[str, Any]]:
         """
@@ -450,13 +447,6 @@ information about the columns in the current table. Use 'peek',
                         " a uniform choice over the referenced table's rows"
                     )
 
-    def _get_table_index(self, table_name: str) -> int | None:
-        """Get the index of the named table in the table entries list."""
-        for n, entry in enumerate(self.table_entries):
-            if entry.name == table_name:
-                return n
-        return None
-
     def _get_proposer_index(self, table_index: int, column_name: str) -> int | None:
         """
         Get the index number of a column within the list of proposers in this table.
@@ -483,7 +473,7 @@ information about the columns in the current table. Use 'peek',
           (table_index, column_index) refers to a column within a different
           table.
         """
-        table_index = self._get_table_index(target)
+        table_index = self.get_table_index(target)
         if table_index is not None:
             return (table_index, 0)
         # The whole thing is not a table
@@ -496,7 +486,7 @@ information about the columns in the current table. Use 'peek',
             # It doesn't split, so that's the end
             self.print(self.ERROR_NO_SUCH_TABLE_OR_COLUMN, last_part)
             return (None, None)
-        table_index = self._get_table_index(first_part)
+        table_index = self.get_table_index(first_part)
         if table_index is None:
             self.print(self.ERROR_NO_SUCH_TABLE, first_part)
             return (None, None)
@@ -562,7 +552,7 @@ information about the columns in the current table. Use 'peek',
         (first_part, last_part) = split_column_full_name(text)
         if first_part:
             # first_part is table, last_part is column
-            table_index = self._get_table_index(first_part)
+            table_index = self.get_table_index(first_part)
             if table_index is None:
                 return []
             table_entry = self.table_entries[table_index]

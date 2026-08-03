@@ -8,7 +8,6 @@ from sqlalchemy import Connection, MetaData, insert, select
 
 from datafaker.interactive.base import DbCmd
 from datafaker.proposers import NullPartitionedNormalProposerFactory
-from datafaker.theme import ThemeEntry, set_active_theme
 from tests.test_interactive_generators import MockGeneratorCmd
 from tests.utils import GeneratesDBTestCase
 
@@ -137,7 +136,6 @@ class NullPartitionedTests(GeneratesDBTestCase):
     def setUp(self) -> None:
         """Set up the test with specific sample and suppress counts."""
         super().setUp()
-        set_active_theme(ThemeEntry.NONE)
         NullPartitionedNormalProposerFactory.SAMPLE_COUNT = 8
         NullPartitionedNormalProposerFactory.SUPPRESS_COUNT = 2
 

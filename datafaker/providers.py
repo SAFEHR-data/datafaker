@@ -669,6 +669,6 @@ class AnchoredProvider(BaseProvider):
         )
         anchor = dst_db_conn.execute(query).first()
         out = getattr(anchor, "out", None)
-        if not isinstance(out, str):
+        if not isinstance(out, (str, dt.date, dt.datetime)):
             return None
         return self.normal_date(mean_seconds, sd_seconds, out)

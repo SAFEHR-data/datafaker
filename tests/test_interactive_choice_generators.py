@@ -6,7 +6,6 @@ from sqlalchemy import Connection, MetaData, select
 
 from datafaker.interactive.base import DbCmd
 from datafaker.proposers.choice import ChoiceProposerFactory
-from datafaker.theme import ThemeEntry, set_active_theme
 from tests.test_interactive_generators import MockGeneratorCmd
 from tests.utils import DuckTestDb, GeneratesDBTestCase, MsSqlTestDb
 
@@ -36,7 +35,6 @@ class GeneratorsChoiceTests(GeneratesDBTestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        set_active_theme(ThemeEntry.NONE)
         ChoiceProposerFactory.SAMPLE_COUNT = 500
         ChoiceProposerFactory.SUPPRESS_COUNT = 5
 

@@ -120,7 +120,12 @@ class DateAfterProposer(Proposer):
 
     def name(self) -> str:
         """Get the name of the generator."""
-        return f"{self.function_name()} [anchored to {self._anchor.name}]"
+        fname = self.function_name()
+        aname = self._anchor.name
+        atable = self._anchor.table
+        if atable == self._column.table:
+            return f"{fname} [anchored to {aname}]"
+        return f"{fname} [anchored to {aname} of table {atable.name}]"
 
     def nominal_kwargs(self) -> dict[str, Any]:
         """Get the arguments to be entered into ``config.yaml``."""
@@ -180,8 +185,8 @@ class DateAfterProposer(Proposer):
                     )
                 ),
                 "comment": (
-                    f"Mean of interval between {anchor.name} and"
-                    f" {column.name} from table {column.table.name}."
+                    f"Mean of interval between {anchor.name} of {anchor.table.name}"
+                    f" and {column.name} from table {column.table.name}."
                 ),
             },
             f"stddev__{column.name}": {

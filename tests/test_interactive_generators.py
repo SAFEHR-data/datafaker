@@ -13,7 +13,6 @@ from sqlalchemy import func, select
 from datafaker.dialects import SecondsDifference, StdDev
 from datafaker.interactive.base import DbCmd
 from datafaker.interactive.generators import GeneratorCmd
-from datafaker.theme import ThemeEntry, set_active_theme
 from tests.utils import (
     DuckTestDb,
     GeneratesDBTestCase,
@@ -43,10 +42,6 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
     dump_file_path = "instrument.sql"
     database_name = "instrument"
     schema_name = "public"
-
-    def setUp(self) -> None:
-        super().setUp()
-        set_active_theme(ThemeEntry.NONE)
 
     def _get_cmd(self, config: MutableMapping[str, Any]) -> MockGeneratorCmd:
         """Get the command we are using for this test case."""
@@ -549,10 +544,12 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
                 gc.complete_select("fu", "select id from string fu", 22, 24), ["full"]
             )
             self.assertListEqual(
-                gc.complete_select("ou", "select id from string full ou", 25, 27), ["outer"]
+                gc.complete_select("ou", "select id from string full ou", 25, 27),
+                ["outer"],
             )
             self.assertListEqual(
-                gc.complete_select("jo", "select id from string full outer jo", 29, 31), ["join"]
+                gc.complete_select("jo", "select id from string full outer jo", 29, 31),
+                ["join"],
             )
 
     def test_compare_reports_privacy(self) -> None:
@@ -640,10 +637,6 @@ class ConfigureGeneratorsWithSrc2Tests(GeneratesDBTestCase):
     copy_files = ["row_generators.py", "story_generators.py"]
     copy_from_directory = Path("examples")
 
-    def setUp(self) -> None:
-        super().setUp()
-        set_active_theme(ThemeEntry.NONE)
-
     def _get_cmd(self, config: MutableMapping[str, Any]) -> MockGeneratorCmd:
         """Get the command we are using for this test case."""
         return MockGeneratorCmd(
@@ -716,7 +709,99 @@ class ConfigureGeneratorsWithSrc2DuckDbTests(ConfigureGeneratorsWithSrc2Tests):
 
 
 class ConfigureGeneratorsWithSrc2MsSqlTests(ConfigureGeneratorsWithSrc2Tests):
-    """Test `configure-generators` with `src2.dump` with DuckDB."""
+    """Test `configure-generators` with `src2.dump` with MS SQL."""
+
+    database_type = MsSqlTestDb
+    schema_name = None
+
+
+class ConfigureGeneratorsWithInstrumentsTests(GeneratesDBTestCase):
+    """Test `configure-generators` with the `instrument.sql` database."""
+
+    dump_file_path = "instrument.sql"
+    database_name = "instrument"
+    schema_name = "public"
+    use_temporary_cwd = True
+
+    def _get_cmd(self, config: MutableMapping[str, Any]) -> MockGeneratorCmd:
+        """Get the command we are using for this test case."""
+        return MockGeneratorCmd(
+            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
+        )
+
+    # pylint: disable=too-many-locals
+    def test_cross_table_interval_end_to_end(self) -> None:
+        """Test that the cross-table interval is proposed and works."""
+        table = "model"
+        column = "introduced"
+        atable = "manufacturer"
+        anchor = "founded"
+        config = {
+            "tables": {
+                "manufacturer": {
+                    "row_generators": [
+                        {
+                            "name": "generic.datetime.datetime",
+                            "kwargs": {
+                                "start": 1930,
+                                "end": 1980,
+                            },
+                            "columns_assigned": ["founded"],
+                        },
+                    ],
+                    "columns": {
+                        "founded": {
+                            "roles": ["start"],
+                        },
+                    },
+                },
+            }
+        }
+        with self._get_cmd(config) as gc:
+            # set up our interval proposer
+            gc.do_next(f"{table}.{column}")
+            gc.reset()
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            provider_name = (
+                "generic.anchored_provider.normal_date_fk"
+                f" [anchored to {anchor} of table {atable}]"
+            )
+            self.assertIn(provider_name, proposals.keys())
+            proposals = gc.get_proposals()
+            gc.do_set(str(proposals[provider_name][0]))
+            gc.do_quit("")
+            self.generate_data(config, num_passes=15)
+        with self.sync_engine.connect() as conn:
+            mt = self.metadata.tables[table]
+            mat = self.metadata.tables[atable]
+            src_diff = SecondsDifference(mt.c[column], mat.c[anchor])
+            src_result = conn.execute(
+                select(func.avg(src_diff).label("mean"), StdDev(src_diff).label("sd"))
+                .select_from(mt)
+                .join(mat)
+            ).one()
+        assert self.dst_engine is not None
+        with self.dst_engine.connect() as conn:
+            dmt = self.dst_metadata.tables[table]
+            dmat = self.dst_metadata.tables[atable]
+            dst_diff = SecondsDifference(dmt.c[column], dmat.c[anchor])
+            dst_result = conn.execute(
+                select(func.avg(dst_diff).label("mean"), StdDev(dst_diff).label("sd"))
+                .select_from(dmt)
+                .join(dmat)
+            ).one()
+        self.assertAlmostEqual(
+            dst_result.mean, dst_result.mean, delta=dst_result.mean * 0.3
+        )
+        self.assertAlmostEqual(src_result.sd, dst_result.sd, delta=src_result.sd * 0.5)
+
+
+# Note that this test won't work with DuckDB because it needs foreign keys to work
+class ConfigureGeneratorsWithInstrumentsMsSqlTests(
+    ConfigureGeneratorsWithInstrumentsTests
+):
+    """Test `configure-generators` with `instrument.sql` with MS SQL."""
 
     database_type = MsSqlTestDb
     schema_name = None
@@ -728,10 +813,6 @@ class GeneratorTests(GeneratesDBTestCase):
     dump_file_path = "instrument.sql"
     database_name = "instrument"
     schema_name = "public"
-
-    def setUp(self) -> None:
-        super().setUp()
-        set_active_theme(ThemeEntry.NONE)
 
     def _get_cmd(self, config: MutableMapping[str, Any]) -> MockGeneratorCmd:
         """We are using configure-generators."""

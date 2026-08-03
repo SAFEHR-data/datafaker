@@ -364,12 +364,10 @@ class Buckets:
             StdDev(column).label("stddev"),
             func.count(column).label("count"),  # pylint: disable=not-callable
         ).select_from(table)
-        if join_tables:
-            query = query.join(*join_tables)
+        for jt in join_tables or []:
+            query = query.join(jt)
         with engine.connect() as connection:
-            result = connection.execute(
-                query
-            ).first()
+            result = connection.execute(query).first()
             if result is None or result.stddev is None or getattr(result, "count") < 2:
                 return None
         try:
