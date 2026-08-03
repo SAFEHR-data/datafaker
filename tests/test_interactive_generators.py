@@ -505,6 +505,56 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             )
             self.assertListEqual(gc.complete_next("ww", "next ww", 5, 7), [])
 
+    def test_select_completion(self) -> None:
+        """Test tab completion for the select command."""
+        with self._get_cmd({}) as gc:
+            # Select clause completes tables and columns
+            self.assertSetEqual(
+                set(gc.complete_select("m", "select m", 7, 8)),
+                {"manufacturer", "model"},
+            )
+            self.assertSetEqual(
+                set(gc.complete_select("model", "select model", 7, 12)),
+                {"model", "model."},
+            )
+            self.assertSetEqual(
+                set(gc.complete_select("string.", "select string.", 7, 13)),
+                {"string.id", "string.model_id", "string.position", "string.frequency"},
+            )
+            self.assertSetEqual(
+                set(gc.complete_select("string.p", "select string.p", 7, 14)),
+                {"string.position"},
+            )
+            self.assertListEqual(
+                gc.complete_select("string.q", "select string.q", 7, 14), []
+            )
+            self.assertListEqual(gc.complete_next("ww", "select ww", 7, 9), [])
+            # From clause completes tables only
+            self.assertSetEqual(
+                set(gc.complete_select("m", "select id from m", 15, 16)),
+                {"manufacturer", "model"},
+            )
+            self.assertListEqual(
+                gc.complete_select("string.p", "select id from string.p", 15, 22),
+                [],
+            )
+            # SQL completions
+            self.assertListEqual(
+                gc.complete_select("fr", "select id fr", 10, 12), ["from"]
+            )
+            self.assertListEqual(
+                gc.complete_select("FR", "select id FR", 10, 12), ["FROM"]
+            )
+            self.assertListEqual(
+                gc.complete_select("fu", "select id from string fu", 22, 24), ["full"]
+            )
+            self.assertListEqual(
+                gc.complete_select("ou", "select id from string full ou", 25, 27), ["outer"]
+            )
+            self.assertListEqual(
+                gc.complete_select("jo", "select id from string full outer jo", 29, 31), ["join"]
+            )
+
     def test_compare_reports_privacy(self) -> None:
         """
         Test that compare reports whether the current table is primary private,

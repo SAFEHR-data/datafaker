@@ -467,8 +467,7 @@ Type 'help data' for examples."""
         previous_parts = line[: begidx - 1].split()
         if len(previous_parts) != 2:
             return []
-        table_metadata = self.table_metadata()
-        return [k for k in table_metadata.columns.keys() if k.startswith(text)]
+        return self.get_column_completions(text)
 
     def print_column_data(self, column: str, count: int, min_length: int) -> None:
         """

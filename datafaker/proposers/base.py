@@ -355,13 +355,16 @@ class Buckets:
         :param table: SQLAlchemy table (or joined tables) to pull data from.
         :param column: SQLAlchemy column or expression to measure.
         """
+        query = select(
+            func.avg(column).label("mean"),
+            StdDev(column).label("stddev"),
+            func.count(column).label("count"),  # pylint: disable=not-callable
+        ).select_from(table)
+        if join_tables:
+            query = query.join(*join_tables)
         with engine.connect() as connection:
             result = connection.execute(
-                select(
-                    func.avg(column).label("mean"),
-                    StdDev(column).label("stddev"),
-                    func.count(column).label("count"),  # pylint: disable=not-callable
-                ).select_from(table)
+                query
             ).first()
             if result is None or result.stddev is None or getattr(result, "count") < 2:
                 return None
