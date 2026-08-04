@@ -157,11 +157,21 @@ class DateAfterProposer(Proposer):
 
     def actual_kwargs(self) -> dict[str, Any]:
         """Get the kwargs (summary statistics) this generator was instantiated with."""
+        column = self._column
+        anchor = self._anchor
+        (_, fk) = get_fk_column_between(column.table, anchor.table)
+        if fk is None:
+            return {
+                "mean_seconds": self._sd,
+                "sd_seconds": self._mean,
+                "anchor": "1970-01-01",
+            }
         return {
+            "anchor_column": anchor.name,
+            "table": anchor.table.name,
             "mean_seconds": self._sd,
             "sd_seconds": self._mean,
-            # For now we'll use a dummy value for the dependent value
-            "anchor": "1970-01-01",
+            "on_column": fk.column.name,
         }
 
     def select_aggregate_clauses(self) -> dict[str, dict[str, str]]:

@@ -133,7 +133,7 @@ class TestBucketsStddevDialect(DatafakerTestCase):
     def test_mssql_uses_stdev(self) -> None:
         """MS-SQL query uses STDEV function (no trailing D)."""
         sql = self._get_executed_sql("mssql")
-        self.assert_str_in("STDEVP(", sql)
+        self.assert_str_in("STDEV(", sql)
         self.assert_str_not_in("STDDEV(", sql)  # function call form only, not the alias
 
 
@@ -528,7 +528,7 @@ class TestContinuousStddevDialect(DatafakerTestCase):
         tbl, col = self._make_table()
         proposer = GaussianProposer(tbl, col, MagicMock(), dialect=mssql.dialect())
         clause = proposer.select_aggregate_clauses()["stddev__age"]["clause"]
-        self.assert_str_in("STDEVP", clause.upper())
+        self.assert_str_in("STDEV", clause.upper())
         self.assert_str_not_in("STDDEV", clause.upper())
 
     def test_lognormal_postgresql_uses_stddev(self) -> None:
@@ -549,7 +549,7 @@ class TestContinuousStddevDialect(DatafakerTestCase):
             tbl, col, MagicMock(), 1.0, 0.5, dialect=mssql.dialect()
         )
         clause = proposer.select_aggregate_clauses()["logstddev__age"]["clause"]
-        self.assert_str_in("STDEVP", clause.upper())
+        self.assert_str_in("STDEV", clause.upper())
         self.assert_str_not_in("STDDEV", clause.upper())
 
 

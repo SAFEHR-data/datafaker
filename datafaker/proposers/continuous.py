@@ -276,7 +276,7 @@ class LogNormalProposer(Proposer):
             },
             f"logstddev__{self.column.name}": {
                 "clause": (
-                    f"{'STDEVP' if self._dialect.name == 'mssql' else 'STDDEV'}"
+                    f"{'STDEV' if self._dialect.name == 'mssql' else 'STDDEV'}"
                     f"(CASE WHEN 0<{self.column.name}"
                     f" THEN LN({self.column.name}) ELSE NULL END)"
                 ),

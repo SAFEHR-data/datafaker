@@ -206,9 +206,9 @@ def compile_stddev(element: StdDev, compiler: Any, **kw: Any) -> str:
 
 @compiles(StdDev, "mssql")
 def compile_stddev_mssql(element: StdDev, compiler: Any, **kw: Any) -> str:
-    """MSSQL equivalent: STDEVP."""
+    """MSSQL equivalent: STDEV."""
     e = compiler.process(element.expr, **kw)
-    return f"STDEVP({e})"
+    return f"STDEV({e})"
 
 
 class IsNull(ColumnElement[float]):  # pylint: disable=too-many-ancestors

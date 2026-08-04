@@ -768,8 +768,15 @@ class ConfigureGeneratorsWithInstrumentsTests(GeneratesDBTestCase):
                 f" [anchored to {anchor} of table {atable}]"
             )
             self.assertIn(provider_name, proposals.keys())
-            proposals = gc.get_proposals()
-            gc.do_set(str(proposals[provider_name][0]))
+            prop = proposals[provider_name]
+            gc.reset()
+            gc.do_compare(str(prop[0]))
+            self.assertEqual(gc.messages[0][0], gc.NOT_PRIVATE_TEXT)
+            self.assertEqual(gc.messages[1][0], gc.REQUIRES_SOURCE_DATA_TEXT)
+            self.assertEqual(gc.messages[2][0], gc.PROVIDING_VALUES_TEXT)
+            self.assertAlmostEqual(gc.messages[2][1][1]["sd"], 5.4e7, delta=1.0e6)
+            self.assertAlmostEqual(gc.messages[2][1][1]["mean"], 3.3e7, delta=1.0e6)
+            gc.do_set(str(prop[0]))
             gc.do_quit("")
             self.generate_data(config, num_passes=15)
         with self.sync_engine.connect() as conn:

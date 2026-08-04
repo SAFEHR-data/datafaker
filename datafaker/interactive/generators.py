@@ -95,6 +95,10 @@ information about the columns in the current table. Use 'peek',
     PRIMARY_PRIVATE_TEXT = "Primary Private"
     SECONDARY_PRIVATE_TEXT = "Secondary Private on columns {0}"
     NOT_PRIVATE_TEXT = "Not private"
+    REQUIRES_SOURCE_DATA_TEXT = (
+        "{0}. {2}{1}{3} requires the following data from the source database:"
+    )
+    PROVIDING_VALUES_TEXT = "{2}{0}{3}; providing the following values: {4}{1}"
     ERROR_NO_SUCH_TABLE = "No such (non-vocabulary, non-ignored) table name {0}"
     ERROR_NO_SUCH_COLUMN = "No such column {0} in this table"
     ERROR_COLUMN_ALREADY_MERGED = "Column {0} is already merged"
@@ -688,7 +692,7 @@ information about the columns in the current table. Use 'peek',
             )
         else:
             self.print(
-                "{0}. {2}{1}{3} requires the following data from the source database:",
+                self.REQUIRES_SOURCE_DATA_TEXT,
                 n,
                 prop.name(),
                 theme.function,
@@ -717,7 +721,7 @@ information about the columns in the current table. Use 'peek',
         theme = get_active_theme()
         for cq_key, cq in cqs.items():
             self.print(
-                "{2}{0}{3}; providing the following values: {4}{1}",
+                self.PROVIDING_VALUES_TEXT,
                 cq["query"],
                 cq_key2args[cq_key],
                 theme.query,
@@ -737,7 +741,10 @@ information about the columns in the current table. Use 'peek',
                 # Are we pulling a specific part of this result?
                 sub = src_stat_groups.group(3)
                 if sub:
-                    actual = {sub: actual}
+                    if cq_key in out:
+                        out[cq_key][sub] = actual
+                    else:
+                        out[cq_key] = {sub: actual}
                 else:
                     out[cq_key] = actual
         elif isinstance(nominal, Sequence) and isinstance(actual, Sequence):

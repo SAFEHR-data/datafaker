@@ -438,7 +438,7 @@ class DbCmd(ABC, cmd.Cmd):
             return [j for j in ["outer", "OUTER", "join", "JOIN"] if j.startswith(text)]
         sql_ops += [s.upper() for s in sql_ops]
         sql_completions = [word for word in sql_ops if word.startswith(text)]
-        if previous_word in ["from", "join"]:
+        if previous_word in table_clause:
             return sql_completions + self.get_table_completions(text)
         return sql_completions + self.get_table_or_column_completions(text)
 
