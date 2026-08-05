@@ -48,7 +48,8 @@ class ExtractDateComponentTests(GeneratesDBTestCase):
         with self._get_cmd({}) as gc:
             self._choose_proposal(gc, "dates.getfrom", "generic.datetime.datetime", [])
             self._choose_proposal(gc, "orfrom", "generic.datetime.datetime", [])
-            self._choose_proposal(gc,
+            self._choose_proposal(
+                gc,
                 "year",
                 "generic.extract_provider.year [from column getfrom]",
                 [

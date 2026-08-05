@@ -598,9 +598,7 @@ class ExtractProvider(BaseProvider):
 
         name = "extract_provider"
 
-    def __init__(
-        self, *, seed: int | None = None, **kwargs: Any
-    ) -> None:
+    def __init__(self, *, seed: int | None = None, **kwargs: Any) -> None:
         """Initialise the extract provider."""
         super().__init__(seed=seed, **kwargs)
 

@@ -11,6 +11,7 @@ from datafaker.dialects import Random
 from datafaker.proposers.base import Proposer, ProposerFactory, get_column_type
 from datafaker.providers import ExtractProvider
 
+
 class DateComponentExtractProposer(Proposer):
     """Proposer that proposes the extraction of components from a datetime."""
 
@@ -64,19 +65,17 @@ class DateComponentExtractProposer(Proposer):
         return 0.0
 
     def get_based_on_data(self, count: int) -> list[datetime.datetime]:
+        """Get the data from the based-on column in the source data."""
         with self._engine.connect() as conn:
-            rows = conn.execute(select(self._based_on).order_by(Random())).fetchmany(count)
-            return [
-                row[0] for row in rows
-            ]
+            rows = conn.execute(select(self._based_on).order_by(Random())).fetchmany(
+                count
+            )
+            return [row[0] for row in rows]
 
     def generate_data(self, count: int) -> list[Any]:
         """Generate ``count`` random data points for this column."""
         prov = ExtractProvider()
-        return [
-            self.do_extract(prov, dt)
-            for dt in self.get_based_on_data(count)
-        ]
+        return [self.do_extract(prov, dt) for dt in self.get_based_on_data(count)]
 
     @abstractmethod
     def do_extract(self, provider: ExtractProvider, dt: datetime.datetime) -> Any:
@@ -153,14 +152,10 @@ class DateComponentExtractProposerFactory(ProposerFactory):
         if not isinstance(ct, (Date, Integer)):
             return []
         datetimes = [
-            c for c in column.table.columns
-            if isinstance(get_column_type(c), DateTime)
+            c for c in column.table.columns if isinstance(get_column_type(c), DateTime)
         ]
         if isinstance(ct, Date):
-            return [
-                DateExtractProposer(column, dt, engine)
-                for dt in datetimes
-            ]
+            return [DateExtractProposer(column, dt, engine) for dt in datetimes]
         return [
             prop
             for dt in datetimes
