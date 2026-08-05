@@ -211,7 +211,7 @@ def compile_stddev_mssql(element: StdDev, compiler: Any, **kw: Any) -> str:
     return f"STDEV({e})"
 
 
-class IsNull(ColumnElement[float]):  # pylint: disable=too-many-ancestors
+class IsNull(ColumnElement[bool]):  # pylint: disable=too-many-ancestors
     """Represent IS NULL as an expression."""
 
     expr: ColumnElement[float]

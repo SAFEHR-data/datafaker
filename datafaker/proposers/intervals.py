@@ -95,8 +95,14 @@ class DateAfterProposer(Proposer):
         """
         Initialise a date after proposer.
 
-        :param column_name: The name of the column (in the same table as the
-         output) in which to find the anchor.
+        :param metadata: The metadata of the source database.
+        :param sd: The standard deviation of the number of seconds of the interval measured.
+        :param mean: The mean of the number of seconds of the interval measured.
+        :param column: The column to generate.
+        :param anchor: The anchor column, which must be in the same table as column
+         or a related table.
+        :param dialect: The dialect of the source database.
+        :param buckets: The buckets for the intervals in the source database.
         """
         super().__init__()
         self._sd = sd

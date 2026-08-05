@@ -590,11 +590,50 @@ class DistributionProvider(BaseProvider):
         return result[:length]
 
 
-class AnchoredProvider(BaseProvider):
-    """A Mimesis provider of random values from the source database."""
+class ExtractProvider(BaseProvider):
+    """A provider of values extracted from a date previously generated."""
 
     class Meta:
-        """Meta-class for ColumnValueProvider settings."""
+        """Meta-class for AnchoredProvider settings."""
+
+        name = "extract_provider"
+
+    def __init__(
+        self, *, seed: int | None = None, **kwargs: Any
+    ) -> None:
+        """Initialise the extract provider."""
+        super().__init__(seed=seed, **kwargs)
+
+    def year(self, extract_from: dt.datetime | None) -> int | None:
+        """Extract the year from an existing value."""
+        if extract_from is None:
+            return None
+        return extract_from.year
+
+    def month(self, extract_from: dt.datetime | None) -> int | None:
+        """Extract the month from an existing value."""
+        if extract_from is None:
+            return None
+        return extract_from.month
+
+    def day(self, extract_from: dt.datetime | None) -> int | None:
+        """Extract the day from an existing value."""
+        if extract_from is None:
+            return None
+        return extract_from.day
+
+    def date(self, extract_from: dt.datetime | None) -> dt.date | None:
+        """Cast datetime to date."""
+        if extract_from is None:
+            return None
+        return extract_from.date()
+
+
+class AnchoredProvider(BaseProvider):
+    """A provider of values based on other values previously generated."""
+
+    class Meta:
+        """Meta-class for AnchoredProvider settings."""
 
         name = "anchored_provider"
 
@@ -627,6 +666,8 @@ class AnchoredProvider(BaseProvider):
         """
         if isinstance(anchor, str):
             anchor = dt.datetime.fromisoformat(anchor)
+        if isinstance(anchor, dt.date):
+            anchor = dt.datetime.combine(anchor, dt.time())
         interval = random.normalvariate(float(mean_seconds), float(sd_seconds))
         if interval < 0:
             return anchor
