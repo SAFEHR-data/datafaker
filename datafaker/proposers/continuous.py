@@ -360,7 +360,7 @@ class MultivariateNormalProposer(Proposer):
     def nominal_kwargs(self) -> dict[str, Any]:
         """Get the arguments to be entered into ``config.yaml``."""
         return {
-            "cov": f'SRC_STATS["{self.src_stats_key()}]["results"][0]',
+            "cov": f'SRC_STATS["{self.src_stats_key()}"]["results"][0]',
         }
 
     def custom_queries(self) -> dict[str, Any]:

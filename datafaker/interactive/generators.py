@@ -720,6 +720,9 @@ information about the columns in the current table. Use 'peek',
         )
         theme = get_active_theme()
         for cq_key, cq in cqs.items():
+            if cq_key not in cq_key2args:
+                self.print("There is an error in {0}", cq_key)
+                continue
             self.print(
                 self.PROVIDING_VALUES_TEXT,
                 cq["query"],
