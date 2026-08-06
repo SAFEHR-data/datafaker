@@ -52,7 +52,7 @@ TYPE_PROMPT = {
     TableType.IGNORE: "(table: {} (ignore)) ",
     TableType.VOCABULARY: "(table: {} (vocab)) ",
     TableType.PRIVATE: "(table: {} (private)) ",
-    TableType.EMPTY: "(table: {} (empty))",
+    TableType.EMPTY: "(table: {} (empty)) ",
 }
 
 

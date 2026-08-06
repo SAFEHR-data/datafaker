@@ -76,3 +76,22 @@ INSERT INTO public.observation VALUES (5, 1, 1.5, NULL, 'eggs');
 INSERT INTO public.observation VALUES (6, 1, 9.2, NULL, 'cheese');
 INSERT INTO public.observation VALUES (7, 1, 9.3, NULL, 'cheese');
 INSERT INTO public.observation VALUES (8, 1, 1.1, NULL, 'ham');
+
+CREATE TABLE public.double (
+    id INTEGER NOT NULL,
+    type INTEGER NOT NULL,
+    subtype INTEGER NOT NULL,
+    value TEXT
+);
+
+ALTER TABLE ONLY public.double ADD CONSTRAINT double_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.double
+    ADD CONSTRAINT double_type_fkey FOREIGN KEY (type) REFERENCES public.measurement_type(id);
+ALTER TABLE ONLY public.double
+    ADD CONSTRAINT double_subtype_fkey FOREIGN KEY (subtype) REFERENCES public.measurement_type(id);
+
+ALTER TABLE public.double OWNER TO postgres;
+
+INSERT INTO public.double VALUES (1, 1, 1, 'yes');
+INSERT INTO public.double VALUES (2, 2, 1, 'maybe');
+INSERT INTO public.double VALUES (3, 2, 4, 'no');

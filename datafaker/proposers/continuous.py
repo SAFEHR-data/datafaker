@@ -3,12 +3,14 @@
 import itertools
 from abc import abstractmethod
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import (
     Column,
     Dialect,
     Engine,
+    FromClause,
     RowMapping,
     Select,
     Table,
@@ -19,6 +21,7 @@ from sqlalchemy import (
     select,
 )
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import aliased
 from sqlalchemy.sql.functions import coalesce
 from sqlalchemy.types import Integer, Numeric
 from typing_extensions import Self
@@ -429,6 +432,14 @@ class MultivariateNormalGeneratorFactoryBase(ProposerFactory):
         return {}
 
 
+@dataclass
+class JoinToOn:
+    """Represents a JOIN clause."""
+
+    table: FromClause
+    onclause: Any
+
+
 # pylint: disable=too-many-instance-attributes
 class CovariateQuery:
     """Query-constructing object for making a covariate matrix."""
@@ -519,40 +530,41 @@ class CovariateQuery:
 
     def _get_constants_and_joins(
         self, named_tables: Mapping[str, Column], subquery: Any
-    ) -> tuple[list[Column], list[Table]]:
+    ) -> tuple[list[Column], list[JoinToOn]]:
         """
         Extra JOINs to give names to foreign keys.
 
-        This enables information governance people can understand the results better.
+        This enables information governance people can understand the results
+        better.
         :param named_tables: A mapping of tables that have names to columns
-        that supply those names.
-        :return: A pair; the first is constants in the SELECT clause, the second is
-        tables to join to the outer query in order to make names appear
-        in the output.
+         that supply those names.
+        :return: A pair; the first is constants in the SELECT clause, the
+         second is foreign keys to tables to join to the outer query in order
+         to make names appear in the output.
         """
         # Column names -> Foreign Keys to named_tables
         col_to_named_fks = {
             col.name: [
-                fk.column
-                for fk in col.foreign_keys
-                if fk.column.table.name in named_tables
+                fk for fk in col.foreign_keys if fk.column.table.name in named_tables
             ]
             for col in self._constant_clauses.values()
         }
         # Column names -> single FK to named_tables
         col_to_named_fk = {col: fks[0] for col, fks in col_to_named_fks.items() if fks}
-        name_joins: list[Table] = []
+        name_joins: list[JoinToOn] = []
         constants: list[Any] = []
         for index, col in self._constant_clauses.items():
             col_name = col.name
-            constants.append(subquery.c[f"k{index}"])
+            fk_parent_col = subquery.c[f"k{index}"]
+            constants.append(fk_parent_col)
             if col_name in col_to_named_fk:
-                fk_target = col_to_named_fk[col_name]
-                name_joins.append(fk_target.table)
+                fk = col_to_named_fk[col_name]
+                name_table = aliased(fk.column.table)
+                name_table_id = name_table.c[fk.column.name]
+                name_joins.append(JoinToOn(name_table, fk_parent_col == name_table_id))
+                name_column = named_tables[fk.column.table.name]
                 constants.append(
-                    named_tables[fk_target.table.name].label(
-                        f"k{index}_{col_name}__name"
-                    )
+                    name_table.c[name_column.name].label(f"k{index}_{col_name}__name")
                 )
         return constants, name_joins
 
@@ -582,7 +594,7 @@ class CovariateQuery:
             literal(rank).label("rank"), middle.c["count"], *constants, *means, *covs
         ).select_from(middle)
         for j in name_joins:
-            query = query.join(j)
+            query = query.join(j.table, onclause=j.onclause)
         # if there are any numeric columns we need at least
         # two rows to make any (co)variances at all
         if self._columns:
