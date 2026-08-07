@@ -237,7 +237,7 @@ def compile_isnull(element: IsNull, compiler: Any, **kw: Any) -> str:
     return f"{e} IS NULL"
 
 
-class IsNotNull(ColumnElement[float]):  # pylint: disable=too-many-ancestors
+class IsNotNull(ColumnElement[bool]):  # pylint: disable=too-many-ancestors
     """Represent IS NOT NULL as an expression."""
 
     expr: ColumnElement[float]
@@ -261,6 +261,105 @@ def compile_isnotnull(element: IsNotNull, compiler: Any, **kw: Any) -> str:
     """Create SQL for IS NULL."""
     e = compiler.process(element.expr, **kw)
     return f"{e} IS NOT NULL"
+
+
+class IsNumeric(ColumnElement[bool]):  # pylint: disable=too-many-ancestors
+    """Tell if a column is not Null, NaN or Infinity."""
+
+    expr: ColumnElement[float]
+
+    _traverse_internals = [
+        ("expr", InternalTraversal.dp_clauseelement),
+    ]
+
+    def __init__(
+        self,
+        expr: ColumnElement[float],
+    ):
+        """Get the clause that is being tested."""
+        self.expr = expr
+
+    __sa_operate__ = ColumnElement.operate
+
+
+@compiles(IsNumeric)
+def compile_isnumeric(element: IsNumeric, compiler: Any, **kw: Any) -> str:
+    """Create SQL for IsNumeric."""
+    e = compiler.process(element.expr, **kw)
+    return f"COALESCE({e} != {e} + 1, False)"
+
+
+@compiles(IsNumeric, "mssql")
+def compile_isnumeric_mssql(element: IsNumeric, compiler: Any, **kw: Any) -> str:
+    """Create SQL for IsNumeric for MSSQL."""
+    e = compiler.process(element.expr, **kw)
+    return f"ISNULL({e} * 0, 1) != 1"
+
+
+class IsPositive(ColumnElement[bool]):  # pylint: disable=too-many-ancestors
+    """Tell if a column is not Null, NaN, Infinity, negative or zero."""
+
+    expr: ColumnElement[float]
+
+    _traverse_internals = [
+        ("expr", InternalTraversal.dp_clauseelement),
+    ]
+
+    def __init__(
+        self,
+        expr: ColumnElement[float],
+    ):
+        """Get the clause that is being tested."""
+        self.expr = expr
+
+    __sa_operate__ = ColumnElement.operate
+
+
+@compiles(IsPositive)
+def compile_ispositive(element: IsPositive, compiler: Any, **kw: Any) -> str:
+    """Create SQL for IsPositive."""
+    e = compiler.process(element.expr, **kw)
+    return f"COALESCE({e} != {e} + 1 AND {e} > 0, False)"
+
+
+@compiles(IsPositive, "mssql")
+def compile_ispositive_mssql(element: IsPositive, compiler: Any, **kw: Any) -> str:
+    """Create SQL for IsPositive for MSSQL."""
+    e = compiler.process(element.expr, **kw)
+    return f"ISNULL({e}, -1) > 0"
+
+
+class LogNatural(ColumnElement[float]):  # pylint: disable=too-many-ancestors
+    """Calculate the logarithm base e."""
+
+    expr: ColumnElement[float]
+
+    _traverse_internals = [
+        ("expr", InternalTraversal.dp_clauseelement),
+    ]
+
+    def __init__(
+        self,
+        expr: ColumnElement[float],
+    ):
+        """Get the clause that is being tested."""
+        self.expr = expr
+
+    __sa_operate__ = ColumnElement.operate
+
+
+@compiles(LogNatural)
+def compile_lognatural(element: LogNatural, compiler: Any, **kw: Any) -> str:
+    """Create SQL for LogNatural."""
+    e = compiler.process(element.expr, **kw)
+    return f"LN({e})"
+
+
+@compiles(LogNatural, "mssql")
+def compile_lognatural_mssql(element: LogNatural, compiler: Any, **kw: Any) -> str:
+    """Create SQL for LogNatural for MSSQL."""
+    e = compiler.process(element.expr, **kw)
+    return f"LOG({e})"
 
 
 class Random(ColumnElement[float]):  # pylint: disable=too-many-ancestors

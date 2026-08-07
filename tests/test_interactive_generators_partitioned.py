@@ -9,7 +9,7 @@ from sqlalchemy import Connection, MetaData, insert, select
 from datafaker.interactive.base import DbCmd
 from datafaker.proposers import NullPartitionedNormalProposerFactory
 from tests.test_interactive_generators import MockGeneratorCmd
-from tests.utils import GeneratesDBTestCase
+from tests.utils import GeneratesDBTestCase, MsSqlTestDb
 
 
 @dataclass
@@ -543,3 +543,10 @@ class NullPartitionedTests(GeneratesDBTestCase):
                     if "k1" in result:
                         k1 = result["k1"]
                         self.assertEqual(result["k1_subtype__name"], mt[k1])
+
+
+class NullPartitionedMsSqlTests(NullPartitionedTests):
+    """NullPartitionedTests but for MS SQL."""
+
+    database_type = MsSqlTestDb
+    schema_name = None

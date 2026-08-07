@@ -284,7 +284,7 @@ class MsSqlTestDb(TestDatabaseBase):
     _EOL_RE = re.compile(r";$", re.MULTILINE)
     _TIMESTAMP_RE = re.compile(r"(TIMESTAMP)\s+WITH\s+TIME\s+ZONE", re.IGNORECASE)
     _ALTER_OWNER_RE = re.compile(
-        r"ALTER\s+(TABLE|DATABASE)\s+[A-Za-z0-9_.]+\s+OWNER\s+TO\s+[A-Za-z0-9_]+\s*;"
+        r'ALTER\s+(TABLE|DATABASE)\s+["A-Za-z0-9_.]+\s+OWNER\s+TO\s+[A-Za-z0-9_]+\s*;'
     )
     _ALTER_ONLY_RE = re.compile(r"ALTER\s+TABLE\s+ONLY\s+")
     _CREATE_INDEX_RE = re.compile(

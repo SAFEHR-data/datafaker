@@ -26,7 +26,7 @@ from sqlalchemy.sql.functions import coalesce
 from sqlalchemy.types import Integer, Numeric
 from typing_extensions import Self
 
-from datafaker.dialects import IsNotNull, NullIf, Random, StdDev
+from datafaker.dialects import IsNotNull, LogNatural, NullIf, Random, StdDev
 from datafaker.proposers.base import (
     Buckets,
     NumericType,
@@ -716,7 +716,7 @@ class MultivariateLogNormalProposerFactory(MultivariateNormalProposerFactory):
 
     def query_var(self, column: Column) -> Any:
         """Get the expression to query for, for this column."""
-        return func.ln(column)
+        return LogNatural(column)
 
     def query_comment(self) -> str:
         """Return the human-readable comment for this generator."""
