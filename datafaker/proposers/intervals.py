@@ -3,14 +3,14 @@ import datetime
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from sqlalchemy import Column, Dialect, Engine, ForeignKey, MetaData, func, select
+from sqlalchemy import Column, Engine, ForeignKey, MetaData, func, select
 from sqlalchemy.types import Date, DateTime
 
 from datafaker.db_utils import get_fk_column_between
-from datafaker.dialects import SecondsDifference, StdDev
+from datafaker.dialects import Random, SecondsDifference, StdDev
 from datafaker.proposers.base import Buckets, Proposer, ProposerFactory, get_column_type
 from datafaker.providers import AnchoredProvider
-from datafaker.utils import get_property
+from datafaker.utils import get_property, procrustes
 
 RelatedColumn = tuple[ForeignKey | None, Column]
 
@@ -78,6 +78,13 @@ def _get_roles(
     return role_to_fk_columns
 
 
+def coerce_to_datetime(d: datetime.date | datetime.datetime) -> datetime.datetime:
+    """Return a datetime, given either a date or datetime."""
+    if isinstance(d, datetime.datetime):
+        return d
+    return datetime.datetime.combine(d, datetime.time())
+
+
 class DateAfterProposer(Proposer):
     """Proposer that proposes dates that are after a preexisting date."""
 
@@ -89,7 +96,7 @@ class DateAfterProposer(Proposer):
         mean: float,
         column: Column,
         anchor: Column,
-        dialect: Dialect,
+        engine: Engine,
         buckets: Buckets | None = None,
     ):
         """
@@ -109,14 +116,15 @@ class DateAfterProposer(Proposer):
         self._mean = mean
         self._anchor = anchor
         self._column = column
-        self._dialect = dialect
+        self._engine = engine
         self._provider = AnchoredProvider(metadata=metadata)
         if buckets is None:
             self._fit = None
             return
-        dummy_anchor = datetime.datetime.fromisoformat("1970-01-01")
-        samples = [(d - dummy_anchor).total_seconds() for d in self.generate_data(400)]
-        self._fit = buckets.fit_from_values(samples)
+        intervals = self.generate_intervals(400)
+        self._fit = buckets.fit_from_values(
+            [(b - coerce_to_datetime(a)).total_seconds() for (a, b) in intervals]
+        )
 
     def function_name(self) -> str:
         """Get the name of the generator function to call."""
@@ -197,7 +205,8 @@ class DateAfterProposer(Proposer):
             f"mean__{column.name}": {
                 "clause": str(
                     mean_q.compile(
-                        dialect=self._dialect, compile_kwargs={"literal_binds": True}
+                        dialect=self._engine.dialect,
+                        compile_kwargs={"literal_binds": True},
                     )
                 ),
                 "comment": (
@@ -208,7 +217,8 @@ class DateAfterProposer(Proposer):
             f"stddev__{column.name}": {
                 "clause": str(
                     sd_q.compile(
-                        dialect=self._dialect, compile_kwargs={"literal_binds": True}
+                        dialect=self._engine.dialect,
+                        compile_kwargs={"literal_binds": True},
                     )
                 ),
                 "comment": (
@@ -245,7 +255,7 @@ class DateAfterProposer(Proposer):
                 ],
                 "query": str(
                     query.compile(
-                        dialect=self._dialect,
+                        dialect=self._engine.dialect,
                         compile_kwargs={"literal_binds": True},
                     )
                 ),
@@ -258,10 +268,30 @@ class DateAfterProposer(Proposer):
 
     def generate_data(self, count: int) -> list[datetime.datetime]:
         """Generate ``count`` random data points for this column."""
-        dummy_anchor = datetime.datetime.fromisoformat("1970-01-01")
+        return [b for (_, b) in self.generate_intervals(count)]
+
+    def generate_intervals(
+        self,
+        count: int,
+    ) -> list[tuple[datetime.datetime, datetime.datetime]]:
+        """
+        Generate ``count`` intervals.
+
+        :param count: The number of intervals to generate.
+        :return: Each pair consists of an anchor and the generated datetime.
+        """
+        query = select(self._anchor).select_from(self._anchor.table)
+        query = query.order_by(Random()).limit(count)
+        with self._engine.connect() as conn:
+            anchors = conn.execute(query).scalars().all()
+        anchors = procrustes(
+            anchors,
+            count,
+            datetime.datetime.fromisoformat("1970-01-01"),
+        )
         return [
-            self._provider.normal_date(self._sd, self._mean, dummy_anchor)
-            for _ in range(count)
+            (anchor, self._provider.normal_date(self._sd, self._mean, anchor))
+            for anchor in anchors
         ]
 
 
@@ -303,7 +333,7 @@ class DateAfterProposerFactory(ProposerFactory):
                 result.mean,
                 column,
                 anchor,
-                dialect=engine.dialect,
+                engine=engine,
                 buckets=buckets,
             )
         ]

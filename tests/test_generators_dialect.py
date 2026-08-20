@@ -585,13 +585,15 @@ class TestIntervalsDifferenceDialect(DatafakerTestCase):
             Column("start_date", DateTime()),
             Column("end_date", DateTime()),
         )
+        engine = MagicMock()
+        engine.dialect = mssql.dialect()
         proposer = DateAfterProposer(
             metadata=meta,
             sd=1.0,
             mean=86400.0,
             column=tbl.c.end_date,
             anchor=tbl.c.start_date,
-            dialect=mssql.dialect(),
+            engine=engine,
         )
         clauses = proposer.select_aggregate_clauses()
         mean_clause = clauses["mean__end_date"]["clause"].upper()
@@ -611,13 +613,15 @@ class TestIntervalsDifferenceDialect(DatafakerTestCase):
             Column("start_date", DateTime()),
             Column("end_date", DateTime()),
         )
+        engine = MagicMock()
+        engine.dialect = postgresql.dialect()
         proposer = DateAfterProposer(
             metadata=meta,
             sd=1.0,
             mean=86400.0,
             column=tbl.c.end_date,
             anchor=tbl.c.start_date,
-            dialect=postgresql.dialect(),
+            engine=engine,
         )
         clauses = proposer.select_aggregate_clauses()
         mean_clause = clauses["mean__end_date"]["clause"].upper()
