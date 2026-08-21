@@ -1,8 +1,10 @@
 """Generator configuration shell."""  # pylint: disable=too-many-lines
 import functools
 import re
+from abc import ABC
 from collections.abc import Iterable, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Any, Callable, Optional, cast
 
 from sqlalchemy import Column, and_, literal_column, select
@@ -66,6 +68,37 @@ def get_aggregate_query(
     qualified = schema_qualified_name(table_name, engine)
     alias = f' AS "{table_name}"' if engine.dialect.name == "duckdb" else ""
     return f'SELECT {", ".join(clauses)} FROM "{qualified}"{alias}'
+
+
+class Role(StrEnum):
+    """Roles that can be set on columns."""
+
+    START = "start"
+    SOURCE = "source"
+
+
+class RoleCommand(ABC):
+    """Command for ``role``."""
+
+
+class RoleCommandList(RoleCommand):
+    """Command for ``role list``."""
+
+
+class RoleCommandSet(RoleCommand):
+    """Command for ``role set <role>``."""
+
+    def __init__(self, role: Role) -> None:
+        """Initialize RoleCommandSet."""
+        self.role = role
+
+
+class RoleCommandDelete(RoleCommand):
+    """Command for ``role delete <role>``."""
+
+    def __init__(self, role: Role) -> None:
+        """Initialize RoleCommandDelete."""
+        self.role = role
 
 
 # pylint: disable=too-many-public-methods
@@ -192,6 +225,7 @@ information about the columns in the current table. Use 'peek',
         self.proposer_index = 0
         self.proposers_valid_columns: Optional[tuple[int, list[str]]] = None
         self.set_prompt()
+        self.roles: dict[str, dict[str, set[Role]]] = {}
 
     @property
     def table_entries(self) -> list[GeneratorCmdTableEntry]:
@@ -983,7 +1017,6 @@ information about the columns in the current table. Use 'peek',
         self, text: str, _line: str, _begidx: int, _endidx: int
     ) -> list[str]:
         """Complete column names."""
-        last_arg = text.split()[-1]
         table_entry: GeneratorCmdTableEntry | None = self.get_table()
         if table_entry is None:
             return []
@@ -992,7 +1025,7 @@ information about the columns in the current table. Use 'peek',
             for i, gen in enumerate(table_entry.new_proposers)
             if i != self.proposer_index
             for column in gen.columns
-            if column.startswith(last_arg)
+            if column.startswith(text)
         ]
 
     def do_unmerge(self, arg: str) -> None:
@@ -1039,14 +1072,13 @@ information about the columns in the current table. Use 'peek',
         self, text: str, _line: str, _begidx: int, _endidx: int
     ) -> list[str]:
         """Complete column names to unmerge."""
-        last_arg = text.split()[-1]
         table_entry: GeneratorCmdTableEntry | None = self.get_table()
         if table_entry is None:
             return []
         return [
             column
             for column in table_entry.new_proposers[self.proposer_index].columns
-            if column.startswith(last_arg)
+            if column.startswith(text)
         ]
 
     def get_current_columns(self) -> set[str]:
@@ -1072,6 +1104,126 @@ information about the columns in the current table. Use 'peek',
         for to_remove in existing:
             self.do_unmerge(to_remove)
         return self.merge_columns(other_cols)
+
+    # pylint: disable=too-many-return-statements
+    def parse_role(self, arg: str) -> tuple[str | None, RoleCommand] | None:
+        """
+        Parse the `role` command arguments.
+
+        :param arg: The arguments; the text after ``role ``.
+        :return: A pair of the column name and the command specifed by
+         the arguments. Each is None if unspecified. None overall is returned
+         if the parse fails.
+        """
+        args = arg.split()
+        if len(args) == 0:
+            self.print("role requires a subcommand: list, set or delete.")
+            return None
+        column: str | None = None
+        command: RoleCommand | None = None
+        n = 0
+        while n < len(args):
+            param = args[n + 1] if n + 1 < len(args) else None
+            match args[n].lower():
+                case "on":
+                    if param is None:
+                        self.print("'on' requires a column name")
+                        return None
+                    column = param
+                    n += 2
+                case "list":
+                    command = RoleCommandList()
+                    n += 1
+                case "set":
+                    if param is None:
+                        self.print("'role set' requires a role name")
+                        return None
+                    if param not in Role:
+                        self.print("role must be one of {0}", ", ".join(Role))
+                        return None
+                    command = RoleCommandSet(Role(param))
+                    n += 2
+                case "delete":
+                    if param is None:
+                        self.print("'delete' requires a role name")
+                        return None
+                    if param not in Role:
+                        self.print("role must be one of {0}", ", ".join(Role))
+                        return None
+                    command = RoleCommandDelete(Role(param))
+                    n += 2
+                case _:
+                    self.print("Did not understand role command '{0}'", args[n])
+                    self.print("should be 'on', 'list', 'set' or 'delete'")
+                    return None
+        if command is None:
+            self.print("'role' requires a command 'set', 'list' or 'delete'")
+            return None
+        return (column, command)
+
+    def do_role(self, arg: str) -> None:
+        """
+        List, Set or Delete roles on this column.
+
+        List the roles on this column: role list
+        Set role 'start' on this column: role add start
+        Delete role 'start' on this column: role delete start
+        Add 'on mycolumn' or 'on mytable.mycolumn' to
+        check or alter a different column, for example
+        role on mytable.mycolumn list
+        """
+        parse = self.parse_role(arg)
+        if parse is None:
+            return
+        (column, command) = parse
+        if not column:
+            cols = self.get_current_columns()
+            if len(cols) != 1:
+                self.print(
+                    "We are not on one column, so an 'on columnname' must be specified"
+                )
+                return
+            column = list(cols)[0]
+        (table, col) = split_column_full_name(column)
+        if not table:
+            entry = self.get_table()
+            if entry is None:
+                self.print("Error, no tables!")
+                return
+            table = entry.name
+        if table not in self.metadata.tables:
+            self.print("Error: no such table '{0}'", table)
+            return
+        tm = self.metadata.tables[table]
+        if col not in tm.columns:
+            self.print("Error: no such column '{0}' in table '{1}'", col, table)
+            return
+        table_roles: dict[str, set[Role]] = self.roles.get(table, {})
+        column_roles: set[Role] = table_roles.get(col, set())
+        if isinstance(command, RoleCommandList):
+            if not column_roles:
+                self.print("No roles.")
+            else:
+                self.print(", ".join(column_roles))
+        elif isinstance(command, RoleCommandSet):
+            column_roles.add(command.role)
+            table_roles[col] = column_roles
+            self.roles[table] = table_roles
+        elif isinstance(command, RoleCommandDelete):
+            column_roles.remove(command.role)
+            table_roles[col] = column_roles
+            self.roles[table] = table_roles
+
+    def complete_role(
+        self, text: str, line: str, begidx: int, _endidx: int
+    ) -> list[str]:
+        """Complete column names."""
+        prev = line[:begidx].rsplit(maxsplit=1)[-1]
+        if prev == "on":
+            return self.get_table_or_column_completions(text)
+        if prev in {"set", "delete"}:
+            return [com for com in Role if com.startswith(text)]
+        return [com for com in ["list", "set", "delete"] if com.startswith(text)]
 
 
 def try_setting_generator(gc: GeneratorCmd, proposers: Iterable[str]) -> bool:
