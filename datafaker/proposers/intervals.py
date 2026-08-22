@@ -130,10 +130,9 @@ class DateAfterProposer(Proposer):
             self._fit = None
             return
         intervals = self.generate_intervals(400)
-        self._fit = buckets.fit_from_values([
-            (b - coerce_to_datetime(a, b)).total_seconds()
-            for (a, b) in intervals
-        ])
+        self._fit = buckets.fit_from_values(
+            [(b - coerce_to_datetime(a, b)).total_seconds() for (a, b) in intervals]
+        )
 
     def function_name(self) -> str:
         """Get the name of the generator function to call."""
