@@ -814,6 +814,113 @@ class ConfigureGeneratorsWithInstrumentsMsSqlTests(
     schema_name = None
 
 
+class ConfigureGeneratorsWithDateTests(GeneratesDBTestCase):
+    """Test `configure-generators` with the `instrument.sql` database."""
+
+    dump_file_path = "date.sql"
+    database_name = "date_tables"
+    schema_name = "public"
+    use_temporary_cwd = True
+
+    def _get_cmd(self, config: MutableMapping[str, Any]) -> MockGeneratorCmd:
+        """Get the command we are using for this test case."""
+        return MockGeneratorCmd(
+            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
+        )
+
+    # pylint: disable=too-many-locals
+    def test_cross_table_interval_timestamp_vs_date(self) -> None:
+        """
+        Test that the cross-table interval is proposed and compared.
+
+        Tests all combinations of date vs timestamp.
+        """
+        table = "happening"
+        column = "at_time"
+        column2 = "at_date"
+        atable = "person"
+        anchor = "date_of_birth"
+        anchor2 = "timestamp_of_birth"
+        config = {
+            "tables": {
+                atable: {
+                    "row_generators": [
+                        {
+                            "name": "generic.datetime.datetime",
+                            "kwargs": {
+                                "start": 1930,
+                                "end": 1980,
+                            },
+                            "columns_assigned": [anchor],
+                        },
+                    ],
+                    "columns": {
+                        anchor: {
+                            "roles": ["start"],
+                        },
+                        anchor2: {
+                            "roles": ["start"],
+                        },
+                    },
+                },
+            }
+        }
+        with self._get_cmd(config) as gc:
+            # set up our interval proposer
+            gc.do_next(f"{table}.{column}")
+            gc.reset()
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            provider_name = (
+                "generic.anchored_provider.normal_date_fk"
+                f" [anchored to {anchor} of table {atable}]"
+            )
+            self.assertIn(provider_name, proposals.keys())
+            prop = proposals[provider_name]
+            provider_name2 = (
+                "generic.anchored_provider.normal_date_fk"
+                f" [anchored to {anchor2} of table {atable}]"
+            )
+            self.assertIn(provider_name2, proposals.keys())
+            prop2 = proposals[provider_name2]
+            gc.reset()
+            gc.do_compare(f"{prop[0]} {prop2[0]}")
+            self.assertEqual(gc.messages[0][0], gc.NOT_PRIVATE_TEXT)
+            self.assertEqual(gc.messages[1][0], gc.REQUIRES_SOURCE_DATA_TEXT)
+            self.assertEqual(gc.messages[2][0], gc.PROVIDING_VALUES_TEXT)
+            gc.do_next(column2)
+            gc.reset()
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            provider_name = (
+                "generic.anchored_provider.normal_date_fk"
+                f" [anchored to {anchor} of table {atable}]"
+            )
+            self.assertIn(provider_name, proposals.keys())
+            prop = proposals[provider_name]
+            provider_name2 = (
+                "generic.anchored_provider.normal_date_fk"
+                f" [anchored to {anchor2} of table {atable}]"
+            )
+            self.assertIn(provider_name2, proposals.keys())
+            prop2 = proposals[provider_name2]
+            gc.reset()
+            gc.do_compare(f"{prop[0]} {prop2[0]}")
+            self.assertEqual(gc.messages[0][0], gc.NOT_PRIVATE_TEXT)
+            self.assertEqual(gc.messages[1][0], gc.REQUIRES_SOURCE_DATA_TEXT)
+            self.assertEqual(gc.messages[2][0], gc.PROVIDING_VALUES_TEXT)
+
+
+# Note that this test won't work with DuckDB because it needs foreign keys to work
+class ConfigureGeneratorsWithDateMsSqlTests(
+    ConfigureGeneratorsWithDateTests
+):
+    """Test `configure-generators` with `instrument.sql` with MS SQL."""
+
+    database_type = MsSqlTestDb
+    schema_name = None
+
+
 class GeneratorTests(GeneratesDBTestCase):
     """Testing configure-generators with generation."""
 

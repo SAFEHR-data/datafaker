@@ -78,11 +78,19 @@ def _get_roles(
     return role_to_fk_columns
 
 
-def coerce_to_datetime(d: datetime.date | datetime.datetime) -> datetime.datetime:
+def coerce_to_datetime(
+    d: datetime.date | datetime.datetime,
+    tzdonor: datetime.datetime,
+) -> datetime.datetime:
     """Return a datetime, given either a date or datetime."""
     if isinstance(d, datetime.datetime):
+        if d.tzinfo is None:
+            if tzdonor.tzinfo is not None:
+                return d.replace(tzinfo=tzdonor.tzinfo)
+        elif tzdonor.tzinfo is None:
+            return d.replace(tzinfo=None)
         return d
-    return datetime.datetime.combine(d, datetime.time())
+    return datetime.datetime.combine(d, datetime.time(), tzinfo=tzdonor.tzinfo)
 
 
 class DateAfterProposer(Proposer):
@@ -122,9 +130,10 @@ class DateAfterProposer(Proposer):
             self._fit = None
             return
         intervals = self.generate_intervals(400)
-        self._fit = buckets.fit_from_values(
-            [(b - coerce_to_datetime(a)).total_seconds() for (a, b) in intervals]
-        )
+        self._fit = buckets.fit_from_values([
+            (b - coerce_to_datetime(a, b)).total_seconds()
+            for (a, b) in intervals
+        ])
 
     def function_name(self) -> str:
         """Get the name of the generator function to call."""

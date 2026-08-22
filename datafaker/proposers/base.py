@@ -308,18 +308,20 @@ class Buckets:
         mean: float,
         stddev: float,
         count: int,
+        join_tables: list[Table] | None = None,
     ):
         """Initialise a Buckets object."""
         bottom = mean - 2 * stddev
         width = stddev / 2
+        query = select(
+            func.count(column).label("f"),  # pylint: disable=not-callable
+            ((func.floor(column) - bottom) / width).label("b"),
+        ).select_from(table)
+        for jt in join_tables or []:
+            query = query.join(jt)
         with engine.connect() as connection:
             raw_buckets = connection.execute(
-                select(
-                    func.count(column).label("f"),  # pylint: disable=not-callable
-                    ((func.floor(column) - bottom) / width).label("b"),
-                )
-                .select_from(table)
-                .group_by("b")
+                query.group_by("b")
             )
             self.buckets: Sequence[int] = [0] * 10
             for rb in raw_buckets:
@@ -378,6 +380,7 @@ class Buckets:
                 result.mean,
                 result.stddev,
                 getattr(result, "count"),
+                join_tables,
             )
         except DatabaseError as exc:
             logger.debug("Failed to instantiate Buckets object: %s", exc)
