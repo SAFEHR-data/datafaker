@@ -1,37 +1,49 @@
 .. _page-index:
 
-datafaker
----------------------------
+Datafaker
+---------
 
-**datafaker** is a package for making copies of relational databases and populating them with random data.
+**Datafaker** is a package for generating synthetic versions of relational and tabular datasets. 
+It can work with relational databases as well as Parquet files through DuckDB integration. 
 
-If you are new to datafaker, we recommend going through the pages of this documentation roughly in order:
-After :ref:`installing <page-installation>` datafaker and learning the basic commands that it uses from the :ref:`quick start guide <page-quickstart>`, the :ref:`introductory tutorial <page-introduction>` will walk you through a relatively simple use case in detail.
-You can then look at one of our other two example use cases, one for :ref:`financial data <page-example-loan-data>` and one for :ref:`health data <page-example-health-data>`.
-The latter also goes through some more advanced features of datafaker and how to use them, that are relevant beyond health data use cases.
+If you are new to Datafaker, we recommend following the documentation in order: start with the :ref:`Installation <page-installation>` guide and learn the basic commands that Datafaker uses from the :ref:`Command-Line Interface (CLI) Guide <page-quickstart>`. 
+Then, work through the :ref:`Tutorials <page-introduction>` before exploring the example use cases and reference documentation.
+
 
 .. note::
 
-   This project will be under active development from Jan - Oct 2023
+   New features are regularly added. See the GitHub repository for the latest updates.
 
 Contents:
 ---------
 
 .. toctree::
-   :glob:
    :maxdepth: 2
+   :caption: Getting Started
 
-   overview
+   Overview <overview>
    installation
    docker
-   quickstart
-   introduction
+   Command-Line Interface (CLI) Guide <quickstart>
+   Tutorial: Generate Synthetic Data from PostgreSQL <introduction>
+   Tutorial: Generate Synthetic Data from CSV and Parquet <tutorial_parquet>
+
+.. toctree::
+   :glob:
+   :maxdepth: 1
+   :caption: Advanced
+
    orm
-   loan_data
-   health_data
    configuration
-   custom_generators
+   health_data
+   Custom Generators <custom_generators>
    api
+
+.. toctree::
+   :glob:
+   :maxdepth: 1
+   :caption: Reference
+
    faq
    glossary
 

@@ -73,8 +73,9 @@ Install and check the MS SQL tools:
    $ odbcinst -q -d
    [ODBC Driver 18 for SQL Server]
 
+
 Use in a docker container
-=========================
+-------------------------
 
 It can also be used directly within a Docker container by downloading image ``timband/datafaker``.
 See the :ref:`quickstart guide <page-quickstart>` for more information.

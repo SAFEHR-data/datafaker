@@ -1,7 +1,7 @@
 .. _page-introduction:
 
-Introductory Tutorial
-==============================
+Tutorial: Generate Synthetic Data from PostgreSQL
+================================================================
 
 Let us begin with a simple movie rental database called `Pagila <https://github.com/devrimgunduz/pagila>`_. Follow the instructions there to create a PostgreSQL database if you want to follow this tutorial along.
 Pagila is already fake data, but we shall pretend that it has sensitive data in it, and we are attempting to keep this data secure.
