@@ -374,6 +374,3 @@ Troubleshooting
   For example, if ``DST_DSN`` is set to ``duckdb:////path/to/file.db`` then ``DST_SCHEMA`` could be set to ``file.myschema``.
 
 .. _duckdb bug: https://github.com/duckdb/duckdb/issues/20530
-
-
-
