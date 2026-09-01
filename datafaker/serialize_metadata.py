@@ -245,10 +245,20 @@ def column_to_dict(column: Column, dialect: Dialect) -> dict[str, typing.Any]:
         "primary": column.primary_key,
         "nullable": column.nullable,
     }
-    foreign_keys = [str(fk.target_fullname) for fk in column.foreign_keys]
+    foreign_keys = [fk_target_string(fk) for fk in column.foreign_keys]
     if foreign_keys:
         result["foreign_keys"] = foreign_keys
     return result
+
+
+def fk_target_string(fk: ForeignKey) -> str:
+    """
+    Get the name of the foreign key target.
+
+    The schema is not included, only table and column.
+    """
+    c = fk.column
+    return f"{c.table.name}.{c.name}"
 
 
 def dict_to_column(

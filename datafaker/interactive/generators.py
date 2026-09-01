@@ -95,6 +95,10 @@ information about the columns in the current table. Use 'peek',
     PRIMARY_PRIVATE_TEXT = "Primary Private"
     SECONDARY_PRIVATE_TEXT = "Secondary Private on columns {0}"
     NOT_PRIVATE_TEXT = "Not private"
+    REQUIRES_SOURCE_DATA_TEXT = (
+        "{0}. {2}{1}{3} requires the following data from the source database:"
+    )
+    PROVIDING_VALUES_TEXT = "{2}{0}{3}; providing the following values: {4}{1}"
     ERROR_NO_SUCH_TABLE = "No such (non-vocabulary, non-ignored) table name {0}"
     ERROR_NO_SUCH_COLUMN = "No such column {0} in this table"
     ERROR_COLUMN_ALREADY_MERGED = "Column {0} is already merged"
@@ -270,21 +274,18 @@ information about the columns in the current table. Use 'peek',
     def set_prompt(self) -> None:
         """Set the prompt according to the current table, column and generator."""
         (table_name, prop_info) = self._get_table_and_proposer()
-        theme = get_active_theme()
         if table_name is None:
-            self.prompt = f"{theme.prompt}(generators){theme.reset} "
+            self.prompt = "(generators) "
             return
         if prop_info is None:
-            self.prompt = f"{theme.prompt}({table_name}){theme.reset} "
+            self.prompt = f"({table_name}) "
             return
         table = self.table_metadata()
         columns = [
             c + "[pk]" if table.columns[c].primary_key else c for c in prop_info.columns
         ]
         gen = f" ({prop_info.proposer.name()})" if prop_info.proposer else ""
-        self.prompt = (
-            f"{theme.prompt}({table_name}.{','.join(columns)}{gen}){theme.reset} "
-        )
+        self.prompt = f"({table_name}.{','.join(columns)}{gen}) "
 
     def _remove_auto_src_stats(self) -> list[MutableMapping[str, Any]]:
         """
@@ -450,13 +451,6 @@ information about the columns in the current table. Use 'peek',
                         " a uniform choice over the referenced table's rows"
                     )
 
-    def _get_table_index(self, table_name: str) -> int | None:
-        """Get the index of the named table in the table entries list."""
-        for n, entry in enumerate(self.table_entries):
-            if entry.name == table_name:
-                return n
-        return None
-
     def _get_proposer_index(self, table_index: int, column_name: str) -> int | None:
         """
         Get the index number of a column within the list of proposers in this table.
@@ -483,7 +477,7 @@ information about the columns in the current table. Use 'peek',
           (table_index, column_index) refers to a column within a different
           table.
         """
-        table_index = self._get_table_index(target)
+        table_index = self.get_table_index(target)
         if table_index is not None:
             return (table_index, 0)
         # The whole thing is not a table
@@ -496,7 +490,7 @@ information about the columns in the current table. Use 'peek',
             # It doesn't split, so that's the end
             self.print(self.ERROR_NO_SUCH_TABLE_OR_COLUMN, last_part)
             return (None, None)
-        table_index = self._get_table_index(first_part)
+        table_index = self.get_table_index(first_part)
         if table_index is None:
             self.print(self.ERROR_NO_SUCH_TABLE, first_part)
             return (None, None)
@@ -562,7 +556,7 @@ information about the columns in the current table. Use 'peek',
         (first_part, last_part) = split_column_full_name(text)
         if first_part:
             # first_part is table, last_part is column
-            table_index = self._get_table_index(first_part)
+            table_index = self.get_table_index(first_part)
             if table_index is None:
                 return []
             table_entry = self.table_entries[table_index]
@@ -698,7 +692,7 @@ information about the columns in the current table. Use 'peek',
             )
         else:
             self.print(
-                "{0}. {2}{1}{3} requires the following data from the source database:",
+                self.REQUIRES_SOURCE_DATA_TEXT,
                 n,
                 prop.name(),
                 theme.function,
@@ -726,8 +720,11 @@ information about the columns in the current table. Use 'peek',
         )
         theme = get_active_theme()
         for cq_key, cq in cqs.items():
+            if cq_key not in cq_key2args:
+                self.print("There is an error in {0}", cq_key)
+                continue
             self.print(
-                "{2}{0}{3}; providing the following values: {4}{1}",
+                self.PROVIDING_VALUES_TEXT,
                 cq["query"],
                 cq_key2args[cq_key],
                 theme.query,
@@ -747,7 +744,10 @@ information about the columns in the current table. Use 'peek',
                 # Are we pulling a specific part of this result?
                 sub = src_stat_groups.group(3)
                 if sub:
-                    actual = {sub: actual}
+                    if cq_key in out:
+                        out[cq_key][sub] = actual
+                    else:
+                        out[cq_key] = {sub: actual}
                 else:
                     out[cq_key] = actual
         elif isinstance(nominal, Sequence) and isinstance(actual, Sequence):

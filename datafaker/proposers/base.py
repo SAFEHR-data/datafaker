@@ -308,19 +308,14 @@ class Buckets:
         mean: float,
         stddev: float,
         count: int,
+        join_tables: list[Table] | None = None,
     ):
         """Initialise a Buckets object."""
-        bottom = mean - 2 * stddev
-        width = stddev / 2
+        self.mean = mean
+        self.stddev = stddev
+        query = self._get_bucket_query(table, column, join_tables)
         with engine.connect() as connection:
-            raw_buckets = connection.execute(
-                select(
-                    func.count(column).label("f"),  # pylint: disable=not-callable
-                    ((func.floor(column) - bottom) / width).label("b"),
-                )
-                .select_from(table)
-                .group_by("b")
-            )
+            raw_buckets = connection.execute(query.group_by("b"))
             self.buckets: Sequence[int] = [0] * 10
             for rb in raw_buckets:
                 try:
@@ -335,12 +330,31 @@ class Buckets:
                     # catches errors if SQLAlchemy returns something that
                     # isn't a number for some other unknown reason.
                     pass
-        self.mean = mean
-        self.stddev = stddev
+
+    def _get_bucket_query(
+        self,
+        table: Table | Join,
+        column: Any,
+        join_tables: list[Table] | None,
+    ) -> Any:
+        """Make the query for half-sd buckets."""
+        bottom = self.mean - 2 * self.stddev
+        width = self.stddev / 2
+        query = select(
+            func.count(column).label("f"),  # pylint: disable=not-callable
+            ((func.floor(column) - bottom) / width).label("b"),
+        ).select_from(table)
+        for jt in join_tables or []:
+            query = query.join(jt)
+        return query
 
     @classmethod
     def make_buckets(
-        cls, engine: Engine, table: Table | Join, column: Any
+        cls,
+        engine: Engine,
+        table: Table | Join,
+        column: Any,
+        join_tables: list[Table] | None = None,
     ) -> Self | None:
         """
         Construct a Buckets object.
@@ -355,14 +369,15 @@ class Buckets:
         :param table: SQLAlchemy table (or joined tables) to pull data from.
         :param column: SQLAlchemy column or expression to measure.
         """
+        query = select(
+            func.avg(column).label("mean"),
+            StdDev(column).label("stddev"),
+            func.count(column).label("count"),  # pylint: disable=not-callable
+        ).select_from(table)
+        for jt in join_tables or []:
+            query = query.join(jt)
         with engine.connect() as connection:
-            result = connection.execute(
-                select(
-                    func.avg(column).label("mean"),
-                    StdDev(column).label("stddev"),
-                    func.count(column).label("count"),  # pylint: disable=not-callable
-                ).select_from(table)
-            ).first()
+            result = connection.execute(query).first()
             if result is None or result.stddev is None or getattr(result, "count") < 2:
                 return None
         try:
@@ -373,6 +388,7 @@ class Buckets:
                 result.mean,
                 result.stddev,
                 getattr(result, "count"),
+                join_tables,
             )
         except DatabaseError as exc:
             logger.debug("Failed to instantiate Buckets object: %s", exc)

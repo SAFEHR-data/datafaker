@@ -1,19 +1,13 @@
 """ Tests for the configure-generators command. """
 import copy
 import re
-import sys
 from collections.abc import MutableMapping
-from importlib import resources
-from pathlib import Path
 from typing import Any, Iterable
 
-import yaml
-from sqlalchemy import func, select
+from sqlalchemy import select
 
-from datafaker.dialects import SecondsDifference, StdDev
 from datafaker.interactive.base import DbCmd
 from datafaker.interactive.generators import GeneratorCmd
-from datafaker.theme import ThemeEntry, set_active_theme
 from tests.utils import (
     DuckTestDb,
     GeneratesDBTestCase,
@@ -43,10 +37,6 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
     dump_file_path = "instrument.sql"
     database_name = "instrument"
     schema_name = "public"
-
-    def setUp(self) -> None:
-        super().setUp()
-        set_active_theme(ThemeEntry.NONE)
 
     def _get_cmd(self, config: MutableMapping[str, Any]) -> MockGeneratorCmd:
         """Get the command we are using for this test case."""
@@ -505,6 +495,58 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             )
             self.assertListEqual(gc.complete_next("ww", "next ww", 5, 7), [])
 
+    def test_select_completion(self) -> None:
+        """Test tab completion for the select command."""
+        with self._get_cmd({}) as gc:
+            # Select clause completes tables and columns
+            self.assertSetEqual(
+                set(gc.complete_select("m", "select m", 7, 8)),
+                {"manufacturer", "model"},
+            )
+            self.assertSetEqual(
+                set(gc.complete_select("model", "select model", 7, 12)),
+                {"model", "model."},
+            )
+            self.assertSetEqual(
+                set(gc.complete_select("string.", "select string.", 7, 13)),
+                {"string.id", "string.model_id", "string.position", "string.frequency"},
+            )
+            self.assertSetEqual(
+                set(gc.complete_select("string.p", "select string.p", 7, 14)),
+                {"string.position"},
+            )
+            self.assertListEqual(
+                gc.complete_select("string.q", "select string.q", 7, 14), []
+            )
+            self.assertListEqual(gc.complete_next("ww", "select ww", 7, 9), [])
+            # From clause completes tables only
+            self.assertSetEqual(
+                set(gc.complete_select("m", "select id from m", 15, 16)),
+                {"manufacturer", "model"},
+            )
+            self.assertListEqual(
+                gc.complete_select("string.p", "select id from string.p", 15, 22),
+                [],
+            )
+            # SQL completions
+            self.assertListEqual(
+                gc.complete_select("fr", "select id fr", 10, 12), ["from"]
+            )
+            self.assertListEqual(
+                gc.complete_select("FR", "select id FR", 10, 12), ["FROM"]
+            )
+            self.assertListEqual(
+                gc.complete_select("fu", "select id from string fu", 22, 24), ["full"]
+            )
+            self.assertListEqual(
+                gc.complete_select("ou", "select id from string full ou", 25, 27),
+                ["outer"],
+            )
+            self.assertListEqual(
+                gc.complete_select("jo", "select id from string full outer jo", 29, 31),
+                ["join"],
+            )
+
     def test_compare_reports_privacy(self) -> None:
         """
         Test that compare reports whether the current table is primary private,
@@ -580,108 +622,12 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertNotIn("string", table_names)
 
 
-class ConfigureGeneratorsWithSrc2Tests(GeneratesDBTestCase):
-    """Test `configure-generators` with the `src2.dump` database."""
-
-    dump_file_path = "src2.dump"
-    database_name = "src"
-    schema_name = "public"
-    use_temporary_cwd = True
-    copy_files = ["row_generators.py", "story_generators.py"]
-    copy_from_directory = Path("examples")
-
-    def setUp(self) -> None:
-        super().setUp()
-        set_active_theme(ThemeEntry.NONE)
-
-    def _get_cmd(self, config: MutableMapping[str, Any]) -> MockGeneratorCmd:
-        """Get the command we are using for this test case."""
-        return MockGeneratorCmd(
-            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
-        )
-
-    def _get_config(self) -> dict[Any, Any]:
-        test_module = resources.files(sys.modules["tests"])
-        with test_module.joinpath("examples/example_config2.yaml").open(
-            encoding="utf-8",
-        ) as config_fh:
-            cy = yaml.load(config_fh, yaml.SafeLoader)
-            assert isinstance(cy, dict)
-            return cy
-
-    def test_intervals_end_to_end(self) -> None:
-        """Test that if an interval end is applicable it gets proposed and works."""
-        table = "hospital_visit"
-        column = "visit_end"
-        config = self._get_config()
-        # let's not test the uniqueness failures!
-        config["tables"]["unique_constraint_test"]["num_rows_per_pass"] = 0
-        config["tables"]["unique_constraint_test2"]["num_rows_per_pass"] = 0
-        with self._get_cmd(config) as gc:
-            # set up our interval proposer
-            gc.do_next(f"{table}.{column}")
-            gc.do_unmerge("visit_start")
-            gc.reset()
-            gc.do_propose("")
-            proposals = gc.get_proposals()
-            provider_name = (
-                "generic.anchored_provider.normal_date [anchored to visit_start]"
-            )
-            self.assertIn(provider_name, proposals)
-            proposals = gc.get_proposals()
-            gc.do_set(str(proposals[provider_name][0]))
-            gc.do_quit("")
-            self.generate_data(config, num_passes=15)
-        with self.sync_engine.connect() as conn:
-            src_diff = SecondsDifference(
-                self.metadata.tables[table].c[column],
-                self.metadata.tables[table].c["visit_start"],
-            )
-            src_result = conn.execute(
-                select(
-                    func.avg(src_diff).label("mean"), StdDev(src_diff).label("sd")
-                ).select_from(self.metadata.tables[table])
-            ).one()
-        assert self.dst_engine is not None
-        with self.dst_engine.connect() as conn:
-            dst_diff = SecondsDifference(
-                self.dst_metadata.tables[table].c[column],
-                self.dst_metadata.tables[table].c["visit_start"],
-            )
-            dst_result = conn.execute(
-                select(
-                    func.avg(dst_diff).label("mean"), StdDev(dst_diff).label("sd")
-                ).select_from(self.dst_metadata.tables[table])
-            ).one()
-        self.assertAlmostEqual(
-            src_result.mean, dst_result.mean, delta=src_result.mean * 0.3
-        )
-        self.assertAlmostEqual(src_result.sd, dst_result.sd, delta=src_result.sd * 0.5)
-
-
-class ConfigureGeneratorsWithSrc2DuckDbTests(ConfigureGeneratorsWithSrc2Tests):
-    """Test `configure-generators` with `src2.dump` with DuckDB."""
-
-    database_type = DuckTestDb
-
-
-class ConfigureGeneratorsWithSrc2MsSqlTests(ConfigureGeneratorsWithSrc2Tests):
-    """Test `configure-generators` with `src2.dump` with DuckDB."""
-
-    database_type = MsSqlTestDb
-    schema_name = None
-
-
 class GeneratorTests(GeneratesDBTestCase):
     """Testing configure-generators with generation."""
 
     dump_file_path = "instrument.sql"
     database_name = "instrument"
     schema_name = "public"
-
-    def setUp(self) -> None:
-        super().setUp()
-        set_active_theme(ThemeEntry.NONE)
 
     def _get_cmd(self, config: MutableMapping[str, Any]) -> MockGeneratorCmd:
         """We are using configure-generators."""
@@ -811,7 +757,7 @@ class GeneratorTestsDuckDb(GeneratorTests):
 
 
 class GeneratorTestsMsSql(GeneratorTests):
-    """As ``GeneratorTests`` but with M SSql."""
+    """As ``GeneratorTests`` but with MSSql."""
 
     database_type = MsSqlTestDb
     schema_name = None

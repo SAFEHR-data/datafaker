@@ -20,10 +20,9 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.exc import DatabaseError
-from sqlalchemy.sql.functions import coalesce
 from sqlalchemy.types import Integer, Numeric
 
-from datafaker.dialects import IsNotNull, IsNull
+from datafaker.dialects import IsNotNull, IsNull, IsNumeric, IsPositive, LogNatural
 from datafaker.proposers.base import Proposer, dist_gen, get_column_type
 from datafaker.proposers.continuous import (
     CovariateQuery,
@@ -428,7 +427,7 @@ class NullPartitionedNormalProposerFactory(MultivariateNormalProposerFactory):
         """Get a SQLAlchemy expression that is true when ``column`` is available for analysis."""
         if is_numeric(column):
             # x <> x + 1 ensures that x is not infinity or NaN
-            return coalesce(column != column + 1, False)
+            return IsNumeric(column)
         return IsNotNull(column)
 
     def query_var(self, column: Column) -> Any:
@@ -517,14 +516,11 @@ class NullPartitionedNormalProposerFactory(MultivariateNormalProposerFactory):
         this partition, and ``count`` is the total number of rows in this partition.
         """
         index_exp = sum(self._get_query_predicate(nc) for nc in ncs)
-        sel = (
-            select(
-                func.count().label("count"),  # pylint: disable=not-callable
-                index_exp.label("index"),
-            )
-            .select_from(table)
-            .group_by("index")
-        )
+        subq = select(index_exp.label("index")).select_from(table).subquery()
+        sel = select(
+            func.count().label("count"),  # pylint: disable=not-callable
+            subq.c["index"],
+        ).group_by("index")
         if 1 < suppress_count:
             sb = sel.subquery("_q")
             sel = select(sb.c["count", "index"]).where(sb.c["count"] > suppress_count)
@@ -683,13 +679,12 @@ class NullPartitionedLogNormalProposerFactory(NullPartitionedNormalProposerFacto
     def query_predicate(self, column: Column) -> Any:
         """Get the SQL expression testing if the value in this column should be used."""
         if is_numeric(column):
-            # x <> x + 1 ensures that x is not infinity or NaN
-            return coalesce(column != column + 1 and column > 0, False)
+            return IsPositive(column)
         return IsNotNull(column)
 
     def query_var(self, column: Column) -> Any:
         """Get the variable or expression we are querying for this column."""
-        return func.ln(column)
+        return LogNatural(column)
 
     def query_comment(self) -> str:
         """Return the human-readable comment for this generator."""

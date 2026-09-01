@@ -590,11 +590,48 @@ class DistributionProvider(BaseProvider):
         return result[:length]
 
 
-class AnchoredProvider(BaseProvider):
-    """A Mimesis provider of random values from the source database."""
+class ExtractProvider(BaseProvider):
+    """A provider of values extracted from a date previously generated."""
 
     class Meta:
-        """Meta-class for ColumnValueProvider settings."""
+        """Meta-class for AnchoredProvider settings."""
+
+        name = "extract_provider"
+
+    def __init__(self, *, seed: int | None = None, **kwargs: Any) -> None:
+        """Initialise the extract provider."""
+        super().__init__(seed=seed, **kwargs)
+
+    def year(self, extract_from: dt.datetime | None) -> int | None:
+        """Extract the year from an existing value."""
+        if extract_from is None:
+            return None
+        return extract_from.year
+
+    def month(self, extract_from: dt.datetime | None) -> int | None:
+        """Extract the month from an existing value."""
+        if extract_from is None:
+            return None
+        return extract_from.month
+
+    def day(self, extract_from: dt.datetime | None) -> int | None:
+        """Extract the day from an existing value."""
+        if extract_from is None:
+            return None
+        return extract_from.day
+
+    def date(self, extract_from: dt.datetime | None) -> dt.date | None:
+        """Cast datetime to date."""
+        if extract_from is None:
+            return None
+        return extract_from.date()
+
+
+class AnchoredProvider(BaseProvider):
+    """A provider of values based on other values previously generated."""
+
+    class Meta:
+        """Meta-class for AnchoredProvider settings."""
 
         name = "anchored_provider"
 
@@ -627,6 +664,8 @@ class AnchoredProvider(BaseProvider):
         """
         if isinstance(anchor, str):
             anchor = dt.datetime.fromisoformat(anchor)
+        if isinstance(anchor, dt.date):
+            anchor = dt.datetime.combine(anchor, dt.time())
         interval = random.normalvariate(float(mean_seconds), float(sd_seconds))
         if interval < 0:
             return anchor
@@ -639,8 +678,8 @@ class AnchoredProvider(BaseProvider):
         mean_seconds: float,
         sd_seconds: float,
         table: str,
-        foreign_key: str,
         on_column: str,
+        anchor_row: Any,
         anchor_column: str,
     ) -> dt.datetime | None:
         """
@@ -652,12 +691,12 @@ class AnchoredProvider(BaseProvider):
         :param dst_db_conn: Connection to the destination database.
         :param mean_seconds: Average number of seconds the interval lasts.
         :param sd_seconds: Standard deviation of the intervals' lengths in seconds.
-        :param table: The name of the table for the column we are generating.
-        :param foreign_key: The name of the column in ``table`` providing the
-         foreign key to the table providing the start of the interval.
+        :param table: The name of the table for the anchor column.
         :param on_column: The name of the column in the foreign table
-         that ``foreign_key`` must match.
-        :param anchor_column: The name of the column in the foreign table
+         that ``row`` must match.
+        :param row: The value in the ``on_column`` column in table ``table``
+         for the row providing the start of the interval.
+        :param anchor_column: The name of the column in ``table``
          providing the start of the interval.
         :return: The end of the interval; will be no earlier than the start of the
          interval. This is clamped; note that ``mean_seconds`` and
@@ -665,10 +704,10 @@ class AnchoredProvider(BaseProvider):
         """
         mt = self._metadata.tables[table]
         query = select(mt.c[anchor_column].label("out")).where(
-            mt.c[on_column] == foreign_key
+            mt.c[on_column] == anchor_row,
         )
         anchor = dst_db_conn.execute(query).first()
         out = getattr(anchor, "out", None)
-        if not isinstance(out, str):
+        if not isinstance(out, (str, dt.date, dt.datetime)):
             return None
         return self.normal_date(mean_seconds, sd_seconds, out)
