@@ -30,6 +30,12 @@ class MockGeneratorCmd(GeneratorCmd, TestDbCmdMixin):
             if s == self.PROPOSE_GENERATOR_SAMPLE_TEXT
         }
 
+    def get_roles_from_columns(self, column: str) -> set[str]:
+        """Get the roles in the named column from the ``columns`` command output."""
+        self.reset()
+        self.do_columns("")
+        return self.get_roles_from_columns_output(column)
+
 
 class ConfigureGeneratorsTests(RequiresDBTestCase):
     """Testing configure-generators."""
