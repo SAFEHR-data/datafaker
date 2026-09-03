@@ -5,7 +5,7 @@ import re
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
-from enum import StrEnum
+from enum import Enum
 from typing import Any, Callable, Optional, cast
 
 from sqlalchemy import Column, and_, literal_column, select
@@ -73,11 +73,20 @@ def get_aggregate_query(
     return f'SELECT {", ".join(clauses)} FROM "{qualified}"{alias}'
 
 
-class Role(StrEnum):
+class Role(str, Enum):
     """Roles that can be set on columns."""
 
     START = "start"
     SOURCE = "source"
+
+
+def is_role(item: str) -> bool:
+    """
+    Test if ``item`` is a ``Role``.
+
+    Like ``item in Role`` in Python 3.12.
+    """
+    return item in Role.__members__.values()
 
 
 @dataclass
@@ -109,7 +118,7 @@ class RoleCommandList(RoleCommand):
         if column_roles is None or not column_roles.new:
             self.print(self.error_text)
         else:
-            self.print(", ".join(column_roles.new))
+            self.print(", ".join(role.value for role in column_roles.new))
 
 
 class RoleCommandSet(RoleCommand):
@@ -144,7 +153,7 @@ class RoleCommandDelete(RoleCommand):
 
 def make_role_entry(roles: Sequence[str]) -> RoleEntry:
     """Make a role entry from a list of strings."""
-    role_set = {Role(r) for r in roles if r in Role}
+    role_set = {Role(r) for r in roles if is_role(r)}
     return RoleEntry(copy.copy(role_set), role_set)
 
 
@@ -1255,7 +1264,7 @@ information about the columns in the current table. Use 'peek',
                     if param is None:
                         self.print("'role set' requires a role name")
                         return None
-                    if param not in Role:
+                    if not is_role(param):
                         self.print("role must be one of {0}", ", ".join(Role))
                         return None
                     command = RoleCommandSet(Role(param))
@@ -1264,7 +1273,7 @@ information about the columns in the current table. Use 'peek',
                     if param is None:
                         self.print("'delete' requires a role name")
                         return None
-                    if param not in Role:
+                    if not is_role(param):
                         self.print("role must be one of {0}", ", ".join(Role))
                         return None
                     command = RoleCommandDelete(Role(param))
@@ -1330,7 +1339,11 @@ information about the columns in the current table. Use 'peek',
         if prev == "on":
             return self.get_table_or_column_completions(text)
         if prev in {"set", "delete"}:
-            return [com for com in Role if com.startswith(text)]
+            return [
+                com.value
+                for com in Role.__members__.values()
+                if com.value.startswith(text)
+            ]
         return [com for com in ["list", "set", "delete"] if com.startswith(text)]
 
 
