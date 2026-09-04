@@ -16,6 +16,7 @@ from datafaker.proposers.continuous import (
     MultivariateLogNormalProposerFactory,
     MultivariateNormalProposerFactory,
 )
+from datafaker.proposers.extract import DateComponentExtractProposerFactory
 from datafaker.proposers.intervals import DateAfterProposerFactory
 from datafaker.proposers.mimesis import (
     MimesisDateProposerFactory,
@@ -55,4 +56,5 @@ def everything_factory(config: Mapping, metadata: MetaData) -> ProposerFactory:
         NullPartitionedNormalProposerFactory(config, metadata),
         NullPartitionedLogNormalProposerFactory(config, metadata),
         DateAfterProposerFactory(config, metadata),
+        DateComponentExtractProposerFactory(config, metadata),
     )

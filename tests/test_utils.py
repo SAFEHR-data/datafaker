@@ -10,7 +10,12 @@ from sqlalchemy import Column, Integer, insert
 from sqlalchemy.orm import declarative_base
 
 from datafaker.db_utils import download_table
-from datafaker.utils import generators_require_stats, import_file, read_config_file
+from datafaker.utils import (
+    generators_require_stats,
+    import_file,
+    procrustes,
+    read_config_file,
+)
 from tests.utils import DatafakerTestCase, RequiresDBTestCase
 
 # pylint: disable=invalid-name
@@ -326,4 +331,13 @@ class TestUtils(DatafakerTestCase):
                     "\n   ^",
                 ),
             ]
+        )
+
+    def test_procrustes(self) -> None:
+        """Test the ``procrustes`` function."""
+        self.assertListEqual(procrustes([], 4, 5), [5, 5, 5, 5])
+        self.assertListEqual(procrustes([1], 4, 5), [1, 1, 1, 1])
+        self.assertListEqual(procrustes([1, 2, 3], 8, 5), [1, 2, 3, 1, 2, 3, 1, 2])
+        self.assertListEqual(
+            procrustes([1, 100, -2, -3, 4, -10, -1, 1], 4, 5), [1, 100, -2, -3]
         )

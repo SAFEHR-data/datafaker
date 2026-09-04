@@ -4,6 +4,7 @@ import importlib.util
 import io
 import json
 import logging
+import math
 import random
 import re
 import string
@@ -599,3 +600,23 @@ def split_column_full_name(col_fullname: str) -> tuple[str, str]:
         ".".join(name_parts[:-1]),
         name_parts[-1],
     )
+
+
+def procrustes(input_seq: Sequence[T], to_length: int, default: T) -> list[T]:
+    """
+    Truncate or stretch ``input_seq`` to length ``to_length``.
+
+    :param input_seq: The sequence to be stretched or truncated.
+    :param to_length: The length of the output sequence returned.
+    :param default: The element to use if the input sequence is empty.
+    :return: ``input_seq[:to_length]`` if ``input_seq`` is longer than
+     ``to_length``, ``input_seq`` with elements recycled if ``input_seq``
+      is too short but not empty, or ``to_length`` repeats of ``default`` if
+      ``input_seq`` is empty.
+    """
+    s = list(input_seq)
+    if len(s) == 0:
+        return [default] * to_length
+    if len(s) < to_length:
+        s = s * math.ceil(to_length / len(s))
+    return s[:to_length]

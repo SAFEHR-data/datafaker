@@ -39,6 +39,7 @@ from datafaker.db_utils import (
 from datafaker.interactive.base import DbCmd
 from datafaker.make import make_src_stats, make_tables_file
 from datafaker.serialize_metadata import dict_to_metadata, metadata_to_dict
+from datafaker.theme import ThemeEntry, set_active_theme
 from datafaker.utils import T
 
 
@@ -283,7 +284,7 @@ class MsSqlTestDb(TestDatabaseBase):
     _EOL_RE = re.compile(r";$", re.MULTILINE)
     _TIMESTAMP_RE = re.compile(r"(TIMESTAMP)\s+WITH\s+TIME\s+ZONE", re.IGNORECASE)
     _ALTER_OWNER_RE = re.compile(
-        r"ALTER\s+(TABLE|DATABASE)\s+[A-Za-z0-9_.]+\s+OWNER\s+TO\s+[A-Za-z0-9_]+\s*;"
+        r'ALTER\s+(TABLE|DATABASE)\s+["A-Za-z0-9_.]+\s+OWNER\s+TO\s+[A-Za-z0-9_]+\s*;'
     )
     _ALTER_ONLY_RE = re.compile(r"ALTER\s+TABLE\s+ONLY\s+")
     _CREATE_INDEX_RE = re.compile(
@@ -677,6 +678,7 @@ class RequiresDBTestCase(
 
     def setUp(self) -> None:
         super().setUp()
+        set_active_theme(ThemeEntry.NONE)
         if self.database is None:
             self.database = self.database_type()
         else:

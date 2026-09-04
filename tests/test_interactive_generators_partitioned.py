@@ -8,9 +8,8 @@ from sqlalchemy import Connection, MetaData, insert, select
 
 from datafaker.interactive.base import DbCmd
 from datafaker.proposers import NullPartitionedNormalProposerFactory
-from datafaker.theme import ThemeEntry, set_active_theme
 from tests.test_interactive_generators import MockGeneratorCmd
-from tests.utils import GeneratesDBTestCase
+from tests.utils import GeneratesDBTestCase, MsSqlTestDb
 
 
 @dataclass
@@ -137,7 +136,6 @@ class NullPartitionedTests(GeneratesDBTestCase):
     def setUp(self) -> None:
         """Set up the test with specific sample and suppress counts."""
         super().setUp()
-        set_active_theme(ThemeEntry.NONE)
         NullPartitionedNormalProposerFactory.SAMPLE_COUNT = 8
         NullPartitionedNormalProposerFactory.SUPPRESS_COUNT = 2
 
@@ -501,3 +499,54 @@ class NullPartitionedTests(GeneratesDBTestCase):
                         ids.add(k0)
                         self.assertEqual(result["k0_type__name"], mt[k0])
                 self.assertSetEqual(ids, set(mt.keys()))
+
+    def test_doubly_named_foreign_keys(self) -> None:
+        """Test foreign keys gain two names in source stats."""
+        with self._get_cmd(
+            {
+                "tables": {
+                    "measurement_type": {
+                        "name_column": "name",
+                    },
+                },
+            }
+        ) as gc:
+            self.merge_columns(
+                gc,
+                "double",
+                [
+                    "type",
+                    "subtype",
+                    "value",
+                ],
+            )
+            proposals = self._propose(gc)
+            dist_to_choose = "null-partitioned grouped_multivariate_normal"
+            self.assertIn(dist_to_choose, proposals)
+            prop = proposals[dist_to_choose]
+            gc.do_compare(str(prop[0]))
+            gc.do_set(str(prop[0]))
+            gc.do_quit("")
+            self.set_configuration(gc.config)
+            src_stats = self.get_src_stats(gc.config)
+            with self.sync_engine.connect() as conn:
+                stmt = select(self.metadata.tables["measurement_type"])
+                rows = conn.execute(stmt).fetchall()
+                mt = {row.id: row.name for row in rows}
+                results = [
+                    result for ss in src_stats.values() for result in ss["results"]
+                ]
+                for result in results:
+                    if "k0" in result:
+                        k0 = result["k0"]
+                        self.assertEqual(result["k0_type__name"], mt[k0])
+                    if "k1" in result:
+                        k1 = result["k1"]
+                        self.assertEqual(result["k1_subtype__name"], mt[k1])
+
+
+class NullPartitionedMsSqlTests(NullPartitionedTests):
+    """NullPartitionedTests but for MS SQL."""
+
+    database_type = MsSqlTestDb
+    schema_name = None
