@@ -1,7 +1,7 @@
 .. _page-quickstart:
 
-Quick Start
-===========
+Command-Line Interface (CLI) Guide
+===============================================
 
 Overview
 --------
