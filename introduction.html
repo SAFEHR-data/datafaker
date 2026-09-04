@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tutorial: Generate Synthetic Data from PostgreSQL &mdash; datafaker 0.0 documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/sphinx_highlight.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Tutorial: Generate Synthetic Data from CSV and Parquet Files" href="tutorial_parquet.html" />
+    <link rel="prev" title="Command-Line Interface (CLI) Guide" href="quickstart.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            datafaker
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="docker.html">Using Docker</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Command-Line Interface (CLI) Guide</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Tutorial: Generate Synthetic Data from PostgreSQL</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#minimal-example">Minimal example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#making-the-minimal-example-work-at-all">Making the minimal example work at all</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#problems-with-the-minimal-example">Problems with the minimal example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#fixing-the-problems-with-the-minimal-example-1-ignoring-unwanted-tables">Fixing the problems with the minimal example #1: ignoring unwanted tables</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#fixing-the-problems-with-the-minimal-example-2-generate-vocabularies">Fixing the problems with the minimal example #2: generate vocabularies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#fixing-the-problems-with-the-minimal-example-3-generate-more-plausible-text">Fixing the problems with the minimal example #3: generate more plausible text</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#fixing-the-problems-with-the-minimal-example-4-unnormalized-databases">Fixing the problems with the minimal example #4: Unnormalized databases</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="tutorial_parquet.html">Tutorial: Generate Synthetic Data from CSV and Parquet</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="orm.html">ORM Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="health_data.html">Advanced Example: OMOP Health Data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="custom_generators.html">Custom Generators</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="faq.html">FAQ</a></li>
+<li class="toctree-l1"><a class="reference internal" href="glossary.html">Glossary</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">datafaker</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Tutorial: Generate Synthetic Data from PostgreSQL</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/introduction.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="tutorial-generate-synthetic-data-from-postgresql">
+<span id="page-introduction"></span><h1>Tutorial: Generate Synthetic Data from PostgreSQL<a class="headerlink" href="#tutorial-generate-synthetic-data-from-postgresql" title="Permalink to this heading"></a></h1>
+<p>Let us begin with a simple movie rental database called <a class="reference external" href="https://github.com/devrimgunduz/pagila">Pagila</a>. Follow the instructions there to create a PostgreSQL database if you want to follow this tutorial along.
+Pagila is already fake data, but we shall pretend that it has sensitive data in it, and we are attempting to keep this data secure.
+We will imagine we have a strict protocol to follow to keep the data safe, and that the source database is only accessible from a private network.</p>
+<p>You can give access to this database to a different user (I’m using <code class="docutils literal notranslate"><span class="pre">tim</span></code>) like this:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>sudo<span class="w"> </span>-u<span class="w"> </span>postgres<span class="w"> </span>psql<span class="w"> </span>pagila
+<span class="go">pagila=# grant pg_read_all_data to tim;</span>
+<span class="go">pagila=# \q</span>
+</pre></div>
+</div>
+<section id="minimal-example">
+<h2>Minimal example<a class="headerlink" href="#minimal-example" title="Permalink to this heading"></a></h2>
+<p>Let us begin in the private network that this sensitive data resides in (well, let us pretend anyway).</p>
+<p>We being by setting the database connection information
+(you don’t need to set <code class="docutils literal notranslate"><span class="pre">SRC_SCHEMA</span></code> if the schema is the default, but for explicitness we do here),
+and creating the configuration, ORM and initial statistics files.
+For creating a default configuration we will use the <code class="docutils literal notranslate"><span class="pre">configure-tables</span></code>
+command but quit immediately.
+Here we are imagining the username is <code class="docutils literal notranslate"><span class="pre">postgres</span></code> and the password is <code class="docutils literal notranslate"><span class="pre">password</span></code> – change <code class="docutils literal notranslate"><span class="pre">postgres:password</span></code> to the username and password you used to set up the database:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ export SRC_DSN=&#39;postgresql://postgres:password@localhost/pagila&#39;
+$ export SRC_SCHEMA=&#39;public&#39;
+$ datafaker make-tables
+$ datafaker configure-tables
+Interactive table configuration (ignore, vocabulary, private, generate or empty). Type ? for help.
+(table: actor) quit
+You have made no changes.
+Do you want to save this configuration?
+(yes/no/cancel) yes
+$ datafaker make-stats
+</pre></div>
+</div>
+<p>This generates the files <code class="docutils literal notranslate"><span class="pre">orm.yaml</span></code>, <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code> and <code class="docutils literal notranslate"><span class="pre">src-stats.yaml</span></code>.</p>
+<p>Now at this point in the process we examine these files for evidence of sensitive information.
+At this point there is pretty much nothing in <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code> or <code class="docutils literal notranslate"><span class="pre">src-stats.yaml</span></code>,
+and <code class="docutils literal notranslate"><span class="pre">orm.yaml</span></code> only contains information on the structure of the source database.
+Therefore there is nothing much to examine here, and we can happily take these
+three files out of the private network and use them to generate some fake data.</p>
+<p>Let us first create a new database within PostgreSQL.
+Here we are using user <code class="docutils literal notranslate"><span class="pre">tim</span></code> and the default schema <code class="docutils literal notranslate"><span class="pre">public</span></code>:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>sudo<span class="w"> </span>-u<span class="w"> </span>postgres<span class="w"> </span>psql
+<span class="go">postgres=# create database fake_pagila;</span>
+<span class="go">CREATE DATABASE</span>
+<span class="go">postgres=# grant all privileges on database fake_pagila to tim;</span>
+<span class="go">GRANT</span>
+<span class="go">postgres=# \connect fake_pagila</span>
+<span class="go">You are now connected to database &quot;fake_pagila&quot; as user &quot;postgres&quot;.</span>
+<span class="go">fake_pagila=# grant all privileges on schema public to tim;</span>
+<span class="go">GRANT</span>
+<span class="go">fake_pagila=# exit</span>
+</pre></div>
+</div>
+<p>And let’s populate it with the fake data:</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">DST_DSN</span><span class="o">=</span><span class="s1">&#39;postgresql://tim:password@localhost/fake_pagila&#39;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">DST_SCHEMA</span><span class="o">=</span><span class="s1">&#39;public&#39;</span>
+datafaker<span class="w"> </span>create-tables
+datafaker<span class="w"> </span>create-data
+</pre></div>
+</div>
+<p>You will notice that <code class="docutils literal notranslate"><span class="pre">create-tables</span></code> produces a couple of warnings, and PostgreSQL complains when <code class="docutils literal notranslate"><span class="pre">datafaker</span></code> tries to create the data.
+The warnings are that <code class="docutils literal notranslate"><span class="pre">datafaker</span></code> doesn’t understand the special PostgresSQL types <code class="docutils literal notranslate"><span class="pre">TSVECTOR</span></code> and <code class="docutils literal notranslate"><span class="pre">ARRAY</span></code>, so it doesn’t know how to generate data for those columns.
+Because it doesn’t know how to generate data for those columns it will just use NULLs, and the <code class="docutils literal notranslate"><span class="pre">film.fulltext</span></code> column cannot be NULL, so creating the data fails.</p>
+</section>
+<section id="making-the-minimal-example-work-at-all">
+<h2>Making the minimal example work at all<a class="headerlink" href="#making-the-minimal-example-work-at-all" title="Permalink to this heading"></a></h2>
+<p>We can use the <code class="docutils literal notranslate"><span class="pre">configure-generators</span></code> command to fix this.
+Let us add a nice text generator to the <code class="docutils literal notranslate"><span class="pre">film.fulltext</span></code>
+and <code class="docutils literal notranslate"><span class="pre">film.special_features</span></code> columns, and while we are at it let’s
+give the actors sensible names (this would be back in the private
+network in a real example).</p>
+<p>Here we can see the use of some of the commands available within
+the <code class="docutils literal notranslate"><span class="pre">configure-generators</span></code> command:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">next</span></code>: move to the next column or table.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">next</span> <span class="pre">table-name</span></code>: move to table <code class="docutils literal notranslate"><span class="pre">table-name</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">propose</span></code>: show generators that are available.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">compare</span></code>: compare the proposed generators’ output against the real data.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">set</span></code>: set the proposed generator as the one we want.</p></li>
+<li><p>An empty line repeats the previous command.</p></li>
+</ul>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ datafaker configure-generators
+Interactive generator configuration. Type ? for help.
+
+(actor.actor_id[pk]) next
+(actor.first_name) propose
+Sample of actual source data: &#39;PENELOPE&#39;; &#39;MINNIE&#39;; &#39;NICK&#39;; &#39;FAY&#39;; &#39;RIP&#39;...
+1. dist_gen.weighted_choice: (fit: 0) &#39;SIDNEY&#39;; &#39;KENNETH&#39;; &#39;EWAN&#39;; &#39;AL&#39;; &#39;WHOOPI&#39; ...
+2. dist_gen.weighted_choice [sampled]: (fit: 0) &#39;MERYL&#39;; &#39;BEN&#39;; &#39;DAN&#39;; &#39;CHARLIZE&#39;; &#39;SPENCER&#39; ...
+3. dist_gen.choice: (fit: 0.00281) &#39;JENNIFER&#39;; &#39;GOLDIE&#39;; &#39;MILLA&#39;; &#39;FRANCES&#39;; &#39;CHRIS&#39; ...
+4. dist_gen.choice [sampled]: (fit: 0.00281) &#39;RENEE&#39;; &#39;ANNE&#39;; &#39;RIP&#39;; &#39;VAL&#39;; &#39;SCARLETT&#39; ...
+5. dist_gen.zipf_choice: (fit: 0.0919) &#39;GROUCHO&#39;; &#39;THORA&#39;; &#39;GROUCHO&#39;; &#39;PENELOPE&#39;; &#39;KENNETH&#39; ...
+6. dist_gen.zipf_choice [sampled]: (fit: 0.0919) &#39;KIRK&#39;; &#39;JOHN&#39;; &#39;KENNETH&#39;; &#39;RUSSELL&#39;; &#39;DARYL&#39; ...
+7. generic.text.word: (fit: 200) &#39;optimal&#39;; &#39;suggest&#39;; &#39;share&#39;; &#39;principal&#39;; &#39;contain&#39; ...
+8. generic.person.language: (fit: 284) &#39;Haitian Creole&#39;; &#39;Latvian&#39;; &#39;Somali&#39;; &#39;Haitian Creole&#39;; &#39;Belarusian&#39; ...
+9. generic.person.nationality: (fit: 304) &#39;Afghan&#39;; &#39;Finnish&#39;; &#39;Costa Rican&#39;; &#39;Guatemalan&#39;; &#39;Afghan&#39; ...
+10. generic.person.last_name: (fit: 313) &#39;Blake&#39;; &#39;Weeks&#39;; &#39;Castillo&#39;; &#39;Hensley&#39;; &#39;Soto&#39; ...
+11. generic.person.first_name: (fit: 318) &#39;Maryln&#39;; &#39;Minna&#39;; &#39;Cleo&#39;; &#39;Efrain&#39;; &#39;Bart&#39; ...
+12. generic.address.street_name: (fit: 319) &#39;Lagangreen&#39;; &#39;Creggan&#39;; &#39;Killeen&#39;; &#39;Kilcurragh&#39;; &#39;Ceylon&#39; ...
+... lines removed ...
+38. dist_gen.constant: (no fit) &#39;&#39;; &#39;&#39;; &#39;&#39;; &#39;&#39;; &#39;&#39; ...
+(actor.first_name) compare 4 11
+Not private
+4. dist_gen.choice [sampled] requires the following data from the source database:
+SELECT first_name AS value FROM (SELECT first_name FROM actor WHERE first_name IS NOT NULL ORDER BY RANDOM() LIMIT 500) AS _inner GROUP BY value ORDER BY COUNT(first_name) DESC; providing the following values: [&#39;KENNETH&#39;, &#39;PENELOPE&#39;, &#39;JULIA&#39;, &#39;BURT&#39;, &#39;GENE&#39;, &#39;DAN&#39;, &#39;MATTHEW&#39;, &#39;GROUCHO&#39;, &#39;MORGAN&#39;, &#39;RUSSELL&#39;, &#39;CUBA&#39;, &#39;CHRISTIAN&#39;, &#39;ED&#39;, &#39;FAY&#39;, &#39;CAMERON&#39;, &#39;NICK&#39;, &#39;JAYNE&#39;, &#39;SCARLETT&#39;, &#39;AUDREY&#39;, &#39;WOODY&#39;, &#39;ADAM&#39;, &#39;LUCILLE&#39;, &#39;MICHAEL&#39;, &#39;DARYL&#39;, &#39;CHRISTOPHER&#39;, &#39;MARY&#39;, &#39;BEN&#39;, &#39;HUMPHREY&#39;, &#39;MENA&#39;, &#39;CATE&#39;, &#39;RIP&#39;, &#39;REESE&#39;, &#39;MILLA&#39;, &#39;SUSAN&#39;, &#39;KEVIN&#39;, &#39;ANGELA&#39;, &#39;GARY&#39;, &#39;FRANCES&#39;, &#39;SPENCER&#39;, &#39;SEAN&#39;, &#39;KIRSTEN&#39;, &#39;MINNIE&#39;, &#39;CHRIS&#39;, &#39;TOM&#39;, &#39;WARREN&#39;, &#39;RENEE&#39;, &#39;GRETA&#39;, &#39;ALBERT&#39;, &#39;MERYL&#39;, &#39;SANDRA&#39;, &#39;JOHNNY&#39;, &#39;VIVIEN&#39;, &#39;JIM&#39;, &#39;HELEN&#39;, &#39;GINA&#39;, &#39;HARRISON&#39;, &#39;MEG&#39;, &#39;GEOFFREY&#39;, &#39;CHARLIZE&#39;, &#39;JOE&#39;, &#39;CARY&#39;, &#39;FRED&#39;, &#39;MAE&#39;, &#39;RIVER&#39;, &#39;DEBBIE&#39;, &#39;LIZA&#39;, &#39;NATALIE&#39;, &#39;HENRY&#39;, &#39;SIDNEY&#39;, &#39;BETTE&#39;, &#39;OLYMPIA&#39;, &#39;KARL&#39;, &#39;ANNE&#39;, &#39;JANE&#39;, &#39;RALPH&#39;, &#39;LISA&#39;, &#39;ZERO&#39;, &#39;GOLDIE&#39;, &#39;BELA&#39;, &#39;PARKER&#39;, &#39;JENNIFER&#39;, &#39;EMILY&#39;, &#39;JADA&#39;, &#39;WILLIAM&#39;, &#39;HARVEY&#39;, &#39;JODIE&#39;, &#39;ELVIS&#39;, &#39;SALMA&#39;, &#39;GREG&#39;, &#39;SYLVESTER&#39;, &#39;ALEC&#39;, &#39;ELLEN&#39;, &#39;JAMES&#39;, &#39;SISSY&#39;, &#39;IAN&#39;, &#39;KIRK&#39;, &#39;WILL&#39;, &#39;THORA&#39;, &#39;LAURA&#39;, &#39;ANGELINA&#39;, &#39;LAURENCE&#39;, &#39;WHOOPI&#39;, &#39;JUDE&#39;, &#39;TIM&#39;, &#39;KIM&#39;, &#39;OPRAH&#39;, &#39;EWAN&#39;, &#39;VAL&#39;, &#39;CARMEN&#39;, &#39;GREGORY&#39;, &#39;JESSICA&#39;, &#39;JULIANNE&#39;, &#39;RICHARD&#39;, &#39;JEFF&#39;, &#39;AL&#39;, &#39;UMA&#39;, &#39;RAY&#39;, &#39;WALTER&#39;, &#39;MICHELLE&#39;, &#39;JUDY&#39;, &#39;JOHN&#39;, &#39;JON&#39;, &#39;DUSTIN&#39;, &#39;BOB&#39;, &#39;ROCK&#39;, &#39;GRACE&#39;, &#39;RITA&#39;, &#39;ALAN&#39;]
+11. generic.person.first_name requires no data from the source database.
++----------+------------------------------+-------------------------------+
+|  source  | 4. dist_gen.choice [sampled] | 11. generic.person.first_name |
++----------+------------------------------+-------------------------------+
+|   CATE   |           HARRISON           |             Alden             |
+| KENNETH  |            HENRY             |            Michale            |
+|  MORGAN  |           KIRSTEN            |             Foster            |
+|  SANDRA  |             JUDE             |             Delpha            |
+|  WHOOPI  |             KIRK             |              Kina             |
+|   CUBA   |           PENELOPE           |            Vernetta           |
+|    ED    |           RUSSELL            |           Kristopher          |
+|   JOE    |             JANE             |            Geraldo            |
+|   FAY    |             LIZA             |             Claude            |
+|   JON    |             JUDY             |             Cesar             |
+| SCARLETT |           HARRISON           |            Genevive           |
+|  WARREN  |            CHRIS             |             Hisako            |
+|  WOODY   |            CHRIS             |              Reed             |
+|   MENA   |             JON              |              Mike             |
+|   FAY    |            DARYL             |             Erwin             |
+|  JULIA   |            JAMES             |            Katharyn           |
+|  CHRIS   |            SUSAN             |             Ellis             |
+| HARRISON |             JUDE             |             Orval             |
+|  HARVEY  |            BETTE             |             Kenia             |
+|  SUSAN   |            JULIA             |            Antonia            |
++----------+------------------------------+-------------------------------+
+(actor.first_name) set 11
+(actor.last_name) propose
+Sample of actual source data: &#39;CRONYN&#39;; &#39;DEGENERES&#39;; &#39;BRODY&#39;; &#39;DENCH&#39;; &#39;CAGE&#39;...
+1. dist_gen.weighted_choice: (fit: 0) &#39;JACKMAN&#39;; &#39;STREEP&#39;; &#39;WINSLET&#39;; &#39;BALL&#39;; &#39;CAGE&#39; ...
+2. dist_gen.weighted_choice [sampled]: (fit: 0) &#39;KILMER&#39;; &#39;LEIGH&#39;; &#39;WEST&#39;; &#39;MCKELLEN&#39;; &#39;HOPKINS&#39; ...
+3. dist_gen.choice: (fit: 0.00396) &#39;NOLTE&#39;; &#39;DEGENERES&#39;; &#39;WINSLET&#39;; &#39;VOIGHT&#39;; &#39;LOLLOBRIGIDA&#39; ...
+4. dist_gen.choice [sampled]: (fit: 0.00396) &#39;AKROYD&#39;; &#39;BALL&#39;; &#39;PALTROW&#39;; &#39;KEITEL&#39;; &#39;MCQUEEN&#39; ...
+5. dist_gen.zipf_choice: (fit: 0.1) &#39;GARLAND&#39;; &#39;HOPKINS&#39;; &#39;WILLIS&#39;; &#39;PFEIFFER&#39;; &#39;PECK&#39; ...
+6. dist_gen.zipf_choice [sampled]: (fit: 0.1) &#39;BERRY&#39;; &#39;KILMER&#39;; &#39;ALLEN&#39;; &#39;TEMPLE&#39;; &#39;KILMER&#39; ...
+7. generic.text.word: (fit: 199) &#39;exploration&#39;; &#39;substantial&#39;; &#39;capacity&#39;; &#39;jam&#39;; &#39;suicide&#39; ...
+8. generic.address.city: (fit: 233) &#39;Felixstowe&#39;; &#39;Bridgend&#39;; &#39;Peterlee&#39;; &#39;Kelso&#39;; &#39;Harwich&#39; ...
+9. generic.address.street_name: (fit: 240) &#39;Derrynahone&#39;; &#39;Foster&#39;; &#39;Esdale&#39;; &#39;Greenridge&#39;; &#39;Harris&#39; ...
+10. generic.address.country: (fit: 271) &#39;Canada&#39;; &#39;St. Kitts &amp; Nevis&#39;; &#39;Burkina Faso&#39;; &#39;Jordan&#39;; &#39;Lithuania&#39; ...
+11. generic.person.nationality: (fit: 278) &#39;Latvian&#39;; &#39;British&#39;; &#39;Spanish&#39;; &#39;Russian&#39;; &#39;Spanish&#39; ...
+12. generic.person.language: (fit: 284) &#39;Portuguese&#39;; &#39;Bengali&#39;; &#39;Dhivehi&#39;; &#39;Catalan&#39;; &#39;Portuguese&#39; ...
+13. generic.person.last_name: (fit: 285) &#39;Hanson&#39;; &#39;Bush&#39;; &#39;Benjamin&#39;; &#39;Cox&#39;; &#39;Cleveland&#39; ...
+14. generic.person.first_name: (fit: 289) &#39;Thi&#39;; &#39;Huey&#39;; &#39;Gaylord&#39;; &#39;Marcel&#39;; &#39;Dong&#39; ...
+15. generic.address.street_suffix: (fit: 331) &#39;Crescent&#39;; &#39;Terrace&#39;; &#39;Mall&#39;; &#39;Shore&#39;; &#39;Extension&#39; ...
+... lines removed ...
+38. dist_gen.constant: (no fit) &#39;&#39;; &#39;&#39;; &#39;&#39;; &#39;&#39;; &#39;&#39; ...
+(actor.last_name) compare 4 13
+Not private
+4. dist_gen.choice [sampled] requires the following data from the source database:
+SELECT last_name AS value FROM (SELECT last_name FROM actor WHERE last_name IS NOT NULL ORDER BY RANDOM() LIMIT 500) AS _inner GROUP BY value ORDER BY COUNT(last_name) DESC; providing the following values: [&#39;KILMER&#39;, &#39;TEMPLE&#39;, &#39;NOLTE&#39;, &#39;WILLIS&#39;, &#39;PECK&#39;, &#39;GUINESS&#39;, &#39;DAVIS&#39;, &#39;DEGENERES&#39;, &#39;HOFFMAN&#39;, &#39;GARLAND&#39;, &#39;BERRY&#39;, &#39;ALLEN&#39;, &#39;TORN&#39;, &#39;KEITEL&#39;, &#39;HARRIS&#39;, &#39;JOHANSSON&#39;, &#39;ZELLWEGER&#39;, &#39;AKROYD&#39;, &#39;HOPKINS&#39;, &#39;WILLIAMS&#39;, &#39;CRONYN&#39;, &#39;DEPP&#39;, &#39;JACKMAN&#39;, &#39;HOPPER&#39;, &#39;DUKAKIS&#39;, &#39;TRACY&#39;, &#39;MONROE&#39;, &#39;MOSTEL&#39;, &#39;MCKELLEN&#39;, &#39;WAHLBERG&#39;, &#39;DEAN&#39;, &#39;BENING&#39;, &#39;SILVERSTONE&#39;, &#39;WEST&#39;, &#39;HACKMAN&#39;, &#39;BOLGER&#39;, &#39;MCQUEEN&#39;, &#39;DENCH&#39;, &#39;DEE&#39;, &#39;NEESON&#39;, &#39;STREEP&#39;, &#39;CAGE&#39;, &#39;BRODY&#39;, &#39;WINSLET&#39;, &#39;WOOD&#39;, &#39;GOODING&#39;, &#39;PENN&#39;, &#39;MCCONAUGHEY&#39;, &#39;CHASE&#39;, &#39;BAILEY&#39;, &#39;PALTROW&#39;, &#39;TANDY&#39;, &#39;CRAWFORD&#39;, &#39;FAWCETT&#39;, &#39;OLIVIER&#39;, &#39;CARREY&#39;, &#39;JOLIE&#39;, &#39;BACALL&#39;, &#39;TOMEI&#39;, &#39;PESCI&#39;, &#39;TAUTOU&#39;, &#39;LEIGH&#39;, &#39;COSTNER&#39;, &#39;WITHERSPOON&#39;, &#39;BASINGER&#39;, &#39;PITT&#39;, &#39;WILSON&#39;, &#39;BRIDGES&#39;, &#39;HUNT&#39;, &#39;GIBSON&#39;, &#39;HESTON&#39;, &#39;SUVARI&#39;, &#39;SINATRA&#39;, &#39;ASTAIRE&#39;, &#39;BULLOCK&#39;, &#39;JOVOVICH&#39;, &#39;GABLE&#39;, &#39;MALDEN&#39;, &#39;CHAPLIN&#39;, &#39;MANSFIELD&#39;, &#39;HURT&#39;, &#39;MCDORMAND&#39;, &#39;BALL&#39;, &#39;PRESLEY&#39;, &#39;RYDER&#39;, &#39;BIRCH&#39;, &#39;BERGMAN&#39;, &#39;WALKEN&#39;, &#39;HOPE&#39;, &#39;BERGEN&#39;, &#39;CRUZ&#39;, &#39;NICHOLSON&#39;, &#39;PHOENIX&#39;, &#39;PFEIFFER&#39;, &#39;SWANK&#39;, &#39;STALLONE&#39;, &#39;BLOOM&#39;, &#39;GRANT&#39;, &#39;SOBIESKI&#39;, &#39;CRUISE&#39;, &#39;BARRYMORE&#39;, &#39;CROWE&#39;, &#39;BALE&#39;, &#39;DAY-LEWIS&#39;, &#39;WAYNE&#39;, &#39;LOLLOBRIGIDA&#39;, &#39;HAWKE&#39;, &#39;MARX&#39;, &#39;POSEY&#39;, &#39;DUNST&#39;, &#39;DAMON&#39;, &#39;PINKETT&#39;, &#39;VOIGHT&#39;, &#39;MIRANDA&#39;, &#39;DERN&#39;, &#39;REYNOLDS&#39;, &#39;GOLDBERG&#39;, &#39;HUDSON&#39;, &#39;DREYFUSS&#39;, &#39;WRAY&#39;, &#39;CLOSE&#39;]
+13. generic.person.last_name requires no data from the source database.
++-----------+------------------------------+------------------------------+
+|   source  | 4. dist_gen.choice [sampled] | 13. generic.person.last_name |
++-----------+------------------------------+------------------------------+
+|   BRODY   |            TRACY             |           Lambert            |
+|   CARREY  |            CRONYN            |          Cleveland           |
+|  PFEIFFER |           MIRANDA            |           Bullock            |
+|   LEIGH   |            TEMPLE            |           Mckenzie           |
+|   MALDEN  |           WAHLBERG           |            Sawyer            |
+|   HAWKE   |          ZELLWEGER           |            Warner            |
+| JOHANSSON |            HOPPER            |            Ortiz             |
+|    PECK   |           PINKETT            |           Hubbard            |
+|  GOODING  |            CLOSE             |           Burnett            |
+|    CAGE   |          MANSFIELD           |           Erickson           |
+|   BERRY   |            POSEY             |           Russell            |
+|   HOPPER  |            PESCI             |            Combs             |
+|  JACKMAN  |             DEE              |            Hooper            |
+|  PALTROW  |            NOLTE             |           Foreman            |
+|   ALLEN   |             DERN             |            Miles             |
+|  MCKELLEN |            KEITEL            |           Salinas            |
+|   TEMPLE  |          DAY-LEWIS           |           Swanson            |
+|   BERRY   |             TORN             |           Hensley            |
+|   TRACY   |            CRONYN            |             Key              |
+| BARRYMORE |           HACKMAN            |            Cooke             |
++-----------+------------------------------+------------------------------+
+(actor.last_name) set 13
+(actor.last_update) next film
+(film.description) next
+(film.film_id[pk])
+(film.fulltext) propose
+Sample of actual source data: &quot;&#39;amaz&#39;:4 &#39;astronaut&#39;:11 &#39;berlin&#39;:18 &#39;display&#39;:5 &#39;fight&#39;:14 &#39;idaho&#39;:2 &#39;must&#39;:13 &#39;robot&#39;:8 &#39;woman&#39;:16 &#39;yentl&#39;:1&quot;; &quot;&#39;battl&#39;:14 &#39;boat&#39;:20 &#39;butler&#39;:11,16 &#39;command&#39;:2 &#39;jet&#39;:19 &#39;montezuma&#39;:1 &#39;must&#39;:13 &#39;reflect&#39;:5 &#39;thrill&#39;:4 &#39;waitress&#39;:8&quot;; &quot;&#39;amaz&#39;:4 &#39;astronaut&#39;:11 &#39;boy&#39;:8 &#39;crusad&#39;:2 &#39;epistl&#39;:5 &#39;gaslight&#39;:1 &#39;gulf&#39;:19 &#39;man&#39;:16 &#39;mexico&#39;:21 &#39;must&#39;:13 &#39;redeem&#39;:14&quot;; &quot;&#39;arsenic&#39;:2 &#39;astronaut&#39;:11 &#39;australia&#39;:18 &#39;display&#39;:5 &#39;girl&#39;:8 &#39;lacklustur&#39;:4 &#39;must&#39;:13 &#39;student&#39;:16 &#39;succumb&#39;:14 &#39;videotap&#39;:1&quot;; &quot;&#39;battl&#39;:14 &#39;beauti&#39;:4 &#39;brooklyn&#39;:1 &#39;compos&#39;:11 &#39;dentist&#39;:8 &#39;desert&#39;:2 &#39;drama&#39;:5 &#39;first&#39;:20 &#39;man&#39;:21 &#39;must&#39;:13 &#39;space&#39;:22 &#39;station&#39;:23 &#39;sumo&#39;:16 &#39;wrestler&#39;:17&quot;...
+1. dist_gen.choice [sampled]: (fit: 0) &quot;&#39;administr&#39;:18 &#39;boat&#39;:9,22 &#39;cat&#39;:12 &#39;charact&#39;:5 &#39;crane&#39;:2 &#39;databas&#39;:17 &#39;fate&#39;:4 &#39;find&#39;:15 &#39;jet&#39;:21 &#39;must&#39;:14 &#39;right&#39;:1 &#39;studi&#39;:6&quot;; &quot;&#39;baloon&#39;:19 &#39;confront&#39;:14 &#39;drama&#39;:5 &#39;epic&#39;:4 &#39;explor&#39;:11 &#39;factori&#39;:20 &#39;hunter&#39;:16 &#39;invas&#39;:2 &#39;lumberjack&#39;:8 &#39;must&#39;:13 &#39;sundanc&#39;:1&quot;; &quot;&#39;butler&#39;:16 &#39;drama&#39;:5 &#39;feminist&#39;:11 &#39;hustler&#39;:2 &#39;loser&#39;:1 &#39;must&#39;:13 &#39;nigeria&#39;:18 &#39;outgun&#39;:14 &#39;robot&#39;:8 &#39;stun&#39;:4&quot;; &quot;&#39;abandon&#39;:21 &#39;beauti&#39;:1 &#39;compos&#39;:10 &#39;display&#39;:7 &#39;fast&#39;:5 &#39;fast-pac&#39;:4 &#39;greas&#39;:2 &#39;mine&#39;:22 &#39;moos&#39;:13 &#39;must&#39;:15 &#39;pace&#39;:6 &#39;robot&#39;:18 &#39;shaft&#39;:23 &#39;sink&#39;:16&quot;; &quot;&#39;astronaut&#39;:12 &#39;california&#39;:19 &#39;car&#39;:17 &#39;challeng&#39;:15 &#39;cow&#39;:9 &#39;epic&#39;:4 &#39;hard&#39;:2 &#39;juggler&#39;:1 &#39;mad&#39;:8 &#39;must&#39;:14 &#39;stori&#39;:5&quot; ...
+2. dist_gen.weighted_choice [sampled]: (fit: 0) &quot;&#39;convent&#39;:21 &#39;explor&#39;:12 &#39;frisbe&#39;:17 &#39;must&#39;:14 &#39;mysql&#39;:20 &#39;reflect&#39;:5 &#39;sink&#39;:15 &#39;sleep&#39;:1 &#39;stun&#39;:4 &#39;sumo&#39;:8 &#39;suspect&#39;:2 &#39;wrestler&#39;:9&quot;; &quot;&#39;administr&#39;:18 &#39;boy&#39;:8 &#39;challeng&#39;:15 &#39;cow&#39;:12 &#39;databas&#39;:17 &#39;desert&#39;:22 &#39;guy&#39;:2 &#39;mad&#39;:11 &#39;must&#39;:14 &#39;sahara&#39;:21 &#39;stori&#39;:5 &#39;trap&#39;:1 &#39;unbeliev&#39;:4&quot;; &quot;&#39;amaz&#39;:4 &#39;australia&#39;:18 &#39;compos&#39;:16 &#39;crocodil&#39;:8 &#39;crusad&#39;:2 &#39;deep&#39;:1 &#39;discov&#39;:14 &#39;must&#39;:13 &#39;squirrel&#39;:11 &#39;tale&#39;:5&quot;; &quot;&#39;convent&#39;:22 &#39;cow&#39;:18 &#39;discov&#39;:15 &#39;forens&#39;:11 &#39;insight&#39;:4 &#39;mad&#39;:17 &#39;man&#39;:8 &#39;must&#39;:14 &#39;mysql&#39;:21 &#39;psychologist&#39;:12 &#39;punk&#39;:2 &#39;saga&#39;:5 &#39;seabiscuit&#39;:1&quot;; &quot;&#39;bore&#39;:4 &#39;challeng&#39;:14 &#39;dog&#39;:11 &#39;fiddler&#39;:1 &#39;gulf&#39;:19 &#39;lost&#39;:2 &#39;madman&#39;:16 &#39;mexico&#39;:21 &#39;must&#39;:13 &#39;squirrel&#39;:8 &#39;tale&#39;:5&quot; ...
+3. dist_gen.zipf_choice [sampled]: (fit: 0.0346) &quot;&#39;charact&#39;:5 &#39;crocodil&#39;:12 &#39;gulf&#39;:20 &#39;insight&#39;:4 &#39;intent&#39;:2 &#39;mexico&#39;:22 &#39;must&#39;:14 &#39;sink&#39;:15 &#39;streetcar&#39;:1 &#39;studi&#39;:6 &#39;waitress&#39;:9,17&quot;; &quot;&#39;australia&#39;:18 &#39;butler&#39;:8 &#39;explor&#39;:16 &#39;freddi&#39;:2 &#39;must&#39;:13 &#39;pursu&#39;:14 &#39;saga&#39;:5 &#39;sister&#39;:1 &#39;stun&#39;:4 &#39;woman&#39;:11&quot;; &quot;&#39;administr&#39;:9 &#39;baloon&#39;:21 &#39;chef&#39;:13 &#39;coma&#39;:2 &#39;confront&#39;:16 &#39;databas&#39;:8 &#39;emot&#39;:4 &#39;factori&#39;:22 &#39;metropoli&#39;:1 &#39;must&#39;:15 &#39;pastri&#39;:12 &#39;saga&#39;:5 &#39;teacher&#39;:18&quot;; &quot;&#39;boat&#39;:8 &#39;california&#39;:18 &#39;cat&#39;:16 &#39;die&#39;:1 &#39;intrepid&#39;:4 &#39;kill&#39;:14 &#39;maker&#39;:2 &#39;monkey&#39;:11 &#39;must&#39;:13 &#39;tale&#39;:5&quot;; &quot;&#39;battl&#39;:15 &#39;chef&#39;:9 &#39;giant&#39;:2 &#39;monkey&#39;:12,17 &#39;must&#39;:14 &#39;pastri&#39;:8 &#39;princess&#39;:1 &#39;shark&#39;:20 &#39;tank&#39;:21 &#39;thrill&#39;:4 &#39;yarn&#39;:5&quot; ...
+(film.fulltext) set 1
+(film.language_id) next
+(film.last_update)
+(film.length)
+(film.original_language_id)
+(film.rating)
+(film.release_year)
+(film.rental_duration)
+(film.rental_rate)
+(film.replacement_cost)
+(film.special_features)
+(film.title) previous
+(film.special_features) propose
+Sample of actual source data: [&#39;Commentaries&#39;, &#39;Deleted Scenes&#39;, &#39;Behind the Scenes&#39;]; [&#39;Trailers&#39;, &#39;Commentaries&#39;, &#39;Behind the Scenes&#39;]; [&#39;Trailers&#39;, &#39;Commentaries&#39;, &#39;Deleted Scenes&#39;]; [&#39;Trailers&#39;, &#39;Commentaries&#39;, &#39;Behind the Scenes&#39;]; [&#39;Trailers&#39;, &#39;Commentaries&#39;, &#39;Deleted Scenes&#39;, &#39;Behind the Scenes&#39;]...
+1. dist_gen.weighted_choice: (fit: 0) [&#39;Trailers&#39;, &#39;Commentaries&#39;]; [&#39;Commentaries&#39;]; [&#39;Commentaries&#39;]; [&#39;Behind the Scenes&#39;]; [&#39;Trailers&#39;] ...
+2. dist_gen.weighted_choice [suppressed]: (fit: 0) [&#39;Commentaries&#39;, &#39;Deleted Scenes&#39;]; [&#39;Deleted Scenes&#39;]; [&#39;Trailers&#39;, &#39;Behind the Scenes&#39;]; [&#39;Trailers&#39;, &#39;Behind the Scenes&#39;]; [&#39;Trailers&#39;, &#39;Commentaries&#39;, &#39;Deleted Scenes&#39;, &#39;Behind the Scenes&#39;] ...
+3. dist_gen.weighted_choice [sampled]: (fit: 0) [&#39;Commentaries&#39;, &#39;Deleted Scenes&#39;]; [&#39;Commentaries&#39;, &#39;Deleted Scenes&#39;, &#39;Behind the Scenes&#39;]; [&#39;Trailers&#39;, &#39;Deleted Scenes&#39;]; [&#39;Trailers&#39;, &#39;Deleted Scenes&#39;]; [&#39;Commentaries&#39;, &#39;Deleted Scenes&#39;, &#39;Behind the Scenes&#39;] ...
+4. dist_gen.weighted_choice [sampled and suppressed]: (fit: 0) [&#39;Trailers&#39;, &#39;Commentaries&#39;, &#39;Deleted Scenes&#39;]; [&#39;Trailers&#39;, &#39;Behind the Scenes&#39;]; [&#39;Trailers&#39;, &#39;Commentaries&#39;, &#39;Deleted Scenes&#39;]; [&#39;Trailers&#39;, &#39;Deleted Scenes&#39;]; [&#39;Commentaries&#39;, &#39;Deleted Scenes&#39;, &#39;Behind the Scenes&#39;] ...
+5. dist_gen.choice [sampled]: (fit: 1.26) [&#39;Deleted Scenes&#39;, &#39;Behind the Scenes&#39;]; [&#39;Trailers&#39;, &#39;Deleted Scenes&#39;]; [&#39;Trailers&#39;, &#39;Commentaries&#39;, &#39;Behind the Scenes&#39;]; [&#39;Trailers&#39;, &#39;Commentaries&#39;]; [&#39;Deleted Scenes&#39;] ...
+6. dist_gen.choice [sampled and suppressed]: (fit: 1.26) [&#39;Trailers&#39;, &#39;Commentaries&#39;]; [&#39;Trailers&#39;, &#39;Commentaries&#39;]; [&#39;Trailers&#39;, &#39;Commentaries&#39;, &#39;Behind the Scenes&#39;]; [&#39;Commentaries&#39;, &#39;Deleted Scenes&#39;, &#39;Behind the Scenes&#39;]; [&#39;Trailers&#39;, &#39;Commentaries&#39;, &#39;Deleted Scenes&#39;] ...
+7. dist_gen.choice: (fit: 2.75) [&#39;Deleted Scenes&#39;]; [&#39;Trailers&#39;, &#39;Deleted Scenes&#39;]; [&#39;Trailers&#39;, &#39;Behind the Scenes&#39;]; [&#39;Trailers&#39;, &#39;Deleted Scenes&#39;, &#39;Behind the Scenes&#39;]; [&#39;Deleted Scenes&#39;] ...
+8. dist_gen.choice [suppressed]: (fit: 2.75) [&#39;Trailers&#39;, &#39;Behind the Scenes&#39;]; [&#39;Deleted Scenes&#39;]; [&#39;Trailers&#39;, &#39;Deleted Scenes&#39;, &#39;Behind the Scenes&#39;]; [&#39;Trailers&#39;, &#39;Commentaries&#39;]; [&#39;Commentaries&#39;, &#39;Deleted Scenes&#39;, &#39;Behind the Scenes&#39;] ...
+9. dist_gen.zipf_choice [sampled]: (fit: 71.1) [&#39;Commentaries&#39;, &#39;Deleted Scenes&#39;]; [&#39;Commentaries&#39;, &#39;Deleted Scenes&#39;]; [&#39;Trailers&#39;, &#39;Deleted Scenes&#39;]; [&#39;Trailers&#39;, &#39;Commentaries&#39;, &#39;Behind the Scenes&#39;]; [&#39;Deleted Scenes&#39;] ...
+10. dist_gen.zipf_choice [sampled and suppressed]: (fit: 71.1) [&#39;Commentaries&#39;, &#39;Deleted Scenes&#39;]; [&#39;Trailers&#39;, &#39;Commentaries&#39;, &#39;Deleted Scenes&#39;, &#39;Behind the Scenes&#39;]; [&#39;Trailers&#39;]; [&#39;Trailers&#39;]; [&#39;Commentaries&#39;, &#39;Deleted Scenes&#39;] ...
+11. dist_gen.zipf_choice: (fit: 299) [&#39;Trailers&#39;]; [&#39;Trailers&#39;, &#39;Commentaries&#39;]; [&#39;Trailers&#39;, &#39;Commentaries&#39;]; [&#39;Trailers&#39;]; [&#39;Commentaries&#39;] ...
+12. dist_gen.zipf_choice [suppressed]: (fit: 299) [&#39;Trailers&#39;]; [&#39;Trailers&#39;, &#39;Behind the Scenes&#39;]; [&#39;Trailers&#39;, &#39;Commentaries&#39;, &#39;Behind the Scenes&#39;]; [&#39;Trailers&#39;, &#39;Commentaries&#39;, &#39;Behind the Scenes&#39;]; [&#39;Trailers&#39;] ...
+13. dist_gen.constant: (no fit) None; None; None; None; None ...
+(film.special_features) set 1
+(film.title) quit
+Table film:
+...changing special_features from nothing to dist_gen.weighted_choice
+Do you want to save this configuration?
+(yes/no/cancel) yes
+</pre></div>
+</div>
+<p>Let’s have a look at what that did to <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code>
+(which used to contain almost nothing):</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">src-stats</span><span class="p">:</span>
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">comments</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">The values that appear in column fulltext of a random sample of 500 rows of table</span>
+<span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">film</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auto__film__fulltext</span>
+<span class="w">  </span><span class="nt">query</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">SELECT fulltext AS value FROM (SELECT fulltext FROM film WHERE fulltext IS</span>
+<span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">NOT NULL ORDER BY RANDOM() LIMIT 500) AS _inner GROUP BY value ORDER BY COUNT(fulltext)</span>
+<span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">DESC</span>
+<span class="nt">tables</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">actor</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">row_generators</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">columns_assigned</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">first_name</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">generic.person.first_name</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">columns_assigned</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">last_name</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">generic.person.last_name</span>
+<span class="w">  </span><span class="nt">address</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span>
+<span class="w">  </span><span class="nt">category</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span>
+<span class="w">  </span><span class="nt">city</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span>
+<span class="w">  </span><span class="nt">country</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span>
+<span class="w">  </span><span class="nt">customer</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span>
+<span class="w">  </span><span class="nt">film</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">row_generators</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">columns_assigned</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fulltext</span>
+<span class="w">      </span><span class="nt">kwargs</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">a</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">SRC_STATS[&quot;auto__film__fulltext&quot;][&quot;results&quot;]</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dist_gen.choice</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">columns_assigned</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">special_features</span>
+<span class="w">      </span><span class="nt">kwargs</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">a</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">SRC_STATS[&quot;auto__film__special_features&quot;][&quot;results&quot;]</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dist_gen.weighted_choice</span>
+<span class="w">  </span><span class="nt">film_actor</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span>
+<span class="w">  </span><span class="nt">film_category</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span>
+<span class="w">  </span><span class="nt">inventory</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span>
+<span class="w">  </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span>
+<span class="w">  </span><span class="nt">payment</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span>
+<span class="w">  </span><span class="nt">payment_p2022_01</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span>
+<span class="w">  </span><span class="nt">payment_p2022_02</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span>
+<span class="w">  </span><span class="nt">payment_p2022_03</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span>
+<span class="w">  </span><span class="nt">payment_p2022_04</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span>
+<span class="w">  </span><span class="nt">payment_p2022_05</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span>
+<span class="w">  </span><span class="nt">payment_p2022_06</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span>
+<span class="w">  </span><span class="nt">payment_p2022_07</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span>
+<span class="w">  </span><span class="nt">rental</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span>
+<span class="w">  </span><span class="nt">staff</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span>
+<span class="w">  </span><span class="nt">store</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span>
+</pre></div>
+</div>
+<p>Here we can see the simple generators that are now applied to the first name
+and last name of the <code class="docutils literal notranslate"><span class="pre">actor</span></code> table. We can also see the <code class="docutils literal notranslate"><span class="pre">dist_gen.choice</span></code>
+generators we chose for <code class="docutils literal notranslate"><span class="pre">film.fulltext</span></code> and <code class="docutils literal notranslate"><span class="pre">film.special_features</span></code>, and how
+these require some data from the database.
+We can see the query that will provide this data in the <code class="docutils literal notranslate"><span class="pre">src-stats:</span></code> block.</p>
+<p>However, this was a confusing choice to make. We did not see actual text when we
+were choosing the generator, we saw a list of words and numbers.</p>
+<p>Well, let’s see what this generates anyway. We will need to use the
+<code class="docutils literal notranslate"><span class="pre">--force</span></code> option for overwrite the existing files, and the <code class="docutils literal notranslate"><span class="pre">--num-passes</span></code>
+option to create multiple rows of output.</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>datafaker<span class="w"> </span>create-data<span class="w"> </span>--num-passes<span class="w"> </span><span class="m">3</span>
+</pre></div>
+</div>
+<p>Now let’s have a look at what data we have in the destination database:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ datafaker list-tables
+actor
+address
+category
+city
+country
+customer
+film
+film_actor
+film_category
+inventory
+language
+payment
+payment_p2022_01
+payment_p2022_02
+payment_p2022_03
+payment_p2022_04
+payment_p2022_05
+payment_p2022_06
+payment_p2022_07
+rental
+staff
+store
+$ datafaker dump-data --output - --table actor
+actor_id,first_name,last_name,last_update
+1,Vertie,Huber,2026-12-13 01:09:43.409289+00:00
+2,Jewel,Clarke,2026-10-31 16:07:09.691557+00:00
+3,Arden,Chavez,2026-03-12 17:22:18.332749+00:00
+$ datafaker dump-data --output - --table film
+description,film_id,fulltext,language_id,last_update,length,original_language_id,rating,release_year,rental_duration,rental_rate,replacement_cost,special_features,title
+Green,1,&#39;amaz&#39;:4 &#39;boat&#39;:22 &#39;butler&#39;:8 &#39;drama&#39;:5 &#39;expec&#39;:1 &#39;husband&#39;:11 &#39;must&#39;:13 &#39;natur&#39;:2 &#39;reach&#39;:14 &#39;shark&#39;:17 &#39;u&#39;:21 &#39;u-boat&#39;:20,1,2026-04-22 19:56:57.650072+01:00,938,1,Cyan,-319,-52,79.21,45.44,&quot;[&#39;Deleted Scenes&#39;, &#39;Behind the Scenes&#39;]&quot;,Blue
+Red,2,&#39;ballroom&#39;:2 &#39;boondock&#39;:1 &#39;boy&#39;:11 &#39;crocodil&#39;:8 &#39;defeat&#39;:14 &#39;fate&#39;:4 &#39;gulf&#39;:19 &#39;mexico&#39;:21 &#39;monkey&#39;:16 &#39;must&#39;:13 &#39;panorama&#39;:5,1,2026-08-08 21:06:59.620631+01:00,994,1,Brown,-471,-388,97.80,32.94,&quot;[&#39;Commentaries&#39;, &#39;Deleted Scenes&#39;, &#39;Behind the Scenes&#39;]&quot;,Blue
+Magenta,3,&quot;&#39;ancient&#39;:20 &#39;astound&#39;:4 &#39;chanc&#39;:1 &#39;china&#39;:21 &#39;forens&#39;:8,12 &#39;moos&#39;:18 &#39;must&#39;:15 &#39;overcom&#39;:16 &#39;psychologist&#39;:9,13 &#39;resurrect&#39;:2 &#39;stori&#39;:5&quot;,2,2026-06-10 09:43:23.457110+01:00,273,2,Pink,520,-960,71.36,14.38,&quot;[&#39;Trailers&#39;, &#39;Behind the Scenes&#39;]&quot;,Brown
+$ datafaker dump-data --output - --table film_actor
+actor_id,film_id,last_update
+1,1,2026-07-18 22:09:15.669313+01:00
+2,2,2026-02-18 03:04:45.317350+00:00
+3,3,2026-07-09 20:43:06.250462+01:00
+</pre></div>
+</div>
+<p>So here we have dumped the two tables we configured (<code class="docutils literal notranslate"><span class="pre">actor</span></code> and <code class="docutils literal notranslate"><span class="pre">film</span></code>),
+and one other (<code class="docutils literal notranslate"><span class="pre">film_actor</span></code>), three rows of each because we specified <code class="docutils literal notranslate"><span class="pre">--num-passes</span> <span class="pre">3</span></code>.</p>
+<p>You will see that almost all of the columns have correctly-typed data in it.
+The primary keys befin at one and increase by one per row,
+all the foreign keys point to existing rows in the correct table
+and all the data is correctly-typed. Also our nice new generators are working:
+Our <code class="docutils literal notranslate"><span class="pre">actor</span></code> table has nice names in it, and our <code class="docutils literal notranslate"><span class="pre">film</span></code> table has a <code class="docutils literal notranslate"><span class="pre">fulltext</span></code> column.</p>
+</section>
+<section id="problems-with-the-minimal-example">
+<h2>Problems with the minimal example<a class="headerlink" href="#problems-with-the-minimal-example" title="Permalink to this heading"></a></h2>
+<p>Here is a non-exhaustive list of issues with the data produced:</p>
+<ul class="simple">
+<li><p>all text fields are just colours, for example:
+- staff names (we can deal with this the same way we dealt with actors names above).
+- address lines.
+- movie categories.
+- city, country and language names.
+- movie descriptions.</p></li>
+<li><p>the <code class="docutils literal notranslate"><span class="pre">fulltext</span></code> table in Pagila relates to the <code class="docutils literal notranslate"><span class="pre">title</span></code> and <code class="docutils literal notranslate"><span class="pre">description</span></code>
+but in our generated data does not.</p></li>
+<li><p>there are a lot of payment tables that are partitions of the
+main payment table in the source database, but these are
+just different tables in the generated table.</p></li>
+</ul>
+</section>
+<section id="fixing-the-problems-with-the-minimal-example-1-ignoring-unwanted-tables">
+<h2>Fixing the problems with the minimal example #1: ignoring unwanted tables<a class="headerlink" href="#fixing-the-problems-with-the-minimal-example-1-ignoring-unwanted-tables" title="Permalink to this heading"></a></h2>
+<p>First, let us remove all the <code class="docutils literal notranslate"><span class="pre">payment_</span></code> tables.
+This lowers the fidelity of the generated database, but <code class="docutils literal notranslate"><span class="pre">datafaker</span></code> cannot cope with partitioned tables
+so the best that we can do is pretend that <code class="docutils literal notranslate"><span class="pre">payment</span></code> is not a partitioned table.
+If we think that our users will not be interested in this implementation detail then this will be acceptable.</p>
+<p>We fix this problems with <code class="docutils literal notranslate"><span class="pre">datafaker</span> <span class="pre">configure-tables</span></code>
+(remember that entering no command repeats the previous command):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ datafaker configure-tables
+Interactive table configuration (ignore, vocabulary, private, generate or empty). Type ? for help.
+
+(table: actor) next
+(table: address)
+(table: category)
+(table: city)
+(table: country)
+(table: customer)
+(table: film)
+(table: film_actor)
+(table: film_category)
+(table: inventory)
+(table: language)
+(table: payment)
+(table: payment_p2022_01) ignore
+Table payment_p2022_01 set as ignored
+(table: payment_p2022_02)
+Table payment_p2022_02 set as ignored
+(table: payment_p2022_03)
+Table payment_p2022_03 set as ignored
+(table: payment_p2022_04)
+Table payment_p2022_04 set as ignored
+(table: payment_p2022_05)
+Table payment_p2022_05 set as ignored
+(table: payment_p2022_06)
+Table payment_p2022_06 set as ignored
+(table: payment_p2022_07)
+Table payment_p2022_07 set as ignored
+(table: rental) quit
+Changing payment_p2022_01 from generate to ignore
+Changing payment_p2022_02 from generate to ignore
+Changing payment_p2022_03 from generate to ignore
+Changing payment_p2022_04 from generate to ignore
+Changing payment_p2022_05 from generate to ignore
+Changing payment_p2022_06 from generate to ignore
+Changing payment_p2022_07 from generate to ignore
+Do you want to save this configuration?
+(yes/no/cancel) yes
+</pre></div>
+</div>
+<p>This has changed <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code> file by adding the following sections:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">payment_p2022_01</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">ignore</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="nt">payment_p2022_02</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">ignore</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="nt">payment_p2022_03</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">ignore</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="nt">payment_p2022_04</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">ignore</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="nt">payment_p2022_05</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">ignore</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="nt">payment_p2022_06</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">ignore</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="nt">payment_p2022_07</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">ignore</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</pre></div>
+</div>
+<p>Now we can destroy the existing database and try again:</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>datafaker<span class="w"> </span>remove-tables<span class="w"> </span>--all<span class="w"> </span>--yes
+datafaker<span class="w"> </span>create-tables
+datafaker<span class="w"> </span>create-data<span class="w"> </span>--num-passes<span class="w"> </span><span class="m">3</span>
+</pre></div>
+</div>
+<p>We don’t need to regenerate the generators this time as we have not changed anything in the <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code> file that affects generators.</p>
+</section>
+<section id="fixing-the-problems-with-the-minimal-example-2-generate-vocabularies">
+<h2>Fixing the problems with the minimal example #2: generate vocabularies<a class="headerlink" href="#fixing-the-problems-with-the-minimal-example-2-generate-vocabularies" title="Permalink to this heading"></a></h2>
+<p>While we could try to generate random plausible language, country, city and film category names, there is a better way.
+As these tables hold no sensitive data, we can just copy them.</p>
+<p>We will need to use <code class="docutils literal notranslate"><span class="pre">datafaker</span> <span class="pre">configure-tables</span></code> again; in fact,
+we could have done this at the same time as ignoring the payment partitions.
+After configuring the tables we use <code class="docutils literal notranslate"><span class="pre">datafaker</span> <span class="pre">make-vocab</span></code> to export the data:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ datafaker configure-tables
+Interactive table configuration (ignore, vocabulary, private, generate or empty). Type ? for help.
+
+(table: actor) next
+(table: address)
+(table: category) vocabulary
+Table category set as vocabulary
+(table: city)
+Table city set as vocabulary
+(table: country)
+Table country set as vocabulary
+(table: customer) next
+(table: film)
+(table: film_actor)
+(table: film_category)
+(table: inventory)
+(table: language) vocabulary
+Table language set as vocabulary
+(table: payment) quit
+Changing category from generate to vocabulary
+Changing city from generate to vocabulary
+Changing country from generate to vocabulary
+Changing language from generate to vocabulary
+Do you want to save this configuration?
+(yes/no/cancel) yes
+$ datafaker make-vocab --compress
+</pre></div>
+</div>
+<p>Now we can see the follwing sections in <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code> containing <code class="docutils literal notranslate"><span class="pre">vocabulary_table:true</span></code>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">category</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">vocabulary_table</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="nt">city</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">vocabulary_table</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="nt">country</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">vocabulary_table</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="nt">language</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">vocabulary_table</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</pre></div>
+</div>
+<p>And we can also see we have generated four files:
+<code class="docutils literal notranslate"><span class="pre">category.yaml.gz</span></code>, <code class="docutils literal notranslate"><span class="pre">city.yaml.gz</span></code>, <code class="docutils literal notranslate"><span class="pre">country.yaml.gz</span></code> and <code class="docutils literal notranslate"><span class="pre">language.yaml.gz</span></code>.
+If the <code class="docutils literal notranslate"><span class="pre">--compress</span></code> option is not passed it will produce <code class="docutils literal notranslate"><span class="pre">.yaml</span></code> files instead of <code class="docutils literal notranslate"><span class="pre">.yaml.gz</span></code> and this would be fine in this case.
+Certain databases have very large vocabulary tables, for example the <code class="docutils literal notranslate"><span class="pre">concept</span></code> table in OMOP databases.
+Such huge YAML files can cause problems, but they compress very well, so the <code class="docutils literal notranslate"><span class="pre">--compress</span></code> option can be very useful for overcoming such limitations.
+Generating these huge vocabulary files can nevertheless take a very long time! Not in Pagila’s case, though.</p>
+<p>Now your data privacy protocols will either require you to unzip and examine these files before taking them out of the private network
+or it will trust <code class="docutils literal notranslate"><span class="pre">datafaker</span></code> to produce only non-private output given certain inputs.
+In either case we take these files out of the private network.</p>
+<p>Using the same <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code> file outside the private network (and with <code class="docutils literal notranslate"><span class="pre">DST_DSN</span></code> set as above) we delete the existing data in these vocabulary tables,
+and fill them with the new data from the <code class="docutils literal notranslate"><span class="pre">yaml.gz</span></code> (or unzipped <code class="docutils literal notranslate"><span class="pre">.yaml</span></code>) files:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>datafaker<span class="w"> </span>remove-vocab<span class="w"> </span>--yes
+<span class="gp">tim@tim-Latitude-5410:~/Documents/test$ </span>datafaker<span class="w"> </span>create-vocab
+<span class="gp">tim@tim-Latitude-5410:~/Documents/test$ </span>datafaker<span class="w"> </span>dump-data<span class="w"> </span>--output<span class="w"> </span>-<span class="w"> </span>--table<span class="w"> </span>language
+<span class="go">language_id,last_update,name</span>
+<span class="go">1,2022-02-15 10:02:19+00:00,English</span>
+<span class="go">2,2022-02-15 10:02:19+00:00,Italian</span>
+<span class="go">3,2022-02-15 10:02:19+00:00,Japanese</span>
+<span class="go">4,2022-02-15 10:02:19+00:00,Mandarin</span>
+<span class="go">5,2022-02-15 10:02:19+00:00,French</span>
+<span class="go">6,2022-02-15 10:02:19+00:00,German</span>
+</pre></div>
+</div>
+</section>
+<section id="fixing-the-problems-with-the-minimal-example-3-generate-more-plausible-text">
+<h2>Fixing the problems with the minimal example #3: generate more plausible text<a class="headerlink" href="#fixing-the-problems-with-the-minimal-example-3-generate-more-plausible-text" title="Permalink to this heading"></a></h2>
+<p>Let us take the example of the <code class="docutils literal notranslate"><span class="pre">film.description</span></code> column. Remember we did this above:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ datafaker dump-data --output - --table film
+description,film_id,fulltext,language_id,last_update,length,original_language_id,rating,release_year,rental_duration,rental_rate,replacement_cost,special_features,title
+Green,1,&#39;amaz&#39;:4 &#39;boat&#39;:22 &#39;butler&#39;:8 &#39;drama&#39;:5 &#39;expec&#39;:1 &#39;husband&#39;:11 &#39;must&#39;:13 &#39;natur&#39;:2 &#39;reach&#39;:14 &#39;shark&#39;:17 &#39;u&#39;:21 &#39;u-boat&#39;:20,1,2026-04-22 19:56:57.650072+01:00,938,1,Cyan,-319,-52,79.21,45.44,&quot;[&#39;Deleted Scenes&#39;, &#39;Behind the Scenes&#39;]&quot;,Blue
+Red,2,&#39;ballroom&#39;:2 &#39;boondock&#39;:1 &#39;boy&#39;:11 &#39;crocodil&#39;:8 &#39;defeat&#39;:14 &#39;fate&#39;:4 &#39;gulf&#39;:19 &#39;mexico&#39;:21 &#39;monkey&#39;:16 &#39;must&#39;:13 &#39;panorama&#39;:5,1,2026-08-08 21:06:59.620631+01:00,994,1,Brown,-471,-388,97.80,32.94,&quot;[&#39;Commentaries&#39;, &#39;Deleted Scenes&#39;, &#39;Behind the Scenes&#39;]&quot;,Blue
+Magenta,3,&quot;&#39;ancient&#39;:20 &#39;astound&#39;:4 &#39;chanc&#39;:1 &#39;china&#39;:21 &#39;forens&#39;:8,12 &#39;moos&#39;:18 &#39;must&#39;:15 &#39;overcom&#39;:16 &#39;psychologist&#39;:9,13 &#39;resurrect&#39;:2 &#39;stori&#39;:5&quot;,2,2026-06-10 09:43:23.457110+01:00,273,2,Pink,520,-960,71.36,14.38,&quot;[&#39;Trailers&#39;, &#39;Behind the Scenes&#39;]&quot;,Brown
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">description</span></code> column has values <code class="docutils literal notranslate"><span class="pre">Green</span></code>, <code class="docutils literal notranslate"><span class="pre">Red</span></code> and <code class="docutils literal notranslate"><span class="pre">Magenta</span></code>. Can we do better? Well, maybe a bit.</p>
+<p>Let us at least make the description longer than one word!
+<code class="docutils literal notranslate"><span class="pre">datafaker</span> <span class="pre">configure-generators</span></code> using commands <code class="docutils literal notranslate"><span class="pre">next</span> <span class="pre">table-name.column-name</span></code>, <code class="docutils literal notranslate"><span class="pre">propose</span></code> and <code class="docutils literal notranslate"><span class="pre">set</span></code>,
+followed by re-generating the data:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ datafaker configure-generators
+Interactive generator configuration. Type ? for help.
+
+(actor.first_name (generic.person.first_name)) next film.description
+(film.description) propose
+Sample of actual source data: &#39;A Brilliant Panorama of a Boat And a Astronaut who must Challenge a Teacher in A Manhattan Penthouse&#39;; &#39;A Lacklusture Epistle of a Boat And a Technical Writer who must Fight a A Shark in The Canadian Rockies&#39;; &#39;A Awe-Inspiring Drama of a Dog And a Man who must Escape a Robot in A Shark Tank&#39;; &#39;A Epic Yarn of a Cat And a Madman who must Vanquish a Dentist in An Abandoned Amusement Park&#39;; &#39;A Intrepid Story of a Student And a Dog who must Challenge a Explorer in Soviet Georgia&#39;...
+1. dist_gen.choice [sampled]: (fit: 0) &#39;A Emotional Tale of a Robot And a Sumo Wrestler who must Redeem a Pastry Chef in A Baloon Factory&#39;; &#39;A Insightful Epistle of a Pastry Chef And a Womanizer who must Build a Boat in New Orleans&#39;; &#39;A Stunning Display of a Moose And a Database Administrator who must Pursue a Composer in A Jet Boat&#39;; &#39;A Amazing Documentary of a Car And a Robot who must Escape a Lumberjack in An Abandoned Amusement Park&#39;; &#39;A Beautiful Story of a Monkey And a Sumo Wrestler who must Conquer a A Shark in A MySQL Convention&#39; ...
+2. dist_gen.weighted_choice [sampled]: (fit: 0) &#39;A Fateful Story of a A Shark And a Explorer who must Succumb a Technical Writer in A Jet Boat&#39;; &#39;A Epic Tale of a Robot And a Monkey who must Vanquish a Man in New Orleans&#39;; &#39;A Fast-Paced Panorama of a Technical Writer And a Mad Scientist who must Find a Feminist in An Abandoned Mine Shaft&#39;; &#39;A Insightful Panorama of a Crocodile And a Boat who must Conquer a Sumo Wrestler in A MySQL Convention&#39;; &#39;A Brilliant Tale of a Car And a Moose who must Battle a Dentist in Nigeria&#39; ...
+3. dist_gen.zipf_choice [sampled]: (fit: 0.0346) &#39;A Intrepid Yarn of a Frisbee And a Dog who must Build a Astronaut in A Baloon Factory&#39;; &#39;A Awe-Inspiring Character Study of a Boy And a Feminist who must Sink a Crocodile in Ancient China&#39;; &#39;A Thrilling Yarn of a Feminist And a Madman who must Battle a Hunter in Berlin&#39;; &#39;A Lacklusture Reflection of a Boat And a Forensic Psychologist who must Fight a Waitress in A Monastery&#39;; &#39;A Insightful Drama of a Mad Scientist And a Hunter who must Defeat a Pastry Chef in New Orleans&#39; ...
+4. generic.text.sentence: (fit: 789) &#39;Do you come here often?&#39;; &#39;Haskell features a type system with type inference and lazy evaluation.&#39;; &#39;Do you have any idea why this is not working?&#39;; &#39;Erlang is a general-purpose, concurrent, functional programming language.&#39;; &#39;Ports are used to communicate with the external world.&#39; ...
+5. generic.text.quote: (fit: 826) &quot;Mama always said life was like a box of chocolates. You never know what you&#39;re gonna get.&quot;; &quot;Mama always said life was like a box of chocolates. You never know what you&#39;re gonna get.&quot;; &#39;A census taker once tried to test me. I ate his liver with some fava beans and a nice Chianti.&#39;; &#39;Houston, we have a problem.&#39;; &#39;Elementary, my dear Watson.&#39; ...
+6. generic.text.text: (fit: 1600) &#39;It is also a garbage-collected runtime system. Any element of a tuple can be accessed in constant time. They are written as strings of consecutive alphanumeric characters, the first character being lowercase. The arguments can be primitive data types or compound data types. In 1989 the building was heavily damaged by fire, but it has since been restored.&#39;; &#39;Atoms can contain any character if they are enclosed within single quotes and an escape convention exists which allows any character to be used within an atom. Where are my pants? Do you have any idea why this is not working? Haskell features a type system with type inference and lazy evaluation. Erlang is a general-purpose, concurrent, functional programming language.&#39;; &#39;Initially composing light-hearted and irreverent works, he also wrote serious, sombre and religious pieces beginning in the 1930s. Make me a sandwich. Make me a sandwich. The Galactic Empire is nearing completion of the Death Star, a space station with the power to destroy entire planets. Make me a sandwich.&#39;; &#39;Make me a sandwich. Its main implementation is the Glasgow Haskell Compiler. Atoms can contain any character if they are enclosed within single quotes and an escape convention exists which allows any character to be used within an atom. The Galactic Empire is nearing completion of the Death Star, a space station with the power to destroy entire planets. Haskell features a type system with type inference and lazy evaluation.&#39;; &#39;The syntax {D1,D2,...,Dn} denotes a tuple whose arguments are D1, D2, ... Dn. They are written as strings of consecutive alphanumeric characters, the first character being lowercase. The sequential subset of Erlang supports eager evaluation, single assignment, and dynamic typing. Erlang is a general-purpose, concurrent, functional programming language. Ports are created with the built-in function open_port.&#39; ...
+... lines removed ...
+35. dist_gen.constant: (no fit) None; None; None; None; None ...
+(film.description) set 5
+(film.film_id[pk]) quit
+Table film:
+...changing description from nothing to generic.text.quote
+Do you want to save this configuration?
+(yes/no/cancel) yes
+$ datafaker remove-data --yes
+$ datafaker create-data --num-passes 3
+$ datafaker dump-data --output - --table film
+description,film_id,fulltext,language_id,last_update,length,original_language_id,rating,release_year,rental_duration,rental_rate,replacement_cost,special_features,title
+I&#39;m gonna make him an offer he can&#39;t refuse.,1,&#39;apollo&#39;:2 &#39;beauti&#39;:4 &#39;conquer&#39;:15 &#39;convent&#39;:22 &#39;monkey&#39;:8 &#39;must&#39;:14 &#39;mysql&#39;:21 &#39;shark&#39;:18 &#39;stori&#39;:5 &#39;sumo&#39;:11 &#39;wild&#39;:1 &#39;wrestler&#39;:12,2,2026-04-07 16:17:54.353109+01:00,981,2,Brown,-846,575,51.36,73.72,&quot;[&#39;Trailers&#39;, &#39;Deleted Scenes&#39;]&quot;,Cyan
+Those who refuse to learn from history are condemned to repeat it.,2,&#39;ace&#39;:1 &#39;administr&#39;:9 &#39;ancient&#39;:19 &#39;astound&#39;:4 &#39;car&#39;:17 &#39;china&#39;:20 &#39;databas&#39;:8 &#39;epistl&#39;:5 &#39;explor&#39;:12 &#39;find&#39;:15 &#39;goldfing&#39;:2 &#39;must&#39;:14,3,2026-11-03 01:24:15.123173+00:00,122,5,Magenta,-154,148,46.16,17.17,&quot;[&#39;Trailers&#39;, &#39;Deleted Scenes&#39;]&quot;,Red
+&quot;One morning I shot an elephant in my pajamas. How he got in my pajamas, I don&#39;t know.&quot;,3,&#39;berlin&#39;:20 &#39;car&#39;:10 &#39;cat&#39;:13 &#39;fargo&#39;:2 &#39;fast&#39;:5 &#39;fast-pac&#39;:4 &#39;hunter&#39;:18 &#39;must&#39;:15 &#39;outgun&#39;:16 &#39;pace&#39;:6 &#39;perdit&#39;:1 &#39;stori&#39;:7,2,2026-12-28 08:16:07.956949+00:00,393,5,Black,761,158,34.31,61.42,&quot;[&#39;Deleted Scenes&#39;, &#39;Behind the Scenes&#39;]&quot;,Pink
+</pre></div>
+</div>
+<p>So, not really movie descriptions, but at least text of sensible length.
+This generator requires no information from the source database and so cannot leak private data.
+Later, datafaker might gain the capability to generate more exciting text.</p>
+</section>
+<section id="fixing-the-problems-with-the-minimal-example-4-unnormalized-databases">
+<h2>Fixing the problems with the minimal example #4: Unnormalized databases<a class="headerlink" href="#fixing-the-problems-with-the-minimal-example-4-unnormalized-databases" title="Permalink to this heading"></a></h2>
+<p>If you look at the <code class="docutils literal notranslate"><span class="pre">film</span></code> table in the source Pagila directory, you might figure out that
+the <code class="docutils literal notranslate"><span class="pre">fulltext</span></code> column is where to find all the words in the <code class="docutils literal notranslate"><span class="pre">title</span></code> and <code class="docutils literal notranslate"><span class="pre">description</span></code> columns:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ psql pagila
+psql (17.7 (Ubuntu 17.7-3.pgdg24.04+1), server 16.11 (Ubuntu 16.11-1.pgdg24.04+1))
+Type &quot;help&quot; for help.
+
+pagila=&gt; select title,description,fulltext,to_tsvector(concat(title,&#39; &#39;,description)) from film limit 3;
+      title       |                                             description                                              |                                                                  fulltext                                                                   |                                                                 to_tsvector
+------------------+------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------
+ACADEMY DINOSAUR | A Epic Drama of a Feminist And a Mad Scientist who must Battle a Teacher in The Canadian Rockies     | &#39;academi&#39;:1 &#39;battl&#39;:15 &#39;canadian&#39;:20 &#39;dinosaur&#39;:2 &#39;drama&#39;:5 &#39;epic&#39;:4 &#39;feminist&#39;:8 &#39;mad&#39;:11 &#39;must&#39;:14 &#39;rocki&#39;:21 &#39;scientist&#39;:12 &#39;teacher&#39;:17 | &#39;academi&#39;:1 &#39;battl&#39;:15 &#39;canadian&#39;:20 &#39;dinosaur&#39;:2 &#39;drama&#39;:5 &#39;epic&#39;:4 &#39;feminist&#39;:8 &#39;mad&#39;:11 &#39;must&#39;:14 &#39;rocki&#39;:21 &#39;scientist&#39;:12 &#39;teacher&#39;:17
+ACE GOLDFINGER   | A Astounding Epistle of a Database Administrator And a Explorer who must Find a Car in Ancient China | &#39;ace&#39;:1 &#39;administr&#39;:9 &#39;ancient&#39;:19 &#39;astound&#39;:4 &#39;car&#39;:17 &#39;china&#39;:20 &#39;databas&#39;:8 &#39;epistl&#39;:5 &#39;explor&#39;:12 &#39;find&#39;:15 &#39;goldfing&#39;:2 &#39;must&#39;:14      | &#39;ace&#39;:1 &#39;administr&#39;:9 &#39;ancient&#39;:19 &#39;astound&#39;:4 &#39;car&#39;:17 &#39;china&#39;:20 &#39;databas&#39;:8 &#39;epistl&#39;:5 &#39;explor&#39;:12 &#39;find&#39;:15 &#39;goldfing&#39;:2 &#39;must&#39;:14
+ADAPTATION HOLES | A Astounding Reflection of a Lumberjack And a Car who must Sink a Lumberjack in A Baloon Factory     | &#39;adapt&#39;:1 &#39;astound&#39;:4 &#39;baloon&#39;:19 &#39;car&#39;:11 &#39;factori&#39;:20 &#39;hole&#39;:2 &#39;lumberjack&#39;:8,16 &#39;must&#39;:13 &#39;reflect&#39;:5 &#39;sink&#39;:14                          | &#39;adapt&#39;:1 &#39;astound&#39;:4 &#39;baloon&#39;:19 &#39;car&#39;:11 &#39;factori&#39;:20 &#39;hole&#39;:2 &#39;lumberjack&#39;:8,16 &#39;must&#39;:13 &#39;reflect&#39;:5 &#39;sink&#39;:14
+(3 rows)
+</pre></div>
+</div>
+<p>So ideally we should be able to generate <code class="docutils literal notranslate"><span class="pre">title</span></code> and <code class="docutils literal notranslate"><span class="pre">description</span></code>, then set the <code class="docutils literal notranslate"><span class="pre">fulltext</span></code> column
+with the SQL expression <code class="docutils literal notranslate"><span class="pre">TO_TSVECTOR(CONCAT(title,</span> <span class="pre">'</span> <span class="pre">',</span> <span class="pre">description))</span></code>.</p>
+<p>Sorry, this is not possible at the moment using the configuration commands;
+stories should be used if this column is necessary.
+One possible solution is to remove this column from the <code class="docutils literal notranslate"><span class="pre">orm.yaml</span></code> file.
+Find the portion that corresponds to the <code class="docutils literal notranslate"><span class="pre">film</span></code> table in this file:</p>
+<p>Simply remove the <code class="docutils literal notranslate"><span class="pre">fulltext:</span></code> section and this column will not appear in the destination database.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="quickstart.html" class="btn btn-neutral float-left" title="Command-Line Interface (CLI) Guide" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="tutorial_parquet.html" class="btn btn-neutral float-right" title="Tutorial: Generate Synthetic Data from CSV and Parquet Files" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023, anon.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
