@@ -16,7 +16,7 @@ generating synthetic data.
 The workflow is:
 
 1. Configure source and destination DSNs.
-2. Generate an ``orm.yaml`` file.
+2. Generate the default schema definition (``orm.yaml`` file)
 3. Review and refine the schema definition.
 4. Generate synthetic data.
 5. Export the results.
@@ -226,7 +226,6 @@ This creates:
 
 .. code-block:: text
 
-   orm.yaml
    config.yaml
    src-stats.yaml
 
@@ -240,7 +239,10 @@ Generate synthetic data:
 
 .. code-block:: shell
 
-   datafaker create-data --num-passes 100
+   datafaker create-data --num-passes 10
+
+Each pass produces roughly one row per table, so
+``--num-passes 10`` will generate about 10 rows in each table:
 
 Exporting Synthetic Data
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -334,7 +336,7 @@ Create schema and generate data:
 .. code-block:: shell
 
    datafaker create-tables
-   datafaker create-data --num-passes 100
+   datafaker create-data --num-passes 10
 
 Export synthetic Parquet files:
 
@@ -356,7 +358,7 @@ For a minimal end-to-end workflow:
    datafaker make-tables --parquet-dir ./input_parquet
 
    datafaker create-tables
-   datafaker create-data --num-passes 1
+   datafaker create-data --num-passes 10
 
    mkdir fake_csv
 
@@ -365,7 +367,11 @@ For a minimal end-to-end workflow:
 Troubleshooting
 ^^^^^^^^^^^^^^^
 
-* If you see a command not found error when running ``datafaker``, run the command using Poetry instead: ``poetry run datafaker``
+* If you see a command not found error when running ``datafaker``, check it's
+  installed and on your ``PATH`` — see :ref:`Installation <page-installation>`.
+  If you installed with ``pipx``, try ``pipx ensurepath`` and open a new shell.
+  If you're working from a development checkout, use ``poetry run datafaker``
+  instead.
 * If ``make-tables`` logs warnings like "Could not determine type of column ...",
   inspect and fix the Parquet schema or edit ``orm.yaml`` (nested/struct or
   mixed-type columns often need flattening or manual typing).
