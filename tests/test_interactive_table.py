@@ -14,6 +14,12 @@ from tests.utils import RequiresDBTestCase, TestDbCmdMixin
 class MockTableCmd(TableCmd, TestDbCmdMixin):
     """TableCmd but mocked"""
 
+    def get_roles_from_columns(self, column: str) -> set[str]:
+        """Get the roles in the named column from the ``columns`` command output."""
+        self.reset()
+        self.do_columns("")
+        return self.get_roles_from_columns_output(column)
+
 
 class ConfigureTablesTests(RequiresDBTestCase):
     """Testing configure-tables."""
@@ -463,6 +469,21 @@ class ConfigureTablesInstrumentsTests(ConfigureTablesTests):
                     {},
                 ),
             )
+
+    def test_see_roles(self) -> None:
+        """Test that we can see roles for a particular column."""
+        table = "model"
+        column = "name"
+        with self._get_cmd(
+            {"tables": {table: {"columns": {column: {"roles": ["start", "source"]}}}}}
+        ) as gc:
+            gc.do_next(table)
+            self.assertSetEqual(gc.get_roles_from_columns(column), {"start", "source"})
+        with self._get_cmd(
+            {"tables": {table: {"columns": {column: {"roles": ["start"]}}}}}
+        ) as gc:
+            gc.do_next(table)
+            self.assertSetEqual(gc.get_roles_from_columns(column), {"start"})
 
 
 class TrickyTests(ConfigureTablesTests):

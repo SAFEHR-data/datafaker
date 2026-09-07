@@ -879,3 +879,14 @@ class TestDbCmdMixin(DbCmd):
     def ask_save(self) -> str:
         """Quitting always works without needing to ask the user."""
         return "yes"
+
+    def get_roles_from_columns_output(self, column: str) -> set[str]:
+        """Get the roles in the named column from the ``columns`` command output."""
+        name_index = self.headings.index("name")
+        our_rows = [r for r in self.rows if r[name_index] == column]
+        assert len(our_rows) == 1
+        role_index = self.headings.index("roles")
+        roles = our_rows[0][role_index].split(", ")
+        if roles == [""]:
+            return set()
+        return set(roles)

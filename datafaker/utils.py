@@ -10,7 +10,7 @@ import re
 import string
 import sys
 import typing
-from collections.abc import Mapping, MutableSequence, Sequence, Sized
+from collections.abc import Mapping, MutableMapping, MutableSequence, Sequence, Sized
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Callable, Final, Generator, Generic, Iterable, TypeVar
@@ -235,6 +235,21 @@ def get_flag(maybe_dict: Any, key: Any) -> bool:
     return isinstance(maybe_dict, Mapping) and maybe_dict.get(key, False)
 
 
+def _element_or_iterable_to_iterable(maybe_it: Any) -> Sequence:
+    """
+    Get a list of elements from maybe an element.
+
+    :param maybe_it: Either an iterable of elements or just one.
+    :return: An iterable of elements, either the argument or a singleton
+     of the argument.
+    """
+    if isinstance(maybe_it, str):
+        return [maybe_it]
+    if isinstance(maybe_it, Sequence):
+        return maybe_it
+    return [maybe_it]
+
+
 def get_property(maybe_dict: Any, key: Any, default: T) -> T:
     """
     Get a specific property from a dict or a default if that does not exist.
@@ -247,12 +262,7 @@ def get_property(maybe_dict: Any, key: Any, default: T) -> T:
       if you want None as the default, please use get_property_or_none
     :return: ``maybe_dict[key]`` if this makes sense, or ``default`` if not.
     """
-    if isinstance(key, str):
-        keys: Iterable[Any] = [key]
-    elif isinstance(key, Iterable):
-        keys = key
-    else:
-        keys = [key]
+    keys = _element_or_iterable_to_iterable(key)
     v = maybe_dict
     for k in keys:
         if isinstance(v, Sequence) and isinstance(v, Sized) and isinstance(k, int):
@@ -265,6 +275,51 @@ def get_property(maybe_dict: Any, key: Any, default: T) -> T:
             return default
         v = v[k]
     return v if isinstance(v, type(default)) else default
+
+
+def _set_property(obj: Any, keys: Sequence[Any], index: int, value: Any) -> bool:
+    if len(keys) <= index or not isinstance(obj, MutableMapping):
+        return False
+    k = keys[index]
+    if len(keys) == index + 1:
+        obj[k] = value
+        return True
+    if k not in obj:
+        obj[k] = {}
+    return _set_property(
+        obj[k],
+        keys,
+        index + 1,
+        value,
+    )
+
+
+def set_property(maybe_dict: Any, key: Any, value: Any) -> bool:
+    """
+    Set a property in a dictionary, or dictionary of dictionaries.
+
+    So, ``set_property(d, "one", 3)`` sets ``d["one"] == 3`` and
+    returns True if ``d`` is a mutable mapping, and False (without
+    making any changes) otherwise.
+
+    ``set_property(d, ["one", "two"], 3)`` sets ``d["one"]["two"] == 3``
+    and returns True if ``d`` is a mutable mapping, ``d["one"]`` exists
+    and is a mutable mapping. If ``d["one"]`` does not exist then
+    ``d["one"] = {"two": 3}`` is set and True is returned.
+
+    Similarly ``set_property(d, ["one", "two", "three"], 3) sets either
+    ``d["one"]["two"]["three"] = 3``, ``d["one"]["two"] = {"three", 3}``
+    or ``d["one"] = {"two": {"three": 3}}`` depending on the state
+    of ``d``.
+
+    :param maybe_dict: The dictionary to set a value in,
+    :param key: The key, or list of keys to descend into the dictionaries.
+    :param value: The value to set.
+    :return: True if successful, False if any object along the chain
+     is not a mutable mapping.
+    """
+    keys = _element_or_iterable_to_iterable(key)
+    return _set_property(maybe_dict, keys, 0, value)
 
 
 def get_property_or_none(maybe_dict: Any, key: Any, type_: type[T]) -> T | None:

@@ -1,8 +1,11 @@
 """Generator configuration shell."""  # pylint: disable=too-many-lines
+import copy
 import functools
 import re
+from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Callable, Optional, cast
 
 from sqlalchemy import Column, and_, literal_column, select
@@ -15,9 +18,11 @@ from datafaker.proposers.base import PredefinedProposer, Proposer
 from datafaker.theme import get_active_theme
 from datafaker.utils import (
     get_columns_assigned,
+    get_property,
     get_row_generators,
     logger,
     schema_qualified_name,
+    set_property,
     split_column_full_name,
 )
 
@@ -68,6 +73,90 @@ def get_aggregate_query(
     return f'SELECT {", ".join(clauses)} FROM "{qualified}"{alias}'
 
 
+class Role(str, Enum):
+    """Roles that can be set on columns."""
+
+    START = "start"
+    SOURCE = "source"
+
+
+def is_role(item: str) -> bool:
+    """
+    Test if ``item`` is a ``Role``.
+
+    Like ``item in Role`` in Python 3.12.
+    """
+    return item in Role.__members__.values()
+
+
+@dataclass
+class RoleEntry:
+    """The old and altered role set for a column."""
+
+    old: set[Role]
+    new: set[Role]
+
+
+class RoleCommand(ABC):
+    """Command for ``role``."""
+
+    @abstractmethod
+    def do(self, column_roles: RoleEntry | None) -> RoleEntry | None:
+        """Perform the command."""
+
+
+class RoleCommandList(RoleCommand):
+    """Command for ``role list``."""
+
+    def __init__(self, error_text: str, print_fn: Callable[[str], None]) -> None:
+        """Initialize RoleCommandSet."""
+        self.print = print_fn
+        self.error_text = error_text
+
+    def do(self, column_roles: RoleEntry | None) -> RoleEntry | None:
+        """Perform the command."""
+        if column_roles is None or not column_roles.new:
+            self.print(self.error_text)
+        else:
+            self.print(", ".join(role.value for role in column_roles.new))
+
+
+class RoleCommandSet(RoleCommand):
+    """Command for ``role set <role>``."""
+
+    def __init__(self, role: Role) -> None:
+        """Initialize RoleCommandSet."""
+        self.role = role
+
+    def do(self, column_roles: RoleEntry | None) -> RoleEntry | None:
+        """Perform the command."""
+        if column_roles is None:
+            return RoleEntry(set(), {self.role})
+        column_roles.new.add(self.role)
+        return column_roles
+
+
+class RoleCommandDelete(RoleCommand):
+    """Command for ``role delete <role>``."""
+
+    def __init__(self, role: Role) -> None:
+        """Initialize RoleCommandDelete."""
+        self.role = role
+
+    def do(self, column_roles: RoleEntry | None) -> RoleEntry | None:
+        """Perform the command."""
+        if column_roles is None:
+            return None
+        column_roles.new.remove(self.role)
+        return column_roles
+
+
+def make_role_entry(roles: Sequence[str]) -> RoleEntry:
+    """Make a role entry from a list of strings."""
+    role_set = {Role(r) for r in roles if is_role(r)}
+    return RoleEntry(copy.copy(role_set), role_set)
+
+
 # pylint: disable=too-many-public-methods
 class GeneratorCmd(DbCmd):
     """Interactive command shell for setting generators."""
@@ -99,6 +188,7 @@ information about the columns in the current table. Use 'peek',
         "{0}. {2}{1}{3} requires the following data from the source database:"
     )
     PROVIDING_VALUES_TEXT = "{2}{0}{3}; providing the following values: {4}{1}"
+    NO_ROLES_TEXT = "No roles."
     ERROR_NO_SUCH_TABLE = "No such (non-vocabulary, non-ignored) table name {0}"
     ERROR_NO_SUCH_COLUMN = "No such column {0} in this table"
     ERROR_COLUMN_ALREADY_MERGED = "Column {0} is already merged"
@@ -192,6 +282,18 @@ information about the columns in the current table. Use 'peek',
         self.proposer_index = 0
         self.proposers_valid_columns: Optional[tuple[int, list[str]]] = None
         self.set_prompt()
+        self.roles: dict[str, dict[str, RoleEntry]] = {
+            table_name: {
+                column_name: make_role_entry(column_settings["roles"])
+                for column_name, column_settings in get_property(
+                    table_settings, "columns", {}
+                ).items()
+                if "roles" in column_settings
+            }
+            for table_name, table_settings in get_property(
+                settings.config, "tables", {}
+            ).items()
+        }
 
     @property
     def table_entries(self) -> list[GeneratorCmdTableEntry]:
@@ -296,7 +398,7 @@ information about the columns in the current table. Use 'peek',
         """
         return self._remove_prefix_src_stats("auto__")
 
-    def _copy_entries(self) -> None:
+    def _copy_generators(self) -> None:
         """Set generator and query information in the configuration."""
         src_stats = self._remove_auto_src_stats()
         for entry in self.table_entries:
@@ -347,6 +449,22 @@ information about the columns in the current table. Use 'peek',
             self.set_table_config(entry.name, table_config)
         self.config["src-stats"] = src_stats
 
+    def _copy_roles(self) -> None:
+        """Set role information in the configuration."""
+        for table_name, table_roles in self.roles.items():
+            for column_name, entry in table_roles.items():
+                if entry.new:
+                    set_property(
+                        self.config,
+                        ["tables", table_name, "columns", column_name, "roles"],
+                        [n.value for n in entry.new],
+                    )
+
+    def _copy_entries(self) -> None:
+        """Set generator, query and role information in the configuration."""
+        self._copy_generators()
+        self._copy_roles()
+
     def _find_old_proposer(
         self, entry: GeneratorCmdTableEntry, columns: Iterable[str]
     ) -> Proposer | None:
@@ -357,8 +475,12 @@ information about the columns in the current table. Use 'peek',
                 return gen.proposer
         return None
 
-    def do_quit(self, arg: str) -> bool:
-        """Check the updates, save them if desired and quit the configurer."""
+    def _print_generator_changes(self) -> int:
+        """
+        Print any changes to generators that have been requested.
+
+        :return: Number of changes found.
+        """
         count = 0
         for entry in self.table_entries:
             header_shown = False
@@ -376,6 +498,32 @@ information about the columns in the current table. Use 'peek',
                         old_gen.name() if old_gen else "nothing",
                         gen.proposer.name() if gen.proposer else "nothing",
                     )
+        return count
+
+    def _print_role_changes(self) -> int:
+        """
+        Print any changes to roles that have been requested.
+
+        :return: Number of changes found.
+        """
+        count = 0
+        for table_name, table_entry in self.roles.items():
+            for column_name, entry in table_entry.items():
+                if entry.old != entry.new:
+                    count += 1
+                    self.print(
+                        "Changing role set of column {0} of table {1} from {2} to {3}",
+                        column_name,
+                        table_name,
+                        ", ".join(str(oe) for oe in entry.old),
+                        ", ".join(str(ne) for ne in entry.new),
+                    )
+        return count
+
+    def do_quit(self, arg: str) -> bool:
+        """Check the updates, save them if desired and quit the configurer."""
+        count = self._print_generator_changes()
+        count += self._print_role_changes()
         if count == 0:
             self.print("You have made no changes.")
         if arg in {"yes", "no"}:
@@ -383,8 +531,8 @@ information about the columns in the current table. Use 'peek',
         else:
             reply = self.ask_save()
         if reply == "yes":
-            logger.debug("Changed entries copied")
             self._copy_entries()
+            logger.debug("Changed entries copied")
             return True
         if reply == "no":
             logger.debug("Configuration unchanged")
@@ -424,6 +572,15 @@ information about the columns in the current table. Use 'peek',
     def do_columns(self, _arg: str) -> None:
         """Report the column names and metadata."""
         self.report_columns()
+
+    def get_roles(self, table: str, column: str) -> set[str]:
+        """Get the roles for the named column in the named table."""
+        if table not in self.roles:
+            return set()
+        t = self.roles[table]
+        if column not in t:
+            return set()
+        return {r.value for r in t[column].new}
 
     def do_info(self, _arg: str) -> None:
         """Show information about the current column."""
@@ -983,7 +1140,6 @@ information about the columns in the current table. Use 'peek',
         self, text: str, _line: str, _begidx: int, _endidx: int
     ) -> list[str]:
         """Complete column names."""
-        last_arg = text.split()[-1]
         table_entry: GeneratorCmdTableEntry | None = self.get_table()
         if table_entry is None:
             return []
@@ -992,7 +1148,7 @@ information about the columns in the current table. Use 'peek',
             for i, gen in enumerate(table_entry.new_proposers)
             if i != self.proposer_index
             for column in gen.columns
-            if column.startswith(last_arg)
+            if column.startswith(text)
         ]
 
     def do_unmerge(self, arg: str) -> None:
@@ -1039,14 +1195,13 @@ information about the columns in the current table. Use 'peek',
         self, text: str, _line: str, _begidx: int, _endidx: int
     ) -> list[str]:
         """Complete column names to unmerge."""
-        last_arg = text.split()[-1]
         table_entry: GeneratorCmdTableEntry | None = self.get_table()
         if table_entry is None:
             return []
         return [
             column
             for column in table_entry.new_proposers[self.proposer_index].columns
-            if column.startswith(last_arg)
+            if column.startswith(text)
         ]
 
     def get_current_columns(self) -> set[str]:
@@ -1072,6 +1227,124 @@ information about the columns in the current table. Use 'peek',
         for to_remove in existing:
             self.do_unmerge(to_remove)
         return self.merge_columns(other_cols)
+
+    # pylint: disable=too-many-return-statements
+    def parse_role(self, arg: str) -> tuple[str | None, RoleCommand] | None:
+        """
+        Parse the `role` command arguments.
+
+        :param arg: The arguments; the text after ``role ``.
+        :return: A pair of the column name and the command specifed by
+         the arguments. Each is None if unspecified. None overall is returned
+         if the parse fails.
+        """
+        args = arg.split()
+        if len(args) == 0:
+            self.print("role requires a subcommand: list, set or delete.")
+            return None
+        column: str | None = None
+        command: RoleCommand | None = None
+        n = 0
+        while n < len(args):
+            param = args[n + 1] if n + 1 < len(args) else None
+            match args[n].lower():
+                case "on":
+                    if param is None:
+                        self.print("'on' requires a column name")
+                        return None
+                    column = param
+                    n += 2
+                case "list":
+                    command = RoleCommandList(
+                        self.NO_ROLES_TEXT,
+                        self.print,
+                    )
+                    n += 1
+                case "set":
+                    if param is None:
+                        self.print("'role set' requires a role name")
+                        return None
+                    if not is_role(param):
+                        self.print("role must be one of {0}", ", ".join(Role))
+                        return None
+                    command = RoleCommandSet(Role(param))
+                    n += 2
+                case "delete":
+                    if param is None:
+                        self.print("'delete' requires a role name")
+                        return None
+                    if not is_role(param):
+                        self.print("role must be one of {0}", ", ".join(Role))
+                        return None
+                    command = RoleCommandDelete(Role(param))
+                    n += 2
+                case _:
+                    self.print("Did not understand role command '{0}'", args[n])
+                    self.print("should be 'on', 'list', 'set' or 'delete'")
+                    return None
+        if command is None:
+            self.print("'role' requires a command 'set', 'list' or 'delete'")
+            return None
+        return (column, command)
+
+    def do_role(self, arg: str) -> None:
+        """
+        List, Set or Delete roles on this column.
+
+        List the roles on this column: role list
+        Set role 'start' on this column: role add start
+        Delete role 'start' on this column: role delete start
+        Add 'on mycolumn' or 'on mytable.mycolumn' to
+        check or alter a different column, for example
+        role on mytable.mycolumn list
+        """
+        parse = self.parse_role(arg)
+        if parse is None:
+            return
+        (column, command) = parse
+        if not column:
+            cols = self.get_current_columns()
+            if len(cols) != 1:
+                self.print(
+                    "We are not on one column, so an 'on columnname' must be specified"
+                )
+                return
+            column = list(cols)[0]
+        (table, col) = split_column_full_name(column)
+        if not table:
+            entry = self.get_table()
+            if entry is None:
+                self.print("Error, no tables!")
+                return
+            table = entry.name
+        if table not in self.metadata.tables:
+            self.print("Error: no such table '{0}'", table)
+            return
+        tm = self.metadata.tables[table]
+        if col not in tm.columns:
+            self.print("Error: no such column '{0}' in table '{1}'", col, table)
+            return
+        table_roles: dict[str, RoleEntry] = self.roles.get(table, {})
+        column_roles: RoleEntry | None = table_roles.get(col, None)
+        new = command.do(column_roles)
+        if new:
+            table_roles[col] = new
+            self.roles[table] = table_roles
+
+    def complete_role(
+        self, text: str, line: str, begidx: int, _endidx: int
+    ) -> list[str]:
+        """Complete column names."""
+        prev = line[:begidx].rsplit(maxsplit=1)[-1]
+        if prev == "on":
+            return self.get_table_or_column_completions(text)
+        if prev in {"set", "delete"}:
+            return [
+                com.value
+                for com in Role.__members__.values()
+                if com.value.startswith(text)
+            ]
+        return [com for com in ["list", "set", "delete"] if com.startswith(text)]
 
 
 def try_setting_generator(gc: GeneratorCmd, proposers: Iterable[str]) -> bool:

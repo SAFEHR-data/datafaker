@@ -282,14 +282,19 @@ class DbCmd(ABC, cmd.Cmd):
         """Get the names of the current columns."""
         return [col.name for col in self.table_metadata().columns]
 
+    def get_roles(self, table: str, column: str) -> set[str]:
+        """Get the roles for the named column in the named table."""
+        return set(
+            get_property(
+                self.config,
+                ["tables", table, "columns", column, "roles"],
+                [],
+            )
+        )
+
     def report_columns(self) -> None:
         """Print information about the current columns."""
         table = self.table_metadata()
-        table_config: dict[str, Any] = get_property(
-            self.config,
-            ["tables", table.name, "columns"],
-            {},
-        )
         theme = get_active_theme()
         self.print_table(
             [
@@ -310,7 +315,7 @@ class DbCmd(ABC, cmd.Cmd):
                     col.primary_key,
                     col.nullable,
                     ", ".join([fk_column_name(fk) for fk in col.foreign_keys]),
-                    ", ".join(get_property(table_config, [name, "roles"], [])),
+                    ", ".join(self.get_roles(table.name, name)),
                 ]
                 for name, col in table.columns.items()
             ],
