@@ -37,6 +37,7 @@ Contents:
    configuration
    health_data
    Custom Generators <custom_generators>
+   Built-in Generators and Proposers <builtin_generators>
    api
 
 .. toctree::
