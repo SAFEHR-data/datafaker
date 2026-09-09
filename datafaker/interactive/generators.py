@@ -9,13 +9,26 @@ from enum import Enum
 from typing import Any, Callable, Optional, cast
 
 from sqlalchemy import Column, and_, literal_column, select
+from sqlalchemy.types import Integer
 
 from datafaker.db_utils import MaybeAsyncEngine, primary_private_fks, table_is_private
 from datafaker.dialects import Random
+from datafaker.evaluators.column_evaluator import ColumnEvaluator
+from datafaker.evaluators.proposal_ranking import (
+    ProposalRanking,
+    ProposalRankingDisplay,
+    format_ranking_display,
+    rank_proposals,
+)
 from datafaker.interactive.base import DbCmd, TableEntry, fk_column_name, or_default
 from datafaker.proposers import everything_factory
-from datafaker.proposers.base import PredefinedProposer, Proposer
-from datafaker.theme import get_active_theme
+from datafaker.proposers.base import PredefinedProposer, Proposer, get_column_type
+from datafaker.proposers.continuous import (
+    GaussianProposer,
+    LogNormalProposer,
+    UniformProposer,
+)
+from datafaker.theme import Theme, get_active_theme
 from datafaker.utils import (
     get_columns_assigned,
     get_property,
@@ -181,6 +194,10 @@ information about the columns in the current table. Use 'peek',
         "{theme_reset}{index}. {theme_func}{name}:"
         " {theme_fit}{fit} {theme_data}{sample}{theme_reset} ..."
     )
+    RANKED_SAMPLE_TEXT = (
+        "{theme_reset}{index}. {theme_func}{name}:"
+        " {theme_data}{sample}{theme_reset} ..."
+    )
     PRIMARY_PRIVATE_TEXT = "Primary Private"
     SECONDARY_PRIVATE_TEXT = "Secondary Private on columns {0}"
     NOT_PRIVATE_TEXT = "Not private"
@@ -195,6 +212,11 @@ information about the columns in the current table. Use 'peek',
     ERROR_COLUMN_ALREADY_UNMERGED = "Column {0} is not merged"
     ERROR_CANNOT_UNMERGE_ALL = "You cannot unmerge all the generator's columns"
     PROPOSE_NOTHING = "No proposed generators, sorry."
+
+    # Cap on rows shown by default 'propose' (front 1 can otherwise hold more
+    # candidates than are worth scanning in a terminal table). 'propose all'
+    # is unaffected.
+    MAX_PROPOSERS_SHOWN = 10
 
     SRC_STAT_RE = re.compile(
         r'\bSRC_STATS\["([^"]+)"\](\["results"\]\[0\]\["([^"]+)"\])?'
@@ -281,6 +303,9 @@ information about the columns in the current table. Use 'peek',
         self.proposers: list[Proposer] | None = None
         self.proposer_index = 0
         self.proposers_valid_columns: Optional[tuple[int, list[str]]] = None
+        # whether the cached self.proposers list currently includes proposers
+        # that are type-incompatible with the column (e.g. from 'propose all')
+        self.proposers_include_all: bool = False
         self.set_prompt()
         self.roles: dict[str, dict[str, RoleEntry]] = {
             table_name: {
@@ -763,17 +788,61 @@ information about the columns in the current table. Use 'peek',
             self._get_column_names(),
         )
 
-    def _get_proposer_proposals(self) -> list[Proposer]:
-        """Get a list of acceptable proposers, sorted by decreasing fit to the actual data."""
-        if not self._proposers_valid():
-            self.proposers = None
-        if self.proposers is None:
+    # Proposers that emit continuous float output (via random.uniform/
+    # normalvariate/lognormvariate) with no integer rounding. That's a
+    # legitimate fit for a Numeric/decimal column, but not for a genuinely
+    # Integer-typed one: inserting a non-whole float into an Integer column
+    # is backend-dependent at best (silently stored as-is on SQLite,
+    # truncated or rejected on MySQL) and raises an error on PostgreSQL.
+    _CONTINUOUS_FLOAT_PROPOSER_TYPES = (
+        GaussianProposer,
+        UniformProposer,
+        LogNormalProposer,
+    )
+
+    def _is_integer_incompatible(
+        self, proposer: Proposer, columns: list[Column]
+    ) -> bool:
+        """Check whether `proposer` produces float output invalid for an Integer column."""
+        if not isinstance(proposer, self._CONTINUOUS_FLOAT_PROPOSER_TYPES):
+            return False
+        if len(columns) != 1:
+            return False
+        return isinstance(get_column_type(columns[0]), Integer)
+
+    def _get_proposer_proposals(
+        self, include_all: bool | None = None
+    ) -> list[Proposer]:
+        """
+        Get a list of acceptable proposers, sorted by decreasing fit to the actual data.
+
+        By default (``include_all=None``), type-incompatible proposers (see
+        ``_is_integer_incompatible``) are filtered out - this is what
+        'propose' shows - and the cached list from the most recent
+        'propose'/'propose all' is reused if still valid, so that 'set
+        <number>' numbering matches whichever list was last displayed. Pass
+        an explicit ``True``/``False`` (from 'propose'/'propose all'
+        themselves) to force that mode, refetching if it differs from what's
+        cached.
+        """
+        if include_all is None:
+            include_all = self.proposers_include_all
+        if (
+            not self._proposers_valid()
+            or self.proposers is None
+            or include_all != self.proposers_include_all
+        ):
             columns = self._column_metadata()
             props = everything_factory(self.config, self.metadata).get_proposers(
                 columns, self.sync_engine
             )
+            if not include_all:
+                props = [
+                    p for p in props if not self._is_integer_incompatible(p, columns)
+                ]
             sorted_props = sorted(props, key=lambda g: g.fit(9999))
             self.proposers = sorted_props
+            self.proposers_include_all = include_all
             self.proposers_valid_columns = (
                 self.table_index,
                 self._get_column_names().copy(),
@@ -978,23 +1047,26 @@ information about the columns in the current table. Use 'peek',
             result = connection.execute(stmt)
             return [[to_str(x) for x in xs] for xs in result.all()]
 
-    def do_propose(self, _arg: str) -> None:
+    def do_propose(  # pylint: disable=too-many-locals too-many-branches too-many-statements
+        self, _arg: str
+    ) -> None:
         """
         Display a list of possible generators for this column.
 
         They will be listed in order of fit, the most likely matches first.
         The results can be compared (against a sample of the real data in
         the column and against each other) with the 'compare' command.
+
+        By default, generators whose output type is incompatible with the
+        column (e.g. a continuous-float generator for an Integer column)
+        are left out. Run 'propose all' to include them anyway.
         """
         theme = get_active_theme()
         limit = 5
+        include_all = _arg.strip().lower() == "all"
         props = self._get_proposer_proposals()
         sample = self._get_column_data(limit)
-        if sample:
-            rep = [x[0] if len(x) == 1 else ",".join(x) for x in sample]
-            self.print(self.PROPOSE_SOURCE_SAMPLE_TEXT, "; ".join(rep), theme.data)
-        else:
-            self.print(self.PROPOSE_SOURCE_EMPTY_TEXT)
+        self._print_source_sample(sample, theme)
         if not props:
             self.print(self.PROPOSE_NOTHING)
         for index, prop in enumerate(props):
@@ -1016,6 +1088,186 @@ information about the columns in the current table. Use 'peek',
                 theme_data=theme.data,
                 theme_reset=theme.reset,
             )
+
+        column_evaluator = ColumnEvaluator()
+        columns = self._column_metadata()
+        results = []
+        column_evaluator.setup(columns, self.sync_engine)
+        for index, proposer in enumerate(props):
+            result = column_evaluator.evaluate(proposer)
+            results.append(result)
+
+        self.print("\n***\n")
+        # self.print("\nProposal evaluation:\n", results)
+
+        profile = getattr(column_evaluator, "profile", None)
+        column_name = (
+            column_evaluator.column.name
+            if column_evaluator.column is not None
+            else None
+        )
+        real_uniqueness = getattr(column_evaluator, "real_uniqueness", 0.0)
+        is_numeric_column = getattr(column_evaluator, "column_is_numeric", False)
+        is_primary_key = getattr(column_evaluator, "is_primary_key", False)
+        ranking = rank_proposals(
+            results,
+            profile,
+            theme,
+            column_name=column_name,
+            real_uniqueness=real_uniqueness,
+            is_numeric_column=is_numeric_column,
+            is_primary_key=is_primary_key,
+        )
+        display = format_ranking_display(ranking, results, profile)
+
+        if display.recommendation is not None:
+            if (
+                display.no_uniqueness_guarantee
+                or display.weak_recommendation_warning is not None
+            ):
+                # Don't highlight a fallback or non-existent pick - coloring
+                # it the same way as a solid recommendation would visually
+                # contradict the caveat that follows (or, for
+                # no_uniqueness_guarantee, claim confidence in a pick that
+                # doesn't exist at all).
+                self.print(display.recommendation)
+            else:
+                self.print(f"{theme.column}{display.recommendation}{theme.reset}")
+        if display.weak_recommendation_warning is not None:
+            self.print(display.weak_recommendation_warning)
+        if include_all and ranking.recommended_index is not None:
+            # 'propose all' deliberately bypasses the type-compatibility filter,
+            # so a generator whose output type doesn't match the column (e.g. a
+            # continuous-float generator for an Integer column) can still win -
+            # the statistical score has no way to detect that mismatch at all,
+            # which is exactly why the default 'propose' excludes it structurally
+            # instead of trying to penalize it.
+            recommended_proposer = results[ranking.recommended_index].proposer
+            if self._is_integer_incompatible(recommended_proposer, columns):
+                self.print(
+                    "Warning: {0} produces output whose type doesn't match this"
+                    " column - it's excluded from the default 'propose' list for"
+                    " exactly this reason (run 'propose' without 'all'). The"
+                    " statistics can't detect this mismatch, so a high score here"
+                    " doesn't mean it's safe to use.",
+                    recommended_proposer.name(),
+                )
+
+        self.print(display.profile_summary)
+
+        indices_to_show = self._select_indices_to_show(display, ranking, include_all)
+        rows_to_show = [display.rows[i] for i in indices_to_show]
+
+        self.print_table(
+            [
+                "#",
+                "Proposer",
+                "Profile",
+                "Front",
+                "Score",
+                "Keyword",
+                "Fidelity",
+                "Novelty",
+                "Diversity",
+                "Uniqueness",
+                "Copies",
+                "Penalty",
+            ],
+            rows_to_show,
+        )
+
+        self.print("\n")
+        self._print_source_sample(sample, theme)
+        for i in indices_to_show:
+            prop = props[i]
+            self.print(
+                self.RANKED_SAMPLE_TEXT,
+                index=i + 1,
+                name=prop.name(),
+                sample="; ".join(map(repr, prop.generate_data(limit))),
+                theme_func=theme.function,
+                theme_data=theme.data,
+                theme_reset=theme.reset,
+            )
+
+        print("\n\n")
+
+    def _print_source_sample(self, sample: list[list[str]], theme: Theme) -> None:
+        """Print a sample of the real column values, or a note that there are none."""
+        if sample:
+            rep = [x[0] if len(x) == 1 else ",".join(x) for x in sample]
+            self.print(self.PROPOSE_SOURCE_SAMPLE_TEXT, "; ".join(rep), theme.data)
+        else:
+            self.print(self.PROPOSE_SOURCE_EMPTY_TEXT)
+
+    def _select_indices_to_show(
+        self,
+        display: ProposalRankingDisplay,
+        ranking: ProposalRanking,
+        include_all: bool,
+    ) -> list[int]:
+        """Pick which candidate rows to show in the propose table.
+
+        By default, only show Pareto front 1: a front-2+ candidate is, by
+        definition, strictly worse than some front-1 one on fidelity,
+        novelty AND diversity simultaneously, so it adds nothing to a
+        shortlist. 'propose all' bypasses this (and the type-compatibility
+        filter) to show every candidate. The returned indices let the
+        sample listing after the table map each shown row back to its
+        proposer without parsing the (possibly theme-colored) '#' cell text.
+        """
+        indices_to_show = list(range(len(display.rows)))
+        if include_all:
+            return indices_to_show
+
+        indices_to_show = [i for i in indices_to_show if display.fronts[i] == 1]
+        # The recommendation is picked by combined score across *all*
+        # candidates, not just front 1 (see rank_proposals) - a
+        # dominated candidate can still win once the resample penalty
+        # and keyword boost are applied, since those are computed after
+        # fronts are derived from the raw fidelity/novelty/diversity
+        # values. Force it into the table even when front-2+, otherwise
+        # "Recommended: N. x" can point at a row the user never sees.
+        recommended_outside_front_1 = (
+            ranking.recommended_index is not None
+            and ranking.recommended_index not in indices_to_show
+        )
+        if recommended_outside_front_1:
+            indices_to_show.append(ranking.recommended_index)
+        capped = len(indices_to_show) > self.MAX_PROPOSERS_SHOWN
+        if capped:
+            # Keep the highest-scoring candidates - front 1 alone can
+            # still hold more rows than are worth scanning in a
+            # terminal table (nothing dominates them, but they're not
+            # all equally worth showing). Always keep the recommendation
+            # even if its score wouldn't otherwise make the cut, since
+            # it's referenced by name right above this table.
+            ranked = sorted(
+                indices_to_show, key=lambda i: ranking.scores[i], reverse=True
+            )
+            keep = set(ranked[: self.MAX_PROPOSERS_SHOWN])
+            if ranking.recommended_index is not None:
+                keep.add(ranking.recommended_index)
+            indices_to_show = sorted(keep)
+        else:
+            indices_to_show.sort()
+        if len(indices_to_show) < len(display.rows):
+            if capped:
+                qualifier = (
+                    f" (Pareto front 1, top {self.MAX_PROPOSERS_SHOWN} by score,"
+                    " plus the recommendation)"
+                )
+            elif recommended_outside_front_1:
+                qualifier = " (Pareto front 1, plus the recommendation)"
+            else:
+                qualifier = " (Pareto front 1 only)"
+            self.print(
+                "Showing {0} of {1} candidates" + qualifier + "."
+                " Run 'propose all' to see the rest.",
+                len(indices_to_show),
+                len(display.rows),
+            )
+        return indices_to_show
 
     def do_p(self, arg: str) -> None:
         """Synonym for propose."""
