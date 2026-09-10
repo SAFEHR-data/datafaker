@@ -123,6 +123,7 @@ class HistogramBuilderBuildFromValuesTests(DatafakerTestCase):
         dist = self.builder.build_from_values([-1000, 1000])
         self.assertAlmostEqual(1.0, sum(dist.probabilities.values()))
         buckets = set(dist.probabilities.keys())
+        assert self.builder.edges is not None
         self.assertTrue(all(0 <= b <= len(self.builder.edges) - 2 for b in buckets))
 
 
