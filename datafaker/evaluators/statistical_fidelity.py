@@ -34,7 +34,7 @@ class EvaluationPipeline:
     """One named feature-comparison stage within a profile's fidelity score."""
 
     name: str
-    builder: DistributionBuilder
+    builder: type[DistributionBuilder]
     metric: Metric
     extractor: FeatureExtractor
     weight: float = 1.0

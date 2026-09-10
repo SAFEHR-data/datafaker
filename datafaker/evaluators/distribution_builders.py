@@ -36,6 +36,22 @@ class Distribution:
 class DistributionBuilder(ABC):
     """Build a real or synthetic value's ``Distribution`` for one feature."""
 
+    # pylint: disable=too-many-arguments too-many-positional-arguments
+    def __init__(
+        self,
+        engine,
+        table,
+        column,
+        extractor: FeatureExtractor = IdentityExtractor(),
+        sample_size=4000,
+    ):
+        """Initialize the engine/table/column/extractor/sample_size shared by every builder."""
+        self.engine = engine
+        self.table = table
+        self.column = column
+        self.extractor = extractor
+        self.sample_size = sample_size
+
     @abstractmethod
     def build_from_table(self) -> Distribution:
         """Build the distribution of this feature over the real column."""
@@ -60,12 +76,8 @@ class HistogramBuilder(DistributionBuilder):
         sample_size=4000,
     ):
         """Initialize a histogram builder for one column feature."""
-        self.engine = engine
-        self.table = table
-        self.column = column
+        super().__init__(engine, table, column, extractor, sample_size)
         self.bins = bins
-        self.extractor = extractor
-        self.sample_size = sample_size
 
         # Learned from the real data
         self.mean = None
@@ -189,6 +201,12 @@ class HistogramBuilder(DistributionBuilder):
 
     def build_from_values(self, values) -> Distribution:
         """Build the synthetic sample's histogram distribution."""
+        if self.edges is None:
+            # build_from_table() never learned edges - either it hasn't run
+            # yet, or the real column had no usable values. Either way there
+            # is nothing to bucket synthetic values against.
+            return Distribution({})
+
         counts = Counter()
         total = 0
 
@@ -208,22 +226,6 @@ class HistogramBuilder(DistributionBuilder):
 
 class CategoryBuilder(DistributionBuilder):
     """Build a categorical distribution over a discrete feature's values."""
-
-    # pylint: disable=too-many-arguments too-many-positional-arguments
-    def __init__(
-        self,
-        engine,
-        table,
-        column,
-        extractor: FeatureExtractor = IdentityExtractor(),
-        sample_size=4000,
-    ):
-        """Initialize a category builder for one column feature."""
-        self.engine = engine
-        self.table = table
-        self.column = column
-        self.extractor = extractor
-        self.sample_size = sample_size
 
     def build_from_table(self):
         """Build the real column's categorical distribution."""

@@ -2,6 +2,7 @@
 
 import string
 from dataclasses import dataclass
+from typing import Any
 
 from sqlalchemy import Column, Engine, select
 from sqlalchemy.types import Date, DateTime, Integer, Numeric, Time
@@ -66,7 +67,7 @@ class ProposalEvaluation:
     __repr__ = __str__
 
 
-def analyse_column(values: list[str]) -> ColumnStats:
+def analyse_column(values: list[Any]) -> ColumnStats:
     """Compute length/space/digit/punctuation statistics over ``values``."""
     values = [str(v) for v in values if v is not None]
 
@@ -198,7 +199,7 @@ class ColumnEvaluator:  # pylint: disable=too-many-instance-attributes
                 # which are computed from this sample.
                 rows = conn.execute(
                     select(columns[0])
-                    .select_from(self.table)
+                    .select_from(columns[0].table)
                     .order_by(Random())
                     .limit(self.sample_size)
                 )
@@ -259,6 +260,9 @@ class ColumnEvaluator:  # pylint: disable=too-many-instance-attributes
 
     def evaluate(self, proposer) -> ProposalEvaluation:
         """Score one proposer's synthetic data against the sampled real data."""
+        assert (
+            self.novelty_metric is not None and self.diversity_metric is not None
+        ), "setup() must be called before evaluate()"
         synthetic_samples = proposer.generate_data(self.sample_size)
 
         # calculate novelty

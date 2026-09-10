@@ -264,7 +264,9 @@ def rank_proposals(
         EvaluationProfile.FREE_TEXT: (0.5, 0.3, 0.2),
         EvaluationProfile.TEMPORAL: (0.7, 0.15, 0.15),
     }
-    fid_w, nov_w, div_w = profile_weights.get(profile, (0.5, 0.25, 0.25))
+    fid_w, nov_w, div_w = (
+        profile_weights[profile] if profile in profile_weights else (0.5, 0.25, 0.25)
+    )
 
     # compute profile-specific score (higher-is-better)
     combined_scores = [fid_w * f + nov_w * n + div_w * d for (f, n, d) in points]
