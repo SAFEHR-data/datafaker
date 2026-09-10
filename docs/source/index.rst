@@ -36,6 +36,7 @@ Contents:
    orm
    configuration
    health_data
+   Choosing a Generator <choosing_a_generator>
    Custom Generators <custom_generators>
    Built-in Generators and Proposers <builtin_generators>
    api

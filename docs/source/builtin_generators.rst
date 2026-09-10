@@ -3,8 +3,10 @@ Built-in generators and proposers
 
 This page is a reference for the generator functions that ship with ``datafaker``,
 and for the *proposers* that suggest which of those functions (and which arguments)
-to use for a given column. If you want to write your own generators instead,
-see :doc:`custom_generators`.
+to use for a given column. If you just want a quick pointer from "my column
+looks like this" to "try this generator", see :doc:`choosing_a_generator`
+instead. If you want to write your own generators, see
+:doc:`custom_generators`.
 
 Generators vs. proposers
 -------------------------
@@ -646,6 +648,8 @@ plus ``person.height``, ``person.weight``, ``datetime.date``,
 See also
 ---------
 
+* :doc:`choosing_a_generator` -- a quick lookup from column shape to
+  generator, for when you want more than the ``propose`` recommendation.
 * :doc:`custom_generators` -- writing your own row generators and story
   generators.
 * :doc:`quickstart` and :doc:`introduction` -- walkthroughs of
