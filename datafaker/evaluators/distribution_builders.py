@@ -164,17 +164,23 @@ class HistogramBuilder(DistributionBuilder):
         # raw-value pulls above).
         #
         with self.engine.connect() as conn:
-            # Group by the bucket expression itself, not its output alias:
-            # MSSQL (unlike Postgres/DuckDB) rejects a SELECT-list alias
-            # referenced from GROUP BY.
+            # Compute the bucket expression once, in an inner subquery, and
+            # group by the resulting materialized column in the outer query.
+            # MSSQL rejects both `GROUP BY <alias>` (a SELECT-list alias
+            # referenced from GROUP BY) and `GROUP BY <repeated expression>`
+            # (its query planner does not recognize two separately-bound
+            # occurrences of the same parameterized expression as
+            # equivalent) - grouping by an actual column of a subquery is
+            # the one form every dialect (Postgres/DuckDB/MSSQL) accepts.
             bucket_expr = func.floor((feature_expr - bottom) / width)
+            inner = (
+                select(bucket_expr.label("bucket")).select_from(self.table).subquery()
+            )
             rows = conn.execute(
                 select(
-                    bucket_expr.label("bucket"),
+                    inner.c.bucket,
                     func.count().label("count"),  # pylint: disable=not-callable
-                )
-                .select_from(self.table)
-                .group_by(bucket_expr)
+                ).group_by(inner.c.bucket)
             ).all()
 
         # total must come from this same full-table query, not from the
