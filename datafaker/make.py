@@ -714,7 +714,7 @@ def make_tables_file(
             new_tables = {**extra_meta, **md_tables}
             meta_dict["tables"] = new_tables
 
-    return yaml.dump(meta_dict)
+    return yaml.dump(meta_dict, sort_keys=False)
 
 
 class DbConnection:
