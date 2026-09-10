@@ -1064,7 +1064,7 @@ information about the columns in the current table. Use 'peek',
         theme = get_active_theme()
         limit = 5
         include_all = _arg.strip().lower() == "all"
-        props = self._get_proposer_proposals()
+        props = self._get_proposer_proposals(include_all)
         sample = self._get_column_data(limit)
         self._print_source_sample(sample, theme)
         if not props:

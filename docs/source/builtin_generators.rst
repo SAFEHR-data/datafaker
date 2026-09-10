@@ -387,7 +387,7 @@ For a single-column ``propose``, every candidate proposer that survives the
 type-compatibility filter (see below) is additionally scored by
 ``datafaker.evaluators.ColumnEvaluator`` and ranked by
 ``datafaker.evaluators.proposal_ranking.rank_proposals``. This produces a
- table shown by ``propose``, with a ``Recommended: N. <name>`` line
+table shown by ``propose``, with a ``Recommended: N. <name>`` line
 above it.
 
 Evaluation profile
