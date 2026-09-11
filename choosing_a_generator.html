@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Choosing a generator for a column &mdash; datafaker 0.0 documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/sphinx_highlight.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Including your own generators" href="custom_generators.html" />
+    <link rel="prev" title="Advanced Example: OMOP Health Data" href="health_data.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            datafaker
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="docker.html">Using Docker</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Command-Line Interface (CLI) Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="introduction.html">Tutorial: Generate Synthetic Data from PostgreSQL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorial_parquet.html">Tutorial: Generate Synthetic Data from CSV and Parquet</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="orm.html">ORM Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="health_data.html">Advanced Example: OMOP Health Data</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Choosing a Generator</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#start-here">Start here</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#when-propose-recommends-nothing">When <code class="docutils literal notranslate"><span class="pre">propose</span></code> recommends nothing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#see-also">See also</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="custom_generators.html">Custom Generators</a></li>
+<li class="toctree-l1"><a class="reference internal" href="builtin_generators.html">Built-in Generators and Proposers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="faq.html">FAQ</a></li>
+<li class="toctree-l1"><a class="reference internal" href="glossary.html">Glossary</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">datafaker</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Choosing a generator for a column</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/choosing_a_generator.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="choosing-a-generator-for-a-column">
+<h1>Choosing a generator for a column<a class="headerlink" href="#choosing-a-generator-for-a-column" title="Permalink to this heading"></a></h1>
+<p>This page is a quick decision aid for the <code class="docutils literal notranslate"><span class="pre">propose</span></code> command: “my column looks
+like <em>this</em> – which generator should I expect, and why?” For the full list of
+generator functions and proposers, and how <code class="docutils literal notranslate"><span class="pre">propose</span></code> scores and ranks them,
+see <a class="reference internal" href="builtin_generators.html"><span class="doc">Built-in generators and proposers</span></a>.</p>
+<section id="start-here">
+<h2>Start here<a class="headerlink" href="#start-here" title="Permalink to this heading"></a></h2>
+<p>In almost all cases, just run <code class="docutils literal notranslate"><span class="pre">propose</span></code> on the column and take the
+<code class="docutils literal notranslate"><span class="pre">Recommended</span></code> generator – it already scores every applicable candidate on
+fidelity, novelty and diversity against your real data, which is more
+reliable than guessing from the column’s type alone. The table below is for
+the two situations where you need more than the recommendation:</p>
+<ul class="simple">
+<li><p>you want to sanity-check <em>why</em> a particular generator was recommended, or</p></li>
+<li><p>the recommendation looks wrong (or none was given) and you want to know
+what else is worth trying.</p></li>
+</ul>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 30%" />
+<col style="width: 40%" />
+<col style="width: 30%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Your column looks like…</p></th>
+<th class="head"><p>Try this generator</p></th>
+<th class="head"><p>Why</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>A unique ID, e.g. an integer primary key</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">generic.column_value_provider.increment</span></code></p></td>
+<td><p>Guarantees fresh, unique values by counting up past the highest
+existing one; <code class="docutils literal notranslate"><span class="pre">propose</span></code> offers this explicitly and it’s also the
+automatic default for integer primary keys. See
+<a class="reference internal" href="builtin_generators.html#increment-proposer"><span class="std std-ref">the sequence proposer</span></a>.</p></td>
+</tr>
+<tr class="row-odd"><td><p>A foreign key to another table</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">generic.column_value_provider.column_value</span></code></p></td>
+<td><p>Picks a random existing value from the referenced column, so
+referential integrity is preserved. This is the automatic default for
+any foreign key column.</p></td>
+</tr>
+<tr class="row-even"><td><p>A near-unique value that must look real but not <em>be</em> real, e.g. an
+email address or free-text ID</p></td>
+<td><p>Whichever <code class="docutils literal notranslate"><span class="pre">generic.*</span></code> value proposer <code class="docutils literal notranslate"><span class="pre">propose</span></code> recommends</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">propose</span></code> applies an extra privacy penalty here: a candidate that
+reproduces real values verbatim is scored down in proportion to how
+unique the real column is, so the recommendation already accounts for
+leak risk. See <a class="reference internal" href="builtin_generators.html#evaluating-and-ranking-proposals"><span class="std std-ref">Evaluating and ranking proposals</span></a>.</p></td>
+</tr>
+<tr class="row-odd"><td><p>A small set of repeating values, e.g. a status code, category or flag</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dist_gen.weighted_choice</span></code> (matches real frequencies exactly), or
+<code class="docutils literal notranslate"><span class="pre">dist_gen.zipf_choice</span></code> / <code class="docutils literal notranslate"><span class="pre">dist_gen.choice</span></code> for a looser fit</p></td>
+<td><p>These are the <em>choice proposers</em>, offered for any column with up to
+500 distinct values; they differ in how closely they copy the real
+frequency of each value. <code class="docutils literal notranslate"><span class="pre">weighted_choice</span></code> stores and reproduces
+the exact real frequency of every value – the closest fit, but the
+most exposing of how common each value really is. <code class="docutils literal notranslate"><span class="pre">zipf_choice</span></code>
+instead only ranks values from most- to least-common and assigns
+each a Zipf/power-law frequency (the <em>n</em>th most common value is
+chosen <code class="docutils literal notranslate"><span class="pre">1/n</span></code> as often as the most common one), which approximates
+a typical real-world skew without storing per-value counts.
+<code class="docutils literal notranslate"><span class="pre">choice</span></code> drops frequency information entirely and picks uniformly
+at random – the loosest fit, but the simplest and most private
+option if flattening the distribution is acceptable.</p></td>
+</tr>
+<tr class="row-even"><td><p>A continuous measurement, e.g. a length, weight or price</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dist_gen.normal</span></code>, <code class="docutils literal notranslate"><span class="pre">dist_gen.lognormal</span></code> (if all values are
+positive and skewed), or <code class="docutils literal notranslate"><span class="pre">dist_gen.uniform_ms</span></code></p></td>
+<td><p>The <em>continuous distribution proposers</em> fit directly to the real
+column’s mean and standard deviation.</p></td>
+</tr>
+<tr class="row-odd"><td><p>Two or more numeric columns that vary together, e.g. width and height</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dist_gen.multivariate_normal</span></code> / <code class="docutils literal notranslate"><span class="pre">dist_gen.multivariate_lognormal</span></code></p></td>
+<td><p>Select all the columns together (<code class="docutils literal notranslate"><span class="pre">merge</span></code>) before running
+<code class="docutils literal notranslate"><span class="pre">propose</span></code> so it can offer these – they preserve the correlation
+between columns rather than generating each independently.</p></td>
+</tr>
+<tr class="row-even"><td><p>The same, but some rows have one column <code class="docutils literal notranslate"><span class="pre">NULL</span></code> and others don’t</p></td>
+<td><p>the <em>null-partitioned</em> generators, e.g. <code class="docutils literal notranslate"><span class="pre">dist_gen.alternatives</span></code>
+wrapping <code class="docutils literal notranslate"><span class="pre">dist_gen.grouped_multivariate_normal</span></code></p></td>
+<td><p>Real data is split into partitions by which columns are <code class="docutils literal notranslate"><span class="pre">NULL</span></code>;
+each partition keeps its own correlation, and one is picked at
+generation time weighted by how common it was in the source data.</p></td>
+</tr>
+<tr class="row-odd"><td><p>A recognisable human-ish string, e.g. a first name, city or username</p></td>
+<td><p>The matching <code class="docutils literal notranslate"><span class="pre">generic.person.*</span></code> / <code class="docutils literal notranslate"><span class="pre">generic.address.*</span></code> /
+<code class="docutils literal notranslate"><span class="pre">generic.text.*</span></code> generator</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">propose</span></code> gives a flat <code class="docutils literal notranslate"><span class="pre">+0.15</span></code> boost when the column’s <em>name</em>
+hints at its content (e.g. a column called <code class="docutils literal notranslate"><span class="pre">first_name</span></code> boosts
+<code class="docutils literal notranslate"><span class="pre">generic.person.first_name</span></code>) – a tie-breaker, not an override of a
+clearly better statistical fit.</p></td>
+</tr>
+<tr class="row-even"><td><p>A date/time that should stay consistent with another date on the same
+row, e.g. a <code class="docutils literal notranslate"><span class="pre">discharge_date</span></code> after an <code class="docutils literal notranslate"><span class="pre">admission_date</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">generic.anchored_provider.normal_date</span></code> (same table) or
+<code class="docutils literal notranslate"><span class="pre">.normal_date_fk</span></code> (related table via foreign key)</p></td>
+<td><p>Only offered once the earlier date has been given the <code class="docutils literal notranslate"><span class="pre">start</span></code> role
+(<code class="docutils literal notranslate"><span class="pre">role</span> <span class="pre">set</span> <span class="pre">start</span></code>). The offset is a clamped, normally distributed
+number of seconds taken from the real interval lengths, so the
+generated date is never earlier than its anchor.</p></td>
+</tr>
+<tr class="row-odd"><td><p>A column that should just agree with a <code class="docutils literal notranslate"><span class="pre">datetime</span></code> column elsewhere
+in the row, e.g. <code class="docutils literal notranslate"><span class="pre">year_of_birth</span></code> alongside <code class="docutils literal notranslate"><span class="pre">date_of_birth</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">generic.extract_provider.date</span></code> / <code class="docutils literal notranslate"><span class="pre">.year</span></code> / <code class="docutils literal notranslate"><span class="pre">.month</span></code> / <code class="docutils literal notranslate"><span class="pre">.day</span></code></p></td>
+<td><p>Derives the value from the other column instead of generating it
+independently, so the two can never disagree.</p></td>
+</tr>
+<tr class="row-even"><td><p>Nothing else fits, or you just want a placeholder</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dist_gen.constant</span></code></p></td>
+<td><p>Always returns the same value (<code class="docutils literal notranslate"><span class="pre">None</span></code> if the column is nullable).
+Also useful as a baseline to compare other candidates’ fit against.</p></td>
+</tr>
+</tbody>
+</table>
+<p>If a column doesn’t match any row above, it’s still worth running
+<code class="docutils literal notranslate"><span class="pre">propose</span></code> – the ranking in <a class="reference internal" href="builtin_generators.html"><span class="doc">Built-in generators and proposers</span></a> covers cases (and
+combinations of <code class="docutils literal notranslate"><span class="pre">String</span></code>/<code class="docutils literal notranslate"><span class="pre">Numeric</span></code>/<code class="docutils literal notranslate"><span class="pre">Date</span></code> type with real-data shape)
+that are awkward to summarise as a simple lookup table.</p>
+</section>
+<section id="when-propose-recommends-nothing">
+<h2>When <code class="docutils literal notranslate"><span class="pre">propose</span></code> recommends nothing<a class="headerlink" href="#when-propose-recommends-nothing" title="Permalink to this heading"></a></h2>
+<p>For a primary key or other unique column, <code class="docutils literal notranslate"><span class="pre">propose</span></code> will withhold a
+recommendation entirely if every candidate’s synthetic sample duplicates too
+often to satisfy uniqueness – rather than confidently suggesting something
+that would break a constraint. Look for the sequence proposer
+(<code class="docutils literal notranslate"><span class="pre">generic.column_value_provider.increment</span></code>) instead.</p>
+</section>
+<section id="see-also">
+<h2>See also<a class="headerlink" href="#see-also" title="Permalink to this heading"></a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="builtin_generators.html"><span class="doc">Built-in generators and proposers</span></a> – full generator and proposer reference, plus
+how the <code class="docutils literal notranslate"><span class="pre">Recommended</span></code> score is computed.</p></li>
+<li><p><a class="reference internal" href="quickstart.html"><span class="doc">Command-Line Interface (CLI) Guide</span></a> – walkthrough of <code class="docutils literal notranslate"><span class="pre">propose</span></code>, <code class="docutils literal notranslate"><span class="pre">compare</span></code> and <code class="docutils literal notranslate"><span class="pre">set</span></code> in
+the <code class="docutils literal notranslate"><span class="pre">configure-generators</span></code> CLI.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="health_data.html" class="btn btn-neutral float-left" title="Advanced Example: OMOP Health Data" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="custom_generators.html" class="btn btn-neutral float-right" title="Including your own generators" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023, anon.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
