@@ -427,7 +427,11 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             column = "position"
             generator = "dist_gen.uniform_ms"
             gc.do_next(f"string.{column}")
-            gc.do_propose("")
+            # "position" is an Integer column, and dist_gen.uniform_ms produces
+            # float output that default 'propose' now excludes as type-
+            # incompatible (see GeneratorCmd._is_integer_incompatible) - 'all'
+            # bypasses that filter so this generator is still selectable here.
+            gc.do_propose("all")
             proposals = gc.get_proposals()
             gc.do_set(str(proposals[f"{generator}"][0]))
             gc.do_quit("")
@@ -604,7 +608,11 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             column = "position"
             generator = "dist_gen.uniform_ms"
             gc.do_next(f"string.{column}")
-            gc.do_propose("")
+            # "position" is an Integer column, and dist_gen.uniform_ms produces
+            # float output that default 'propose' now excludes as type-
+            # incompatible (see GeneratorCmd._is_integer_incompatible) - 'all'
+            # bypasses that filter so this generator is still selectable here.
+            gc.do_propose("all")
             proposals = gc.get_proposals()
             gc.do_set(str(proposals[generator][0]))
             gc.do_quit("")
