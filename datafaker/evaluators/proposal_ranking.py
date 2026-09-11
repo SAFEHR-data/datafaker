@@ -204,6 +204,51 @@ def _crowding_distances(
     return crowding
 
 
+def _penalty_for_candidate(
+    result: ProposalEvaluation,
+    real_uniqueness: float,
+    apply_to_every_proposer: bool,
+    needs_uniqueness: bool,
+) -> float:
+    """Combine the resample and self-duplication penalties for one candidate.
+
+    ChoiceProposer and its variants (dist_gen.choice/weighted_choice/
+    zipf_choice) resample directly from the column's own observed values -
+    by construction, they can only ever emit values already in the real
+    data. That's the *correct* thing to do for a column with a small,
+    shared vocabulary (a status code, a gender) - reproducing real values
+    there is expected and unavoidable - but a privacy problem for a column
+    whose real values are meant to be unique per row (an email, a genuine
+    ID). Numeric columns get the same treatment regardless of proposer
+    (apply_to_every_proposer): a plain number has no shared human
+    vocabulary to explain a coincidental match, so a high copy_fraction
+    there means the real value range is dense, not a legitimate overlap.
+
+    Separately, self_duplication_penalty catches a candidate duplicating
+    against its OWN output (synthetic_uniqueness) rather than against the
+    real data (copy_fraction, above) - e.g. dist_gen.constant on a column
+    whose fixed value happens not to appear in the sampled real data gets
+    copy_fraction=0 (no resample penalty) despite duplicating every row
+    against itself. It applies to every candidate, but its full strength
+    is only warranted when the column actually needs unique values (a
+    PRIMARY KEY/UNIQUE constraint); it's floored otherwise, since a merely
+    observed-unique column (e.g. free-text descriptions that happen to all
+    differ) doesn't have a correctness reason to punish a small,
+    repetitive-but-otherwise-plausible pool as hard as a real key would.
+    """
+    resample_penalty = 1.0
+    if isinstance(result.proposer, ChoiceProposer) or apply_to_every_proposer:
+        resample_penalty = 1.0 - real_uniqueness * result.copy_fraction
+    self_duplication_penalty = 1.0 - real_uniqueness * (
+        1.0 - result.synthetic_uniqueness
+    )
+    if not needs_uniqueness:
+        self_duplication_penalty = max(
+            self_duplication_penalty, SELF_DUPLICATION_PENALTY_FLOOR
+        )
+    return resample_penalty * self_duplication_penalty
+
+
 # pylint: disable=too-many-arguments too-many-positional-arguments
 # pylint: disable=too-many-locals too-many-statements
 def rank_proposals(
@@ -282,77 +327,17 @@ def rank_proposals(
     # compute profile-specific score (higher-is-better)
     combined_scores = [fid_w * f + nov_w * n + div_w * d for (f, n, d) in points]
 
-    # ChoiceProposer and its variants (dist_gen.choice/weighted_choice/
-    # zipf_choice) resample directly from the column's own observed values -
-    # by construction, they can only ever emit values already in the real
-    # data. That's the *correct* thing to do for a column with a small,
-    # shared vocabulary (a status code, a gender) - reproducing real values
-    # there is expected and unavoidable - but a privacy problem for a column
-    # whose real values are meant to be unique per row (an email, a genuine
-    # ID): it isn't modeling the distribution, it's handing back real
-    # records. Scale the penalty by how unique the real column actually is
-    # (near 0 for a low-uniqueness column, where this is fine; near full
-    # strength for a near-unique one, where it's a leak) and by how much of
-    # this proposer's own output is actually copied.
-    #
-    # Other proposers are, in general, not penalized for copy_fraction: for
-    # them a high copy_fraction is usually a coincidental side effect of a
-    # naturally overlapping real-world vocabulary (e.g. common first names),
-    # not a sign of memorization - penalizing it there wrongly punishes
-    # exactly the generators that model the real distribution best (verified:
-    # applying this penalty to person.first_name for a first-name column
-    # incorrectly hands the win back to a generic word generator).
-    #
-    # Numeric columns are the exception, regardless of whether they end up
-    # profiled IDENTIFIER (high uniqueness, e.g. a primary key) or
-    # CATEGORICAL (low uniqueness, e.g. a foreign key referencing a small
-    # set of rows): a plain number has no shared human vocabulary to explain
-    # a coincidental match. A high copy_fraction there instead means the
-    # real value range is dense (e.g. a gapless sequence of small integer
-    # IDs), so *any* generator landing in that range trivially "matches"
-    # almost every time, independent of whether it resamples. That's the
-    # same underlying signal as ChoiceProposer's, just from a proposer that
-    # isn't one - e.g. a generic "weight" generator whose typical output
-    # range happens to overlap a table's ID range - so it gets the same
-    # penalty here. A low-cardinality *string* column (a gender, a status)
-    # doesn't get this: there, high copy_fraction from a well-calibrated
-    # generator is legitimate/expected, not a coincidental range overlap.
+    # See _penalty_for_candidate for what resample_penalty and
+    # self_duplication_penalty actually guard against and why.
     apply_to_every_proposer = is_numeric_column
-    penalty_multipliers = [1.0] * len(results)
-    for idx, result in enumerate(results):
-        resample_penalty = 1.0
-        if isinstance(result.proposer, ChoiceProposer) or apply_to_every_proposer:
-            resample_penalty = 1.0 - real_uniqueness * result.copy_fraction
-        # A second, separate penalty for duplicating against the candidate's
-        # OWN output (synthetic_uniqueness) rather than against the real
-        # data (copy_fraction, above). These catch different failure modes:
-        # e.g. dist_gen.constant on a column whose fixed value happens not
-        # to appear in the sampled real data gets copy_fraction=0 - no
-        # resample penalty at all - despite duplicating every single row
-        # against itself. Scaled by real_uniqueness for the same reason as
-        # the resample penalty: a column with a small, legitimate shared
-        # vocabulary (a gender, a status) is expected to have low
-        # synthetic_uniqueness too, and shouldn't be penalized for it.
-        # Unlike the resample penalty, this applies to every candidate
-        # regardless of column type or whether the proposer is a resampler -
-        # but its full strength is only warranted when the column actually
-        # needs unique values (a PRIMARY KEY/UNIQUE constraint); it's floored
-        # below (SELF_DUPLICATION_PENALTY_FLOOR) otherwise, since a merely
-        # observed-unique column (e.g. free-text descriptions that happen to
-        # all differ) doesn't have a correctness reason to punish a small,
-        # repetitive-but-otherwise-plausible pool as hard as a real key would.
-        self_duplication_penalty = 1.0 - real_uniqueness * (
-            1.0 - result.synthetic_uniqueness
+    needs_uniqueness = is_primary_key or is_unique_constrained
+    penalty_multipliers = [
+        _penalty_for_candidate(
+            result, real_uniqueness, apply_to_every_proposer, needs_uniqueness
         )
-        if not (is_primary_key or is_unique_constrained):
-            # No constraint actually requires unique values here, so don't
-            # let this penalty alone crush the score - just discount it
-            # relative to a candidate that can sustain the real column's
-            # observed distinctness.
-            self_duplication_penalty = max(
-                self_duplication_penalty, SELF_DUPLICATION_PENALTY_FLOOR
-            )
-        penalty_multipliers[idx] = resample_penalty * self_duplication_penalty
+        for result in results
+    ]
+    for idx in range(len(results)):
         combined_scores[idx] *= penalty_multipliers[idx]
 
     # soft boost for generators whose kind the column name itself hints at
