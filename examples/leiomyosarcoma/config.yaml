@@ -35,25 +35,35 @@ tables:
     ignore: false
     vocabulary_table: true
   person:
-    num_rows_per_pass: 1
-    row_generators:
-    - columns_assigned:
-      - ethnicity_concept_id
-      kwargs:
-        a: SRC_STATS["auto__person__ethnicity_concept_id"]["results"]
-      name: dist_gen.weighted_choice
-    - columns_assigned:
-      - gender_concept_id
-      kwargs:
-        a: SRC_STATS["auto__person__gender_concept_id"]["results"]
-      name: dist_gen.weighted_choice
-    - columns_assigned:
-      - race_concept_id
-      kwargs:
-        a: SRC_STATS["auto__person__race_concept_id"]["results"]
-      name: dist_gen.weighted_choice
-    - columns_assigned:
-      - year_of_birth
-      kwargs:
-        a: SRC_STATS["auto__person__year_of_birth"]["results"]
-      name: dist_gen.weighted_choice
+    num_rows_per_pass: 0
+    # row_generators:
+    # - columns_assigned:
+    #   - ethnicity_concept_id
+    #   kwargs:
+    #     a: SRC_STATS["auto__person__ethnicity_concept_id"]["results"]
+    #   name: dist_gen.weighted_choice
+    # - columns_assigned:
+    #   - gender_concept_id
+    #   kwargs:
+    #     a: SRC_STATS["auto__person__gender_concept_id"]["results"]
+    #   name: dist_gen.weighted_choice
+    # - columns_assigned:
+    #   - race_concept_id
+    #   kwargs:
+    #     a: SRC_STATS["auto__person__race_concept_id"]["results"]
+    #   name: dist_gen.weighted_choice
+    # - columns_assigned:
+    #   - year_of_birth
+    #   kwargs:
+    #     a: SRC_STATS["auto__person__year_of_birth"]["results"]
+    #   name: dist_gen.weighted_choice
+  condition_occurrence:
+    num_rows_per_pass: 0
+  visit_occurrence:
+    num_rows_per_pass: 0
+  procedure_occurrence:
+    num_rows_per_pass: 0
+story_generators_module: story_generators
+story_generators:
+  - name: story_generators.patient_story
+    num_stories_per_pass: 1
