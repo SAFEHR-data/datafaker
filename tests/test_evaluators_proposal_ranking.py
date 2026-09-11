@@ -370,7 +370,7 @@ class FormatRankingDisplayTests(DatafakerTestCase):
             numeric_ranking, results, EvaluationProfile.IDENTIFIER
         )
         self.assert_str_in(
-            "applied to every generator", numeric_display.profile_summary
+            "every generator (numeric column)", numeric_display.profile_summary
         )
 
         string_ranking = rank_proposals(results, EvaluationProfile.SHORT_TEXT)
@@ -378,7 +378,8 @@ class FormatRankingDisplayTests(DatafakerTestCase):
             string_ranking, results, EvaluationProfile.SHORT_TEXT
         )
         self.assert_str_in(
-            "applied only to resampling generators", string_display.profile_summary
+            "resamplers only (dist_gen.choice/weighted_choice/zipf_choice)",
+            string_display.profile_summary,
         )
 
     def test_rows_and_fronts_pass_through_unchanged(self) -> None:

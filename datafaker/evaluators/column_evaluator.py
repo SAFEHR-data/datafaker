@@ -4,7 +4,7 @@ import string
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import Column, Engine, select
+from sqlalchemy import Column, Engine, UniqueConstraint, select
 from sqlalchemy.types import Date, DateTime, Integer, Numeric, Time
 
 from datafaker.dialects import Random
@@ -167,6 +167,7 @@ class ColumnEvaluator:  # pylint: disable=too-many-instance-attributes
         self.column = None
         self.table = None
         self.is_primary_key = False
+        self.is_unique_constrained = False
         self.real_values = []
         self.column_is_numeric = False
         self.real_uniqueness = 0.0
@@ -185,6 +186,14 @@ class ColumnEvaluator:  # pylint: disable=too-many-instance-attributes
         # A composite key needs every constituent column marked primary_key;
         # this reduces to the single column's own flag in the common case.
         self.is_primary_key = bool(columns) and all(c.primary_key for c in columns)
+        # A real UNIQUE constraint/index needs the same uniqueness guarantee
+        # as a primary key, even though it isn't one - e.g. a UNIQUE email
+        # column. Distinct from is_primary_key so the two can be OR'd
+        # together (needs_uniqueness) without conflating "is the key" with
+        # "must be unique".
+        self.is_unique_constrained = self.is_primary_key or self._has_unique_constraint(
+            columns
+        )
 
         with engine.connect() as conn:
             if len(columns) == 1:
@@ -257,6 +266,24 @@ class ColumnEvaluator:  # pylint: disable=too-many-instance-attributes
         else:
             self.statistical_fidelity = None
             self.profile = EvaluationProfile.IDENTIFIER
+
+    @staticmethod
+    def _has_unique_constraint(columns: list[Column]) -> bool:
+        """Whether exactly this column set is covered by a UNIQUE constraint/index."""
+        if not columns:
+            return False
+        table = columns[0].table
+        column_set = set(columns)
+        for constraint in table.constraints:
+            if (
+                isinstance(constraint, UniqueConstraint)
+                and set(constraint.columns) == column_set
+            ):
+                return True
+        for index in table.indexes:
+            if index.unique and set(index.columns) == column_set:
+                return True
+        return False
 
     def evaluate(self, proposer) -> ProposalEvaluation:
         """Score one proposer's synthetic data against the sampled real data."""

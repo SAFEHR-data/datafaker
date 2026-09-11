@@ -68,6 +68,15 @@ SYNTHETIC_UNIQUENESS_GUARANTEE_THRESHOLD = 0.999
 # on top of a perfectly good pick.
 WEAK_WINNER_SCORE_THRESHOLD = 0.5
 
+# Floor applied to the self-duplication penalty (see rank_proposals) for a
+# column that doesn't actually need guaranteed-unique values (no PRIMARY
+# KEY/UNIQUE constraint). Self-duplication still matters there - a
+# generator whose synthetic sample is mostly repeats of a tiny fixed pool
+# (e.g. a canned-quote generator) makes for an obviously repetitive column
+# even without breaking a constraint - but it shouldn't be crushed as hard
+# as it would be for a column where duplicates are a correctness bug.
+SELF_DUPLICATION_PENALTY_FLOOR = 0.4
+
 
 def keyword_match(
     column_name: str | None, proposer_name: str
@@ -117,6 +126,7 @@ class ProposalRanking:
     weights: tuple[float, float, float]
     real_uniqueness: float = 0.0
     penalty_applies_to_all: bool = False
+    self_duplication_floored: bool = False
     fronts: list[int] = field(default_factory=list)
     scores: list[float] = field(default_factory=list)
     weak_recommendation_warning: str | None = None
@@ -204,6 +214,7 @@ def rank_proposals(
     real_uniqueness: float = 0.0,
     is_numeric_column: bool = False,
     is_primary_key: bool = False,
+    is_unique_constrained: bool = False,
 ) -> ProposalRanking:
     """Rank proposals by fidelity, novelty and diversity using Pareto fronts.
 
@@ -323,12 +334,24 @@ def rank_proposals(
         # vocabulary (a gender, a status) is expected to have low
         # synthetic_uniqueness too, and shouldn't be penalized for it.
         # Unlike the resample penalty, this applies to every candidate
-        # unconditionally - self-duplication breaks a PRIMARY KEY/UNIQUE
-        # constraint regardless of column type or whether the proposer is a
-        # resampler.
+        # regardless of column type or whether the proposer is a resampler -
+        # but its full strength is only warranted when the column actually
+        # needs unique values (a PRIMARY KEY/UNIQUE constraint); it's floored
+        # below (SELF_DUPLICATION_PENALTY_FLOOR) otherwise, since a merely
+        # observed-unique column (e.g. free-text descriptions that happen to
+        # all differ) doesn't have a correctness reason to punish a small,
+        # repetitive-but-otherwise-plausible pool as hard as a real key would.
         self_duplication_penalty = 1.0 - real_uniqueness * (
             1.0 - result.synthetic_uniqueness
         )
+        if not (is_primary_key or is_unique_constrained):
+            # No constraint actually requires unique values here, so don't
+            # let this penalty alone crush the score - just discount it
+            # relative to a candidate that can sustain the real column's
+            # observed distinctness.
+            self_duplication_penalty = max(
+                self_duplication_penalty, SELF_DUPLICATION_PENALTY_FLOOR
+            )
         penalty_multipliers[idx] = resample_penalty * self_duplication_penalty
         combined_scores[idx] *= penalty_multipliers[idx]
 
@@ -464,6 +487,7 @@ def rank_proposals(
             f"{diversity_scores[idx]:.6f}",
             f"{real_uniqueness:.3f}",
             f"{result.copy_fraction:.3f}",
+            f"{result.synthetic_uniqueness:.3f}",
             f"{penalty_multipliers[idx]:.3f}",
         ]
         # color entire row for Pareto front 1
@@ -480,6 +504,7 @@ def rank_proposals(
         weights=(fid_w, nov_w, div_w),
         real_uniqueness=real_uniqueness,
         penalty_applies_to_all=apply_to_every_proposer,
+        self_duplication_floored=not (is_primary_key or is_unique_constrained),
         fronts=list(front_of),
         scores=list(combined_scores),
         weak_recommendation_warning=weak_recommendation_warning,
@@ -505,17 +530,16 @@ def format_ranking_display(
         recommendation = (
             f"Recommended: {rec_num}. {rec_name} — {ranking.recommended_reason}\n"
         )
-    if ranking.penalty_applies_to_all:
-        penalty_scope = (
-            "applied to every generator (this is a numeric column, so a high"
-            " copy_fraction always means the real range is dense, not a coincidental"
-            " vocabulary match)"
-        )
-    else:
-        penalty_scope = (
-            "applied only to resampling generators (dist_gen.choice/weighted_choice/"
-            "zipf_choice - see Penalty column); 1.0 (no effect) for everyone else"
-        )
+    resample_scope = (
+        "every generator (numeric column)"
+        if ranking.penalty_applies_to_all
+        else "resamplers only (dist_gen.choice/weighted_choice/zipf_choice)"
+    )
+    self_dup_scope = (
+        f"floored at {SELF_DUPLICATION_PENALTY_FLOOR:.1f} (no PK/UNIQUE constraint)"
+        if ranking.self_duplication_floored
+        else "full strength (PK/UNIQUE constrained)"
+    )
     profile_summary = (
         f"Profile: {profile.name if profile is not None else 'UNKNOWN'}  |  "
         f"Real uniqueness: {ranking.real_uniqueness:.3f}  |  "
@@ -523,8 +547,12 @@ def format_ranking_display(
         f"Score = clamp( ({fid_w:.2f}*Fidelity + {nov_w:.2f}*Novelty"
         f" + {div_w:.2f}*Diversity + Keyword) "
         "x Penalty ,  0, 1 )\n"
-        "  Keyword: +0.15 if the column name hints at this generator's kind (see Keyword column)\n"
-        f"  Penalty: 1 - real_uniqueness x copy_fraction, {penalty_scope}"
+        "  Keyword: +0.15 for a column-name hint (see Keyword column)\n"
+        "  Penalty = resample_penalty x self_duplication_penalty"
+        " (see Copies / Synth.Uniq columns)\n"
+        f"    resample_penalty (1 - real_uniqueness x copy_fraction): {resample_scope}\n"
+        "    self_duplication_penalty (1 - real_uniqueness x (1 - synthetic_uniqueness)):"
+        f" {self_dup_scope}"
     )
     return ProposalRankingDisplay(
         recommendation=recommendation,

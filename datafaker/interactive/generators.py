@@ -1109,6 +1109,9 @@ information about the columns in the current table. Use 'peek',
         real_uniqueness = getattr(column_evaluator, "real_uniqueness", 0.0)
         is_numeric_column = getattr(column_evaluator, "column_is_numeric", False)
         is_primary_key = getattr(column_evaluator, "is_primary_key", False)
+        is_unique_constrained = getattr(
+            column_evaluator, "is_unique_constrained", False
+        )
         ranking = rank_proposals(
             results,
             profile,
@@ -1117,6 +1120,7 @@ information about the columns in the current table. Use 'peek',
             real_uniqueness=real_uniqueness,
             is_numeric_column=is_numeric_column,
             is_primary_key=is_primary_key,
+            is_unique_constrained=is_unique_constrained,
         )
         display = format_ranking_display(ranking, results, profile)
 
@@ -1171,6 +1175,7 @@ information about the columns in the current table. Use 'peek',
                 "Diversity",
                 "Uniqueness",
                 "Copies",
+                "Synth.Uniq",
                 "Penalty",
             ],
             rows_to_show,

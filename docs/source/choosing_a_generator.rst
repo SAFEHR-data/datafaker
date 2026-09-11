@@ -43,7 +43,7 @@ the two situations where you need more than the recommendation:
      - ``propose`` applies an extra privacy penalty here: a candidate that
        reproduces real values verbatim is scored down in proportion to how
        unique the real column is, so the recommendation already accounts for
-       leak risk. See :ref:`statistical-fidelity-pipelines`.
+       leak risk. See :ref:`evaluating-and-ranking-proposals`.
    * - A small set of repeating values, e.g. a status code, category or flag
      - ``dist_gen.weighted_choice`` (matches real frequencies exactly), or
        ``dist_gen.zipf_choice`` / ``dist_gen.choice`` for a looser fit

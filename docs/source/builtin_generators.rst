@@ -503,17 +503,39 @@ The three normalized scores are combined into one ``Score`` per candidate as
   see ``KEYWORD_GENERATOR_HINTS`` in ``proposal_ranking.py`` for the full
   list) -- a cheap, complementary signal used only to break near-ties, never
   to override a clearly better statistical result.
-* **Penalty** (``1 - real_uniqueness * copy_fraction``, further reduced by how
-  much a candidate duplicates against its *own* output) discounts a
-  choice-style proposer (``dist_gen.choice``/``weighted_choice``/
-  ``zipf_choice``) -- or, for a numeric column, *any* proposer -- for
-  reproducing real values verbatim, scaled by how unique the real column
-  actually is. This is a privacy safeguard: resampling real values is
-  expected and harmless for a low-uniqueness column (a gender, a status) but
-  a genuine leak for a near-unique one (an email, a real ID). It has no
-  effect (``1.0``) on other proposers for non-numeric columns, where an
-  overlap with real values is usually just a naturally shared vocabulary
-  (e.g. common first names), not memorization.
+* **Penalty** is the product of two independent factors, each scaled by how
+  unique the real column actually is:
+
+  .. code-block:: text
+
+     Penalty = resample_penalty * self_duplication_penalty
+
+  * ``resample_penalty = 1 - real_uniqueness * copy_fraction`` is a privacy
+    safeguard against reproducing real values verbatim. ``copy_fraction`` is
+    the fraction of a candidate's synthetic sample that exactly matches a
+    real value. It only applies to choice-style proposers
+    (``dist_gen.choice``/``weighted_choice``/``zipf_choice``) -- or, for a
+    numeric column, *any* proposer -- since resampling real values is
+    expected and harmless for a low-uniqueness column (a gender, a status)
+    but a genuine leak for a near-unique one (an email, a real ID). It has no
+    effect (``1.0``) on other proposers for non-numeric columns, where an
+    overlap with real values is usually just a naturally shared vocabulary
+    (e.g. common first names), not memorization.
+  * ``self_duplication_penalty = 1 - real_uniqueness * (1 - synthetic_uniqueness)``
+    guards against a candidate duplicating against its *own* output --
+    ``synthetic_uniqueness`` is the fraction of distinct values in its 4000
+    synthetic samples. This is a different failure mode from
+    ``resample_penalty``: a candidate can have a tiny fixed pool of possible
+    outputs (e.g. a canned-quote generator with only a few dozen distinct
+    strings) without ever coincidentally matching a *real* value, yet still
+    be unusable for a column that needs many distinct rows. It's computed
+    for every candidate, but only applied at full strength when the column
+    actually needs unique values (a primary key or a ``UNIQUE``-constrained
+    column) -- otherwise it's floored at ``0.4``, discounting a
+    self-duplicating-but-otherwise-plausible candidate rather than crushing
+    its score to near zero over a constraint that doesn't apply here. The
+    ``Synth.Uniq`` column in the ``propose`` table shows the raw value this
+    factor is computed from.
 
 Candidates are also grouped into Pareto fronts (front 1 = not
 strictly dominated on fidelity, novelty *and* diversity simultaneously by any
