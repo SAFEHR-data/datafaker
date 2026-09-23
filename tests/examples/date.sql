@@ -23,16 +23,20 @@ CREATE TABLE public.happening (
     name TEXT NOT NULL,
     person_id INTEGER NOT NULL,
     at_time TIMESTAMP WITH TIME ZONE NOT NULL,
-    at_date DATE NOT NULL
+    at_date DATE NOT NULL,
+    other_person_id INTEGER,
+    comment TEXT
 );
 
 ALTER TABLE ONLY public.happening ADD CONSTRAINT happening_pkey PRIMARY KEY (id);
 ALTER TABLE ONLY public.happening
     ADD CONSTRAINT person_id_fkey FOREIGN KEY (person_id) REFERENCES public.person(id);
+ALTER TABLE ONLY public.happening
+    ADD CONSTRAINT other_person_id_fkey FOREIGN KEY (other_person_id) REFERENCES public.person(id);
 
 ALTER TABLE public.happening OWNER TO postgres;
 
-INSERT INTO public.happening VALUES (1, 'stepped on a tack', 1, '1997-04-20 04:05:06+00:00', '1997-04-20');
-INSERT INTO public.happening VALUES (2, 'had a dream', 2, '1997-04-20 04:04:16+00:00', '1997-04-20');
-INSERT INTO public.happening VALUES (3, 'kicked a can', 1, '2001-12-23 07:05:06+00:00', '2001-12-23');
-INSERT INTO public.happening VALUES (4, 'steppen in gum', 2, '2003-11-03 04:15:26+00:00', '2003-11-03');
+INSERT INTO public.happening VALUES (1, 'stepped on a tack', 1, '1997-04-20 04:05:06+00:00', '1997-04-20', NULL, NULL);
+INSERT INTO public.happening VALUES (2, 'had a dream', 2, '1997-04-20 04:04:16+00:00', '1997-04-20', NULL, NULL);
+INSERT INTO public.happening VALUES (3, 'kicked a can', 1, '2001-12-23 07:05:06+00:00', '2001-12-23', NULL, NULL);
+INSERT INTO public.happening VALUES (4, 'shared a cake', 2, '2003-11-03 04:15:26+00:00', '2003-11-03', 1, NULL);

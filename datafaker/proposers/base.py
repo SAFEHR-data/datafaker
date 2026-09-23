@@ -2,7 +2,8 @@
 
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any, Union
 
 import mimesis
@@ -14,7 +15,7 @@ from typing_extensions import Self
 
 from datafaker.dialects import StdDev
 from datafaker.providers import DistributionProvider
-from datafaker.utils import logger
+from datafaker.utils import T, logger
 
 NumericType = Union[int, float]
 
@@ -291,6 +292,57 @@ def fit_from_buckets(xs: Sequence[NumericType], ys: Sequence[NumericType]) -> fl
     return sum_diff_squared / (count * count)
 
 
+@dataclass
+class ForeignKeyRelationship:
+    """How a table is related."""
+
+    fk_column: Column  # the "from" column
+    target_column: Column  # the "to" column that fk_column matches
+
+    def target_table(self) -> Table:
+        """Get the related table."""
+        return self.target_column.table
+
+
+def _get_one(seq: Iterable[T]) -> T | None:
+    """Get an arbitrary member of the sequence, or None if it is empty."""
+    for elt in seq:
+        return elt
+    return None
+
+
+def make_foreign_key_relationship(fk_column: Column) -> ForeignKeyRelationship | None:
+    """Make a ``ForeignKeyRelationship`` from a foreign key column."""
+    if (elt := _get_one(fk_column.foreign_keys)) is None:
+        return None
+    return ForeignKeyRelationship(fk_column, elt.column)
+
+
+@dataclass
+class RelatedColumn:
+    """A column in a related table, and how it is related."""
+
+    target: Column
+    relationship: ForeignKeyRelationship | None
+
+    def add_from_to_query(self, query: Any) -> Any:
+        """Take a query and add a ``select_from`` and maybe ``join`` as appropriate."""
+        if self.relationship is None:
+            return query.select_from(self.target.table)
+        query = query.select_from(self.relationship.fk_column.table)
+        return self.add_join_to_query(query)
+
+    def add_join_to_query(self, query: Any) -> Any:
+        """Take a query and maybe add ``join`` as appropriate."""
+        rel = self.relationship
+        if rel is None:
+            return query
+        return query.join(
+            rel.target_column.table,
+            onclause=rel.fk_column == rel.target_column,
+        )
+
+
 class Buckets:
     """
     Measured buckets for a real distribution.
@@ -308,12 +360,12 @@ class Buckets:
         mean: float,
         stddev: float,
         count: int,
-        join_tables: list[Table] | None = None,
+        anchor_relation: RelatedColumn | None = None,
     ):
         """Initialise a Buckets object."""
         self.mean = mean
         self.stddev = stddev
-        query = self._get_bucket_query(table, column, join_tables)
+        query = self._get_bucket_query(table, column, anchor_relation)
         with engine.connect() as connection:
             raw_buckets = connection.execute(query.group_by("b"))
             self.buckets: Sequence[int] = [0] * 10
@@ -335,7 +387,7 @@ class Buckets:
         self,
         table: Table | Join,
         column: Any,
-        join_tables: list[Table] | None,
+        anchor_relation: RelatedColumn | None = None,
     ) -> Any:
         """Make the query for half-sd buckets."""
         bottom = self.mean - 2 * self.stddev
@@ -344,8 +396,8 @@ class Buckets:
             func.count(column).label("f"),  # pylint: disable=not-callable
             ((func.floor(column) - bottom) / width).label("b"),
         ).select_from(table)
-        for jt in join_tables or []:
-            query = query.join(jt)
+        if anchor_relation is not None:
+            query = anchor_relation.add_join_to_query(query)
         return query
 
     @classmethod
@@ -354,7 +406,7 @@ class Buckets:
         engine: Engine,
         table: Table | Join,
         column: Any,
-        join_tables: list[Table] | None = None,
+        anchor_relation: RelatedColumn | None = None,
     ) -> Self | None:
         """
         Construct a Buckets object.
@@ -368,14 +420,16 @@ class Buckets:
         :param engine: SQLAlchemy engine.
         :param table: SQLAlchemy table (or joined tables) to pull data from.
         :param column: SQLAlchemy column or expression to measure.
+        :param anchor_relation: A relationship to another column whose table
+          needs to be joined.
         """
         query = select(
             func.avg(column).label("mean"),
             StdDev(column).label("stddev"),
             func.count(column).label("count"),  # pylint: disable=not-callable
         ).select_from(table)
-        for jt in join_tables or []:
-            query = query.join(jt)
+        if anchor_relation is not None:
+            query = anchor_relation.add_join_to_query(query)
         with engine.connect() as connection:
             result = connection.execute(query).first()
             if result is None or result.stddev is None or getattr(result, "count") < 2:
@@ -388,7 +442,7 @@ class Buckets:
                 result.mean,
                 result.stddev,
                 getattr(result, "count"),
-                join_tables,
+                anchor_relation,
             )
         except DatabaseError as exc:
             logger.debug("Failed to instantiate Buckets object: %s", exc)

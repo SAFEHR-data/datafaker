@@ -201,6 +201,9 @@ information about the columns in the current table. Use 'peek',
     PRIMARY_PRIVATE_TEXT = "Primary Private"
     SECONDARY_PRIVATE_TEXT = "Secondary Private on columns {0}"
     NOT_PRIVATE_TEXT = "Not private"
+    REQUIRES_NO_SOURCE_DATA_TEXT = (
+        "{0}. {2}{1}{3} requires no data from the source database."
+    )
     REQUIRES_SOURCE_DATA_TEXT = (
         "{0}. {2}{1}{3} requires the following data from the source database:"
     )
@@ -910,7 +913,7 @@ information about the columns in the current table. Use 'peek',
         theme = get_active_theme()
         if not prop.select_aggregate_clauses() and not prop.custom_queries():
             self.print(
-                "{0}. {2}{1}{3} requires no data from the source database.",
+                self.REQUIRES_NO_SOURCE_DATA_TEXT,
                 n,
                 prop.name(),
                 theme.function,
