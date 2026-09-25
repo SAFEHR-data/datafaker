@@ -37,6 +37,7 @@ from datafaker.utils import (
     schema_qualified_name,
     set_property,
     split_column_full_name,
+    text_list,
 )
 
 
@@ -160,7 +161,8 @@ class RoleCommandDelete(RoleCommand):
         """Perform the command."""
         if column_roles is None:
             return None
-        column_roles.new.remove(self.role)
+        if self.role in column_roles.new:
+            column_roles.new.remove(self.role)
         return column_roles
 
 
@@ -481,7 +483,7 @@ information about the columns in the current table. Use 'peek',
         """Set role information in the configuration."""
         for table_name, table_roles in self.roles.items():
             for column_name, entry in table_roles.items():
-                if entry.new:
+                if entry.new or entry.old:
                     set_property(
                         self.config,
                         ["tables", table_name, "columns", column_name, "roles"],
@@ -543,8 +545,8 @@ information about the columns in the current table. Use 'peek',
                         "Changing role set of column {0} of table {1} from {2} to {3}",
                         column_name,
                         table_name,
-                        ", ".join(str(oe) for oe in entry.old),
-                        ", ".join(str(ne) for ne in entry.new),
+                        text_list((e.value for e in entry.old), "empty"),
+                        text_list((e.value for e in entry.new), "empty"),
                     )
         return count
 

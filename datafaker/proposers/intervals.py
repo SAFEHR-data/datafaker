@@ -73,11 +73,10 @@ def _get_roles(
         _set_roles_for_column(role_to_fk_columns, None, col, columns_config)
         # look for roles in related tables
         if (fk_relationship := make_foreign_key_relationship(col)) is not None:
-            target_table = fk_relationship.target_table()
             ft_conf: dict[str, Any] = get_property(
-                tables_config, [str(target_table.name), "columns"], {}
+                tables_config, [fk_relationship.target_table_name(), "columns"], {}
             )
-            for fcol in target_table.columns:
+            for fcol in fk_relationship.target_table().columns:
                 _set_roles_for_column(
                     role_to_fk_columns, fk_relationship, fcol, ft_conf
                 )
@@ -164,20 +163,20 @@ class DateAfterProposer(Proposer):
     def name(self) -> str:
         """Get the name of the generator."""
         fname = self.function_name()
-        anchor = self._anchor_related.target
-        aname = anchor.name
-        atable = anchor.table
-        if self._anchor_related.relationship is None:
+        aname = self._anchor_related.target.name
+        rel = self._anchor_related.relationship
+        if rel is None:
             return f"{fname} [anchored to {aname}]"
-        atable = anchor.table.name
-        rel = self._anchor_related.relationship.fk_column.name
-        return f"{fname} [anchored to {aname} of table {atable} (via {rel})]"
+        atable = rel.target_table_name()
+        fk_name = rel.fk_column.name
+        return f"{fname} [anchored to {aname} of table {atable} (via {fk_name})]"
 
     def nominal_kwargs(self) -> dict[str, Any]:
         """Get the arguments to be entered into ``config.yaml``."""
         column = self._column
         anchor = self._anchor_related.target
-        if self._anchor_related.relationship is None:
+        rel = self._anchor_related.relationship
+        if rel is None:
             return {
                 "mean_seconds": (
                     f'SRC_STATS["auto__{column.table.name}"]'
@@ -190,12 +189,12 @@ class DateAfterProposer(Proposer):
                 "anchor": f'GENERATED_ROW["{anchor.name}"]',
             }
         key = f"auto__interval__{column.table.name}__{column.name}"
-        fk_col = self._anchor_related.relationship.fk_column.name
-        on_col = self._anchor_related.relationship.target_column.name
+        fk_col = rel.fk_column.name
+        on_col = rel.target_column.name
         return {
             "dst_db_conn": "dst_db_conn",
             "anchor_column": f'"{anchor.name}"',
-            "table": f'"{anchor.table.name}"',
+            "table": f'"{rel.target_table_name()}"',
             "mean_seconds": (f'SRC_STATS["{key}"]["results"][0]["mean"]'),
             "sd_seconds": (f'SRC_STATS["{key}"]["results"][0]["sd"]'),
             "anchor_row": f'GENERATED_ROW["{fk_col}"]',
@@ -377,7 +376,10 @@ class DateAfterProposerFactory(ProposerFactory):
         if "start" not in roles:
             return []
         other_start_columns = [
-            fk_col for fk_col in roles["start"] if fk_col.target != column
+            fk_col
+            for fk_col in roles["start"]
+            # Don't anchor on ourselves
+            if not (fk_col.relationship is None and fk_col.target == column)
         ]
         return [
             prop
@@ -423,25 +425,27 @@ class CopyProposer(Proposer):
         """Get the name of the generator."""
         fname = self.function_name()
         aname = self._anchor_related.target.name
-        if self._anchor_related.relationship is None:
+        rel = self._anchor_related.relationship
+        if rel is None:
             return f"{fname} [from {aname}]"
-        atable = self._anchor_related.target.table
-        on_col = self._anchor_related.relationship.fk_column.name
-        return f"{fname} [from {aname} of table {atable.name} (via {on_col})]"
+        atable = rel.target_table_name()
+        on_col = rel.fk_column.name
+        return f"{fname} [from {aname} of table {atable} (via {on_col})]"
 
     def nominal_kwargs(self) -> dict[str, Any]:
         """Get the arguments to be entered into ``config.yaml``."""
         anchor = self._anchor_related.target
-        if self._anchor_related.relationship is None:
+        rel = self._anchor_related.relationship
+        if rel is None:
             return {
                 "anchor": f'GENERATED_ROW["{anchor.name}"]',
             }
-        fk_col = self._anchor_related.relationship.fk_column
-        on_col = self._anchor_related.relationship.target_column
+        fk_col = rel.fk_column
+        on_col = rel.target_column
         return {
             "dst_db_conn": "dst_db_conn",
             "anchor_column": f'"{anchor.name}"',
-            "table": f'"{anchor.table.name}"',
+            "table": f'"{rel.target_table_name()}"',
             "anchor_row": f'GENERATED_ROW["{fk_col.name}"]',
             "on_column": f'"{on_col.name}"',
         }
@@ -503,6 +507,9 @@ class CopyProposerFactory(ProposerFactory):
             )
         ]
 
+    def _can_copy_type(self, copy_from, copy_to) -> bool:
+        return type(copy_from) is type(copy_to)
+
     def get_proposers(
         self,
         columns: list[Column],
@@ -519,8 +526,10 @@ class CopyProposerFactory(ProposerFactory):
         other_source_columns = [
             fk_col
             for fk_col in roles["source"]
-            if fk_col.target != column
-            and type(get_column_type(fk_col.target)) is type(ct)
+            # Don't copy from ourself
+            if not (fk_col.relationship is None and fk_col.target == column)
+            # Only copy if the types are compatible
+            and self._can_copy_type(get_column_type(fk_col.target), ct)
         ]
         return [
             prop

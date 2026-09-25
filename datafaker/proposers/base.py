@@ -10,6 +10,7 @@ import mimesis
 import mimesis.locales
 from sqlalchemy import Column, Engine, Join, Table, func, select
 from sqlalchemy.exc import DatabaseError
+from sqlalchemy.orm import aliased
 from sqlalchemy.types import Integer, Numeric, String, TypeEngine
 from typing_extensions import Self
 
@@ -292,16 +293,33 @@ def fit_from_buckets(xs: Sequence[NumericType], ys: Sequence[NumericType]) -> fl
     return sum_diff_squared / (count * count)
 
 
-@dataclass
 class ForeignKeyRelationship:
     """How a table is related."""
 
-    fk_column: Column  # the "from" column
-    target_column: Column  # the "to" column that fk_column matches
+    def __init__(self, fk_column: Column, target_column: Column) -> None:
+        """
+        Initialise a ``ForeignKeyRelationship``.
+
+        :param fk_column: The column containing the foreign key (the source).
+        :param target_column: The column that ``fk_column`` matches in
+          the target table.
+        """
+        self.fk_column = fk_column
+        table = aliased(target_column.table)
+        self.target_column = table.columns[target_column.name]
 
     def target_table(self) -> Table:
         """Get the related table."""
         return self.target_column.table
+
+    def target_table_name(self) -> str:
+        """
+        Get the name of the target table.
+
+        Don't use ``target_table().name`` because this will give the
+        name of the aliased table.
+        """
+        return str(self.target_column.table.original.name)
 
 
 def _get_one(seq: Iterable[T]) -> T | None:
@@ -341,6 +359,18 @@ class RelatedColumn:
             rel.target_column.table,
             onclause=rel.fk_column == rel.target_column,
         )
+
+    def target_table(self) -> Table | None:
+        """Get the related table, or None if it's the same table."""
+        if self.relationship is None:
+            return None
+        return self.relationship.target_table()
+
+    def target_table_name(self) -> str | None:
+        """Get the name of the target table, or None if it's the same table."""
+        if self.relationship is None:
+            return None
+        return self.relationship.target_table_name()
 
 
 class Buckets:
