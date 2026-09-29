@@ -49,7 +49,7 @@ def _set_roles_for_column(
             out[role].append(rc)
 
 
-def _get_roles(
+def _get_all_relative_roles(
     config: Mapping,
     column: Column,
 ) -> dict[str, list[RelatedColumn]]:
@@ -81,6 +81,77 @@ def _get_roles(
                     role_to_fk_columns, fk_relationship, fcol, ft_conf
                 )
     return role_to_fk_columns
+
+
+def _not_anchored_on_ourselves(column: Column, fk_col: RelatedColumn) -> bool:
+    """
+    Return whether these columns are the exact same thing.
+
+    :param column: The column we are wanting to generate for.
+    :param fk_col: The column we are considering using as an anchor.
+    :return: False if ``fk_col`` targets the same column as ``column``
+      not through a foreign key, so True if ``fk_col`` is through a FK
+      or if it doesn't target the same column.
+    """
+    return not (fk_col.relationship is None and fk_col.target == column)
+
+
+def _not_anchoring_nonnullable_to_nullable(
+    column: Column, fk_col: RelatedColumn
+) -> bool:
+    """
+    Return True if ``column`` is nullable or ``fk_col`` is not.
+
+    We are counting ``fk_col`` as nullabe if either the target is nullable
+    or the foreign key itself.
+
+    This is required if ``fk_col`` can be copied to ``col``.
+    """
+    fk_nullable = (
+        fk_col.relationship is not None
+        and fk_col.relationship.fk_column.nullable is not False
+    )
+    fk_col_nullable = fk_nullable or fk_col.target.nullable
+    return column.nullable or not fk_col_nullable
+
+
+def _not_copying_incompatible_fk(column: Column, fk_col: RelatedColumn) -> bool:
+    """Return True if ``column`` and ``fk_col`` are incompatible foreign key types."""
+    target = fk_col.target
+    if not column.foreign_keys:
+        return not target.foreign_keys
+    if not target.foreign_keys:
+        return False
+    tfks = {c.target_fullname for c in target.foreign_keys}
+    cfks = {c.target_fullname for c in column.foreign_keys}
+    return tfks == cfks
+
+
+def _get_roles(
+    config: Mapping,
+    column: Column,
+    role_name: str,
+) -> list[RelatedColumn]:
+    """
+    Get all the ``role_name`` roles in this table or a related table.
+
+    :param role_name: The role to return.
+    :return: The list of all columns in the same table as ``column`` or in
+      tables directly related to that table that have the named role. This
+      list has the following columns filtered out: Nullable columns (if
+      ``column`` is nonnullable), foreign keys if ``column`` is not a
+      foreign key, non-foreign keys if ``column`` is a foreign key
+      or foreign keys if ``column`` is a foreign key to a different table.
+    """
+    roles = _get_all_relative_roles(config, column)
+    if role_name not in roles:
+        return []
+    return [
+        fk_col
+        for fk_col in roles[role_name]
+        if _not_anchored_on_ourselves(column, fk_col)
+        and _not_anchoring_nonnullable_to_nullable(column, fk_col)
+    ]
 
 
 def coerce_to_datetime(
@@ -372,15 +443,7 @@ class DateAfterProposerFactory(ProposerFactory):
         ct = get_column_type(column)
         if not isinstance(ct, (Date, DateTime)):
             return []
-        roles = _get_roles(self._config, column)
-        if "start" not in roles:
-            return []
-        other_start_columns = [
-            fk_col
-            for fk_col in roles["start"]
-            # Don't anchor on ourselves
-            if not (fk_col.relationship is None and fk_col.target == column)
-        ]
+        other_start_columns = _get_roles(self._config, column, "start")
         return [
             prop
             for anchor in other_start_columns
@@ -519,17 +582,9 @@ class CopyProposerFactory(ProposerFactory):
         if len(columns) != 1:
             return []
         column = columns[0]
-        roles = _get_roles(self._config, column)
-        if "source" not in roles:
-            return []
-        ct = get_column_type(column)
+        fk_cols = _get_roles(self._config, column, "source")
         other_source_columns = [
-            fk_col
-            for fk_col in roles["source"]
-            # Don't copy from ourself
-            if not (fk_col.relationship is None and fk_col.target == column)
-            # Only copy if the types are compatible
-            and self._can_copy_type(get_column_type(fk_col.target), ct)
+            fk_col for fk_col in fk_cols if _not_copying_incompatible_fk(column, fk_col)
         ]
         return [
             prop

@@ -320,9 +320,9 @@ class ConfigureGeneratorsWithDateTests(GeneratesDBTestCase):
         """Test for regression where ``start`` role on a date leads to crash."""
         config = {
             "tables": {
-                "happening": {
+                "person": {
                     "columns": {
-                        "at_date": {
+                        "date_of_birth": {
                             "roles": ["start"],
                         },
                     },
@@ -336,8 +336,8 @@ class ConfigureGeneratorsWithDateTests(GeneratesDBTestCase):
             proposals = gc.get_proposals()
             provider_name = (
                 "generic.anchored_provider.normal_date_fk"
-                " [anchored to at_date of table happening"
-                " (via previous_happening_id)]"
+                " [anchored to date_of_birth of table person"
+                " (via person_id)]"
             )
             self.assertIn(provider_name, proposals.keys())
 

@@ -8,15 +8,19 @@ CREATE TABLE public.person (
     id INTEGER NOT NULL,
     name TEXT NOT NULL,
     timestamp_of_birth TIMESTAMP WITH TIME ZONE NOT NULL,
-    date_of_birth DATE NOT NULL
+    date_of_birth DATE NOT NULL,
+    parent_of INTEGER
 );
 
 ALTER TABLE ONLY public.person ADD CONSTRAINT person_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.person
+    ADD CONSTRAINT parent_of_fkey FOREIGN KEY (parent_of) REFERENCES public.person(id);
 
 ALTER TABLE public.person OWNER TO postgres;
 
-INSERT INTO public.person VALUES (1, 'Bobby', '1991-01-08 11:12:13+00:00', '1991-01-08');
-INSERT INTO public.person VALUES (2, 'Mary', '1989-03-04 20:19:18+00:00', '1989-03-04');
+INSERT INTO public.person VALUES (1, 'Bobby', '1991-01-08 11:12:13+00:00', '1991-01-08', NULL);
+INSERT INTO public.person VALUES (2, 'Mary', '1989-03-04 20:19:18+00:00', '1989-03-04', NULL);
+INSERT INTO public.person VALUES (3, 'Elizabeth', '1951-10-14 00:12:12+00:00', '1951-10-14', 2);
 
 CREATE TABLE public.happening (
     id INTEGER NOT NULL,

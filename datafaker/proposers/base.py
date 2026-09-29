@@ -308,6 +308,13 @@ class ForeignKeyRelationship:
         table = aliased(target_column.table)
         self.target_column = table.columns[target_column.name]
 
+    def __repr__(self):
+        """Render the relationship as a JOIN."""
+        return (
+            f"<JOIN {self.target_column.table.original.name} ON"
+            f" {self.fk_column} = {self.target_column.name}>"
+        )
+
     def target_table(self) -> Table:
         """Get the related table."""
         return self.target_column.table
