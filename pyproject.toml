@@ -40,6 +40,7 @@ fastparquet = "^2024.11.0"
 duckdb-sqlalchemy = "^1.5.2.2"
 ty = "^0.0.43"
 colorama = "^0.4.6"
+snowflake-sqlalchemy = "^1.11.1"
 
 [tool.poetry.group.dev.dependencies]
 isort = "^5.10.1"
