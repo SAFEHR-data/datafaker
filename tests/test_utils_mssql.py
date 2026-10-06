@@ -145,7 +145,7 @@ class TestGetMetadataSchema(unittest.TestCase):
             mock_meta_data.return_value = mock_md
             mock_md.reflect.return_value = None
 
-            get_metadata(mock_engine, schema_name="myschema")
+            get_metadata(mock_engine, schema_name="myschema", views_to_tables=False)
 
             mock_md.reflect.assert_called_once_with(mock_engine, schema="myschema")
 
@@ -159,6 +159,6 @@ class TestGetMetadataSchema(unittest.TestCase):
             mock_meta_data.return_value = mock_md
             mock_md.reflect.return_value = None
 
-            get_metadata(mock_engine)
+            get_metadata(mock_engine, schema_name=None, views_to_tables=False)
 
             mock_md.reflect.assert_called_once_with(mock_engine, schema=None)

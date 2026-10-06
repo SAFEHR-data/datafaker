@@ -47,3 +47,8 @@ INSERT INTO public.happening VALUES (1, 'stepped on a tack', 1, '1997-04-20 04:0
 INSERT INTO public.happening VALUES (2, 'had a dream', 2, '1997-04-20 04:04:16+00:00', '1997-04-20', NULL, NULL, 1);
 INSERT INTO public.happening VALUES (3, 'kicked a can', 1, '2001-12-23 07:05:06+00:00', '2001-12-23', NULL, NULL, 1);
 INSERT INTO public.happening VALUES (4, 'shared a cake', 2, '2003-11-03 04:15:26+00:00', '2003-11-03', 1, NULL, NULL);
+
+CREATE VIEW public.happening_view (id, name, person_id)
+    AS SELECT id, name, person_id FROM public.happening;
+
+ALTER VIEW public.happening_view OWNER TO postgres;

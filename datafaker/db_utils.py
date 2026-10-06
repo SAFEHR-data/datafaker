@@ -223,11 +223,15 @@ def create_db_engine_dst(
     return create_db_engine(db_dsn, schema_name, use_asyncio)
 
 
-def get_metadata(engine: Engine, schema_name: Optional[str] = None) -> MetaData:
+def get_metadata(
+    engine: Engine,
+    schema_name: Optional[str],
+    views_to_tables: bool,
+) -> MetaData:
     """Get the MetaData object associated with the engine passed."""
     md = MetaData()
     try:
-        md.reflect(engine, schema=schema_name)
+        md.reflect(engine, schema=schema_name, views=views_to_tables)
     except OperationalError as exc:
         logger.error("Cannot connect to database: %s", exc)
         raise Exit(1) from exc

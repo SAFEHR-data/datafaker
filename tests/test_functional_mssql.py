@@ -52,7 +52,9 @@ class MSSQLFunctionalTestCase(GeneratesDBTestCase):
         (self.orm_fd, self.orm_file_path) = mkstemp(".yaml", "orm_", text=True)
         with os.fdopen(self.orm_fd, "w", encoding="utf-8") as fh:
             fh.write(
-                make_tables_file(self.dsn, self.schema_name, engine=self.sync_engine)
+                make_tables_file(
+                    self.dsn, self.schema_name, False, engine=self.sync_engine
+                )
             )
 
     def tearDown(self) -> None:
