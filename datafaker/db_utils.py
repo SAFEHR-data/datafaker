@@ -145,7 +145,7 @@ def create_db_engine(
     db_dsn: str,
     schema_name: Optional[str] = None,
     use_asyncio: bool = False,
-    parquet_dir: Optional[Path] = None,
+    parquet_dir: Optional[Union[Path, str]] = None,
     **kwargs: Any,
 ) -> MaybeAsyncEngine:
     """Create a SQLAlchemy Engine."""

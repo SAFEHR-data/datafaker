@@ -394,7 +394,7 @@ class PartitionedParquetEngine(TestCase):
         """Test the directory read back from ``orm.yaml`` as text still works."""
         engine = get_sync_engine(
             create_db_engine(
-                "duckdb:///:memory:", parquet_dir=str(self.parquet_dir)  # type: ignore[arg-type]
+                "duckdb:///:memory:", parquet_dir=str(self.parquet_dir)
             )
         )
         with engine.connect() as conn:

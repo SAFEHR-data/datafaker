@@ -45,7 +45,7 @@ def _parquet_files_under(directory: Path) -> tuple[Path, ...]:
     )
 
 
-def find_parquet_tables(directory: Path) -> list[ParquetTable]:
+def find_parquet_tables(directory: Path | str) -> list[ParquetTable]:
     """
     Find the tables represented by the parquet files in a directory.
 
