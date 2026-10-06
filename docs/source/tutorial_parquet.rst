@@ -109,11 +109,16 @@ Large tables are often saved as a directory of Parquet files, partitioned
   containing only ``key=value`` subdirectories) the whole directory is one
   table, named after that directory.
 
-All the files of one partitioned table must have the same columns and types.
-If they do not, ``make-tables`` stops with an error naming the differing
-file. This usually means the subdirectory holds several different tables;
-move each table into its own directory directly inside the input directory
-and run ``make-tables`` again.
+All the files of one partitioned table must have the same column names
+and the same partition keys. If they do not, ``make-tables`` stops with an
+error naming the differing file. This usually means the subdirectory holds
+several different tables; move each table into its own directory directly
+inside the input directory and run ``make-tables`` again.
+
+Column types may differ between files (for example when one partition has no
+values for a column and so is stored with a different type). This is logged as
+a warning and the type from the first file is used. Differences in case only,
+such as ``int32`` and ``Int32``, are ignored.
 
 The synthetic data is written as one file per table (for example
 ``artwork.parquet``) by ``dump-data --parquet``; the partitioning of the

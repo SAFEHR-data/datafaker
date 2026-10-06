@@ -104,51 +104,55 @@ def _partition_keys(table: ParquetTable, path: Path) -> list[str]:
     return keys
 
 
-def _describe_difference(expected: Mapping[str, Any], actual: Mapping[str, Any]) -> str:
-    """Describe how the columns of ``actual`` differ from ``expected``."""
+def _describe_column_difference(
+    expected: Mapping[str, Any], actual: Mapping[str, Any]
+) -> str:
+    """Describe how the column names of ``actual`` differ from ``expected``."""
     problems = []
     missing = [c for c in expected if c not in actual]
     extra = [c for c in actual if c not in expected]
-    changed = [
-        f"{c} ({expected[c]} vs {actual[c]})"
-        for c in expected
-        if c in actual and str(expected[c]) != str(actual[c])
-    ]
     if missing:
         problems.append(f"missing columns {missing}")
     if extra:
         problems.append(f"extra columns {extra}")
-    if changed:
-        problems.append(f"different types {changed}")
     return "; ".join(problems)
+
+
+def _type_name(dtype: Any) -> str:
+    """Get a name for a dtype that ignores case, so ``int32`` equals ``Int32``."""
+    return str(dtype).lower()
 
 
 def get_table_dtypes(table: ParquetTable) -> dict[str, Any]:
     """
     Get the columns and dtypes of a table, checking that its files agree.
 
-    All the files of a partitioned table must have the same columns with the
-    same types, and the same partition keys. Directories that contain
-    unrelated tables are rejected with an error message.
+    All the files of a partitioned table must have the same column names and
+    the same partition keys. Directories that contain unrelated tables are
+    rejected with an error message. Column types may differ between files
+    (for example when a partition has no values for a column); this is
+    reported as a warning and the type from the first file is used.
 
     :param table: The table to examine.
     :return: A dict of column names to dtypes. Partition keys are included.
-    :raises typer.Exit: If the files of a dataset do not all have the same schema.
+    :raises typer.Exit: If the files of a dataset do not all have the same columns.
     """
     first = table.files[0]
     dtypes = _file_dtypes(first)
     if not table.is_dataset:
         return dtypes
     keys = _partition_keys(table, first)
+    type_names: dict[str, set[str]] = {}
     for path in table.files[1:]:
-        problem = _describe_difference(dtypes, _file_dtypes(path))
+        file_dtypes = _file_dtypes(path)
+        problem = _describe_column_difference(dtypes, file_dtypes)
         if not problem and _partition_keys(table, path) != keys:
             problem = "different partition directories"
         if problem:
             logger.error(
                 "Directory %s cannot be read as a single partitioned table: "
                 "%s differs from %s (%s). All the files in a partitioned "
-                "table must have the same columns and types. If the "
+                "table must have the same columns. If the "
                 "directories inside %s hold different tables, move each "
                 "table into its own directory directly inside the parquet "
                 "directory and run this command again.",
@@ -159,6 +163,19 @@ def get_table_dtypes(table: ParquetTable) -> dict[str, Any]:
                 table.root,
             )
             raise Exit(1)
+        for column, dtype in file_dtypes.items():
+            if _type_name(dtype) != _type_name(dtypes[column]):
+                names = type_names.setdefault(column, {_type_name(dtypes[column])})
+                names.add(_type_name(dtype))
+    for column, names in type_names.items():
+        logger.warning(
+            "Column %s.%s has different types in different files: %s. "
+            "Using the type from %s.",
+            table.name,
+            column,
+            sorted(names),
+            first,
+        )
     return {**dtypes, **{k: PARTITION_KEY_DTYPE for k in keys if k not in dtypes}}
 
 
@@ -319,7 +336,9 @@ _numpy_dtype_to_sql: dict[str, str | None] = {
 
 
 def _dtype_to_sql(dtype: Any) -> str | None:
-    """Convert a numpy datatype into a SQL type."""
+    """Convert a numpy or Pandas datatype into a SQL type."""
+    # Pandas nullable types such as ``Int32`` wrap a numpy dtype
+    dtype = getattr(dtype, "numpy_dtype", dtype)
     if isinstance(dtype, np.dtype):
         if dtype.shape != () or dtype.kind not in _numpy_dtype_to_sql:
             return None

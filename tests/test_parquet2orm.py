@@ -281,21 +281,56 @@ class PartitionedParquet2Orm(ParquetDirTestCase):
         self.assertIn("move each table into its own directory", message)
 
     @patch("datafaker.parquet2orm.logger")
-    def test_differing_types_are_rejected(self, mock_logger: MagicMock) -> None:
-        """Test the same column name with a different type is rejected."""
+    def test_differing_types_are_a_warning(self, mock_logger: MagicMock) -> None:
+        """Test the same column with a different type warns but is accepted."""
         self.write_files(
             {
                 "visit/yr=2022/p1.parquet": {"visit_id": [1]},
-                "visit/yr=2023/p1.parquet": {"visit_id": ["one"]},
+                "visit/yr=2023/p1.parquet": {"visit_id": [1.5]},
+                "visit/yr=2023/p2.parquet": {"visit_id": [2.5]},
             }
         )
-        with self.assertRaises(Exit):
-            get_parquet_orm(self.parquet_dir)
-        message = (
-            mock_logger.error.call_args.args[0] % mock_logger.error.call_args.args[1:]
+        orm = get_parquet_orm(self.parquet_dir)
+        assert orm is not None
+        self.assertEqual(orm["visit"]["columns"]["visit_id"]["type"], "INTEGER")
+        mock_logger.error.assert_not_called()
+        mock_logger.warning.assert_called_once()
+        args = mock_logger.warning.call_args.args
+        self.assertEqual(args[1:3], ("visit", "visit_id"))
+        self.assertEqual(args[3], ["float64", "int64"])
+
+    @patch("datafaker.parquet2orm.logger")
+    def test_int32_and_nullable_int32_are_the_same_type(
+        self, mock_logger: MagicMock
+    ) -> None:
+        """Test ``int32`` and ``Int32`` do not even warn."""
+        self.write_files(
+            {
+                "person/yr=2022/p1.parquet": {"age": [1]},
+                "person/yr=2023/p1.parquet": {"age": [2]},
+            }
         )
-        self.assertIn("different types", message)
-        self.assertIn("visit_id", message)
+        pd.DataFrame({"age": pd.array([1], dtype="int32")}).to_parquet(
+            self.parquet_dir / "person/yr=2022/p1.parquet"
+        )
+        pd.DataFrame({"age": pd.array([None, 2], dtype="Int32")}).to_parquet(
+            self.parquet_dir / "person/yr=2023/p1.parquet"
+        )
+        orm = get_parquet_orm(self.parquet_dir)
+        assert orm is not None
+        self.assertEqual(orm["person"]["columns"]["age"]["type"], "INTEGER")
+        for call in mock_logger.warning.call_args_list:
+            self.assertNotIn("different types", call.args[0])
+
+    def test_nullable_int_first_file_is_still_integer(self) -> None:
+        """Test a pandas ``Int32`` column is typed ``INTEGER``."""
+        self.write_files({"person/yr=2022/p1.parquet": {"age": [1]}})
+        pd.DataFrame({"age": pd.array([None, 2], dtype="Int32")}).to_parquet(
+            self.parquet_dir / "person/yr=2022/p1.parquet"
+        )
+        orm = get_parquet_orm(self.parquet_dir)
+        assert orm is not None
+        self.assertEqual(orm["person"]["columns"]["age"]["type"], "INTEGER")
 
     def test_differing_partition_keys_are_rejected(self) -> None:
         """Test files partitioned differently are rejected."""
