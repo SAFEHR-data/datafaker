@@ -209,7 +209,8 @@ class PartitionedParquet2Orm(ParquetDirTestCase):
         self.assertSetEqual(set(orm["visit"]["columns"].keys()), {"visit_id", "yr"})
 
     def test_files_and_directories_mix(self) -> None:
-        """Test a mixture of loose parquet files and parquet directories are read as separate tables. Checks empty directory are not treated as partitioned tables."""
+        """Test a mixture of loose parquet files and parquet dirs are read as separate tables.
+        Checks empty directory are not treated as partitioned tables."""
         self.write_files(
             {
                 "fruit.parquet": {"fruit_id": [1]},
