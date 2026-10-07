@@ -12,15 +12,7 @@ import yaml
 
 # pylint: disable=no-name-in-module
 from psycopg2.errors import UndefinedObject  # ty: ignore[unresolved-import]
-from sqlalchemy import (
-    Column,
-    Connection,
-    Engine,
-    ForeignKey,
-    create_engine,
-    event,
-    select,
-)
+from sqlalchemy import Connection, Engine, ForeignKey, create_engine, event, select
 from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.exc import (
     IntegrityError,
@@ -168,18 +160,29 @@ def create_db_engine(
         logger.error("DSN %s is malformed: %s", db_dsn, exc)
         raise Exit(1) from exc
 
-    settings = {}
+    settings: list[str] = []
+    dialect_name = get_sync_engine(engine).dialect.name
     if schema_name is not None:
-        if get_sync_engine(engine).dialect.name == "mssql":
-            engine = engine.execution_options(schema_translate_map={None: schema_name})
-        else:
-            settings["search_path"] = schema_name
+        match dialect_name:
+            case "mssql":
+                engine = engine.execution_options(
+                    schema_translate_map={None: schema_name}
+                )
+            case "snowflake":
+                settings.append(f"USE SCHEMA {schema_name};")
+            case _:
+                settings.append(f"SET search_path TO {schema_name};")
     if parquet_dir is not None:
-        joined = ",".join(_find_parquet_directories(parquet_dir))
-        # double up single quotes
-        dj = joined.replace("'", "''")
-        # enclose in single quotes
-        settings["file_search_path"] = f"'{dj}'"
+        match dialect_name:
+            case "duckdb":
+                joined = ",".join(_find_parquet_directories(parquet_dir))
+                # double up single quotes
+                dj = joined.replace("'", "''")
+                settings.append(f"SET file_search_path TO '{dj}';")
+            case _:
+                logger.error(
+                    "--parquet-dir cannot be used with %s, only duckdb.", dialect_name
+                )
 
     if settings:
         event_engine = get_sync_engine(engine)
@@ -220,11 +223,15 @@ def create_db_engine_dst(
     return create_db_engine(db_dsn, schema_name, use_asyncio)
 
 
-def get_metadata(engine: Engine, schema_name: Optional[str] = None) -> MetaData:
+def get_metadata(
+    engine: Engine,
+    schema_name: Optional[str],
+    views_to_tables: bool,
+) -> MetaData:
     """Get the MetaData object associated with the engine passed."""
     md = MetaData()
     try:
-        md.reflect(engine, schema=schema_name)
+        md.reflect(engine, schema=schema_name, views=views_to_tables)
     except OperationalError as exc:
         logger.error("Cannot connect to database: %s", exc)
         raise Exit(1) from exc
@@ -248,16 +255,14 @@ def _names_include_parquet(path: Path, file_names: Iterable[str]) -> bool:
     return False
 
 
-def set_db_settings(connection: DBAPIConnection, settings: Mapping[str, str]) -> None:
-    """Set the SEARCH_PATH for a PostgreSQL connection."""
+def set_db_settings(connection: DBAPIConnection, settings: list[str]) -> None:
+    """Run commands."""
     # https://docs.sqlalchemy.org/en/20/dialects/postgresql.html#remote-schema-table-introspection-and-postgresql-search-path
     existing_autocommit = connection.autocommit
     connection.autocommit = True
 
     cursor = connection.cursor()
-    # Parametrised queries don't work with asyncpg, hence the f-string.
-    sql = "".join(f"SET {k} TO {v};" for k, v in settings.items())
-    cursor.execute(sql)
+    cursor.execute("\n".join(settings))
     cursor.close()
 
     connection.autocommit = existing_autocommit
@@ -278,25 +283,6 @@ def get_orm_metadata(
         if ignore:
             metadata.remove(table)
     return metadata
-
-
-def get_fk_column_between(
-    from_: Table, to_: Table
-) -> tuple[Column, ForeignKey] | tuple[None, None]:
-    """
-    Get a foreign key between two tables.
-
-    :param from_: The table on which the foreign key should be defined.
-    :param to_: The table to which the foreign key should refer.
-    :return: A pair (column on from_, foreign key to to_) if such a key exists,
-     or (None, None) if not.
-    """
-    for c in from_.columns:
-        fk: ForeignKey
-        for fk in c.foreign_keys:
-            if fk.column.table == to_:
-                return (c, fk)
-    return (None, None)
 
 
 def fk_refers_to_ignored_table(fk: ForeignKey) -> bool:

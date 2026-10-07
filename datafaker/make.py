@@ -697,6 +697,7 @@ def _generate_vocabulary_table(
 def make_tables_file(
     db_dsn: str,
     schema_name: Optional[str],
+    views_to_tables: bool,
     parquet_dir: Optional[Path] = None,
     engine: Optional[Engine] = None,
 ) -> str:
@@ -704,7 +705,9 @@ def make_tables_file(
     if engine is None:
         engine = get_sync_engine(create_db_engine(db_dsn, schema_name=schema_name))
 
-    metadata = get_metadata(engine, schema_name=schema_name)
+    metadata = get_metadata(
+        engine, schema_name=schema_name, views_to_tables=views_to_tables
+    )
     meta_dict = metadata_to_dict(metadata, schema_name, engine, parquet_dir)
 
     if parquet_dir is not None:

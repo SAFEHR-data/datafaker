@@ -51,8 +51,6 @@ PostgreSQL uses `SERIAL` for autoincrement columns. The code already strips `SER
 
 [datafaker/utils.py:297-309](../../datafaker/utils.py) toggles `connection.autocommit` directly on the DBAPI connection before executing `SET` commands. The availability and behaviour of `autocommit` differs between `psycopg2`, `pyodbc`, and `pymssql`, so this would need testing or an abstraction per driver.
 
-**Deferred.** `set_db_settings` is only ever called for DuckDB connections (`parquet_dir` source feature); MS-SQL connections never reach it. Fixing the `autocommit` toggle in isolation would also leave the `SET {k} TO {v}` SQL syntax broken for MS-SQL (which requires `SET {k} {v}`). Both issues should be addressed together if `set_db_settings` is ever extended to MS-SQL.
-
 ## Setup
 
 ### 1. Install the MS-SQL Python extras

@@ -211,6 +211,96 @@ def compile_stddev_mssql(element: StdDev, compiler: Any, **kw: Any) -> str:
     return f"STDEV({e})"
 
 
+class WordCount(ColumnElement[int]):  # pylint: disable=too-many-ancestors
+    """Count whitespace-separated words in a text expression."""
+
+    expr: ColumnElement[str]
+
+    _traverse_internals = [
+        ("expr", InternalTraversal.dp_clauseelement),
+    ]
+
+    def __init__(self, expr: ColumnElement[str]):
+        """Get a clause for the number of whitespace-separated words in ``expr``."""
+        self.expr = expr
+
+    __sa_operate__ = ColumnElement.operate
+
+
+@compiles(WordCount)
+def compile_word_count(element: WordCount, compiler: Any, **kw: Any) -> str:
+    """Exact word count via regexp_split_to_array (Postgres/DuckDB)."""
+    e = compiler.process(element.expr, **kw)
+    return f"array_length(regexp_split_to_array(trim({e}), '\\s+'), 1)"
+
+
+@compiles(WordCount, "mssql")
+def compile_word_count_mssql(element: WordCount, compiler: Any, **kw: Any) -> str:
+    """MSSQL equivalent: approximate word count via space-counting.
+
+    No regex/array-split support, so approximate word count as (space
+    count in the trimmed text) + 1. This overcounts by one per run of 2+
+    consecutive spaces relative to the exact regex-based count used on
+    Postgres/DuckDB, but there is no T-SQL primitive for a real
+    whitespace-run split.
+    """
+    e = compiler.process(element.expr, **kw)
+    trimmed = f"TRIM({e})"
+    return (
+        f"(CASE WHEN LEN({trimmed}) = 0 THEN 0 ELSE "
+        f"LEN({trimmed}) - LEN(REPLACE({trimmed}, ' ', '')) + 1 END)"
+    )
+
+
+class SentenceCount(ColumnElement[int]):  # pylint: disable=too-many-ancestors
+    """Count '.'/'!'/'?'-delimited sentences in a text expression."""
+
+    expr: ColumnElement[str]
+
+    _traverse_internals = [
+        ("expr", InternalTraversal.dp_clauseelement),
+    ]
+
+    def __init__(self, expr: ColumnElement[str]):
+        """Get a clause for the number of sentences in ``expr``."""
+        self.expr = expr
+
+    __sa_operate__ = ColumnElement.operate
+
+
+@compiles(SentenceCount)
+def compile_sentence_count(element: SentenceCount, compiler: Any, **kw: Any) -> str:
+    """Exact sentence count via regexp_split_to_array (Postgres/DuckDB)."""
+    e = compiler.process(element.expr, **kw)
+    return (
+        f"array_length(regexp_split_to_array(trim({e}, ' .!?\\t\\n\\r'), '[.!?]+'), 1)"
+    )
+
+
+@compiles(SentenceCount, "mssql")
+def compile_sentence_count_mssql(
+    element: SentenceCount, compiler: Any, **kw: Any
+) -> str:
+    """MSSQL equivalent: approximate sentence count via delimiter-counting.
+
+    No regex support, so approximate sentence count by normalizing '!'/'?'
+    to '.' and counting '.' characters, after trimming whitespace and
+    sentence-enders from both ends (so a leading/trailing sentence-ender
+    doesn't add a spurious segment, matching the Postgres/DuckDB
+    behaviour). This overcounts by one per run of 2+ consecutive delimiter
+    characters (e.g. "Wow!!") relative to the exact regex-based count, but
+    there is no T-SQL primitive for regex-run splitting.
+    """
+    e = compiler.process(element.expr, **kw)
+    trim_chars = "' .!?' + CHAR(9) + CHAR(10) + CHAR(13)"
+    trimmed = f"TRIM({trim_chars} FROM {e})"
+    normalized = f"REPLACE(REPLACE({trimmed}, '!', '.'), '?', '.')"
+    return (
+        f"(CASE WHEN LEN({trimmed}) = 0 THEN 0 ELSE "
+        f"LEN({normalized}) - LEN(REPLACE({normalized}, '.', '')) + 1 END)"
+    )
+
+
 class IsNull(ColumnElement[bool]):  # pylint: disable=too-many-ancestors
     """Represent IS NULL as an expression."""
 

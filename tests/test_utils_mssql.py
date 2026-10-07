@@ -107,8 +107,9 @@ class TestSchemaTranslateMap(DatafakerTestCase):
             if len(calls[0].args) > 1
             else calls[0].kwargs.get("settings", {})
         )
-        self.assertIn("file_search_path", settings_passed)
-        self.assertEqual(settings_passed["file_search_path"], f"'{parq_dir}'")
+        all_settings = "\n".join(settings_passed)
+        self.assertIn("file_search_path", all_settings)
+        self.assertIn(f"SET file_search_path TO '{parq_dir}';", all_settings)
 
     def test_mssql_dsn_schema_sets_translate_map(self) -> None:
         """schema_translate_map is set even for an MS-SQL DSN (engine creation, no connect)."""
@@ -144,7 +145,7 @@ class TestGetMetadataSchema(unittest.TestCase):
             mock_meta_data.return_value = mock_md
             mock_md.reflect.return_value = None
 
-            get_metadata(mock_engine, schema_name="myschema")
+            get_metadata(mock_engine, schema_name="myschema", views_to_tables=False)
 
             mock_md.reflect.assert_called_once_with(mock_engine, schema="myschema")
 
@@ -158,6 +159,6 @@ class TestGetMetadataSchema(unittest.TestCase):
             mock_meta_data.return_value = mock_md
             mock_md.reflect.return_value = None
 
-            get_metadata(mock_engine)
+            get_metadata(mock_engine, schema_name=None, views_to_tables=False)
 
             mock_md.reflect.assert_called_once_with(mock_engine, schema=None)

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import parsy
+import snowflake.sqlalchemy.custom_types as snowflake_types
 from sqlalchemy import Column, Dialect, Engine, ForeignKey, MetaData, Table
 from sqlalchemy.dialects import mssql, oracle, postgresql
 from sqlalchemy.sql import schema, sqltypes
@@ -204,6 +205,12 @@ SIMPLE_TYPE_PARSER = parsy.alt(
     string_type(sqltypes.VARCHAR),
     string_type(sqltypes.NVARCHAR),
     string_type(sqltypes.TEXT),
+    parsy.string("TIMESTAMP_NTZ").result(snowflake_types.TIMESTAMP_NTZ),
+    parsy.string("TIMESTAMPNTZ").result(snowflake_types.TIMESTAMP_NTZ),
+    parsy.string("TIMESTAMP_LTZ").result(snowflake_types.TIMESTAMP_LTZ),
+    parsy.string("TIMESTAMPLTZ").result(snowflake_types.TIMESTAMP_LTZ),
+    parsy.string("TIMESTAMP_TZ").result(snowflake_types.TIMESTAMP_TZ),
+    parsy.string("TIMESTAMPTZ").result(snowflake_types.TIMESTAMP_TZ),
     time_type(sqltypes.TIMESTAMP, postgresql.types.TIMESTAMP),
     time_type(sqltypes.TIME, postgresql.types.TIME),
 )

@@ -40,6 +40,7 @@ class RstTests(TestCase):
         # Ignore errors if they contain any of these strings
         allowed_errors = [
             'No role entry for "ref" in module',
+            'No role entry for "doc" in module',
             'No directive entry for "toctree"',
             'No directive entry for "automodule"',
             'No directive entry for "literalinclude"',
@@ -51,6 +52,10 @@ class RstTests(TestCase):
             'Hyperlink target "page-quickstart" is not referenced.',
             'Hyperlink target "page-installation" is not referenced.',
             'Hyperlink target "story-generators" is not referenced.',
+            'Hyperlink target "mimesis-string-list" is not referenced',
+            'Hyperlink target "increment-proposer" is not referenced',
+            'Hyperlink target "evaluating-and-ranking-proposals" is not referenced',
+            'Hyperlink target "statistical-fidelity-pipelines" is not referenced',
         ]
         filtered_errors = [
             file_error
