@@ -209,16 +209,15 @@ class PartitionedParquet2Orm(ParquetDirTestCase):
         self.assertSetEqual(set(orm["visit"]["columns"].keys()), {"visit_id", "yr"})
 
     def test_files_and_directories_mix(self) -> None:
-        """Test loose files are tables and directories are tables."""
+        """Test a mixture of loose parquet files and parquet directories are read as separate tables. Checks empty directory are not treated as partitioned tables."""
         self.write_files(
             {
                 "fruit.parquet": {"fruit_id": [1]},
                 "visit/yr=2023/p1.parquet": {"visit_id": [1]},
-                "empty/readme.txt": {},
             }
         )
-        (self.parquet_dir / "empty" / "readme.txt").unlink()
-        (self.parquet_dir / "empty").rmdir()
+        (self.parquet_dir / "empty").mkdir()
+
         orm = get_parquet_orm(self.parquet_dir)
         assert orm is not None
         self.assertSetEqual(set(orm.keys()), {"fruit.parquet", "visit"})
@@ -345,10 +344,10 @@ class PartitionedParquet2Orm(ParquetDirTestCase):
 
 
 class PartitionedParquetEngine(TestCase):
-    """Tests that DuckDB can query partitioned parquet directories."""
+    """Integration tests for querying Parquet data through the parquet_dir option."""
 
     def setUp(self) -> None:
-        """Make a partitioned dataset and a loose file."""
+        """Create partitioned and loose Parquet data for parquet_dir integration tests."""
         super().setUp()
         self.parquet_dir = Path(tempfile.mkdtemp(prefix="parq"))
         self.addCleanup(shutil.rmtree, self.parquet_dir)
@@ -393,9 +392,7 @@ class PartitionedParquetEngine(TestCase):
     def test_parquet_dir_may_be_a_string(self) -> None:
         """Test the directory read back from ``orm.yaml`` as text still works."""
         engine = get_sync_engine(
-            create_db_engine(
-                "duckdb:///:memory:", parquet_dir=str(self.parquet_dir)
-            )
+            create_db_engine("duckdb:///:memory:", parquet_dir=str(self.parquet_dir))
         )
         with engine.connect() as conn:
             count = conn.execute(text('SELECT count(*) FROM "visit"')).scalar()
