@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Any, Sequence
+from typing import Sequence
 
 from datafaker.evaluators.column_evaluator import ProposalEvaluation
 from datafaker.evaluators.evaluation_profile import EvaluationProfile
 from datafaker.proposers.choice import ChoiceProposer
+from datafaker.theme import Theme
 
 # Column-name keywords mapped to substrings of the generator's dotted name
 # (e.g. "generic.person.first_name") that they hint at. Column naming
@@ -112,6 +113,7 @@ class ProposalRankingDisplay:
     fronts: list[int]
     weak_recommendation_warning: str | None = None
     no_uniqueness_guarantee: bool = False
+    type_incompatible: list[bool] = field(default_factory=list)
 
 
 # pylint: disable=too-many-instance-attributes
@@ -131,6 +133,7 @@ class ProposalRanking:
     scores: list[float] = field(default_factory=list)
     weak_recommendation_warning: str | None = None
     no_uniqueness_guarantee: bool = False
+    type_incompatible: list[bool] = field(default_factory=list)
 
 
 def normalize_list(vals: Sequence[float]) -> list[float]:
@@ -235,6 +238,21 @@ def _penalty_for_candidate(
     observed-unique column (e.g. free-text descriptions that happen to all
     differ) doesn't have a correctness reason to punish a small,
     repetitive-but-otherwise-plausible pool as hard as a real key would.
+
+    :param result: the candidate's own evaluation, supplying its
+        ``copy_fraction`` (resample penalty) and ``synthetic_uniqueness``
+        (self-duplication penalty).
+    :param real_uniqueness: fraction of the real column's sampled values
+        that are distinct - scales how hard both penalties bite.
+    :param apply_to_every_proposer: whether the resample penalty applies to
+        every candidate (numeric columns) rather than just ``ChoiceProposer``
+        and its variants.
+    :param needs_uniqueness: whether the column actually needs unique values
+        (a PRIMARY KEY/UNIQUE constraint) - if not, the self-duplication
+        penalty is floored at ``SELF_DUPLICATION_PENALTY_FLOOR`` instead of
+        reaching full strength.
+    :return: the combined penalty multiplier (lower is worse) to apply to
+        the candidate's score.
     """
     resample_penalty = 1.0
     if isinstance(result.proposer, ChoiceProposer) or apply_to_every_proposer:
@@ -250,21 +268,59 @@ def _penalty_for_candidate(
 
 
 # pylint: disable=too-many-arguments too-many-positional-arguments
-# pylint: disable=too-many-locals too-many-statements
+# pylint: disable=too-many-locals too-many-statements too-many-branches
 def rank_proposals(
     results: Sequence[ProposalEvaluation],
     profile: EvaluationProfile | None,
-    theme: Any | None = None,
+    theme: Theme | None = None,
     column_name: str | None = None,
     real_uniqueness: float = 0.0,
     is_numeric_column: bool = False,
     is_primary_key: bool = False,
     is_unique_constrained: bool = False,
+    type_incompatible: Sequence[bool] | None = None,
 ) -> ProposalRanking:
     """Rank proposals by fidelity, novelty and diversity using Pareto fronts.
 
     The ranking logic is deliberately separated from the interactive shell so it can
     be tested and reused independently of presentation concerns.
+
+    :param results: one evaluation per candidate proposer, already scored
+        against the real column by ``ColumnEvaluator``.
+    :param profile: the column's evaluation profile - selects the
+        fidelity/novelty/diversity weighting (see ``profile_weights``).
+    :param theme: the active display theme, used only to colour-highlight
+        the recommended row in the returned table; ranking itself is
+        theme-independent.
+    :param column_name: the column's own name, used only for the keyword
+        boost (see ``KEYWORD_GENERATOR_HINTS``) - ``None`` disables it.
+    :param real_uniqueness: fraction of the real column's sampled values
+        that are distinct. Scales how hard the resample/self-duplication
+        penalties bite (see ``_penalty_for_candidate``): a low-uniqueness
+        column (a gender, a status) is expected to have repeats, so
+        reproducing real values there is harmless; a near-unique one (an
+        email, a real ID) is not.
+    :param is_numeric_column: whether the resample penalty applies to every
+        candidate (numeric columns have no shared real-world vocabulary
+        that could explain a coincidental match) rather than just
+        choice-style resamplers.
+    :param is_primary_key: whether the column is a primary key - needs
+        guaranteed-unique values, so a candidate with ``synthetic_uniqueness``
+        too low to ever satisfy that is excluded from the recommendation
+        (see ``no_uniqueness_guarantee``), and a candidate that structurally
+        guarantees freshness takes precedence over the generic score (see
+        ``Proposer.guarantees_fresh_uniqueness``).
+    :param is_unique_constrained: as ``is_primary_key``, for a UNIQUE
+        constraint/index that isn't itself the primary key.
+    :param type_incompatible: parallel to ``results`` - True for a candidate
+        whose output type doesn't actually match the column (e.g. a
+        continuous-float proposer for a genuinely Integer, IDENTIFIER-profile
+        column). Such a candidate is never picked as the recommendation, even
+        if its raw score would otherwise win - the fidelity/novelty/diversity
+        metrics have no way to penalize a type mismatch themselves, since
+        they only ever compare numeric shape, not validity for the column.
+    :return: the ranked candidates, the recommended index/reason, and the
+        formatted table rows (see ``ProposalRanking``).
     """
     if not results:
         return ProposalRanking(None, None, [], profile, (0.5, 0.25, 0.25))
@@ -276,13 +332,11 @@ def rank_proposals(
     diversities = [result.diversity for result in results]
 
     norm_scores = normalize_list(scores)
-    norm_nov = normalize_list(novelties)
-    norm_div = normalize_list(diversities)
+    novelty_scores = normalize_list(novelties)
+    diversity_scores = normalize_list(diversities)
 
     # fidelity (higher-is-better) is inverted normalized overall_score
     fidelity_scores = [1.0 - v for v in norm_scores]
-    novelty_scores = norm_nov
-    diversity_scores = norm_div
 
     # build points for Pareto (higher-is-better in all dims)
     points = list(zip(fidelity_scores, novelty_scores, diversity_scores))
@@ -377,6 +431,12 @@ def rank_proposals(
         )
     )
 
+    type_incompatible_flags = (
+        list(type_incompatible)
+        if type_incompatible is not None
+        else [False] * len(results)
+    )
+
     # pick recommended index: highest combined score across all candidates,
     # tiebreaker by crowding distance. This used to restrict the pick to
     # Pareto front 1, but the keyword boost and resample penalty above are
@@ -388,17 +448,56 @@ def rank_proposals(
     # Front/crowding are still computed and shown per row for transparency
     # (which candidates are non-dominated trade-off alternatives vs.
     # objectively worse), just no longer used to gate the recommendation.
-    all_idxs = range(len(combined_scores))
-    best_score = max(combined_scores[idx] for idx in all_idxs)
-    candidates = [idx for idx in all_idxs if combined_scores[idx] == best_score]
+    #
+    # Two further restrictions narrow the *eligible* pool before that
+    # highest-score search, both because fidelity/novelty/diversity have no
+    # way to see either distinction themselves:
+    #
+    # - A type-incompatible candidate (see the ``type_incompatible`` param)
+    #   is never eligible to win, however high its score - a continuous-
+    #   float proposer fit directly to the real column's own numeric range
+    #   can score almost perfectly on an IDENTIFIER profile while still
+    #   being invalid to insert into an Integer column.
+    # - For a column that needs guaranteed-unique values (PK/UNIQUE), a
+    #   candidate that structurally guarantees freshness (see
+    #   ``Proposer.guarantees_fresh_uniqueness``, e.g. a sequence
+    #   continuing past the observed max) takes precedence over the
+    #   generic score - the fidelity metric can only ever read "deliberately
+    #   diverges from the observed range" as a poor fit, never as the
+    #   correct, intended behavior of this kind of proposer.
+    all_idxs = list(range(len(combined_scores)))
+    valid_type_idxs = [
+        idx for idx in all_idxs if not type_incompatible_flags[idx]
+    ] or all_idxs
+    guarantee_idxs = (
+        [
+            idx
+            for idx in valid_type_idxs
+            if results[idx].proposer.guarantees_fresh_uniqueness()
+        ]
+        if needs_uniqueness
+        else []
+    )
+    eligible_idxs = guarantee_idxs or valid_type_idxs
+
+    best_score = max(combined_scores[idx] for idx in eligible_idxs)
+    candidates = [idx for idx in eligible_idxs if combined_scores[idx] == best_score]
     if len(candidates) == 1:
         recommended_index = candidates[0]
-        recommended_reason = "best combined score"
+        recommended_reason = (
+            "guarantees fresh, unique values"
+            if guarantee_idxs
+            else "best combined score"
+        )
     else:
         best_crowding = max(crowding[idx] for idx in candidates)
         selected = [idx for idx in candidates if crowding[idx] == best_crowding]
         recommended_index = selected[0]
-        recommended_reason = "tiebreak by crowding distance"
+        recommended_reason = (
+            "guarantees fresh, unique values; tiebreak by crowding distance"
+            if guarantee_idxs
+            else "tiebreak by crowding distance"
+        )
 
     # Flag the case where the candidates that actually fit the real data
     # best were suppressed by the resample penalty, leaving something that
@@ -450,7 +549,7 @@ def rank_proposals(
                 "a fallback, not a confident pick."
             )
 
-    # prepare rows with Front and Score, mark Pareto front 1 with coloring.
+    # prepare rows with Front and Score, marking the recommended row.
     # Crowding distance is still computed above (used as a tiebreak when
     # scores are exactly equal) but isn't shown - it's an NSGA-II internal
     # detail (how isolated a candidate is from its front-mates in objective
@@ -460,24 +559,35 @@ def rank_proposals(
     for i, result in enumerate(results, start=1):
         idx = i - 1
         front = front_of[idx]
+        is_recommended = idx == recommended_index
+        # '*' marks the recommended row even with theming turned off, where
+        # the colour highlight below has no visible effect at all.
+        index_cell = f"*{i}" if is_recommended else str(i)
+        # Profile and (real) Uniqueness describe the source column, not this
+        # candidate - constant across every row, and already shown once in
+        # profile_summary above the table, so they're left out here rather
+        # than repeated on every line.
         cells = [
-            str(i),
+            index_cell,
             result.proposer.name(),
-            profile.name if profile is not None else "UNKNOWN",
             str(front),
             f"{combined_scores[idx]:.6f}",
             keyword_matches[idx] or "",
             f"{fidelity_scores[idx]:.6f}",
             f"{novelty_scores[idx]:.6f}",
             f"{diversity_scores[idx]:.6f}",
-            f"{real_uniqueness:.3f}",
             f"{result.copy_fraction:.3f}",
             f"{result.synthetic_uniqueness:.3f}",
             f"{penalty_multipliers[idx]:.3f}",
         ]
-        # color entire row for Pareto front 1
-        if front == 1 and theme is not None:
-            cells = [f"{theme.function}{cell}{theme.reset}" for cell in cells]
+        # Highlight the recommended row distinctly from the rest of its
+        # Pareto front 1 "near miss" companions (non-dominated alternatives
+        # worth a second look), rather than one colour for the whole front.
+        if theme is not None:
+            if is_recommended:
+                cells = [f"{theme.recommend}{cell}{theme.reset}" for cell in cells]
+            elif front == 1:
+                cells = [f"{theme.near_miss}{cell}{theme.reset}" for cell in cells]
         # keep original types compatible with print_table (it will cast to list)
         rows.append(tuple(cells))
 
@@ -494,6 +604,7 @@ def rank_proposals(
         scores=list(combined_scores),
         weak_recommendation_warning=weak_recommendation_warning,
         no_uniqueness_guarantee=no_uniqueness_guarantee,
+        type_incompatible=type_incompatible_flags,
     )
 
 
@@ -528,7 +639,9 @@ def format_ranking_display(
     profile_summary = (
         f"Profile: {profile.name if profile is not None else 'UNKNOWN'}  |  "
         f"Real uniqueness: {ranking.real_uniqueness:.3f}  |  "
-        "Pareto front 1 rows are highlighted\n"
+        "'*' marks the recommended row; it and other Pareto front 1 rows"
+        " (non-dominated alternatives) are colour-highlighted, distinctly"
+        " from each other, if your theme supports it\n"
         f"Score = clamp( ({fid_w:.2f}*Fidelity + {nov_w:.2f}*Novelty"
         f" + {div_w:.2f}*Diversity + Keyword) "
         "x Penalty ,  0, 1 )\n"
@@ -546,4 +659,5 @@ def format_ranking_display(
         fronts=ranking.fronts,
         weak_recommendation_warning=ranking.weak_recommendation_warning,
         no_uniqueness_guarantee=ranking.no_uniqueness_guarantee,
+        type_incompatible=ranking.type_incompatible,
     )

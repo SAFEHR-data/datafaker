@@ -40,7 +40,7 @@ the two situations where you need more than the recommendation:
    * - A near-unique value that must look real but not *be* real, e.g. an
        email address or free-text ID
      - Whichever ``generic.*`` value proposer ``propose`` recommends
-     - ``propose`` applies an extra privacy penalty here: a candidate that
+     - ``propose`` applies an extra privacy safeguard here: a candidate that
        reproduces real values verbatim is scored down in proportion to how
        unique the real column is, so the recommendation already accounts for
        leak risk. See :ref:`evaluating-and-ranking-proposals`.

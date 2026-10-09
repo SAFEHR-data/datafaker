@@ -31,12 +31,18 @@ class AnalyseColumnTests(DatafakerTestCase):
         self.assertEqual(1, stats.unique_count)
 
     def test_avg_length_and_ratios(self) -> None:
-        """avg_length, space_ratio, digit_ratio and punctuation_ratio are computed."""
-        stats = analyse_column(["ab 1!"])
-        self.assertEqual(5, stats.avg_length)
-        self.assertAlmostEqual(1 / 5, stats.space_ratio)
-        self.assertAlmostEqual(1 / 5, stats.digit_ratio)
-        self.assertAlmostEqual(1 / 5, stats.punctuation_ratio)
+        """avg_length, space_ratio, digit_ratio and punctuation_ratio are computed.
+
+        Uses a different count of each (2 spaces, 1 digit, 3 punctuation out
+        of 7 characters) so a ratio written to the wrong attribute would
+        actually fail the corresponding assertion, rather than all three
+        happening to share one value.
+        """
+        stats = analyse_column(["a  1!!!"])
+        self.assertEqual(7, stats.avg_length)
+        self.assertAlmostEqual(2 / 7, stats.space_ratio)
+        self.assertAlmostEqual(1 / 7, stats.digit_ratio)
+        self.assertAlmostEqual(3 / 7, stats.punctuation_ratio)
 
     def test_empty_input_does_not_divide_by_zero(self) -> None:
         """An empty (or all-None) column yields all-zero stats, not an error."""
@@ -180,14 +186,14 @@ class LooksLikeEmailTests(DatafakerTestCase):
 class ProposalEvaluationTests(DatafakerTestCase):
     """Test case for the ProposalEvaluation dataclass's display string."""
 
-    def test_str_includes_key_metrics_and_pipeline_scores(self) -> None:
-        """The string form surfaces the headline scores and per-pipeline detail."""
+    def test_str_includes_key_metrics_and_criterion_scores(self) -> None:
+        """The string form surfaces the headline scores and per-criterion detail."""
         evaluation = ProposalEvaluation(
             proposer=ConstantProposer("x"),
             novelty=0.5,
             diversity=0.25,
             overall_score=0.125,
-            pipeline_scores={"length": 0.1, "words": 0.2},
+            criterion_scores={"length": 0.1, "words": 0.2},
             copy_fraction=0.0,
             synthetic_uniqueness=1.0,
         )
@@ -204,7 +210,7 @@ class ColumnEvaluatorIntegrationTests(DatafakerTestCase):
     """End-to-end test of ColumnEvaluator against a real (DuckDB) table."""
 
     def test_evaluate_a_constant_proposer_against_a_categorical_column(self) -> None:
-        """setup() profiles the column and evaluate() scores a real proposer."""
+        """Construction profiles the column; evaluate() scores a real proposer."""
         engine = create_engine("duckdb:///:memory:")
         metadata = MetaData()
         table = Table(
@@ -220,8 +226,7 @@ class ColumnEvaluatorIntegrationTests(DatafakerTestCase):
                 [{"id": i, "status": ["active", "inactive"][i % 2]} for i in range(20)],
             )
 
-        evaluator = ColumnEvaluator()
-        evaluator.setup([table.c.status], engine)
+        evaluator = ColumnEvaluator([table.c.status], engine)
         self.assertEqual(EvaluationProfile.CATEGORICAL, evaluator.profile)
 
         result = evaluator.evaluate(ConstantProposer("active"))
@@ -230,4 +235,4 @@ class ColumnEvaluatorIntegrationTests(DatafakerTestCase):
         # A constant proposer emits the same value every time: only one
         # distinct value out of the whole synthetic sample.
         self.assertLess(result.synthetic_uniqueness, 0.01)
-        self.assertIn("category", result.pipeline_scores)
+        self.assertIn("category", result.criterion_scores)

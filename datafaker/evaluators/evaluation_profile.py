@@ -10,7 +10,7 @@ from enum import Enum, auto
 
 
 class EvaluationProfile(Enum):
-    """The kind of value a column holds, used to pick its fidelity pipelines."""
+    """The kind of value a column holds, used to pick its fidelity criteria."""
 
     SHORT_TEXT = auto()
     CATEGORICAL = auto()

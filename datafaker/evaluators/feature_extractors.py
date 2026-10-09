@@ -1,18 +1,22 @@
 """Extract a comparable feature from a column's real/synthetic values."""
 
 import re
+import unicodedata
 from abc import ABC, abstractmethod
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import String, func, literal
+from sqlalchemy import Integer, String, func, literal
 
 from datafaker.dialects import SecondsDifference, SentenceCount, WordCount
 
 TOKEN = re.compile(r"\w+")
 
+_EPOCH = datetime(1970, 1, 1)
+_EPOCH_DATE = date(1970, 1, 1)
 
-def _coerce_datetime(value):
+
+def _coerce_datetime(value: Any) -> date | datetime | None:
     """
     Best-effort coercion of a value into something with .year/.month/etc.
 
@@ -24,6 +28,10 @@ def _coerce_datetime(value):
     date" and drop it entirely, rather than raising a visible error -
     corrupting the resulting distribution for one candidate while giving no
     indication anything went wrong.
+
+    :return: ``value`` unchanged if it already looks date-like, the parsed
+        ``datetime`` if ``value`` is an ISO-format string, or ``None`` if
+        neither applies.
     """
     if hasattr(value, "year"):
         return value
@@ -230,6 +238,19 @@ class SuffixExtractor(FeatureExtractor):
 VOWELS = set("aeiou")
 
 
+def _is_vowel(ch: str) -> bool:
+    """Whether ``ch`` is a vowel, treating an accented vowel as its base letter.
+
+    Unicode NFKD-decomposes a precomposed accented character (e.g. "é") into
+    its base letter plus a combining accent mark ("e" + U+0301); taking the
+    first character of that decomposition recovers the base letter. Without
+    this, every accented vowel in non-English real data (common in person
+    names) would be miscounted as a consonant, skewing the real-side
+    distribution this feature is evaluated against.
+    """
+    return unicodedata.normalize("NFKD", ch)[0] in VOWELS
+
+
 class VowelConsonantPatternExtractor(FeatureExtractor):
     """Extract a string value's vowel/consonant pattern (e.g. "CVCV")."""
 
@@ -244,7 +265,7 @@ class VowelConsonantPatternExtractor(FeatureExtractor):
             if not ch.isalpha():
                 continue
 
-            pattern.append("V" if ch in VOWELS else "C")
+            pattern.append("V" if _is_vowel(ch) else "C")
 
         if pattern:
             yield "".join(pattern)
@@ -267,9 +288,6 @@ class TimestampExtractor(FeatureExtractor):
     a single joint measure is a fairer, simpler fidelity signal.
     """
 
-    _EPOCH = datetime(1970, 1, 1)
-    _EPOCH_DATE = date(1970, 1, 1)
-
     def extract(self, value):
         """Yield the value's days-since-epoch, as a single continuous float."""
         value = _coerce_datetime(value)
@@ -279,14 +297,14 @@ class TimestampExtractor(FeatureExtractor):
             value = datetime(value.year, value.month, value.day)
         if getattr(value, "tzinfo", None) is not None:
             value = value.replace(tzinfo=None)
-        yield (value - self._EPOCH).total_seconds() / 86400.0
+        yield (value - _EPOCH).total_seconds() / 86400.0
 
     def expression(self, column):
         """Build the SQL expression for the column's days-since-epoch."""
         # func.extract("epoch", ...) has no MSSQL equivalent (DATEPART has no
         # "epoch" field); SecondsDifference already solves exactly this via a
         # dialect-specific DATEDIFF compilation on MSSQL.
-        epoch = literal(self._EPOCH_DATE, type_=column.type)
+        epoch = literal(_EPOCH_DATE, type_=column.type)
         return SecondsDifference(column, epoch) / 86400.0
 
 
@@ -306,8 +324,23 @@ class WeekdayExtractor(FeatureExtractor):
         yield value.weekday()
 
     def expression(self, column):
-        """Build the SQL expression for the column's day of the week."""
-        return func.extract("dow", column)  # pylint: disable=not-callable
+        """Build the SQL expression for the column's day of the week (Monday=0).
+
+        Deliberately not ``func.extract("dow", column)``/``DATEPART(weekday,
+        ...)``: Postgres' DOW (Sunday=0), MSSQL's DATEPART(weekday) (session-
+        configurable via ``DATEFIRST``, default Sunday=1) and Python's
+        ``date.weekday()`` (Monday=0) all disagree with each other, which
+        would silently compare mismatched category labels between the real
+        (SQL-computed) and synthetic (Python-computed) sides here - a
+        generator that reproduces the real day-of-week distribution exactly
+        would still score as a total mismatch. floor()/modulo arithmetic on
+        the same days-since-epoch value `extract()` uses is portable across
+        every dialect and trivially kept in sync with Python's convention:
+        1970-01-01 (epoch) was a Thursday, i.e. weekday()==3, hence +3 below.
+        """
+        epoch = literal(_EPOCH_DATE, type_=column.type)
+        days_since_epoch = func.floor(SecondsDifference(column, epoch) / 86400.0)
+        return (days_since_epoch.cast(Integer) + 3) % 7
 
 
 class EmailLocalPartExtractor(FeatureExtractor):

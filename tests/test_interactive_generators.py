@@ -22,12 +22,17 @@ class MockGeneratorCmd(GeneratorCmd, TestDbCmdMixin):
 
     def get_proposals(self) -> dict[str, tuple[int, str, list[str]]]:
         """
-        Returns a dict of generator name to a tuple of (index, fit_string, [list,of,samples])
+        Returns a dict of generator name to a tuple of (index, '', [list,of,samples]).
+
+        The middle element is unused: it used to carry the old per-proposer
+        fit score, but 'propose' no longer prints that separate (now
+        removed) list, only the ranked table (``RANKED_SAMPLE_TEXT``), which
+        has no equivalent per-candidate fit figure.
         """
         return {
-            kw["name"]: (kw["index"], kw["fit"], kw["sample"].split("; "))
+            kw["name"]: (kw["index"], "", kw["sample"].split("; "))
             for (s, _, kw) in self.messages
-            if s == self.PROPOSE_GENERATOR_SAMPLE_TEXT
+            if s == self.RANKED_SAMPLE_TEXT
         }
 
     def get_roles_from_columns(self, column: str) -> set[str]:
@@ -126,7 +131,10 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             column = "name"
             generator = "person.first_name"
             gc.do_next(f"{table}.{column}")
-            gc.do_propose("")
+            # Picking a specific generator by name, not necessarily the
+            # recommendation - 'all' guarantees it's listed regardless of
+            # Pareto front.
+            gc.do_propose("all")
             proposals = gc.get_proposals()
             gc.do_set(str(proposals[f"generic.{generator}"][0]))
             gc.do_quit("")
@@ -203,7 +211,10 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             column = "frequency"
             generator = "dist_gen.choice"
             gc.do_next(f"{table}.{column}")
-            gc.do_propose("")
+            # Picking a specific generator by name, not necessarily the
+            # recommendation - 'all' guarantees it's listed regardless of
+            # Pareto front.
+            gc.do_propose("all")
             proposals = gc.get_proposals()
             gc.do_set(str(proposals[generator][0]))
             gc.do_quit("")
@@ -244,7 +255,10 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             generator = "dist_gen.weighted_choice"
             values = {1, 2, 3, 4, 5, 6}
             gc.do_next(f"{table}.{column}")
-            gc.do_propose("")
+            # Picking a specific generator by name, not necessarily the
+            # recommendation - 'all' guarantees it's listed regardless of
+            # Pareto front.
+            gc.do_propose("all")
             proposals = gc.get_proposals()
             gen_proposal = proposals[generator]
             self.assert_subset(set(gen_proposal[2]), {str(v) for v in values})
@@ -261,8 +275,11 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
         generator_to_discard = "dist_gen.choice"
         generator = "dist_gen.multivariate_normal"
         with self._get_cmd({}) as gc:
+            # Picking specific generators by name below, not necessarily the
+            # recommendation - 'all' guarantees they're listed regardless of
+            # Pareto front.
             gc.do_next(f"{table}.{column_2}")
-            gc.do_propose("")
+            gc.do_propose("all")
             proposals = gc.get_proposals()
             # set a generator, but this should not exist after merging
             gc.do_set(str(proposals[generator_to_discard][0]))
@@ -270,7 +287,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertIn(table, gc.prompt)
             self.assertIn(column_1, gc.prompt)
             self.assertNotIn(column_2, gc.prompt)
-            gc.do_propose("")
+            gc.do_propose("all")
             proposals = gc.get_proposals()
             # set a generator, but this should not exist either
             gc.do_set(str(proposals[generator_to_discard][0]))
@@ -283,7 +300,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             self.assertIn(column_1, gc.prompt)
             self.assertIn(column_2, gc.prompt)
             gc.reset()
-            gc.do_propose("")
+            gc.do_propose("all")
             proposals = gc.get_proposals()
             gc.do_set(str(proposals[generator][0]))
             gc.do_quit("")
@@ -364,7 +381,10 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             column = "name"
             generator = "person.first_name"
             gc.do_next(f"{table}.{column}")
-            gc.do_propose("")
+            # Picking a specific generator by name, not necessarily the
+            # recommendation - 'all' guarantees it's listed regardless of
+            # Pareto front.
+            gc.do_propose("all")
             proposals = gc.get_proposals()
             gc.do_set(str(proposals[f"generic.{generator}"][0]))
             gc.do_quit("")
@@ -427,10 +447,9 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             column = "position"
             generator = "dist_gen.uniform_ms"
             gc.do_next(f"string.{column}")
-            # "position" is an Integer column, and dist_gen.uniform_ms produces
-            # float output that default 'propose' now excludes as type-
-            # incompatible (see GeneratorCmd._is_integer_incompatible) - 'all'
-            # bypasses that filter so this generator is still selectable here.
+            # dist_gen.uniform_ms produces float output for this Integer
+            # column, so it's unlikely to be Pareto front 1 - use 'all' to
+            # bypass the default front-1-only cap and make sure it's listed.
             gc.do_propose("all")
             proposals = gc.get_proposals()
             gc.do_set(str(proposals[f"{generator}"][0]))
@@ -608,10 +627,9 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             column = "position"
             generator = "dist_gen.uniform_ms"
             gc.do_next(f"string.{column}")
-            # "position" is an Integer column, and dist_gen.uniform_ms produces
-            # float output that default 'propose' now excludes as type-
-            # incompatible (see GeneratorCmd._is_integer_incompatible) - 'all'
-            # bypasses that filter so this generator is still selectable here.
+            # dist_gen.uniform_ms produces float output for this Integer
+            # column, so it's unlikely to be Pareto front 1 - use 'all' to
+            # bypass the default front-1-only cap and make sure it's listed.
             gc.do_propose("all")
             proposals = gc.get_proposals()
             gc.do_set(str(proposals[generator][0]))
@@ -742,7 +760,10 @@ class GeneratorTests(GeneratesDBTestCase):
         with self._get_cmd({}) as gc:
             gc.do_next(f"{table}.{column}")
             gc.reset()
-            gc.do_propose("")
+            # Picking a specific generator by name, not necessarily the
+            # recommendation - 'all' guarantees it's listed regardless of
+            # Pareto front.
+            gc.do_propose("all")
             proposals = gc.get_proposals()
             quotes = [k for k in proposals.keys() if k.startswith(generator)]
             self.assertEqual(len(quotes), 1)

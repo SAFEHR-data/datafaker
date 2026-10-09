@@ -50,7 +50,7 @@ def make_result(  # pylint: disable=too-many-arguments,too-many-positional-argum
         novelty=novelty,
         diversity=diversity,
         overall_score=overall_score,
-        pipeline_scores={},
+        criterion_scores={},
         copy_fraction=copy_fraction,
         synthetic_uniqueness=synthetic_uniqueness,
     )

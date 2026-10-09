@@ -34,6 +34,10 @@ class IncrementProposer(Proposer):
         """Get the name of the generator function to call."""
         return "generic.column_value_provider.increment"
 
+    def guarantees_fresh_uniqueness(self) -> bool:
+        """Monotonically increasing past the observed max can never collide."""
+        return True
+
     def nominal_kwargs(self) -> dict[str, str]:
         """Get the arguments to be entered into ``config.yaml``.
 

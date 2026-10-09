@@ -72,7 +72,7 @@ class MeanSquaredError(Metric):
         # Euclidean distance is bounded in [0, 2] regardless of vocab size.
         # Dividing by that fixed bound (rather than len(vocab)**2) keeps the
         # score on a comparable scale to JensenShannon's [0, ln 2] range, so
-        # pipeline weights combining the two behave as intended.
+        # criterion weights combining the two behave as intended.
         score = squared_error / 2
         return score
 
