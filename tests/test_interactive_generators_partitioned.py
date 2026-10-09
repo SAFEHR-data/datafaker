@@ -147,7 +147,10 @@ class NullPartitionedTests(GeneratesDBTestCase):
 
     def _propose(self, gc: MockGeneratorCmd) -> dict[str, tuple[int, str, list[str]]]:
         gc.reset()
-        gc.do_propose("")
+        # These tests check for the full set of sampled/suppressed
+        # null-partitioned variants, which may not all be Pareto front 1 -
+        # 'all' bypasses that cap so every variant is listed.
+        gc.do_propose("all")
         return gc.get_proposals()
 
     def test_create_with_null_partitioned_grouped_multivariate(self) -> None:

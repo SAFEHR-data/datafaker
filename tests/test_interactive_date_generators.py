@@ -19,12 +19,17 @@ class MockGeneratorCmd(GeneratorCmd, TestDbCmdMixin):
 
     def get_proposals(self) -> dict[str, tuple[int, str, list[str]]]:
         """
-        Returns a dict of generator name to a tuple of (index, fit_string, [list,of,samples])
+        Returns a dict of generator name to a tuple of (index, '', [list,of,samples]).
+
+        The middle element is unused: it used to carry the old per-proposer
+        fit score, but 'propose' no longer prints that separate (now
+        removed) list, only the ranked table (``RANKED_SAMPLE_TEXT``), which
+        has no equivalent per-candidate fit figure.
         """
         return {
-            kw["name"]: (kw["index"], kw["fit"], kw["sample"].split("; "))
+            kw["name"]: (kw["index"], "", kw["sample"].split("; "))
             for (s, _, kw) in self.messages
-            if s == self.PROPOSE_GENERATOR_SAMPLE_TEXT
+            if s == self.RANKED_SAMPLE_TEXT
         }
 
 
@@ -270,7 +275,9 @@ class ConfigureGeneratorsWithDateTests(GeneratesDBTestCase):
             # set up our interval proposer
             gc.do_next(f"{table}.{column}")
             gc.reset()
-            gc.do_propose("")
+            # Both anchored variants must be listed at once - 'all' bypasses
+            # the Pareto-front-1 cap that might otherwise hide one of them.
+            gc.do_propose("all")
             proposals = gc.get_proposals()
             provider_name = (
                 "generic.anchored_provider.normal_date_fk"
@@ -291,7 +298,7 @@ class ConfigureGeneratorsWithDateTests(GeneratesDBTestCase):
             self.assertEqual(gc.messages[2][0], gc.PROVIDING_VALUES_TEXT)
             gc.do_next(column2)
             gc.reset()
-            gc.do_propose("")
+            gc.do_propose("all")
             proposals = gc.get_proposals()
             provider_name = (
                 "generic.anchored_provider.normal_date_fk"
