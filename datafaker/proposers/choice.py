@@ -355,18 +355,17 @@ class ChoiceProposerFactory(ProposerFactory):
         table_sql = schema_qualified_name(table_name, engine)
         src_table = column.table
         dialect = engine.dialect
-        col = literal_column(f'"{column_name}"')
         src_table = column.table  # preserves schema for schema-qualified databases
         generators = []
         with engine.connect() as connection:
             stmt_count = (
                 select(
-                    col.label("v"),
-                    func.count(col).label("f"),  # pylint: disable=E1102
+                    column.label("v"),
+                    func.count(column).label("f"),  # pylint: disable=E1102
                 )
                 .select_from(src_table)
-                .group_by(col)
-                .order_by(desc(func.count(col)))  # pylint: disable=E1102
+                .group_by(column)
+                .order_by(desc(func.count(column)))  # pylint: disable=E1102
                 .limit(MAXIMUM_CHOICES + 1)
             )
             results = connection.execute(stmt_count)
@@ -430,7 +429,7 @@ class ChoiceProposerFactory(ProposerFactory):
                         ),
                     ]
             inner = (
-                select(col.label("v"))
+                select(column.label("v"))
                 .select_from(src_table)
                 .order_by(Random())
                 .limit(self.SAMPLE_COUNT)
