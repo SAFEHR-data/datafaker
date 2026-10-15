@@ -229,9 +229,9 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
                 gc.config["src-stats"][0]["query"],
                 (
                     "SELECT _counted.value \n"
-                    f'FROM (SELECT "{column}" AS value, count("{column}") AS count \n'
+                    f"FROM (SELECT {table}.{column} AS value, count({table}.{column}) AS count \n"
                     f"FROM {table} \n"
-                    f'WHERE "{column}" IS NOT NULL GROUP BY "{column}") '
+                    f"WHERE {table}.{column} IS NOT NULL GROUP BY {table}.{column}) "
                     "AS _counted ORDER BY _counted.count DESC"
                 ),
             )

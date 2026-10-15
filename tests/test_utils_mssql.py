@@ -147,7 +147,9 @@ class TestGetMetadataSchema(unittest.TestCase):
 
             get_metadata(mock_engine, schema_name="myschema", views_to_tables=False)
 
-            mock_md.reflect.assert_called_once_with(mock_engine, schema="myschema")
+            mock_md.reflect.assert_called_once_with(
+                mock_engine, schema="myschema", views=False
+            )
 
     def test_reflect_called_without_schema_when_none(self) -> None:
         """get_metadata passes schema=None to reflect when no schema_name is given."""
@@ -161,4 +163,6 @@ class TestGetMetadataSchema(unittest.TestCase):
 
             get_metadata(mock_engine, schema_name=None, views_to_tables=False)
 
-            mock_md.reflect.assert_called_once_with(mock_engine, schema=None)
+            mock_md.reflect.assert_called_once_with(
+                mock_engine, schema=None, views=False
+            )
