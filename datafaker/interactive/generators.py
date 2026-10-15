@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Optional, cast
 
-from sqlalchemy import Column, and_, literal_column, select
+from sqlalchemy import Column, and_, select
 from sqlalchemy.types import Integer
 
 from datafaker.db_utils import MaybeAsyncEngine, primary_private_fks, table_is_private
@@ -1038,12 +1038,13 @@ information about the columns in the current table. Use 'peek',
     def _get_column_data(
         self, count: int, to_str: Callable[[Any], str] = repr
     ) -> list[list[str]]:
-        columns = self._get_column_names()
-        col_exprs = [literal_column(col) for col in columns]
-        nonnull_clauses = [literal_column(col).isnot(None) for col in columns]
+        column_names = self._get_column_names()
+        table = self.table_metadata()
+        columns = [table.columns[c] for c in column_names]
+        nonnull_clauses = [col.isnot(None) for col in columns]
         stmt = (
-            select(*col_exprs)
-            .select_from(self.table_metadata())
+            select(*columns)
+            .select_from(table)
             .where(and_(*nonnull_clauses))
             .order_by(Random())
             .limit(count)
