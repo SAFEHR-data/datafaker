@@ -1,7 +1,6 @@
 """Utility functions."""
 import gzip
 import io
-import os
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from types import ModuleType
@@ -33,6 +32,7 @@ from sqlalchemy.schema import (
 )
 from typer import Exit
 
+from datafaker.parquet2orm import ParquetTable, find_parquet_tables
 from datafaker.utils import (
     T,
     get_ignored_table_names,
@@ -137,7 +137,7 @@ def create_db_engine(
     db_dsn: str,
     schema_name: Optional[str] = None,
     use_asyncio: bool = False,
-    parquet_dir: Optional[Path] = None,
+    parquet_dir: Optional[Union[Path, str]] = None,
     **kwargs: Any,
 ) -> MaybeAsyncEngine:
     """Create a SQLAlchemy Engine."""
@@ -172,24 +172,31 @@ def create_db_engine(
                 settings.append(f"USE SCHEMA {schema_name};")
             case _:
                 settings.append(f"SET search_path TO {schema_name};")
+    dataset_views: list[str] = []
     if parquet_dir is not None:
         match dialect_name:
             case "duckdb":
-                joined = ",".join(_find_parquet_directories(parquet_dir))
+                tables = find_parquet_tables(parquet_dir)
+                joined = ",".join(
+                    sorted({str(t.root.parent) for t in tables if not t.is_dataset})
+                )
                 # double up single quotes
                 dj = joined.replace("'", "''")
                 settings.append(f"SET file_search_path TO '{dj}';")
             case _:
+                tables = []
                 logger.error(
                     "--parquet-dir cannot be used with %s, only duckdb.", dialect_name
                 )
+        dataset_views = [_dataset_view_sql(t) for t in tables if t.is_dataset]
 
-    if settings:
+    if settings or dataset_views:
         event_engine = get_sync_engine(engine)
 
         @event.listens_for(event_engine, "connect", insert=True)
         def connect(dbapi_connection: DBAPIConnection, _: Any) -> None:
             set_db_settings(dbapi_connection, settings)
+            create_dataset_views(dbapi_connection, dataset_views)
 
     return engine
 
@@ -238,21 +245,33 @@ def get_metadata(
     return md
 
 
-def _find_parquet_directories(parquet_dir: Path) -> list[str]:
-    """Find all the directories under ``parquet_dir`` that contain parquet files."""
-    return [
-        path
-        for path, _, filenames in os.walk(parquet_dir)
-        if _names_include_parquet(Path(path), filenames)
-    ]
+def _sql_quote(text: str, quote: str) -> str:
+    """Enclose ``text`` in ``quote``, doubling any ``quote`` inside it."""
+    return f"{quote}{text.replace(quote, quote * 2)}{quote}"
 
 
-def _names_include_parquet(path: Path, file_names: Iterable[str]) -> bool:
-    for fn in file_names:
-        entry = path / fn
-        if entry.is_file() and entry.suffix in {".parquet", ".parq"}:
-            return True
-    return False
+def _dataset_view_sql(table: ParquetTable) -> str:
+    """Make the SQL that exposes a directory of parquet files as one table."""
+    files = ",".join(_sql_quote(str(f), "'") for f in table.files)
+    return (
+        f"CREATE OR REPLACE TEMP VIEW {_sql_quote(table.name, chr(34))} AS "
+        f"SELECT * FROM read_parquet([{files}], "
+        "hive_partitioning=true, union_by_name=true)"
+    )
+
+
+def create_dataset_views(
+    connection: DBAPIConnection, view_statements: Iterable[str]
+) -> None:
+    """
+    Make each partitioned parquet dataset available as a table.
+
+    The views are temporary so nothing is written into the source database.
+    """
+    cursor = connection.cursor()
+    for statement in view_statements:
+        cursor.execute(statement)
+    cursor.close()
 
 
 def set_db_settings(connection: DBAPIConnection, settings: list[str]) -> None:
