@@ -82,6 +82,48 @@ Example directory structure:
    ├── artist.parquet
    └── artwork.parquet
 
+Partitioned Parquet Datasets
+""""""""""""""""""""""""""""
+
+Large tables are often saved as a directory of Parquet files, partitioned
+(for example by year) and split into several part files:
+
+.. code-block:: text
+
+   input_data/
+   ├── artist.parquet           # a single file: the table ``artist.parquet``
+   └── artwork/                 # a directory: the table ``artwork``
+       ├── yr=2023/
+       │   ├── p00001.parquet
+       │   └── p00002.parquet
+       └── yr=__MISSING__/
+           └── p00001.parquet
+
+* A ``.parquet`` file directly inside the input directory is one table,
+  named after the file, as before.
+* A subdirectory is one table, named after the directory, made from all
+  the Parquet files inside it at any depth.
+* Partition directories named ``key=value`` become a ``TEXT`` column
+  (``yr`` above), because partition keys are not stored in the files.
+* If ``--parquet-dir`` points directly at a partitioned dataset (a directory
+  containing only ``key=value`` subdirectories) the whole directory is one
+  table, named after that directory.
+
+All the files of one partitioned table must have the same column names
+and the same partition keys. If they do not, ``make-tables`` stops with an
+error naming the differing file. This usually means the subdirectory holds
+several different tables; move each table into its own directory directly
+inside the input directory and run ``make-tables`` again.
+
+Column types may differ between files (for example when one partition has no
+values for a column and so is stored with a different type). This is logged as
+a warning and the type from the first file is used. Differences in case only,
+such as ``int32`` and ``Int32``, are ignored.
+
+The synthetic data is written as one file per table (for example
+``artwork.parquet``) by ``dump-data --parquet``; the partitioning of the
+input is not reproduced.
+
 Building the ORM Configuration
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
