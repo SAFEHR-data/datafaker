@@ -30,6 +30,7 @@ from datafaker.proposers.partitioned import (
     NullPartitionedLogNormalProposerFactory,
     NullPartitionedNormalProposerFactory,
 )
+from datafaker.proposers.sequence import IncrementProposerFactory
 
 
 def everything_factory(config: Mapping, metadata: MetaData) -> ProposerFactory:
@@ -57,4 +58,5 @@ def everything_factory(config: Mapping, metadata: MetaData) -> ProposerFactory:
         NullPartitionedLogNormalProposerFactory(config, metadata),
         DateAfterProposerFactory(config, metadata),
         DateComponentExtractProposerFactory(config, metadata),
+        IncrementProposerFactory(),
     )

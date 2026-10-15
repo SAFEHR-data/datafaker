@@ -261,7 +261,7 @@ and source statistics:
 
    datafaker configure-tables
    datafaker configure-generators
-   datafaker configure-missingness
+   datafaker configure-missing
    datafaker make-stats
 
 This creates:
@@ -370,7 +370,7 @@ Generate configuration:
 
    datafaker configure-tables
    datafaker configure-generators
-   datafaker configure-missingness
+   datafaker configure-missing
    datafaker make-stats
 
 Create schema and generate data:
@@ -398,7 +398,10 @@ For a minimal end-to-end workflow:
    export DST_DSN=duckdb:///./fake.db
 
    datafaker make-tables --parquet-dir ./input_parquet
-
+   datafaker configure-tables
+   datafaker configure-generators
+   datafaker configure-missing
+   datafaker make-stats
    datafaker create-tables
    datafaker create-data --num-passes 10
 

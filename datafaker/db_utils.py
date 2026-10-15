@@ -38,6 +38,7 @@ from sqlalchemy.schema import (
     MetaData,
     Table,
 )
+from sqlalchemy.types import Integer, Numeric, TypeEngine
 from typer import Exit
 
 from datafaker.parquet2orm import ParquetTable, find_parquet_tables
@@ -315,6 +316,11 @@ def get_fk_column_between(
             if fk.column.table == to_:
                 return (c, fk)
     return (None, None)
+
+
+def is_numeric_sql_type(column_type: TypeEngine | None) -> bool:
+    """Whether a SQLAlchemy column type is Numeric or Integer."""
+    return isinstance(column_type, (Numeric, Integer))
 
 
 def fk_refers_to_ignored_table(fk: ForeignKey) -> bool:

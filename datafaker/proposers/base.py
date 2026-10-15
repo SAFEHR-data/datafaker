@@ -146,6 +146,21 @@ class Proposer(ABC):
         """
         return default
 
+    def guarantees_fresh_uniqueness(self) -> bool:
+        """
+        Whether this proposer is structurally guaranteed never to collide.
+
+        True only for a proposer whose *construction* rules out ever
+        reproducing a real or previously-generated value (e.g. a sequence
+        continuing past the observed maximum) - not merely one that happens
+        to have a low *observed* collision rate in a given sample. Used to
+        let this kind of proposer take precedence for a column that needs
+        guaranteed-unique values, since the fidelity/novelty/diversity
+        metrics can only ever read "deliberately diverges from the observed
+        range" as a poor statistical fit, never as the intended behavior.
+        """
+        return False
+
 
 class PredefinedProposer(Proposer):
     """

@@ -20,8 +20,8 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.exc import DatabaseError
-from sqlalchemy.types import Integer, Numeric
 
+from datafaker.db_utils import is_numeric_sql_type
 from datafaker.dialects import IsNotNull, IsNull, IsNumeric, IsPositive, LogNatural
 from datafaker.proposers.base import Proposer, dist_gen, get_column_type
 from datafaker.proposers.continuous import (
@@ -364,8 +364,7 @@ class NullPartitionedNormalProposer(Proposer):
 
 def is_numeric(col: Column) -> bool:
     """Test if this column stores a numeric value."""
-    ct = get_column_type(col)
-    return isinstance(ct, (Numeric, Integer)) and not col.foreign_keys
+    return is_numeric_sql_type(get_column_type(col)) and not col.foreign_keys
 
 
 def powerset(xs: list[T]) -> Iterable[Iterable[T]]:
