@@ -136,9 +136,14 @@ class ConfigureMissingnessEndToEndTests(ConfigureMissingnessTestsWithGeneration)
             mc.do_quit("")
             self.generate_data(mc.config, num_passes=100)
             self.assertIs(
-                type(mc.config["tables"][table]["missingness_generators"][0]["columns"][0]),
-                str
+                type(
+                    mc.config["tables"][table]["missingness_generators"][0]["columns"][
+                        0
+                    ]
+                ),
+                str,
             )
+        assert self.dst_engine is not None
         with self.dst_engine.connect() as conn:
             stmt = select(self.metadata.tables[table])
             rows = conn.execute(stmt).mappings().fetchall()
