@@ -10,6 +10,7 @@ from types import TracebackType
 from typing import Any, Final, Optional, Tuple, Type
 
 import pandas as pd
+import snowflake.sqlalchemy.custom_types as snowflake_types
 import snsql
 import typer
 import yaml
@@ -57,6 +58,8 @@ PROVIDER_IMPORTS: Final[list[str]] = []
 for entry_name, entry in inspect.getmembers(providers, inspect.isclass):
     if issubclass(entry, BaseProvider) and entry.__module__ == "datafaker.providers":
         PROVIDER_IMPORTS.append(entry_name)
+
+DEFAULT_UNIQUE_CONSTRAINT_TRIES: int | None = 500
 
 
 @dataclass
@@ -378,6 +381,10 @@ _COLUMN_TYPE_TO_GENERATOR_INFO: dict[Any, GeneratorInfo] = {
         generator=_string_generator,
         choice=True,
     ),
+    snowflake_types.TIMESTAMP_LTZ: GeneratorInfo(
+        generator="generic.datetime.datetime",
+        arg_types={"start": int, "end": int},
+    ),
 }
 
 
@@ -654,6 +661,8 @@ def get_generation_info(
     max_unique_constraint_tries = get_property_or_none(
         config, "max-unique-constraint-tries", int
     )
+    if max_unique_constraint_tries is None:
+        max_unique_constraint_tries = DEFAULT_UNIQUE_CONSTRAINT_TRIES
     return GenerationInfo(
         provider_imports=PROVIDER_IMPORTS,
         row_generator_module_name=row_generator_module_name,
@@ -697,6 +706,7 @@ def _generate_vocabulary_table(
 def make_tables_file(
     db_dsn: str,
     schema_name: Optional[str],
+    views_to_tables: bool,
     parquet_dir: Optional[Path] = None,
     engine: Optional[Engine] = None,
 ) -> str:
@@ -704,7 +714,9 @@ def make_tables_file(
     if engine is None:
         engine = get_sync_engine(create_db_engine(db_dsn, schema_name=schema_name))
 
-    metadata = get_metadata(engine, schema_name=schema_name)
+    metadata = get_metadata(
+        engine, schema_name=schema_name, views_to_tables=views_to_tables
+    )
     meta_dict = metadata_to_dict(metadata, schema_name, engine, parquet_dir)
 
     if parquet_dir is not None:

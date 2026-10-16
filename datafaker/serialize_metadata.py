@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import parsy
+import snowflake.sqlalchemy.custom_types as snowflake_types
 from sqlalchemy import Column, Dialect, Engine, ForeignKey, MetaData, Table
 from sqlalchemy.dialects import mssql, oracle, postgresql
 from sqlalchemy.sql import schema, sqltypes
@@ -103,7 +104,7 @@ def time_type(type_: type, tz_type: type) -> ParserType:
     Make a parser for a SQL date/time type.
 
     Parses TYPE_NAME, TYPE_NAME(32), TYPE_NAME WITH TIME ZONE
-    or TYPE_NAME(32) WITH TIME ZONE
+    or TYPE_NAME(32) WITH TIME ZONE, also WITHOUT
 
     :param type_: The SQLAlchemy type we would like to parse.
     :param tz_type: The type to instantiate when precision or timezone is
@@ -204,6 +205,15 @@ SIMPLE_TYPE_PARSER = parsy.alt(
     string_type(sqltypes.VARCHAR),
     string_type(sqltypes.NVARCHAR),
     string_type(sqltypes.TEXT),
+    parsy.string("TIMESTAMP_NTZ").result(sqltypes.DATETIME),
+    parsy.string("TIMESTAMPNTZ").result(sqltypes.DATETIME),
+    parsy.string("TIMESTAMP_LTZ").result(snowflake_types.TIMESTAMP_LTZ),
+    parsy.string("TIMESTAMPLTZ").result(snowflake_types.TIMESTAMP_LTZ),
+    parsy.string("TIMESTAMP WITH LOCAL TIME ZONE").result(
+        snowflake_types.TIMESTAMP_LTZ
+    ),
+    parsy.string("TIMESTAMP_TZ").result(lambda: sqltypes.DATETIME(timezone=True)),
+    parsy.string("TIMESTAMPTZ").result(lambda: sqltypes.DATETIME(timezone=True)),
     time_type(sqltypes.TIMESTAMP, postgresql.types.TIMESTAMP),
     time_type(sqltypes.TIME, postgresql.types.TIME),
 )

@@ -177,6 +177,10 @@ def make_tables(
         file_okay=False,
         dir_okay=True,
     ),
+    views_to_tables: bool = Option(
+        False,
+        help=("Generate all views as tables in the synthetic version."),
+    ),
 ) -> None:
     """Make a YAML file representing the tables in the schema.
 
@@ -192,7 +196,8 @@ def make_tables(
     content = make_tables_file(
         get_source_dsn(),
         get_source_schema(),
-        parquet_dir,
+        views_to_tables=views_to_tables,
+        parquet_dir=parquet_dir,
     )
     orm_file_path.write_text(content, encoding="utf-8")
     logger.debug("%s created.", orm_file)

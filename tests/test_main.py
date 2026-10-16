@@ -111,7 +111,10 @@ class TestCLI(DatafakerTestCase):
         )
 
         mock_make_tables_file.assert_called_once_with(
-            "postgresql://suser:spassword@shost:5432/sdbname", None, None
+            "postgresql://suser:spassword@shost:5432/sdbname",
+            None,
+            views_to_tables=False,
+            parquet_dir=None,
         )
         mock_path.return_value.write_text.assert_called_once_with(
             "some text", encoding="utf-8"
@@ -176,6 +179,8 @@ class TestCLI(DatafakerTestCase):
 
         for force_option in ["--force", "-f"]:
             with self.subTest(f"Using option {force_option}"):
+                mock_make_tables.reset_mock()
+                mock_path.reset_mock()
                 result: Result = runner.invoke(
                     app,
                     [
@@ -188,15 +193,13 @@ class TestCLI(DatafakerTestCase):
                 mock_make_tables.assert_called_once_with(
                     mock_get_settings.return_value.src_dsn,
                     mock_get_settings.return_value.src_schema,
-                    None,
+                    views_to_tables=False,
+                    parquet_dir=None,
                 )
                 mock_path.return_value.write_text.assert_called_once_with(
                     mock_tables_output, encoding="utf-8"
                 )
                 self.assertSuccess(result)
-
-                mock_make_tables.reset_mock()
-                mock_path.reset_mock()
 
     @patch("datafaker.main.Path")
     @patch("datafaker.settings.get_settings")

@@ -166,7 +166,8 @@ class ConfigureGeneratorsWithInstrumentsTests(GeneratesDBTestCase):
             proposals = gc.get_proposals()
             provider_name = (
                 "generic.anchored_provider.normal_date_fk"
-                f" [anchored to {anchor} of table {atable}]"
+                f" [anchored to {anchor} of table {atable}"
+                " (via manufacturer_id)]"
             )
             self.assertIn(provider_name, proposals.keys())
             prop = proposals[provider_name]
@@ -216,7 +217,7 @@ class ConfigureGeneratorsWithInstrumentsMsSqlTests(
 
 
 class ConfigureGeneratorsWithDateTests(GeneratesDBTestCase):
-    """Test `configure-generators` with the `instrument.sql` database."""
+    """Test `configure-generators` with the `date.sql` database."""
 
     dump_file_path = "date.sql"
     database_name = "date_tables"
@@ -274,13 +275,15 @@ class ConfigureGeneratorsWithDateTests(GeneratesDBTestCase):
             proposals = gc.get_proposals()
             provider_name = (
                 "generic.anchored_provider.normal_date_fk"
-                f" [anchored to {anchor} of table {atable}]"
+                f" [anchored to {anchor} of table {atable}"
+                " (via person_id)]"
             )
             self.assertIn(provider_name, proposals.keys())
             prop = proposals[provider_name]
             provider_name2 = (
                 "generic.anchored_provider.normal_date_fk"
-                f" [anchored to {anchor2} of table {atable}]"
+                f" [anchored to {anchor2} of table {atable}"
+                " (via person_id)]"
             )
             self.assertIn(provider_name2, proposals.keys())
             prop2 = proposals[provider_name2]
@@ -295,13 +298,15 @@ class ConfigureGeneratorsWithDateTests(GeneratesDBTestCase):
             proposals = gc.get_proposals()
             provider_name = (
                 "generic.anchored_provider.normal_date_fk"
-                f" [anchored to {anchor} of table {atable}]"
+                f" [anchored to {anchor} of table {atable}"
+                " (via person_id)]"
             )
             self.assertIn(provider_name, proposals.keys())
             prop = proposals[provider_name]
             provider_name2 = (
                 "generic.anchored_provider.normal_date_fk"
-                f" [anchored to {anchor2} of table {atable}]"
+                f" [anchored to {anchor2} of table {atable}"
+                " (via person_id)]"
             )
             self.assertIn(provider_name2, proposals.keys())
             prop2 = proposals[provider_name2]
@@ -311,10 +316,35 @@ class ConfigureGeneratorsWithDateTests(GeneratesDBTestCase):
             self.assertEqual(gc.messages[1][0], gc.REQUIRES_SOURCE_DATA_TEXT)
             self.assertEqual(gc.messages[2][0], gc.PROVIDING_VALUES_TEXT)
 
+    def test_regression_date_start_crash(self) -> None:
+        """Test for regression where ``start`` role on a date leads to crash."""
+        config = {
+            "tables": {
+                "person": {
+                    "columns": {
+                        "date_of_birth": {
+                            "roles": ["start"],
+                        },
+                    },
+                },
+            }
+        }
+        with self._get_cmd(config) as gc:
+            gc.do_next("happening.at_date")
+            gc.reset()
+            gc.do_propose("")
+            proposals = gc.get_proposals()
+            provider_name = (
+                "generic.anchored_provider.normal_date_fk"
+                " [anchored to date_of_birth of table person"
+                " (via person_id)]"
+            )
+            self.assertIn(provider_name, proposals.keys())
+
 
 # Note that this test won't work with DuckDB because it needs foreign keys to work
 class ConfigureGeneratorsWithDateMsSqlTests(ConfigureGeneratorsWithDateTests):
-    """Test `configure-generators` with `instrument.sql` with MS SQL."""
+    """Test `configure-generators` with `date.sql` with MS SQL."""
 
     database_type = MsSqlTestDb
     schema_name = None
