@@ -9,7 +9,7 @@ from typing import Sequence
 from datafaker.evaluators.column_evaluator import ProposalEvaluation
 from datafaker.evaluators.evaluation_profile import EvaluationProfile
 from datafaker.proposers.choice import ChoiceProposer
-from datafaker.theme import Theme
+from datafaker.theme import THEME, Theme, ThemeEntry
 
 # Column-name keywords mapped to substrings of the generator's dotted name
 # (e.g. "generic.person.first_name") that they hint at. Column naming
@@ -272,7 +272,7 @@ def _penalty_for_candidate(
 def rank_proposals(
     results: Sequence[ProposalEvaluation],
     profile: EvaluationProfile | None,
-    theme: Theme | None = None,
+    theme: Theme = THEME[ThemeEntry.NONE],
     column_name: str | None = None,
     real_uniqueness: float = 0.0,
     is_numeric_column: bool = False,
@@ -291,7 +291,7 @@ def rank_proposals(
         fidelity/novelty/diversity weighting (see ``profile_weights``).
     :param theme: the active display theme, used only to colour-highlight
         the recommended row in the returned table; ranking itself is
-        theme-independent.
+        theme-independent. Defaults to the no-colour theme.
     :param column_name: the column's own name, used only for the keyword
         boost (see ``KEYWORD_GENERATOR_HINTS``) - ``None`` disables it.
     :param real_uniqueness: fraction of the real column's sampled values
@@ -583,11 +583,10 @@ def rank_proposals(
         # Highlight the recommended row distinctly from the rest of its
         # Pareto front 1 "near miss" companions (non-dominated alternatives
         # worth a second look), rather than one colour for the whole front.
-        if theme is not None:
-            if is_recommended:
-                cells = [f"{theme.recommend}{cell}{theme.reset}" for cell in cells]
-            elif front == 1:
-                cells = [f"{theme.near_miss}{cell}{theme.reset}" for cell in cells]
+        if is_recommended:
+            cells = [f"{theme.recommend}{cell}{theme.reset}" for cell in cells]
+        elif front == 1:
+            cells = [f"{theme.near_miss}{cell}{theme.reset}" for cell in cells]
         # keep original types compatible with print_table (it will cast to list)
         rows.append(tuple(cells))
 
