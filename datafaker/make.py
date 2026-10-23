@@ -40,7 +40,7 @@ from datafaker.db_utils import (
     get_sync_engine,
     get_vocabulary_table_names,
 )
-from datafaker.parquet2orm import get_parquet_orm
+from datafaker.parquet2orm import get_initial_parquet_orm, add_guessed_keys
 from datafaker.settings import get_source_dsn, get_source_schema
 from datafaker.utils import (
     get_columns_assigned,
@@ -709,6 +709,7 @@ def make_tables_file(
     views_to_tables: bool,
     parquet_dir: Optional[Path] = None,
     engine: Optional[Engine] = None,
+    guess_keys: bool = False,
 ) -> str:
     """Construct the YAML file representing the schema."""
     if engine is None:
@@ -720,11 +721,14 @@ def make_tables_file(
     meta_dict = metadata_to_dict(metadata, schema_name, engine, parquet_dir)
 
     if parquet_dir is not None:
-        extra_meta = get_parquet_orm(parquet_dir)
+        extra_meta = get_initial_parquet_orm(parquet_dir)
         if extra_meta:
             md_tables: dict[str, Any] = get_property(meta_dict, "tables", {})
             new_tables = {**extra_meta, **md_tables}
             meta_dict["tables"] = new_tables
+
+    if guess_keys:
+        add_guessed_keys(meta_dict["tables"])
 
     return yaml.dump(meta_dict, sort_keys=False)
 

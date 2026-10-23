@@ -101,7 +101,7 @@ class EndToEndParquetTestCase(DatafakerTestCase):
     """Read in parquet, make some generators, output parquet."""
 
     database_type = DuckTestDb
-    examples_dir = Path("examples/duckdb")
+    examples_dir = Path("examples/duckdb/instrument")
 
     def set_working_dir(self) -> None:
         """Change to our working directory."""
@@ -114,9 +114,10 @@ class EndToEndParquetTestCase(DatafakerTestCase):
         super().setUp()
         # Grab all the files
         self.parquet_dir = Path(tempfile.mkdtemp("parq"))
-        example_dir = self.get_abs_example_dir()
-        for fname in os.listdir(example_dir):
-            shutil.copy(example_dir / fname, self.parquet_dir / fname)
+        example_dir = Path(self.get_abs_example_dir())
+        for child in example_dir.iterdir():
+            if child.is_file():
+                shutil.copy(example_dir / child, self.parquet_dir / child.name)
         self.start_dir = os.getcwd()
         self.set_working_dir()
 
@@ -133,22 +134,25 @@ class EndToEndParquetTestCase(DatafakerTestCase):
                 "make-tables",
                 "--parquet-dir",
                 str(self.parquet_dir),
-                "--orm-file",
-                "orm_auto.yaml",
             ],
         )
         self.assertSuccess(result)
-        # Fix up the orm.yaml; the dates might not have types set
-        with Path("orm_auto.yaml").open(encoding="utf-8") as orm_fh:
+        with Path("orm.yaml").open(encoding="utf-8") as orm_fh:
             orm = yaml.load(orm_fh, yaml.SafeLoader)
+        # Let's check some of the types, primary and foreign keys
         t = orm["tables"]
+        self.assertEqual(t["signature_model.parquet"]["columns"]["player_id"]["type"], "INTEGER")
+        self.assertTrue(t["manufacturer.parquet"]["columns"]["id"]["primary"])
+        self.assertFalse(t["manufacturer.parquet"]["columns"]["name"].get("primary", False))
+        self.assertEqual(
+            t["signature_model.parquet"]["columns"]["player_id"]["foreign_keys"],
+            ["player.parquet.id"],
+        )
+        self.assertEqual(t["signature_model.parquet"]["columns"]["based_on"]["type"], "INTEGER")
+        # DATETIMEs cannot be detected
         t["manufacturer.parquet"]["columns"]["founded"]["type"] = "DATETIME"
         t["model.parquet"]["columns"]["introduced"]["type"] = "DATETIME"
-        t["signature_model.parquet"]["columns"]["player_id"]["type"] = "INTEGER"
-        t["signature_model.parquet"]["columns"]["player_id"]["foreign_keys"] = [
-            "player.parquet.id"
-        ]
-        t["signature_model.parquet"]["columns"]["based_on"]["type"] = "INTEGER"
+        # "based_on" doesn't give the foreign key guesser anything to go on
         t["signature_model.parquet"]["columns"]["based_on"]["foreign_keys"] = [
             "model.parquet.id"
         ]

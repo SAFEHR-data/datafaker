@@ -189,7 +189,7 @@ class DuckTestDb(TestDatabaseBase):
     SQL_REMOVALS_RE = re.compile(
         r"^(CREATE DATABASE .*;)|(\\.*)|(ALTER [^;]*;)|(\bUSING\s+btree)", re.MULTILINE
     )
-    # Postgres' default stupid time format, ingoring time zone for now
+    # Postgres' default stupid time format, ignoring time zone for now
     TIME_FORMAT_RE = re.compile(
         r"'([A-Z][a-z]+ \d+ \d\d:\d\d:\d\d \d\d\d\d) ([A-Z+\-0-9:]+)'"
     )

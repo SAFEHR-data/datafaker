@@ -177,18 +177,19 @@ def create_db_engine(
         match dialect_name:
             case "duckdb":
                 tables = find_parquet_tables(parquet_dir)
-                joined = ",".join(
-                    sorted({str(t.root.parent) for t in tables if not t.is_dataset})
-                )
                 # double up single quotes
-                dj = joined.replace("'", "''")
+                dj = str(parquet_dir).replace("'", "''")
                 settings.append(f"SET file_search_path TO '{dj}';")
+                dataset_views = [
+                    _dataset_view_sql(t)
+                    for t in tables
+                    if t.hive_files()
+                ]
             case _:
                 tables = []
                 logger.error(
                     "--parquet-dir cannot be used with %s, only duckdb.", dialect_name
                 )
-        dataset_views = [_dataset_view_sql(t) for t in tables if t.is_dataset]
 
     if settings or dataset_views:
         event_engine = get_sync_engine(engine)
@@ -252,7 +253,7 @@ def _sql_quote(text: str, quote: str) -> str:
 
 def _dataset_view_sql(table: ParquetTable) -> str:
     """Make the SQL that exposes a directory of parquet files as one table."""
-    files = ",".join(_sql_quote(str(f), "'") for f in table.files)
+    files = ",".join(_sql_quote(str(f), "'") for f in table.hive_files())
     return (
         f"CREATE OR REPLACE TEMP VIEW {_sql_quote(table.name, chr(34))} AS "
         f"SELECT * FROM read_parquet([{files}], "
