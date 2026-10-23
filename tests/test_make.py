@@ -65,6 +65,7 @@ class TestSerialize(DatafakerTestCase):
             views_to_tables=False,
             parquet_dir=None,
             engine=get_sync_engine(self.engine),
+            guess_keys=False,
         )
         orm = yaml.load(orm_yaml, yaml.Loader)
         table_names = set(orm["tables"].keys())
