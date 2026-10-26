@@ -331,7 +331,10 @@ class PartitionedParquet2Orm(ParquetDirTestCase):
         assert orm is not None
         add_guessed_keys(orm)
         self.assertEqual(orm["person"]["columns"]["age"]["type"], "INTEGER")
-        mock_logger.warning.assert_not_called()
+        mock_logger.warning.assert_called_once_with(
+            "Found no likely primary keys for table %s",
+            "person",
+        )
 
     def test_nullable_int_first_file_is_still_integer(self) -> None:
         """Test a pandas ``Int32`` column is typed ``INTEGER``."""
