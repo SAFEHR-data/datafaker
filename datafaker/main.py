@@ -172,6 +172,8 @@ def make_tables(
         help=(
             "Directory of Parquet files to consider part of the database."
             " This can be useful when using DuckDB."
+            " The .parquet files or directories containing partitioned tables"
+            " must all be directly inside this named directory."
             " Make sure you check the output!"
         ),
         file_okay=False,

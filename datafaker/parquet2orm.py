@@ -93,7 +93,6 @@ def add_guessed_keys(tables_conf: dict[str, Any]):
         primaries = set()
         for column_name, column_conf in columns.items():
             ctype = get_property(column_conf, "type", "INTEGER")
-            logger.error("Column %s: %s", column_name, ctype)
             if ctype in KEY_TYPES:
                 if guesser.is_likely_primary(table_name, column_name):
                     primaries.add(column_name)

@@ -101,8 +101,21 @@ class TestSerialize(DatafakerTestCase):
         )
         self.assertEqual(happening_columns["person_id"]["type"], "INTEGER")
         self.assertFalse(happening_columns["name"]["primary"])
-        # FK and PK constraints are not visible through views
-        # self.assertTrue(happening_columns["id"]["primary"])
+
+    def test_views_to_dict_guess_keys(self) -> None:
+        """Test views_to_tables with foreign keys and primary keys guessed."""
+        orm_yaml = make_tables_file(
+            self.database.get_dsn("date_tables"),
+            schema_name=None,
+            views_to_tables=True,
+            parquet_dir=None,
+            engine=get_sync_engine(self.engine),
+            guess_keys=True,
+        )
+        orm = yaml.load(orm_yaml, yaml.Loader)
+        view_columns = orm["tables"]["happening_view"]["columns"]
+        self.assertTrue(view_columns["id"]["primary"])
+        self.assertEqual(view_columns["person_id"]["foreign_keys"], ["person.id"])
 
 
 class TestSerializeMsSql(TestSerialize):
