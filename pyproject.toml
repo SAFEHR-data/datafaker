@@ -41,6 +41,7 @@ duckdb-sqlalchemy = "^1.5.2.2"
 ty = "^0.0.43"
 colorama = "^0.4.6"
 snowflake-sqlalchemy = "^1.11.1"
+psycopg2 = "^2.9.13"
 
 [tool.poetry.group.dev.dependencies]
 isort = "^5.10.1"
