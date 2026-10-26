@@ -6,15 +6,14 @@ import tempfile
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
-from tests.utils import DatafakerTestCase
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
 from sqlalchemy import text
-from typer import Exit
 
 from datafaker.db_utils import create_db_engine, get_sync_engine
 from datafaker.parquet2orm import add_guessed_keys, get_initial_parquet_orm
+from tests.utils import DatafakerTestCase
 
 
 class HasValues:
@@ -261,7 +260,9 @@ class PartitionedParquet2Orm(ParquetDirTestCase):
         self.assertSetEqual(set(only["columns"].keys()), {"visit_id", "yr"})
 
     @patch("datafaker.parquet2orm.logger")
-    def test_parquet_dir_dataset_must_be_consistent(self, mock_logger: MagicMock) -> None:
+    def test_parquet_dir_dataset_must_be_consistent(
+        self, mock_logger: MagicMock
+    ) -> None:
         """Test a directory of unrelated hive-named tables is still rejected."""
         self.write_files(
             {
@@ -270,8 +271,11 @@ class PartitionedParquet2Orm(ParquetDirTestCase):
             }
         )
         orm = get_initial_parquet_orm(self.parquet_dir)
+        assert orm is not None
         self.assertDictEqual(orm, {})
-        mock_logger.error.assert_called_once_with("Entry %s cannot be read as parquet", "visit")
+        mock_logger.error.assert_called_once_with(
+            "Entry %s cannot be read as parquet", "visit"
+        )
 
     @patch("datafaker.parquet2orm.logger")
     def test_differing_columns_are_rejected(self, mock_logger: MagicMock) -> None:
@@ -283,8 +287,11 @@ class PartitionedParquet2Orm(ParquetDirTestCase):
             }
         )
         orm = get_initial_parquet_orm(self.parquet_dir)
+        assert orm is not None
         self.assertDictEqual(orm, {})
-        mock_logger.error.assert_called_once_with("Entry %s cannot be read as parquet", "sub")
+        mock_logger.error.assert_called_once_with(
+            "Entry %s cannot be read as parquet", "sub"
+        )
 
     @patch("datafaker.parquet2orm.logger")
     def test_differing_types_is_disallowed(self, mock_logger: MagicMock) -> None:
@@ -297,8 +304,11 @@ class PartitionedParquet2Orm(ParquetDirTestCase):
             }
         )
         orm = get_initial_parquet_orm(self.parquet_dir)
+        assert orm is not None
         self.assertDictEqual(orm, {})
-        mock_logger.error.assert_called_once_with("Entry %s cannot be read as parquet", "visit")
+        mock_logger.error.assert_called_once_with(
+            "Entry %s cannot be read as parquet", "visit"
+        )
 
     @patch("datafaker.parquet2orm.logger")
     def test_int32_and_nullable_int32_are_the_same_type(
@@ -321,7 +331,7 @@ class PartitionedParquet2Orm(ParquetDirTestCase):
         assert orm is not None
         add_guessed_keys(orm)
         self.assertEqual(orm["person"]["columns"]["age"]["type"], "INTEGER")
-        mock_logger.warning.assert_not_called
+        mock_logger.warning.assert_not_called()
 
     def test_nullable_int_first_file_is_still_integer(self) -> None:
         """Test a pandas ``Int32`` column is typed ``INTEGER``."""

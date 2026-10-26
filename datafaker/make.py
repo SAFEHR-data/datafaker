@@ -40,7 +40,7 @@ from datafaker.db_utils import (
     get_sync_engine,
     get_vocabulary_table_names,
 )
-from datafaker.parquet2orm import get_initial_parquet_orm, add_guessed_keys
+from datafaker.parquet2orm import add_guessed_keys, get_initial_parquet_orm
 from datafaker.settings import get_source_dsn, get_source_schema
 from datafaker.utils import (
     get_columns_assigned,
@@ -703,6 +703,7 @@ def _generate_vocabulary_table(
     download_table(table, engine, yaml_file_name, compress)
 
 
+# pylint: disable=too-many-arguments disable=too-many-positional-arguments
 def make_tables_file(
     db_dsn: str,
     schema_name: Optional[str],

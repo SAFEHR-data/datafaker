@@ -1,16 +1,15 @@
 """Add to ORM structure based on parquet files."""
 import glob
 import re
-from abc import ABC, abstractmethod
+from abc import ABC
 from collections.abc import Generator, Mapping
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import numpy as np
-from fastparquet import ParquetFile
+from fastparquet import ParquetException, ParquetFile
 
-from datafaker.utils import logger, get_property
+from datafaker.utils import get_property, logger
 
 PARQUET_SUFFIXES = {".parquet", ".parq"}
 
@@ -33,9 +32,6 @@ class ParquetTable(ABC):
         """Get any files needing to be merged into a view."""
         return []
 
-    def name(self) -> str:
-        """Name of the table."""
-
 
 class ParquetHiveTable(ParquetTable):
     """A hive partitioned table formed from a directory."""
@@ -45,8 +41,8 @@ class ParquetHiveTable(ParquetTable):
         super().__init__(pf, name)
         self.file_list = file_list
 
-    def hive_files(self) -> list[str]:
-        """This table has many files."""
+    def hive_files(self) -> list[Path]:
+        """Return the list of files that make up this hive."""
         return self.file_list
 
 
@@ -75,7 +71,10 @@ def find_parquet_tables(directory: Path | str) -> Generator[ParquetTable, None, 
             else:
                 pf = ParquetFile(child, verify=True)
                 yield ParquetTable(pf, child.name)
-        except Exception as e:
+        except ParquetException as e:
+            logger.error("Entry %s cannot be read as parquet", child.name)
+            logger.warning(e)
+        except ValueError as e:
             logger.error("Entry %s cannot be read as parquet", child.name)
             logger.warning(e)
 
@@ -83,6 +82,7 @@ def find_parquet_tables(directory: Path | str) -> Generator[ParquetTable, None, 
 def add_guessed_keys(tables_conf: dict[str, Any]):
     """
     Read the orm.yaml config "tables" portion, adding guesses for foreign keys and primary keys.
+
     :param tables_conf: On input, the tables portion of the configuration file; this dictionary will
       be changed to set the appropriate primary and foreign keys.
     """
@@ -131,10 +131,7 @@ def get_initial_parquet_orm(directory: Path) -> dict[str, Any] | None:
         logger.error("%s is not a directory", directory)
         return None
     parquets = find_parquet_tables(directory)
-    return {
-        p.name: _get_table_orm(p.parquet_file)
-        for p in parquets
-    }
+    return {p.name: _get_table_orm(p.parquet_file) for p in parquets}
 
 
 _camel_case_re = re.compile(r"([a-z])([A-Z])")
@@ -200,7 +197,7 @@ class _ColumnGuesser:
         return best_so_far
 
     def is_likely_primary(self, table_name, column_name) -> bool:
-        """Determines if the specified column name looks like a primary key."""
+        """Determine if the specified column name looks like a primary key."""
         words = _get_words(column_name) - {"id", "key"}
         return words <= self.tn2words[table_name]
 

@@ -141,14 +141,20 @@ class EndToEndParquetTestCase(DatafakerTestCase):
             orm = yaml.load(orm_fh, yaml.SafeLoader)
         # Let's check some of the types, primary and foreign keys
         t = orm["tables"]
-        self.assertEqual(t["signature_model.parquet"]["columns"]["player_id"]["type"], "INTEGER")
+        self.assertEqual(
+            t["signature_model.parquet"]["columns"]["player_id"]["type"], "INTEGER"
+        )
         self.assertTrue(t["manufacturer.parquet"]["columns"]["id"]["primary"])
-        self.assertFalse(t["manufacturer.parquet"]["columns"]["name"].get("primary", False))
+        self.assertFalse(
+            t["manufacturer.parquet"]["columns"]["name"].get("primary", False)
+        )
         self.assertEqual(
             t["signature_model.parquet"]["columns"]["player_id"]["foreign_keys"],
             ["player.parquet.id"],
         )
-        self.assertEqual(t["signature_model.parquet"]["columns"]["based_on"]["type"], "INTEGER")
+        self.assertEqual(
+            t["signature_model.parquet"]["columns"]["based_on"]["type"], "INTEGER"
+        )
         # DATETIMEs cannot be detected
         t["manufacturer.parquet"]["columns"]["founded"]["type"] = "DATETIME"
         t["model.parquet"]["columns"]["introduced"]["type"] = "DATETIME"

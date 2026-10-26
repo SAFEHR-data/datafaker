@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 from datafaker.interactive import update_config_generators
 from datafaker.interactive.base import DbCmd
 from datafaker.utils import get_property
-from tests.utils import RequiresDBTestCase, DuckTestDb
+from tests.utils import DuckTestDb, RequiresDBTestCase
 
 
 class NonInteractiveTests(RequiresDBTestCase):
@@ -81,7 +81,7 @@ class NonInteractiveTests(RequiresDBTestCase):
         """
         test that we can set multi-column generators from a CSV file
         """
-        mock_csv_reader.return_value=iter(
+        mock_csv_reader.return_value = iter(
             [
                 [
                     "observation",
@@ -137,7 +137,7 @@ class NonInteractiveTests(RequiresDBTestCase):
         but where there are already multi-column generators configured
         that will have to be unmerged.
         """
-        mock_csv_reader.return_value=iter(
+        mock_csv_reader.return_value = iter(
             [
                 [
                     "observation",
@@ -220,5 +220,8 @@ class NonInteractiveTests(RequiresDBTestCase):
             '"grouped_multivariate_lognormal"',
         )
 
+
 class NonInteractiveTestsDuckDB(NonInteractiveTests):
+    """DuckDB version of NonInteractiveTests."""
+
     database_type = DuckTestDb

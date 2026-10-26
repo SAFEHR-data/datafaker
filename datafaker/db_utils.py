@@ -181,11 +181,7 @@ def create_db_engine(
                 # double up single quotes
                 dj = str(parquet_dir).replace("'", "''")
                 settings.append(f"SET file_search_path TO '{dj}';")
-                dataset_views = [
-                    _dataset_view_sql(t)
-                    for t in tables
-                    if t.hive_files()
-                ]
+                dataset_views = [_dataset_view_sql(t) for t in tables if t.hive_files()]
             case _:
                 tables = []
                 logger.error(
