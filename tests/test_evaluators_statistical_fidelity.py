@@ -5,34 +5,34 @@ from sqlalchemy import Column, DateTime, Integer, MetaData, String, Table, creat
 
 from datafaker.evaluators.column_evaluator import EvaluationProfile
 from datafaker.evaluators.statistical_fidelity import (
-    EMAIL_PIPELINE,
-    PROFILE_PIPELINES,
+    EMAIL_CRITERIA,
+    PROFILE_CRITERIA,
     StatisticalFidelity,
 )
 from tests.utils import DatafakerTestCase
 
 
-class ProfilePipelinesTests(DatafakerTestCase):
-    """Structural sanity checks for the built-in evaluation pipelines."""
+class ProfileCriteriaTests(DatafakerTestCase):
+    """Structural sanity checks for the built-in evaluation criteria."""
 
-    def test_every_evaluation_profile_has_a_pipeline(self) -> None:
-        """Each EvaluationProfile enum member maps to a configured pipeline."""
+    def test_every_evaluation_profile_has_criteria(self) -> None:
+        """Each EvaluationProfile enum member maps to configured criteria."""
         for profile in EvaluationProfile:
-            self.assertIn(profile, PROFILE_PIPELINES)
-            self.assertTrue(PROFILE_PIPELINES[profile])
+            self.assertIn(profile, PROFILE_CRITERIA)
+            self.assertTrue(PROFILE_CRITERIA[profile])
 
-    def test_pipeline_weights_sum_to_one(self) -> None:
-        """Each profile's pipeline weights add up to 1.0, for a sane weighted average."""
-        for profile, pipelines in PROFILE_PIPELINES.items():
+    def test_criterion_weights_sum_to_one(self) -> None:
+        """Each profile's criterion weights add up to 1.0, for a sane weighted average."""
+        for profile, criteria in PROFILE_CRITERIA.items():
             with self.subTest(profile=profile.name):
-                total_weight = sum(p.weight for p in pipelines)
+                total_weight = sum(c.weight for c in criteria)
                 self.assertAlmostEqual(1.0, total_weight)
 
-    def test_pipeline_names_are_unique_within_a_profile(self) -> None:
-        """Pipeline names double as dict keys in calculate_scores, so must be unique."""
-        for profile, pipelines in PROFILE_PIPELINES.items():
+    def test_criterion_names_are_unique_within_a_profile(self) -> None:
+        """Criterion names double as dict keys in calculate_scores, so must be unique."""
+        for profile, criteria in PROFILE_CRITERIA.items():
             with self.subTest(profile=profile.name):
-                names = [p.name for p in pipelines]
+                names = [c.name for c in criteria]
                 self.assertEqual(len(names), len(set(names)))
 
 
@@ -57,15 +57,15 @@ class StatisticalFidelityTests(DatafakerTestCase):
             [{"email": f"user{i}@example.com"} for i in range(30)],
         )
         fidelity = StatisticalFidelity(table.c.email, engine, sample_size=1000)
-        fidelity.set_eval_pipelines(EvaluationProfile.EMAIL)
+        fidelity.set_eval_criteria(EvaluationProfile.EMAIL)
 
         synthetic = [f"user{i}@example.com" for i in range(30)]
-        overall_score, pipeline_scores = fidelity.calculate_scores(synthetic)
+        overall_score, criterion_scores = fidelity.calculate_scores(synthetic)
 
         self.assertAlmostEqual(0.0, overall_score)
-        self.assertEqual({p.name for p in EMAIL_PIPELINE}, set(pipeline_scores))
-        for name, score in pipeline_scores.items():
-            with self.subTest(pipeline=name):
+        self.assertEqual({c.name for c in EMAIL_CRITERIA}, set(criterion_scores))
+        for name, score in criterion_scores.items():
+            with self.subTest(criterion=name):
                 self.assertAlmostEqual(0.0, score)
 
     def test_completely_different_synthetic_data_scores_worse(self) -> None:
@@ -75,7 +75,7 @@ class StatisticalFidelityTests(DatafakerTestCase):
             [{"category": "alpha"} for _ in range(30)],
         )
         fidelity = StatisticalFidelity(table.c.category, engine, sample_size=1000)
-        fidelity.set_eval_pipelines(EvaluationProfile.CATEGORICAL)
+        fidelity.set_eval_criteria(EvaluationProfile.CATEGORICAL)
 
         matching_score, _ = fidelity.calculate_scores(["alpha"] * 30)
         different_score, _ = fidelity.calculate_scores(["zzz_never_seen"] * 30)
@@ -83,26 +83,26 @@ class StatisticalFidelityTests(DatafakerTestCase):
         self.assertGreater(different_score, matching_score)
 
     def test_temporal_profile_scores_a_matching_date_column(self) -> None:
-        """The TEMPORAL profile's two pipelines run cleanly against a date column."""
+        """The TEMPORAL profile's two criteria run cleanly against a date column."""
         engine, table = _make_table(
             [Column("ts", DateTime)],
             [{"ts": datetime(2020, 1, (i % 27) + 1)} for i in range(40)],
         )
         fidelity = StatisticalFidelity(table.c.ts, engine, sample_size=1000)
-        fidelity.set_eval_pipelines(EvaluationProfile.TEMPORAL)
+        fidelity.set_eval_criteria(EvaluationProfile.TEMPORAL)
 
         synthetic = [datetime(2020, 1, (i % 27) + 1) for i in range(40)]
-        overall_score, pipeline_scores = fidelity.calculate_scores(synthetic)
+        overall_score, criterion_scores = fidelity.calculate_scores(synthetic)
 
         self.assertAlmostEqual(0.0, overall_score)
-        self.assertEqual({"timestamp", "day_of_week"}, set(pipeline_scores))
+        self.assertEqual({"timestamp", "day_of_week"}, set(criterion_scores))
 
-    def test_no_pipelines_set_scores_zero(self) -> None:
-        """Without calling set_eval_pipelines, there's nothing to score."""
+    def test_no_criteria_set_scores_zero(self) -> None:
+        """Without calling set_eval_criteria, there's nothing to score."""
         engine, table = _make_table(
             [Column("n", Integer)], [{"n": i} for i in range(10)]
         )
         fidelity = StatisticalFidelity(table.c.n, engine, sample_size=1000)
-        overall_score, pipeline_scores = fidelity.calculate_scores([1, 2, 3])
+        overall_score, criterion_scores = fidelity.calculate_scores([1, 2, 3])
         self.assertEqual(0.0, overall_score)
-        self.assertEqual({}, pipeline_scores)
+        self.assertEqual({}, criterion_scores)

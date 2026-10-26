@@ -42,7 +42,7 @@ class ConfigureCopyGeneratorsWithDateTests(GeneratesDBTestCase):
             # set up our copy proposer
             gc.do_next("happening.comment")
             gc.reset()
-            gc.do_propose("")
+            gc.do_propose("all")
             proposals = gc.get_proposals()
             provider_name = "generic.anchored_provider.copy [from name]"
             self.assertIn(provider_name, proposals.keys())
@@ -69,7 +69,7 @@ class ConfigureCopyGeneratorsWithDateTests(GeneratesDBTestCase):
             # set up our copy proposer
             gc.do_next("happening.comment")
             gc.reset()
-            gc.do_propose("")
+            gc.do_propose("all")
             proposals = gc.get_proposals()
             provider_name = (
                 "generic.anchored_provider.copy_fk"
@@ -105,7 +105,7 @@ class ConfigureCopyGeneratorsWithDateTests(GeneratesDBTestCase):
             # set up our copy proposer
             gc.do_next("happening.name")
             gc.reset()
-            gc.do_propose("")
+            gc.do_propose("all")
             proposals = gc.get_proposals()
             provider_name = (
                 "generic.anchored_provider.copy_fk"
@@ -116,7 +116,7 @@ class ConfigureCopyGeneratorsWithDateTests(GeneratesDBTestCase):
             gc.do_set(str(prop[0]))
             gc.do_next("happening.comment")
             gc.reset()
-            gc.do_propose("")
+            gc.do_propose("all")
             proposals = gc.get_proposals()
             provider_name = (
                 "generic.anchored_provider.copy_fk"

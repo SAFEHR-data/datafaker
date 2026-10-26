@@ -2,11 +2,12 @@
 
 import string
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Sequence
 
-from sqlalchemy import Column, Engine, UniqueConstraint, select
-from sqlalchemy.types import Date, DateTime, Integer, Numeric, Time
+from sqlalchemy import Column, Engine, Table, UniqueConstraint, select
+from sqlalchemy.types import Date, DateTime, Time
 
+from datafaker.db_utils import is_numeric_sql_type
 from datafaker.dialects import Random
 from datafaker.evaluators.evaluation_profile import EvaluationProfile
 from datafaker.evaluators.metrics import (
@@ -32,7 +33,7 @@ class ColumnStats:
     punctuation_ratio: float
 
     @property
-    def uniqueness(self):
+    def uniqueness(self) -> float:
         """Fraction of rows whose value is distinct from the others."""
         return self.unique_count / max(self.row_count, 1)
 
@@ -45,11 +46,11 @@ class ProposalEvaluation:
     novelty: float
     diversity: float
     overall_score: float
-    pipeline_scores: dict[str, float]
+    criterion_scores: dict[str, float]
     copy_fraction: float = 0.0
     synthetic_uniqueness: float = 1.0
 
-    def __str__(self):
+    def __str__(self) -> str:
         """Render a human-readable summary of the evaluation."""
         lines = [
             f"{self.proposer.name()} "
@@ -59,7 +60,7 @@ class ProposalEvaluation:
             f" (copies={self.copy_fraction:.6f})"
         ]
 
-        for name, score in self.pipeline_scores.items():
+        for name, score in self.criterion_scores.items():
             lines.append(f"  {name:<15} {score:.6f}")
 
         return "\n".join(lines)
@@ -69,6 +70,9 @@ class ProposalEvaluation:
 
 def analyse_column(values: list[Any]) -> ColumnStats:
     """Compute length/space/digit/punctuation statistics over ``values``."""
+    # setup() already routes Numeric/Integer and Date/DateTime/Time columns
+    # elsewhere, so this only ever sees whatever's left (Boolean/UUID/Enum/
+    # JSON/...) - stringify defensively since those aren't already str.
     values = [str(v) for v in values if v is not None]
 
     total_chars = sum(len(v) for v in values)
@@ -111,18 +115,16 @@ def choose_profile(stats: ColumnStats) -> EvaluationProfile:
     return EvaluationProfile.SHORT_TEXT
 
 
-def choose_numeric_profile(values) -> EvaluationProfile:
+def choose_numeric_profile(values: Sequence[Any]) -> EvaluationProfile:
     """Pick a numeric column's evaluation profile from its cardinality.
 
     Decide whether an Integer/Numeric column behaves like a small set of
     repeated categories (a status code, rating, or flag) or like a
     continuous / high-cardinality quantity (an age, salary, or identifier).
-
-    Previously every Integer column was assumed to be categorical and every
-    Numeric column was assumed to be an identifier, regardless of how many
-    distinct values it actually had - which misclassifies something like an
-    integer age or salary column. This applies the same cardinality check
-    already used for string columns instead.
+    A fixed assumption from SQL type alone can't tell these apart - an
+    Integer column isn't always categorical (an age, say) and a Numeric
+    one isn't always an identifier - so this applies the same cardinality
+    check already used for string columns (see ``choose_profile``) instead.
     """
     non_null = [v for v in values if v is not None]
     if not non_null:
@@ -135,7 +137,7 @@ def choose_numeric_profile(values) -> EvaluationProfile:
     return EvaluationProfile.IDENTIFIER
 
 
-def looks_like_email(values) -> bool:
+def looks_like_email(values: Sequence[Any]) -> bool:
     """Heuristically decide whether a sample of values looks like emails."""
     nonempty = [str(v).strip() for v in values if v is not None and str(v).strip()]
     if not nonempty:
@@ -157,32 +159,17 @@ def looks_like_email(values) -> bool:
 class ColumnEvaluator:  # pylint: disable=too-many-instance-attributes
     """Evaluate candidate proposers against one (or several merged) columns."""
 
-    def __init__(self):
-        """Initialize an unconfigured evaluator; call setup() before use."""
-        self.engine = None
-        self.novelty_metric = None
-        self.diversity_metric = None
-        self.sample_size = 4000
-        self.columns = []
-        self.column = None
-        self.table = None
-        self.is_primary_key = False
-        self.is_unique_constrained = False
-        self.real_values = []
-        self.column_is_numeric = False
-        self.real_uniqueness = 0.0
-        self.statistical_fidelity = None
-        self.profile = None
+    def __init__(self, columns: list[Column], engine: Engine) -> None:
+        """Sample the real column(s) and pick the evaluation profile/criteria."""
+        assert columns, "ColumnEvaluator needs at least one column"
+        self.sample_size: int = 4000
+        self.engine: Engine = engine
+        self.novelty_metric: NoveltyMetric = NoveltyMetric()
+        self.diversity_metric: DiversityMetric = DiversityMetric()
 
-    def setup(self, columns: list[Column], engine: Engine):
-        """Sample the real column(s) and pick the evaluation profile/pipelines."""
-        self.engine = engine
-        self.novelty_metric = NoveltyMetric()
-        self.diversity_metric = DiversityMetric()
-
-        self.columns = columns
-        self.column = columns[0] if len(columns) == 1 else None
-        self.table = columns[0].table if columns else None
+        self.columns: list[Column] = columns
+        self.column: Column | None = columns[0] if len(columns) == 1 else None
+        self.table: Table = columns[0].table
         # A composite key needs every constituent column marked primary_key;
         # this reduces to the single column's own flag in the common case.
         self.is_primary_key = bool(columns) and all(c.primary_key for c in columns)
@@ -231,7 +218,7 @@ class ColumnEvaluator:  # pylint: disable=too-many-instance-attributes
         # names), where that overlap is expected and legitimate. Used to
         # decide how broadly the resample-penalty in proposal_ranking.py
         # applies.
-        self.column_is_numeric = isinstance(column_type, (Numeric, Integer))
+        self.column_is_numeric = is_numeric_sql_type(column_type)
 
         # fraction of real values that are distinct - used to judge whether a
         # generator that resamples from the real data verbatim (e.g. a
@@ -253,7 +240,7 @@ class ColumnEvaluator:  # pylint: disable=too-many-instance-attributes
             )
             if isinstance(column_type, (Date, DateTime, Time)):
                 profile = EvaluationProfile.TEMPORAL
-            elif isinstance(column_type, (Numeric, Integer)):
+            elif is_numeric_sql_type(column_type):
                 profile = choose_numeric_profile(self.real_values)
             else:
                 stats = analyse_column(self.real_values)
@@ -262,7 +249,7 @@ class ColumnEvaluator:  # pylint: disable=too-many-instance-attributes
                 else:
                     profile = choose_profile(stats)
             self.profile = profile
-            self.statistical_fidelity.set_eval_pipelines(self.profile)
+            self.statistical_fidelity.set_eval_criteria(self.profile)
         else:
             self.statistical_fidelity = None
             self.profile = EvaluationProfile.IDENTIFIER
@@ -285,20 +272,15 @@ class ColumnEvaluator:  # pylint: disable=too-many-instance-attributes
                 return True
         return False
 
-    def evaluate(self, proposer) -> ProposalEvaluation:
+    def evaluate(self, proposer: Proposer) -> ProposalEvaluation:
         """Score one proposer's synthetic data against the sampled real data."""
-        assert (
-            self.novelty_metric is not None and self.diversity_metric is not None
-        ), "setup() must be called before evaluate()"
         synthetic_samples = proposer.generate_data(self.sample_size)
 
-        # calculate novelty
         novelty_score = self.novelty_metric.compare(
             self.real_values,
             synthetic_samples,
         )
 
-        # calculate diversity
         diversity_score = self.diversity_metric.compare(
             self.real_values,
             synthetic_samples,
@@ -342,16 +324,16 @@ class ColumnEvaluator:  # pylint: disable=too-many-instance-attributes
             # Same rationale as the copy_frac catch above.
             synthetic_uniqueness = 0.0
 
-        # calculate fidelity scores for each evaluation pipeline. Multi-column
+        # calculate fidelity scores for each evaluation criterion. Multi-column
         # proposal evaluation does not map cleanly onto the single-column fidelity
-        # pipelines, so fall back to a neutral score instead of crashing.
+        # criteria, so fall back to a neutral score instead of crashing.
         if self.statistical_fidelity is None:
             stat_fidelity_overall_score = 0.0
-            stat_fidelity_pipeline_scores = {}
+            stat_fidelity_criterion_scores = {}
         else:
             (
                 stat_fidelity_overall_score,
-                stat_fidelity_pipeline_scores,
+                stat_fidelity_criterion_scores,
             ) = self.statistical_fidelity.calculate_scores(synthetic_samples)
 
         return ProposalEvaluation(
@@ -359,7 +341,7 @@ class ColumnEvaluator:  # pylint: disable=too-many-instance-attributes
             novelty=novelty_score,
             diversity=diversity_score,
             overall_score=stat_fidelity_overall_score,
-            pipeline_scores=stat_fidelity_pipeline_scores,
+            criterion_scores=stat_fidelity_criterion_scores,
             copy_fraction=copy_frac,
             synthetic_uniqueness=synthetic_uniqueness,
         )
