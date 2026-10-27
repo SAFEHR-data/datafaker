@@ -215,7 +215,8 @@ class PartitionedParquet2Orm(ParquetDirTestCase):
         )
         self.assertSetEqual(set(orm["visit"]["columns"].keys()), {"visit_id", "yr"})
 
-    def test_files_and_directories_mix(self) -> None:
+    @patch("datafaker.parquet2orm.logger")
+    def test_files_and_directories_mix(self, mock_logger: MagicMock) -> None:
         """Test a mixture of loose parquet files and parquet dirs are read as separate tables.
         Checks empty directory are not treated as partitioned tables."""
         self.write_files(
@@ -230,6 +231,7 @@ class PartitionedParquet2Orm(ParquetDirTestCase):
         assert orm is not None
         add_guessed_keys(orm)
         self.assertSetEqual(set(orm.keys()), {"fruit.parquet", "visit"})
+        mock_logger.warning.assert_called_once_with("Entry %s is empty", "empty")
 
     def test_nested_plain_directories_are_one_table(self) -> None:
         """Test a subdirectory of unpartitioned files is one table."""

@@ -77,6 +77,8 @@ def find_parquet_tables(directory: Path | str) -> Generator[ParquetTable, None, 
         except ValueError as e:
             logger.error("Entry %s cannot be read as parquet", child.name)
             logger.warning(e)
+        except IndexError as _e:
+            logger.warning("Entry %s is empty", child.name)
 
 
 def add_guessed_keys(tables_conf: dict[str, Any]):
