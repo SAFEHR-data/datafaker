@@ -31,6 +31,7 @@ from sqlalchemy.schema import (
     MetaData,
     Table,
 )
+from sqlalchemy.types import Integer, Numeric, TypeEngine
 from typer import Exit
 
 from datafaker.utils import (
@@ -270,6 +271,11 @@ def get_orm_metadata(
         if ignore:
             metadata.remove(table)
     return metadata
+
+
+def is_numeric_sql_type(column_type: TypeEngine | None) -> bool:
+    """Whether a SQLAlchemy column type is Numeric or Integer."""
+    return isinstance(column_type, (Numeric, Integer))
 
 
 def fk_refers_to_ignored_table(fk: ForeignKey) -> bool:

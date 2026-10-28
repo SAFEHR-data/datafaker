@@ -1,5 +1,7 @@
 """Unit tests for datafaker.evaluators.feature_extractors."""
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
+
+from sqlalchemy import Column, Date, MetaData, Table, create_engine, select
 
 from datafaker.evaluators.feature_extractors import (
     CharacterBigramExtractor,
@@ -260,6 +262,16 @@ class VowelConsonantPatternExtractorTests(DatafakerTestCase):
         """A value with no letters at all produces no pattern."""
         self.assertEqual([], list(self.extractor.extract("123!!")))
 
+    def test_accented_vowels_count_as_vowels(self) -> None:
+        """An accented vowel (common in non-English names) is still a 'V'."""
+        self.assertEqual(["CVCV"], list(self.extractor.extract("René")))
+        self.assertEqual(["CVV"], list(self.extractor.extract("Zoë")))
+
+    def test_cedilla_and_tilde_consonants_stay_consonants(self) -> None:
+        """A diacritic on a consonant (ç, ñ) must not be miscounted as a vowel."""
+        self.assertEqual(["CVCVC"], list(self.extractor.extract("façon")))
+        self.assertEqual(["CVCV"], list(self.extractor.extract("niño")))
+
 
 class TimestampExtractorTests(DatafakerTestCase):
     """Test case for TimestampExtractor."""
@@ -324,6 +336,38 @@ class WeekdayExtractorTests(DatafakerTestCase):
     def test_invalid_string_yields_nothing(self) -> None:
         """An unparseable string produces no feature."""
         self.assertEqual([], list(self.extractor.extract("nope")))
+
+    def test_sql_expression_agrees_with_python_weekday(self) -> None:
+        """The SQL expression must use the same Monday=0 convention as extract().
+
+        Regression test: a dialect's own day-of-week function (Postgres'
+        EXTRACT(DOW), MSSQL's DATEPART(weekday)) uses a different, and for
+        MSSQL session-configurable, numbering convention than Python's
+        date.weekday() - comparing the two directly would silently treat a
+        perfect real/synthetic match as a mismatch (see expression()'s
+        docstring).
+        """
+        engine = create_engine("duckdb:///:memory:")
+        metadata = MetaData()
+        table = Table("d", metadata, Column("dt", Date))
+        metadata.create_all(engine)
+        base = date(1970, 1, 1)
+        days = [base + timedelta(days=i) for i in range(14)]
+        with engine.begin() as conn:
+            conn.execute(table.insert(), [{"dt": d} for d in days])
+
+        expr = self.extractor.expression(table.c.dt)
+        with engine.connect() as conn:
+            rows = conn.execute(select(table.c.dt, expr)).all()
+
+        self.assertEqual(14, len(rows))
+        for day, sql_weekday in rows:
+            self.assertEqual(
+                day.weekday(),
+                sql_weekday,
+                f"{day} ({day.strftime('%A')}): SQL gave {sql_weekday},"
+                f" Python gives {day.weekday()}",
+            )
 
 
 class EmailLocalPartExtractorTests(DatafakerTestCase):

@@ -33,19 +33,16 @@ proposer:
 ``config.yaml``; from then on, only the underlying generator function is used ---
 the proposer itself is not needed again for that column.
 
-``propose`` now shows two different views of the same candidates: first the
-plain, per-proposer ``(fit: ...)`` list described above, and then a second,
-ranked table produced by a separate statistical evaluation pipeline (see
-:ref:`evaluating-and-ranking-proposals` below) that scores every candidate on
-fidelity, novelty and diversity and names a ``Recommended`` generator. The two
-scores are independent and can disagree; the ranked table and its
-recommendation are the more reliable of the two for most columns.
+``propose`` shows a ranked table produced by a statistical evaluation
+pipeline (see :ref:`evaluating-and-ranking-proposals` below) that scores
+every candidate on fidelity, novelty and diversity and names a
+``Recommended`` generator.
 
 Default generators assigned automatically
 ------------------------------------------
 
-Before you run ``propose``/``set`` at all, ``configure-generators`` (via
-``make.py``) already assigns a default generator to every column, purely from its
+Before you run ``propose``/``set`` at all, ``configure-generators`` already
+assigns a default generator to every column, purely from its
 SQL type (and whether it is a foreign key or primary key). ``propose`` lets you
 replace this default with something that better matches the real data.
 
@@ -383,8 +380,7 @@ for example, a ``year_of_birth`` column should always agree with a
 Evaluating and ranking proposals
 ----------------------------------
 
-For a single-column ``propose``, every candidate proposer that survives the
-type-compatibility filter (see below) is additionally scored by
+For a single-column ``propose``, every candidate proposer is scored by
 ``datafaker.evaluators.ColumnEvaluator`` and ranked by
 ``datafaker.evaluators.proposal_ranking.rank_proposals``. This produces a
 table shown by ``propose``, with a ``Recommended: N. <name>`` line
@@ -439,10 +435,10 @@ compared (so these are *relative* scores, not absolute ones):
      - Meaning
    * - **Fidelity**
      - How closely the synthetic sample's distribution matches the real
-       column's, measured by a profile-specific pipeline of feature
-       extractors run through ``MeanSquaredError`` or ``JensenShannon``
-       (see :ref:`statistical-fidelity-pipelines` below), then inverted so
-       higher is better.
+       column's, measured by a profile-specific weighted combination of
+       feature extractors run through ``MeanSquaredError`` or
+       ``JensenShannon`` (see :ref:`statistical-fidelity-criteria` below),
+       then inverted so higher is better.
    * - **Novelty**
      - The fraction of synthetic values (case/whitespace-normalized) that do
        *not* already appear among the real sampled values. 1.0 means every
@@ -452,22 +448,22 @@ compared (so these are *relative* scores, not absolute ones):
        Shannon entropy over distinct values) matches the real sample's --- not
        "more diverse is better", but "as diverse as the real data".
 
-.. _statistical-fidelity-pipelines:
+.. _statistical-fidelity-criteria:
 
-Fidelity pipelines by profile
+Fidelity criteria by profile
 """"""""""""""""""""""""""""""
 
-Fidelity is computed by one of six fixed pipelines, chosen by profile, each a
-weighted combination of feature extractors compared via ``MeanSquaredError``
-(on a length/count histogram) or ``JensenShannon`` divergence (on a category
-distribution):
+Fidelity is computed by one of six fixed sets of criteria, chosen by profile,
+each a weighted combination of feature extractors compared via
+``MeanSquaredError`` (on a length/count histogram) or ``JensenShannon``
+divergence (on a category distribution):
 
 .. list-table::
    :widths: 20 80
    :header-rows: 1
 
    * - Profile
-     - Pipeline (feature: weight)
+     - Criteria (feature: weight)
    * - ``IDENTIFIER``
      - identifier (value histogram): 1.0
    * - ``CATEGORICAL``
@@ -542,11 +538,13 @@ strictly dominated on fidelity, novelty *and* diversity simultaneously by any
 other candidate); ``propose`` (without ``all``) shows only front 1, capped at
 10 rows by ``Score`` (always keeping the recommended candidate even if it
 would otherwise be cut), and tells you how many candidates were hidden. Run
-``propose all`` to see every candidate --- including proposers whose output
-type doesn't actually match the column (for example a continuous-float
-proposer against an ``Integer`` column, invalid on most databases), which the
-plain ``propose`` excludes structurally rather than relying on the score to
-catch.
+``propose all`` to see every candidate regardless of front or score ---
+including, for example, a continuous-float proposer against an ``Integer``
+column; whether that's a valid choice for your database is on you to check,
+since ``propose`` doesn't filter or penalize candidates by output type.
+
+The recommended candidate's row is marked with a leading ``*`` and (if your
+terminal theme supports colour) highlighted, whichever Pareto front it's in.
 
 The **recommendation** is simply the candidate with the highest ``Score``
 (ties broken by NSGA-II crowding distance, i.e. preferring a candidate that's
