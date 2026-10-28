@@ -29,13 +29,9 @@ def _set_roles_for_column(
     """
     Set new entries in ``out`` based on the roles ``column`` has.
 
-    :param out: Mapping to be updated of role to related columns. A related
-        colomn is a pair ``(fk, fcol)`` where ``fcol`` is the column that has
-        that role and ``fk`` is the foreign key in the table ``column`` appears
-        in that points to the table ``fcol`` appears in, or None if ``column``
-        and ``fcol`` are in the same table.
+    :param out: Mapping to be updated of role to related columns.
     :param fk: Foreign key relationship to the table ``column`` appears in
-        (appears in new entries set in ``out``).
+        (this will be set in new entries added to ``out``).
     :param column: The column to be checked for roles.
     :param columns_config: The ``tables: <table-name>: columns:`` section
         of the ``config.yaml`` file.
