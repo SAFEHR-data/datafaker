@@ -284,7 +284,7 @@ class MsSqlTestDb(TestDatabaseBase):
     _EOL_RE = re.compile(r";$", re.MULTILINE)
     _TIMESTAMP_RE = re.compile(r"(TIMESTAMP)\s+WITH\s+TIME\s+ZONE", re.IGNORECASE)
     _ALTER_OWNER_RE = re.compile(
-        r'ALTER\s+(TABLE|DATABASE)\s+["A-Za-z0-9_.]+\s+OWNER\s+TO\s+[A-Za-z0-9_]+\s*;'
+        r'ALTER\s+(TABLE|DATABASE|VIEW)\s+["A-Za-z0-9_.]+\s+OWNER\s+TO\s+[A-Za-z0-9_]+\s*;'
     )
     _ALTER_ONLY_RE = re.compile(r"ALTER\s+TABLE\s+ONLY\s+")
     _CREATE_INDEX_RE = re.compile(
@@ -764,7 +764,7 @@ class GeneratesDBTestCase(RequiresDBTestCase):
         # Generate the `orm.yaml` from the database
         (self.orm_fd, self.orm_file_path) = mkstemp(".yaml", "orm_", text=True)
         with os.fdopen(self.orm_fd, "w", encoding="utf-8") as orm_fh:
-            orm_fh.write(make_tables_file(self.dsn, self.schema_name))
+            orm_fh.write(make_tables_file(self.dsn, self.schema_name, False))
         # Create a separate empty destination database
         self.make_destination_database("dst")
 

@@ -6,17 +6,7 @@ import typing
 from abc import abstractmethod
 from typing import Any, Sequence, Union
 
-from sqlalchemy import (
-    Column,
-    CursorResult,
-    Engine,
-    desc,
-    func,
-    literal_column,
-    select,
-    table,
-    text,
-)
+from sqlalchemy import Column, CursorResult, Engine, desc, func, select
 
 from datafaker.dialects import Random
 from datafaker.proposers.base import (
@@ -25,7 +15,6 @@ from datafaker.proposers.base import (
     dist_gen,
     fit_from_buckets,
 )
-from datafaker.utils import schema_qualified_name
 
 NumericType = Union[int, float]
 
@@ -57,12 +46,10 @@ def zipf_distribution(total: int, bins: int) -> typing.Generator[int, None, None
 
 
 def _choice_stmt(  # pylint: disable=R0913,R0917
-    column_name: str,
-    table_name: str,
+    column: Column,
     store_counts: bool,
     sample_count: int | None,
     suppress_count: int,
-    table_sql: str | None = None,
 ) -> Any:
     """Build a SQLAlchemy SELECT for gathering choice value distributions.
 
@@ -70,13 +57,10 @@ def _choice_stmt(  # pylint: disable=R0913,R0917
     TOP/newid() on MS-SQL.  MS-SQL also forbids ORDER BY inside a subquery
     without TOP; this function never emits such a clause.
     """
-    col = literal_column(f'"{column_name}"')
-    tbl = text(table_sql) if table_sql else table(table_name)
     if sample_count is not None:
         sample_sub = (
-            select(col.label("value"))
-            .where(col.isnot(None))
-            .select_from(tbl)
+            select(column.label("value"))
+            .where(column.isnot(None))
             .order_by(Random())
             .limit(sample_count)
             .subquery("_inner")
@@ -92,12 +76,11 @@ def _choice_stmt(  # pylint: disable=R0913,R0917
     else:
         counted_sub = (
             select(
-                col.label("value"),
-                func.count(col).label("count"),  # pylint: disable=E1102
+                column.label("value"),
+                func.count(column).label("count"),  # pylint: disable=E1102
             )
-            .where(col.isnot(None))
-            .select_from(tbl)
-            .group_by(col)
+            .where(column.isnot(None))
+            .group_by(column)
             .subquery("_counted")
         )
     out_cols = [counted_sub.c.value]
@@ -119,31 +102,26 @@ class ChoiceProposer(Proposer):
     # pylint: disable=too-many-arguments too-many-positional-arguments
     def __init__(
         self,
-        table_name: str,
-        column_name: str,
+        column: Column,
         values: list[Any],
         counts: list[int],
         sample_count: int | None = None,
         suppress_count: int = 0,
         dialect: Any = None,
-        table_sql: str | None = None,
     ) -> None:
         """Initialise a ChoiceProposer."""
         super().__init__()
-        self.table_name = table_name
-        self.column_name = column_name
+        self.column = column
         self.values = values
         estimated_counts = self.get_estimated_counts(counts)
         self._fit = fit_from_buckets(counts, estimated_counts)
 
         extra_comment = " and their counts" if self.STORE_COUNTS else ""
         stmt = _choice_stmt(
-            column_name,
-            table_name,
+            column,
             self.STORE_COUNTS,
             sample_count,
             suppress_count,
-            table_sql=table_sql,
         )
         compile_opts: dict[str, Any] = {"compile_kwargs": {"literal_binds": True}}
         if dialect is not None:
@@ -153,28 +131,28 @@ class ChoiceProposer(Proposer):
         if suppress_count == 0:
             if sample_count is None:
                 self._comment = (
-                    f"All the values{extra_comment} that appear in column {column_name}"
-                    f" of table {table_name}"
+                    f"All the values{extra_comment} that appear in column {column.name}"
+                    f" of table {column.table.name}"
                 )
                 self._annotation = None
             else:
                 self._comment = (
-                    f"The values{extra_comment} that appear in column {column_name}"
-                    f" of a random sample of {sample_count} rows of table {table_name}"
+                    f"The values{extra_comment} that appear in column {column.name}"
+                    f" of a random sample of {sample_count} rows of table {column.table.name}"
                 )
                 self._annotation = "sampled"
         else:
             if sample_count is None:
                 self._comment = (
-                    f"All the values{extra_comment} that appear in column {column_name}"
-                    f" of table {table_name} more than {suppress_count} times"
+                    f"All the values{extra_comment} that appear in column {column.name}"
+                    f" of table {column.table.name} more than {suppress_count} times"
                 )
                 self._annotation = "suppressed"
             else:
                 self._comment = (
                     f"The values{extra_comment} that appear more than {suppress_count} times"
-                    f" in column {column_name}, out of a random sample of {sample_count} rows"
-                    f" of table {table_name}"
+                    f" in column {column.name}, out of a random sample of {sample_count} rows"
+                    f" of table {column.table.name}"
                 )
                 self._annotation = "sampled and suppressed"
 
@@ -185,7 +163,7 @@ class ChoiceProposer(Proposer):
     def nominal_kwargs(self) -> dict[str, Any]:
         """Get the arguments to be entered into ``config.yaml``."""
         return {
-            "a": f'SRC_STATS["auto__{self.table_name}__{self.column_name}"]["results"]',
+            "a": f'SRC_STATS["auto__{self.column.table.name}__{self.column.name}"]["results"]',
         }
 
     def name(self) -> str:
@@ -206,7 +184,7 @@ class ChoiceProposer(Proposer):
         qs = super().custom_queries()
         return {
             **qs,
-            f"auto__{self.table_name}__{self.column_name}": {
+            f"auto__{self.column.table.name}__{self.column.name}": {
                 "query": self._query,
                 "comments": [self._comment],
             },
@@ -350,23 +328,19 @@ class ChoiceProposerFactory(ProposerFactory):
         if len(columns) != 1:
             return []
         column = columns[0]
-        column_name = column.name
-        table_name = column.table.name
-        table_sql = schema_qualified_name(table_name, engine)
         src_table = column.table
         dialect = engine.dialect
-        col = literal_column(f'"{column_name}"')
         src_table = column.table  # preserves schema for schema-qualified databases
         generators = []
         with engine.connect() as connection:
             stmt_count = (
                 select(
-                    col.label("v"),
-                    func.count(col).label("f"),  # pylint: disable=E1102
+                    column.label("v"),
+                    func.count(column).label("f"),  # pylint: disable=E1102
                 )
                 .select_from(src_table)
-                .group_by(col)
-                .order_by(desc(func.count(col)))  # pylint: disable=E1102
+                .group_by(column)
+                .order_by(desc(func.count(column)))  # pylint: disable=E1102
                 .limit(MAXIMUM_CHOICES + 1)
             )
             results = connection.execute(stmt_count)
@@ -375,62 +349,50 @@ class ChoiceProposerFactory(ProposerFactory):
                 if vg.counts:
                     generators += [
                         ZipfChoiceProposer(
-                            table_name,
-                            column_name,
+                            column,
                             vg.values,
                             vg.counts,
                             dialect=dialect,
-                            table_sql=table_sql,
                         ),
                         UniformChoiceProposer(
-                            table_name,
-                            column_name,
+                            column,
                             vg.values,
                             vg.counts,
                             dialect=dialect,
-                            table_sql=table_sql,
                         ),
                         WeightedChoiceProposer(
-                            table_name,
-                            column_name,
+                            column,
                             vg.cvs,
                             vg.counts,
                             dialect=dialect,
-                            table_sql=table_sql,
                         ),
                     ]
                 if vg.counts_not_suppressed:
                     generators += [
                         ZipfChoiceProposer(
-                            table_name,
-                            column_name,
+                            column,
                             vg.values_not_suppressed,
                             vg.counts_not_suppressed,
                             suppress_count=self.SUPPRESS_COUNT,
                             dialect=dialect,
-                            table_sql=table_sql,
                         ),
                         UniformChoiceProposer(
-                            table_name,
-                            column_name,
+                            column,
                             vg.values_not_suppressed,
                             vg.counts_not_suppressed,
                             suppress_count=self.SUPPRESS_COUNT,
                             dialect=dialect,
-                            table_sql=table_sql,
                         ),
                         WeightedChoiceProposer(
-                            table_name=table_name,
-                            column_name=column_name,
+                            column=column,
                             values=vg.cvs_not_suppressed,
                             counts=vg.counts_not_suppressed,
                             suppress_count=self.SUPPRESS_COUNT,
                             dialect=dialect,
-                            table_sql=table_sql,
                         ),
                     ]
             inner = (
-                select(col.label("v"))
+                select(column.label("v"))
                 .select_from(src_table)
                 .order_by(Random())
                 .limit(self.SAMPLE_COUNT)
@@ -450,64 +412,52 @@ class ChoiceProposerFactory(ProposerFactory):
                 if vg.counts:
                     generators += [
                         ZipfChoiceProposer(
-                            table_name,
-                            column_name,
+                            column,
                             vg.values,
                             vg.counts,
                             sample_count=self.SAMPLE_COUNT,
                             dialect=dialect,
-                            table_sql=table_sql,
                         ),
                         UniformChoiceProposer(
-                            table_name,
-                            column_name,
+                            column,
                             vg.values,
                             vg.counts,
                             sample_count=self.SAMPLE_COUNT,
                             dialect=dialect,
-                            table_sql=table_sql,
                         ),
                         WeightedChoiceProposer(
-                            table_name,
-                            column_name,
+                            column,
                             vg.cvs,
                             vg.counts,
                             sample_count=self.SAMPLE_COUNT,
                             dialect=dialect,
-                            table_sql=table_sql,
                         ),
                     ]
                 if vg.counts_not_suppressed:
                     generators += [
                         ZipfChoiceProposer(
-                            table_name,
-                            column_name,
+                            column,
                             vg.values_not_suppressed,
                             vg.counts_not_suppressed,
                             sample_count=self.SAMPLE_COUNT,
                             suppress_count=self.SUPPRESS_COUNT,
                             dialect=dialect,
-                            table_sql=table_sql,
                         ),
                         UniformChoiceProposer(
-                            table_name,
-                            column_name,
+                            column,
                             vg.values_not_suppressed,
                             vg.counts_not_suppressed,
                             sample_count=self.SAMPLE_COUNT,
                             suppress_count=self.SUPPRESS_COUNT,
                             dialect=dialect,
-                            table_sql=table_sql,
                         ),
                         WeightedChoiceProposer(
-                            table_name=table_name,
-                            column_name=column_name,
+                            column=column,
                             values=vg.cvs_not_suppressed,
                             counts=vg.counts_not_suppressed,
                             sample_count=self.SAMPLE_COUNT,
                             suppress_count=self.SUPPRESS_COUNT,
                             dialect=dialect,
-                            table_sql=table_sql,
                         ),
                     ]
         return generators

@@ -215,7 +215,7 @@ data from the database. Use 'quit' to exit this tool."""
                         "kwargs": {
                             "patterns": f'SRC_STATS["{src_stat_key}"]["results"]'
                         },
-                        "columns": [c.name for c in entry.new_type.columns],
+                        "columns": [str(c.name) for c in entry.new_type.columns],
                     }
                 ]
                 src_stats.append(

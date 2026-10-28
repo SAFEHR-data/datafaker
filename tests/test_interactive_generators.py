@@ -63,7 +63,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
         with self._get_cmd(config) as gc:
             table = "model"
             gc.do_next(f"{table}.name")
-            gc.do_propose("")
+            gc.do_propose("all")
             gc.do_compare("")
             gc.do_set("1")
             gc.do_quit("")
@@ -79,7 +79,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
         with self._get_cmd(config) as gc:
             table = "model"
             gc.do_next(f"{table}.name")
-            gc.do_propose("")
+            gc.do_propose("all")
             gc.do_set("1")
             gc.do_quit("")
             self.assertEqual(len(gc.config["tables"][table]["row_generators"]), 1)
@@ -151,7 +151,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
             column = "frequency"
             generator = "dist_gen.normal"
             gc.do_next(f"{table}.{column}")
-            gc.do_propose("")
+            gc.do_propose("all")
             proposals = gc.get_proposals()
             gc.do_set(str(proposals[generator][0]))
             gc.do_quit("")
@@ -240,9 +240,9 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
                 gc.config["src-stats"][0]["query"],
                 (
                     "SELECT _counted.value \n"
-                    f'FROM (SELECT "{column}" AS value, count("{column}") AS count \n'
+                    f"FROM (SELECT {table}.{column} AS value, count({table}.{column}) AS count \n"
                     f"FROM {table} \n"
-                    f'WHERE "{column}" IS NOT NULL GROUP BY "{column}") '
+                    f"WHERE {table}.{column} IS NOT NULL GROUP BY {table}.{column}) "
                     "AS _counted ORDER BY _counted.count DESC"
                 ),
             )

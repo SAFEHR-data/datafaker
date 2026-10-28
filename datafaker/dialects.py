@@ -3,6 +3,7 @@ import re
 from collections.abc import Mapping
 from typing import Any, Optional, TypeVar
 
+import snowflake.sqlalchemy.custom_types as snowflake_types
 from sqlalchemy import Column, Select, Table
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.schema import CreateSchema, CreateTable
@@ -515,3 +516,19 @@ def compile_random_mssql(_element: Random, _compiler: Any, **_kw: Any) -> str:
     same random number gets chosen for each row.
     """
     return "NEWID()"
+
+
+@compiles(snowflake_types.TIMESTAMP_LTZ)
+def compile_timestampltz_generic(
+    _element: snowflake_types.TIMESTAMP_LTZ, compiler: Any, **kw: Any
+) -> str:
+    """Render TIMESTAMP_LTZ as DateTime."""
+    return compiler.process(DateTime(timezone=False), **kw)
+
+
+@compiles(snowflake_types.TIMESTAMP_LTZ, "snowflake")
+def compile_timestampltz_ddb(
+    element: snowflake_types.TIMESTAMP_LTZ, compiler: Any, **kw: Any
+) -> str:
+    """Render TIMESTAMP_LTZ as TIMESTAMP_LTZ."""
+    return compiler.process(element, **kw)
