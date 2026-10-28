@@ -17,7 +17,7 @@ homepage = "https://github.com/SAFEHR-data/datafaker"
 [tool.poetry.dependencies]
 python = ">=3.10,<3.14"
 pydantic = {extras = ["dotenv"], version = "^1.10.2"}
-psycopg2-binary = "^2.9.5"
+psycopg2 = "^2.9.13"
 pyodbc = "^5.0.0"
 aioodbc = "^0.5.0"
 sqlalchemy-utils = "^0.41.2"
@@ -41,6 +41,7 @@ duckdb-sqlalchemy = "^1.5.2.2"
 ty = "^0.0.43"
 colorama = "^0.4.6"
 snowflake-sqlalchemy = "^1.11.1"
+snowflake-connector-python = {version = "4.6.0", extras = ["secure-local-storage"]}
 
 [tool.poetry.group.dev.dependencies]
 isort = "^5.10.1"
