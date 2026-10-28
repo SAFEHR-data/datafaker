@@ -55,7 +55,7 @@ class RstTests(TestCase):
             'Hyperlink target "mimesis-string-list" is not referenced',
             'Hyperlink target "increment-proposer" is not referenced',
             'Hyperlink target "evaluating-and-ranking-proposals" is not referenced',
-            'Hyperlink target "statistical-fidelity-pipelines" is not referenced',
+            'Hyperlink target "statistical-fidelity-criteria" is not referenced',
         ]
         filtered_errors = [
             file_error

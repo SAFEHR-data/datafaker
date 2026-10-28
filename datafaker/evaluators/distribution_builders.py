@@ -121,38 +121,21 @@ class HistogramBuilder(DistributionBuilder):
         self.mean = statistics.mean(values)
         self.stddev = statistics.stdev(values) if len(values) > 1 else 0.0
 
-        if self.stddev == 0:
-            self.edges = [
-                float("-inf"),
-                self.mean - 2.0,
-                self.mean - 1.5,
-                self.mean - 1.0,
-                self.mean - 0.5,
-                self.mean,
-                self.mean + 0.5,
-                self.mean + 1.0,
-                self.mean + 1.5,
-                self.mean + 2.0,
-                float("inf"),
-            ]
-            bottom = self.mean - 2.0
-            width = 0.5
-        else:
-            self.edges = [
-                float("-inf"),
-                self.mean - 2 * self.stddev,
-                self.mean - 1.5 * self.stddev,
-                self.mean - 1.0 * self.stddev,
-                self.mean - 0.5 * self.stddev,
-                self.mean,
-                self.mean + 0.5 * self.stddev,
-                self.mean + 1.0 * self.stddev,
-                self.mean + 1.5 * self.stddev,
-                self.mean + 2 * self.stddev,
-                float("inf"),
-            ]
-            bottom = self.mean - 2 * self.stddev
-            width = self.stddev / 2
+        width = 0.5 if self.stddev == 0 else self.stddev / 2
+        self.edges = [
+            float("-inf"),
+            self.mean - 4 * width,
+            self.mean - 3 * width,
+            self.mean - 2 * width,
+            self.mean - 1 * width,
+            self.mean,
+            self.mean + 1 * width,
+            self.mean + 2 * width,
+            self.mean + 3 * width,
+            self.mean + 4 * width,
+            float("inf"),
+        ]
+        bottom = self.mean - 4 * width
 
         if width == 0:
             width = 1.0
