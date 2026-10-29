@@ -78,6 +78,30 @@ The first job is to read the structure of the source database:
 
 This will create a file called ``orm.yaml``. You should not need to edit this file.
 
+Troubleshooting: What if my tables do not appear in the orm.yaml file?
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+If the tables you expected to see do not all appear in the ``orm.yaml`` file,
+perhaps these are not actual tables, but views.
+
+DataFaker can copy views as though they are tables. If you want this behaviour
+(for example, if you have no access to the underlying tables) you can use
+the ``--views-to-tables`` option:
+
+.. code-block:: console
+
+   $ datafaker make-tables --views-to-tables
+
+This will produce definitions of each view as well as each table.
+This is not a perfect system; DataFaker will guess which columns represent
+primary or foreign keys as this information is not present in views.
+So, after running ``make-tables`` with the ``--view-to-tables`` option,
+please check the ``orm.yaml`` file produced:
+
+* make sure that each table has its correct primary key (DataFaker will have warned you if any table has no or multiple primary keys)
+* make sure that all foreign key columns are correctly marked
+* delete any tables you don't want and have no foreign keys pointing to them (or you could mark them as ignored in the following ``configure-tables`` stage)
+
 Configuring table types
 -----------------------
 
