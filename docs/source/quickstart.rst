@@ -98,7 +98,7 @@ primary or foreign keys as this information is not present in views.
 So, after running ``make-tables`` with the ``--view-to-tables`` option,
 please check the ``orm.yaml`` file produced:
 
-* make sure that each table has its correct primary key (DataFaker will have warned you if any table has no or multiple primary keys)
+* make sure that each table has its correct primary key (DataFaker will have warned you if DataFaker found no or multiple primary keys for any table)
 * make sure that all foreign key columns are correctly marked
 * delete any tables you don't want and have no foreign keys pointing to them (or you could mark them as ignored in the following ``configure-tables`` stage)
 
