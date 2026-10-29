@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 from datafaker.interactive import update_config_generators
 from datafaker.interactive.base import DbCmd
 from datafaker.utils import get_property
-from tests.utils import RequiresDBTestCase
+from tests.utils import DuckTestDb, RequiresDBTestCase
 
 
 class NonInteractiveTests(RequiresDBTestCase):
@@ -20,9 +20,14 @@ class NonInteractiveTests(RequiresDBTestCase):
     schema_name = "public"
 
     @patch("datafaker.interactive.Path")
-    @patch(
-        "datafaker.interactive.csv.reader",
-        return_value=iter(
+    @patch("datafaker.interactive.csv.reader")
+    def test_non_interactive_configure_generators(
+        self, mock_csv_reader: MagicMock, _mock_path: MagicMock
+    ) -> None:
+        """
+        test that we can set generators from a CSV file
+        """
+        mock_csv_reader.return_value = iter(
             [
                 ["observation", "type", "dist_gen.weighted_choice [sampled]"],
                 [
@@ -40,14 +45,7 @@ class NonInteractiveTests(RequiresDBTestCase):
                 ],
                 ["observation", "third_value", "dist_gen.weighted_choice"],
             ]
-        ),
-    )
-    def test_non_interactive_configure_generators(
-        self, _mock_csv_reader: MagicMock, _mock_path: MagicMock
-    ) -> None:
-        """
-        test that we can set generators from a CSV file
-        """
+        )
         config: MutableMapping[str, Any] = {}
         spec_csv = MagicMock()
         spec_csv.open.return_value.__enter__.return_value = "mock spec.csv file"
@@ -76,9 +74,14 @@ class NonInteractiveTests(RequiresDBTestCase):
         )
 
     @patch("datafaker.interactive.Path")
-    @patch(
-        "datafaker.interactive.csv.reader",
-        return_value=iter(
+    @patch("datafaker.interactive.csv.reader")
+    def test_non_interactive_configure_null_partitioned(
+        self, mock_csv_reader: MagicMock, _mock_path: MagicMock
+    ) -> None:
+        """
+        test that we can set multi-column generators from a CSV file
+        """
+        mock_csv_reader.return_value = iter(
             [
                 [
                     "observation",
@@ -86,14 +89,7 @@ class NonInteractiveTests(RequiresDBTestCase):
                     "null-partitioned grouped_multivariate_lognormal",
                 ],
             ]
-        ),
-    )
-    def test_non_interactive_configure_null_partitioned(
-        self, _mock_csv_reader: MagicMock, _mock_path: MagicMock
-    ) -> None:
-        """
-        test that we can set multi-column generators from a CSV file
-        """
+        )
         config: MutableMapping[str, Any] = {}
         spec_csv = MagicMock()
         spec_csv.open.return_value.__enter__.return_value = "mock spec.csv file"
@@ -132,9 +128,16 @@ class NonInteractiveTests(RequiresDBTestCase):
         )
 
     @patch("datafaker.interactive.Path")
-    @patch(
-        "datafaker.interactive.csv.reader",
-        return_value=iter(
+    @patch("datafaker.interactive.csv.reader")
+    def test_non_interactive_configure_null_partitioned_where_existing_merges(
+        self, mock_csv_reader: MagicMock, _mock_path: MagicMock
+    ) -> None:
+        """
+        test that we can set multi-column generators from a CSV file,
+        but where there are already multi-column generators configured
+        that will have to be unmerged.
+        """
+        mock_csv_reader.return_value = iter(
             [
                 [
                     "observation",
@@ -142,16 +145,7 @@ class NonInteractiveTests(RequiresDBTestCase):
                     "null-partitioned grouped_multivariate_lognormal",
                 ],
             ]
-        ),
-    )
-    def test_non_interactive_configure_null_partitioned_where_existing_merges(
-        self, _mock_csv_reader: MagicMock, _mock_path: MagicMock
-    ) -> None:
-        """
-        test that we can set multi-column generators from a CSV file,
-        but where there are already multi-column generators configured
-        that will have to be unmerged.
-        """
+        )
         config = {
             "tables": {
                 "observation": {
@@ -225,3 +219,9 @@ class NonInteractiveTests(RequiresDBTestCase):
             ),
             '"grouped_multivariate_lognormal"',
         )
+
+
+class NonInteractiveTestsDuckDB(NonInteractiveTests):
+    """DuckDB version of NonInteractiveTests."""
+
+    database_type = DuckTestDb

@@ -10,6 +10,7 @@ from types import TracebackType
 from typing import Any, Final, Optional, Tuple, Type
 
 import pandas as pd
+import snowflake.sqlalchemy.custom_types as snowflake_types
 import snsql
 import typer
 import yaml
@@ -39,7 +40,7 @@ from datafaker.db_utils import (
     get_sync_engine,
     get_vocabulary_table_names,
 )
-from datafaker.parquet2orm import get_parquet_orm
+from datafaker.parquet2orm import add_guessed_keys, get_initial_parquet_orm
 from datafaker.settings import get_source_dsn, get_source_schema
 from datafaker.utils import (
     get_columns_assigned,
@@ -57,6 +58,8 @@ PROVIDER_IMPORTS: Final[list[str]] = []
 for entry_name, entry in inspect.getmembers(providers, inspect.isclass):
     if issubclass(entry, BaseProvider) and entry.__module__ == "datafaker.providers":
         PROVIDER_IMPORTS.append(entry_name)
+
+DEFAULT_UNIQUE_CONSTRAINT_TRIES: int | None = 500
 
 
 @dataclass
@@ -378,6 +381,10 @@ _COLUMN_TYPE_TO_GENERATOR_INFO: dict[Any, GeneratorInfo] = {
         generator=_string_generator,
         choice=True,
     ),
+    snowflake_types.TIMESTAMP_LTZ: GeneratorInfo(
+        generator="generic.datetime.datetime",
+        arg_types={"start": int, "end": int},
+    ),
 }
 
 
@@ -654,6 +661,8 @@ def get_generation_info(
     max_unique_constraint_tries = get_property_or_none(
         config, "max-unique-constraint-tries", int
     )
+    if max_unique_constraint_tries is None:
+        max_unique_constraint_tries = DEFAULT_UNIQUE_CONSTRAINT_TRIES
     return GenerationInfo(
         provider_imports=PROVIDER_IMPORTS,
         row_generator_module_name=row_generator_module_name,
@@ -694,25 +703,33 @@ def _generate_vocabulary_table(
     download_table(table, engine, yaml_file_name, compress)
 
 
+# pylint: disable=too-many-arguments disable=too-many-positional-arguments
 def make_tables_file(
     db_dsn: str,
     schema_name: Optional[str],
+    views_to_tables: bool,
     parquet_dir: Optional[Path] = None,
     engine: Optional[Engine] = None,
+    guess_keys: bool = False,
 ) -> str:
     """Construct the YAML file representing the schema."""
     if engine is None:
         engine = get_sync_engine(create_db_engine(db_dsn, schema_name=schema_name))
 
-    metadata = get_metadata(engine, schema_name=schema_name)
+    metadata = get_metadata(
+        engine, schema_name=schema_name, views_to_tables=views_to_tables
+    )
     meta_dict = metadata_to_dict(metadata, schema_name, engine, parquet_dir)
 
     if parquet_dir is not None:
-        extra_meta = get_parquet_orm(parquet_dir)
+        extra_meta = get_initial_parquet_orm(parquet_dir)
         if extra_meta:
             md_tables: dict[str, Any] = get_property(meta_dict, "tables", {})
             new_tables = {**extra_meta, **md_tables}
             meta_dict["tables"] = new_tables
+
+    if guess_keys:
+        add_guessed_keys(meta_dict["tables"])
 
     return yaml.dump(meta_dict, sort_keys=False)
 

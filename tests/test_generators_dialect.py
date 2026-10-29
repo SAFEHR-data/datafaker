@@ -4,14 +4,19 @@ import unittest
 import unittest.mock
 from unittest.mock import MagicMock
 
-from sqlalchemy import Column, Integer, MetaData, Select, Table, literal_column
+from sqlalchemy import Column, Integer, MetaData, Select, Table, Text, literal_column
 from sqlalchemy.dialects import mssql, postgresql
 from sqlalchemy.types import DateTime
 
 from datafaker.dialects import SecondsDifference
 from datafaker.interactive.generators import get_aggregate_query
 from datafaker.interactive.missingness import MissingnessType
-from datafaker.proposers.base import Buckets, PredefinedProposer, Proposer
+from datafaker.proposers.base import (
+    Buckets,
+    PredefinedProposer,
+    Proposer,
+    RelatedColumn,
+)
 from datafaker.proposers.choice import ChoiceProposerFactory, ZipfChoiceProposer
 from datafaker.proposers.continuous import (
     ContinuousLogDistributionProposerFactory,
@@ -141,9 +146,13 @@ class TestChoiceGeneratorStoredQuery(DatafakerTestCase):
     """ChoiceGenerator._query is compiled to dialect-correct SQL at construction time."""
 
     def _make_gen(self, dialect, sample_count=None, suppress_count=0):
+        table = Table(
+            "patient",
+            MetaData(),
+            Column("gender", Text()),
+        )
         return ZipfChoiceProposer(
-            table_name="patient",
-            column_name="gender",
+            column=table.c.gender,
             values=["M", "F"],
             counts=[70, 30],
             sample_count=sample_count,
@@ -592,7 +601,7 @@ class TestIntervalsDifferenceDialect(DatafakerTestCase):
             sd=1.0,
             mean=86400.0,
             column=tbl.c.end_date,
-            anchor=tbl.c.start_date,
+            anchor_related=RelatedColumn(tbl.c.start_date, None),
             engine=engine,
         )
         clauses = proposer.select_aggregate_clauses()
@@ -620,7 +629,7 @@ class TestIntervalsDifferenceDialect(DatafakerTestCase):
             sd=1.0,
             mean=86400.0,
             column=tbl.c.end_date,
-            anchor=tbl.c.start_date,
+            anchor_related=RelatedColumn(tbl.c.start_date, None),
             engine=engine,
         )
         clauses = proposer.select_aggregate_clauses()
