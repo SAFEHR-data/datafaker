@@ -1,8 +1,10 @@
 """Utility functions."""
+
 import gzip
 import io
 from collections.abc import Callable, Mapping
 from pathlib import Path
+import re
 from types import ModuleType
 from typing import Any, Iterable, Optional, Union
 
@@ -25,6 +27,7 @@ from sqlalchemy.exc import (
     IntegrityError,
     NoReferencedTableError,
     NoSuchModuleError,
+    ArgumentError,
     OperationalError,
     ProgrammingError,
 )
@@ -58,6 +61,11 @@ MaybeAsyncEngine = Union[Engine, AsyncEngine]
 # After every how many rows of vocab table downloading do we see a
 # progres update
 MAKE_VOCAB_PROGRESS_REPORT_EVERY = 10000
+
+
+def _hide_password(dsn: str) -> str:
+    """Replace the password in a database address with ***."""
+    return re.sub(r"(://[^:/@]*:)[^@]*@", r"\1***@", dsn)
 
 
 def table_row_count(table: Table, conn: Connection) -> int:
@@ -128,9 +136,9 @@ def get_dialect(dsn: str) -> sqlalchemy.engine.interfaces.Dialect:
     """Get the SQLAlchemy dialect from a DSN string."""
     url = sqlalchemy.engine.make_url(dsn)
     backend = url.get_backend_name()
-    dialect_cls: type[
-        sqlalchemy.engine.interfaces.Dialect
-    ] = sqlalchemy.dialects.registry.load(backend)
+    dialect_cls: type[sqlalchemy.engine.interfaces.Dialect] = (
+        sqlalchemy.dialects.registry.load(backend)
+    )
     url.get_backend_name()
     return dialect_cls()
 
@@ -162,11 +170,17 @@ def create_db_engine(
         logger.error("Failed to connect to the database: %s", exc)
         logger.error("Perhaps the dialect '%s' is invalid.", db_dsn.split(":")[0])
         raise Exit(1) from exc
+    except ArgumentError as exc:
+        logger.error(
+            "The database address is not valid. Expected something like"
+            " postgresql://user:password@host:5432/database"
+        )
+        raise Exit(1) from exc
     except ModuleNotFoundError as exc:
         logger.error("Failed to connect to the database: %s", exc)
         raise Exit(1) from exc
     except ValueError as exc:
-        logger.error("DSN %s is malformed: %s", db_dsn, exc)
+        logger.error("DSN %s is malformed: %s", _hide_password(db_dsn), exc)
         raise Exit(1) from exc
 
     settings = {}
@@ -561,7 +575,7 @@ def sorted_non_vocabulary_tables(metadata: MetaData, config: Mapping) -> list[Ta
     table_names = set(metadata.tables.keys()).difference(
         get_vocabulary_table_names(config) | get_ignored_table_names(config)
     )
-    (sorted_tables, cycles) = topological_sort(
+    sorted_tables, cycles = topological_sort(
         table_names, lambda tn: get_related_table_names(metadata.tables[tn])
     )
     for cycle in cycles:

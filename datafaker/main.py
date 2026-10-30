@@ -1,4 +1,5 @@
 """Entrypoint for the datafaker package."""
+
 import asyncio
 import importlib.metadata
 import io
@@ -48,6 +49,7 @@ from datafaker.utils import (
     get_flag,
     logger,
     read_config_file,
+    load_yaml_file,
 )
 
 # pylint: disable=too-many-arguments
@@ -103,28 +105,36 @@ def load_metadata_config(
     :return: A dict representing the ``orm.yaml`` file, with the tables
         the ``config`` says to ignore removed.
     """
-    with orm_file_path.open(encoding="utf-8") as orm_fh:
-        meta_dict = yaml.load(orm_fh, yaml.Loader)
-        if not isinstance(meta_dict, dict):
-            return {}
-        tables_dict = meta_dict.get("tables", {})
-        if config is not None and "tables" in config:
-            tables_config = config["tables"]
-            # Remove ignored tables
-            for name, table_config in tables_config.items():
-                if get_flag(table_config, "ignore"):
-                    tables_dict.pop(name, None)
-            # Remove foreign keys to ignored tables
-            for table_meta in tables_dict.values():
-                for column_meta in table_meta.get("columns", {}).values():
-                    if isinstance(column_meta, dict) and "foreign_keys" in column_meta:
-                        filtered_fks = [
-                            fk
-                            for fk in column_meta["foreign_keys"]
-                            if not should_ignore_fk(tables_config, fk)
-                        ]
-                        column_meta["foreign_keys"] = filtered_fks
-        return meta_dict
+    meta_dict = load_yaml_file(
+        orm_file_path,
+        "ORM file",
+        "Please run make-tables first.",
+        yaml.SafeLoader,
+    )
+    if not isinstance(meta_dict, dict):
+        logger.error(
+            "ORM file '%s' is empty or invalid. Please run make-tables --force to recreate it.",
+            orm_file_path,
+        )
+        raise Exit(1)
+    tables_dict = meta_dict.get("tables", {})
+    if config is not None and "tables" in config:
+        tables_config = config["tables"]
+        # Remove ignored tables
+        for name, table_config in tables_config.items():
+            if get_flag(table_config, "ignore"):
+                tables_dict.pop(name, None)
+        # Remove foreign keys to ignored tables
+        for table_meta in tables_dict.values():
+            for column_meta in table_meta.get("columns", {}).values():
+                if isinstance(column_meta, dict) and "foreign_keys" in column_meta:
+                    filtered_fks = [
+                        fk
+                        for fk in column_meta["foreign_keys"]
+                        if not should_ignore_fk(tables_config, fk)
+                    ]
+                    column_meta["foreign_keys"] = filtered_fks
+    return meta_dict
 
 
 def load_metadata(orm_file_path: Path, config: dict | None = None) -> MetaData:
@@ -520,6 +530,8 @@ def create_data(
                 "row" if row_count == 1 else "rows",
             )
         return
+    except Exit:
+        raise
     except RuntimeError as e:
         logger.error(e.args[0])
     except SettingsError as e:
@@ -612,8 +624,7 @@ def dump_data(
         default=[],
         help="The tables to dump (default is all non-ignored, non-vocabulary tables)",
     ),
-    output: Path
-    | None = Option(
+    output: Path | None = Option(
         None,
         help=(
             "Output CSV or Parquet file name,"
