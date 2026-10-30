@@ -264,9 +264,8 @@ def configure_tables(
     logger.debug("Configuring tables in %s.", config_file)
     config = {}
     if config_file.exists():
-        config = yaml.load(
-            config_file.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader
-        )
+        config = load_yaml_file(config_file, "Config file", "", yaml.SafeLoader)
+
     # we don't pass config here so that no tables are ignored
     meta_dict = load_metadata_config(orm_file)
     metadata = dict_to_metadata(meta_dict, None)
@@ -309,9 +308,7 @@ def configure_generators(
     logger.debug("Configuring generators in %s.", config_file)
     config = {}
     if config_file.exists():
-        config = yaml.load(
-            config_file.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader
-        )
+        config = load_yaml_file(config_file, "Config file", "", yaml.SafeLoader)
     meta_dict = load_metadata_config(orm_file)
     metadata = dict_to_metadata(meta_dict, None)
     config_updated = update_config_generators(
@@ -349,9 +346,7 @@ def configure_missing(
     logger.debug("Configuring missingness in %s.", config_file)
     config: dict[str, Any] = {}
     if config_file.exists():
-        config_any = yaml.load(
-            config_file.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader
-        )
+        config_any = load_yaml_file(config_file, "Config file", "", yaml.SafeLoader)
         if isinstance(config_any, dict):
             config = config_any
     meta_dict = load_metadata_config(orm_file, config)
@@ -676,7 +671,7 @@ def validate_config(
     """Validate the format of a config file."""
     logger.debug("Validating config file: %s.", config_file)
 
-    config = yaml.load(config_file.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader)
+    config = load_yaml_file(config_file, "Config file", "", yaml.SafeLoader)
     schema_config = json.loads(CONFIG_SCHEMA_PATH.read_text(encoding="UTF-8"))
     try:
         validate(config, schema_config)

@@ -104,6 +104,7 @@ def read_config_file(path: Path) -> dict:
         validate(config, schema_config)
     except ValidationError as e:
         logger.error("The config file is invalid: %s", e.message)
+        raise Exit(1) from e
 
     return config
 
