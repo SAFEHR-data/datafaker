@@ -17,6 +17,7 @@ import os
 from tempfile import mkstemp
 
 import yaml
+from sqlalchemy import Column, MetaData, Table, Text
 from sqlalchemy import create_engine as sa_create_engine
 from sqlalchemy import text
 from sqlalchemy.dialects import mssql as mssql_dialect  # noqa: PLC0415
@@ -52,7 +53,9 @@ class MSSQLFunctionalTestCase(GeneratesDBTestCase):
         (self.orm_fd, self.orm_file_path) = mkstemp(".yaml", "orm_", text=True)
         with os.fdopen(self.orm_fd, "w", encoding="utf-8") as fh:
             fh.write(
-                make_tables_file(self.dsn, self.schema_name, engine=self.sync_engine)
+                make_tables_file(
+                    self.dsn, self.schema_name, False, engine=self.sync_engine
+                )
             )
 
     def tearDown(self) -> None:
@@ -119,9 +122,9 @@ class MSSQLFunctionalTestCase(GeneratesDBTestCase):
         """ChoiceProposer compiles its query with NEWID() not RANDOM() for mssql."""
 
         dialect = mssql_dialect.dialect()
+        table = Table("manufacturer", MetaData(), Column("name", Text()))
         proposer = ZipfChoiceProposer(
-            table_name="manufacturer",
-            column_name="name",
+            column=table.c.name,
             values=["Blender", "Gibbs"],
             counts=[5, 5],
             sample_count=2,

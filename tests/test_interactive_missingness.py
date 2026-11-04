@@ -1,13 +1,23 @@
 """ Tests for the configure-missingness command. """
 import random
 from collections.abc import MutableMapping
-from typing import Any
+from pathlib import Path
+from typing import Any, Iterable
 
 from sqlalchemy import select
 
 from datafaker.interactive import MissingnessCmd
 from datafaker.interactive.base import DbCmd
 from tests.utils import GeneratesDBTestCase, RequiresDBTestCase, TestDbCmdMixin
+
+
+def count_nonnull(it: Iterable):
+    """Count the number of non-null values in an iterable."""
+    n = 0
+    for v in it:
+        if v is not None:
+            n += 1
+    return n
 
 
 class MockMissingnessCmd(MissingnessCmd, TestDbCmdMixin):
@@ -107,3 +117,39 @@ class ConfigureMissingnessTestsWithGeneration(GeneratesDBTestCase):
                 patterns.add(p + b)
             # all pattern possibilities should be present
             self.assertSetEqual(patterns, {0, 1, 2, 3})
+
+
+class ConfigureMissingnessEndToEndTests(ConfigureMissingnessTestsWithGeneration):
+    """Test `configure-missing` end-to-end."""
+
+    use_temporary_cwd = True
+    copy_files = ["row_generators.py", "story_generators.py"]
+    copy_from_directory = Path("examples")
+
+    def test_missingness_end_to_end(self) -> None:
+        """Test that if an interval end is applicable it gets proposed and works."""
+        table = "signature_model"
+        with self._get_cmd({}) as mc:
+            mc.do_next(table)
+            mc.do_sampled("")
+            mc.reset()
+            mc.do_quit("")
+            self.generate_data(mc.config, num_passes=100)
+            self.assertIs(
+                type(
+                    mc.config["tables"][table]["missingness_generators"][0]["columns"][
+                        0
+                    ]
+                ),
+                str,
+            )
+        assert self.dst_engine is not None
+        with self.dst_engine.connect() as conn:
+            stmt = select(self.metadata.tables[table])
+            rows = conn.execute(stmt).mappings().fetchall()
+            name_count = count_nonnull(r.name for r in rows)
+            player_id_count = count_nonnull(r.player_id for r in rows)
+            based_on_count = count_nonnull(r.based_on for r in rows)
+            self.assertEqual(name_count, 100)
+            self.assertAlmostEqual(player_id_count, 50, delta=20)
+            self.assertAlmostEqual(based_on_count, 70, delta=20)

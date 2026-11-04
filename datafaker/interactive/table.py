@@ -3,7 +3,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
-from sqlalchemy import func, literal_column, select
+from sqlalchemy import func, select
 
 from datafaker.dialects import Random
 from datafaker.interactive.base import (
@@ -469,26 +469,21 @@ Type 'help data' for examples."""
             return []
         return self.get_column_completions(text)
 
-    def print_column_data(self, column: str, count: int, min_length: int) -> None:
+    def print_column_data(self, column_name: str, count: int, min_length: int) -> None:
         """
         Print a sample of data from a certain column of the current table.
 
-        :param column: The name of the column to report on.
+        :param column_name: The name of the column to report on.
         :param count: The number of rows to sample.
         :param min_length: The minimum length of text to choose from (0 for any text).
         """
-        col_expr = literal_column(column)
+        table = self.table_metadata()
+        column = table.columns[column_name]
         if 0 < min_length:
-            where_clause = func.length(col_expr) >= min_length
+            where_clause = func.length(column) >= min_length
         else:
-            where_clause = col_expr.isnot(None)
-        stmt = (
-            select(col_expr)
-            .select_from(self.table_metadata())
-            .where(where_clause)
-            .order_by(Random())
-            .limit(count)
-        )
+            where_clause = column.isnot(None)
+        stmt = select(column).where(where_clause).order_by(Random()).limit(count)
         with self.sync_engine.connect() as connection:
             result = connection.execute(stmt)
             self.columnize([str(x[0]) for x in result.all()])

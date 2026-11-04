@@ -5,7 +5,7 @@ from typing import Any, Union
 
 import mimesis
 import mimesis.locales
-from sqlalchemy import Column, Engine, cast, extract, func, literal_column, select
+from sqlalchemy import Column, Engine, cast, extract, func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.types import Date, DateTime, Integer, Numeric, String, Time
 
@@ -187,8 +187,7 @@ class MimesisDateTimeProposer(MimesisProposerBase):
         cls, column: Column, engine: Engine, function_name: str
     ) -> Sequence[Proposer]:
         """Make the appropriate generation configuration for this column."""
-        col_expr = literal_column(column.name)
-        year_expr = cast(extract("year", col_expr), Integer())
+        year_expr = cast(extract("year", column), Integer())
         min_expr = func.min(year_expr)  # pylint: disable=E1111
         max_expr = func.max(year_expr)  # pylint: disable=E1111
         stmt = select(min_expr.label("start"), max_expr.label("end")).select_from(

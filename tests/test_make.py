@@ -3,6 +3,7 @@ import asyncio
 import tempfile
 from pathlib import Path
 from typing import Any
+from unittest import SkipTest
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
@@ -20,12 +21,136 @@ from sqlalchemy import (
 from sqlalchemy.dialects.mysql.types import INTEGER
 from sqlalchemy.dialects.postgresql import UUID
 
+from datafaker.db_utils import create_db_engine, get_sync_engine
 from datafaker.make import (
     _get_default_generator,
     _get_provider_for_column,
     make_src_stats,
+    make_tables_file,
 )
-from tests.utils import DatafakerTestCase, GeneratesDBTestCase, RequiresDBTestCase
+from tests.utils import (
+    DatafakerTestCase,
+    GeneratesDBTestCase,
+    MsSqlTestDb,
+    PostgresTestDb,
+    RequiresDBTestCase,
+)
+
+
+class TestSerialize(DatafakerTestCase):
+    """Unit tests for serialize_metadata."""
+
+    database_type = PostgresTestDb
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        skip_msg = cls.database_type.skip()
+        if skip_msg:
+            raise SkipTest(skip_msg)
+        cls.database_type.setup()
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.database = self.database_type()
+        self.database.open()
+        self.database.run_sql(self.get_abs_example_dir() / "date.sql")
+        self.engine = create_db_engine(self.database.get_dsn("date_tables"), None)
+
+    def test_metadata_to_dict(self) -> None:
+        """Test metadata_to_dict."""
+        orm_yaml = make_tables_file(
+            self.database.get_dsn("date_tables"),
+            schema_name=None,
+            views_to_tables=False,
+            parquet_dir=None,
+            engine=get_sync_engine(self.engine),
+        )
+        orm = yaml.load(orm_yaml, yaml.Loader)
+        table_names = set(orm["tables"].keys())
+        self.assert_subset({"person", "happening", "happening_view"}, table_names)
+        happening_columns = orm["tables"]["happening"]["columns"]
+        happening_column_names = set(happening_columns.keys())
+        self.assert_subset(
+            {"id", "name", "comment", "person_id"},
+            happening_column_names,
+        )
+        self.assertEqual(happening_columns["person_id"]["type"], "INTEGER")
+        self.assertFalse(happening_columns["name"]["primary"])
+        self.assertTrue(happening_columns["id"]["primary"])
+
+    def test_views_to_dict(self) -> None:
+        """Test views_to_tables."""
+        orm_yaml = make_tables_file(
+            self.database.get_dsn("date_tables"),
+            schema_name=None,
+            views_to_tables=True,
+            parquet_dir=None,
+            engine=get_sync_engine(self.engine),
+        )
+        orm = yaml.load(orm_yaml, yaml.Loader)
+        table_names = set(orm["tables"].keys())
+        self.assert_subset({"person", "happening", "happening_view"}, table_names)
+        happening_columns = orm["tables"]["happening_view"]["columns"]
+        happening_column_names = set(happening_columns.keys())
+        self.assert_subset(
+            {"id", "name", "person_id"},
+            happening_column_names,
+        )
+        self.assertEqual(happening_columns["person_id"]["type"], "INTEGER")
+        self.assertFalse(happening_columns["name"]["primary"])
+
+    def test_views_to_dict_guess_keys(self) -> None:
+        """Test views_to_tables with foreign keys and primary keys guessed."""
+        orm_yaml = make_tables_file(
+            self.database.get_dsn("date_tables"),
+            schema_name=None,
+            views_to_tables=True,
+            parquet_dir=None,
+            engine=get_sync_engine(self.engine),
+        )
+        orm = yaml.load(orm_yaml, yaml.Loader)
+        view_columns = orm["tables"]["happening_view"]["columns"]
+        self.assertTrue(view_columns["id"]["primary"])
+        self.assertEqual(view_columns["person_id"]["foreign_keys"], ["person.id"])
+
+    def test_only_guess_keys_in_views_and_parquet(self) -> None:
+        """Test view_to_tables guesses keys only from parquet or views."""
+        parquet_dir = self.get_abs_example_dir() / "duckdb" / "date"
+        orm_yaml = make_tables_file(
+            self.database.get_dsn("date_tables"),
+            schema_name=None,
+            views_to_tables=True,
+            parquet_dir=parquet_dir,
+            engine=get_sync_engine(self.engine),
+        )
+        orm = yaml.load(orm_yaml, yaml.Loader)
+        # Test view PK and FK to tables
+        view_columns = orm["tables"]["happening_view"]["columns"]
+        self.assertTrue(view_columns["id"]["primary"])
+        self.assertFalse(view_columns["id"].get("nullable", False))
+        self.assertEqual(view_columns["person_id"]["foreign_keys"], ["person.id"])
+        # Test parquet PK and parquet FK to table:
+        # (other_person.happening_id -> happening.id)
+        self.assertIn("other_person.parquet", orm["tables"])
+        parquet_columns = orm["tables"]["other_person.parquet"]["columns"]
+        self.assertTrue(parquet_columns["id"]["primary"])
+        self.assertFalse(parquet_columns["id"].get("nullable", False))
+        self.assertEqual(
+            parquet_columns["happening_id"]["foreign_keys"], ["happening.id"]
+        )
+        # Test that table does not get updated:
+        # (happening.other_person_id should stay as FK to person.id)
+        happening_columns = orm["tables"]["happening"]["columns"]
+        self.assertEqual(
+            happening_columns["other_person_id"]["foreign_keys"], ["person.id"]
+        )
+
+
+class TestSerializeMsSql(TestSerialize):
+    """Unit tests for serialize_metadata with an MS SQL database."""
+
+    database_type = MsSqlTestDb
 
 
 class TestGetDefaultGenerator(DatafakerTestCase):

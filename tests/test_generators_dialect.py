@@ -4,7 +4,7 @@ import unittest
 import unittest.mock
 from unittest.mock import MagicMock
 
-from sqlalchemy import Column, Integer, MetaData, Select, Table, literal_column
+from sqlalchemy import Column, Integer, MetaData, Select, Table, Text, literal_column
 from sqlalchemy.dialects import mssql, postgresql
 from sqlalchemy.types import DateTime
 
@@ -146,9 +146,13 @@ class TestChoiceGeneratorStoredQuery(DatafakerTestCase):
     """ChoiceGenerator._query is compiled to dialect-correct SQL at construction time."""
 
     def _make_gen(self, dialect, sample_count=None, suppress_count=0):
+        table = Table(
+            "patient",
+            MetaData(),
+            Column("gender", Text()),
+        )
         return ZipfChoiceProposer(
-            table_name="patient",
-            column_name="gender",
+            column=table.c.gender,
             values=["M", "F"],
             counts=[70, 30],
             sample_count=sample_count,
