@@ -12,6 +12,7 @@ from typing import Any, Final, Optional, Tuple, Type
 import pandas as pd
 import snowflake.sqlalchemy.custom_types as snowflake_types
 import snsql
+import sqlalchemy
 import typer
 import yaml
 from mimesis.providers.base import BaseProvider
@@ -40,7 +41,7 @@ from datafaker.db_utils import (
     get_sync_engine,
     get_vocabulary_table_names,
 )
-from datafaker.parquet2orm import get_parquet_orm
+from datafaker.parquet2orm import add_guessed_keys, get_initial_parquet_orm
 from datafaker.settings import get_source_dsn, get_source_schema
 from datafaker.utils import (
     get_columns_assigned,
@@ -703,6 +704,7 @@ def _generate_vocabulary_table(
     download_table(table, engine, yaml_file_name, compress)
 
 
+# pylint: disable=too-many-arguments disable=too-many-positional-arguments
 def make_tables_file(
     db_dsn: str,
     schema_name: Optional[str],
@@ -718,13 +720,22 @@ def make_tables_file(
         engine, schema_name=schema_name, views_to_tables=views_to_tables
     )
     meta_dict = metadata_to_dict(metadata, schema_name, engine, parquet_dir)
+    inspector = sqlalchemy.inspect(engine)
+    if hasattr(inspector, "get_view_names"):
+        view_names = set(inspector.get_view_names())
+    else:
+        view_names = set()
 
+    parquet_table_names = set()
     if parquet_dir is not None:
-        extra_meta = get_parquet_orm(parquet_dir)
+        extra_meta = get_initial_parquet_orm(parquet_dir)
         if extra_meta:
+            parquet_table_names = set(extra_meta.keys())
             md_tables: dict[str, Any] = get_property(meta_dict, "tables", {})
             new_tables = {**extra_meta, **md_tables}
             meta_dict["tables"] = new_tables
+
+    add_guessed_keys(meta_dict["tables"], view_names | parquet_table_names)
 
     return yaml.dump(meta_dict, sort_keys=False)
 
