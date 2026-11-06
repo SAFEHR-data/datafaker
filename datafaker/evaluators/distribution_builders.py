@@ -9,7 +9,7 @@ from typing import Any
 
 from sqlalchemy import func, select
 
-from datafaker.dialects import Random
+from datafaker.dialects import random_sample
 from datafaker.evaluators.feature_extractors import FeatureExtractor, IdentityExtractor
 
 
@@ -104,10 +104,10 @@ class HistogramBuilder(DistributionBuilder):
         with self.engine.connect() as conn:
             values = (
                 conn.execute(
-                    select(feature_expr)
-                    .select_from(self.table)
-                    .order_by(Random())
-                    .limit(self.sample_size)
+                    random_sample(
+                        select(feature_expr).select_from(self.table),
+                        self.sample_size,
+                    )
                 )
                 .scalars()
                 .all()
@@ -227,10 +227,10 @@ class CategoryBuilder(DistributionBuilder):
             # unordered LIMIT biasing the "real" distribution toward
             # whatever the DB returns first (see HistogramBuilder above).
             rows = conn.execute(
-                select(self.column)
-                .select_from(self.table)
-                .order_by(Random())
-                .limit(self.sample_size)
+                random_sample(
+                    select(self.column).select_from(self.table),
+                    self.sample_size,
+                )
             )
 
             for (value,) in rows:
