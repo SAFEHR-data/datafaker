@@ -1,4 +1,5 @@
 """Tests for the utils module."""
+
 import os
 import sys
 import tempfile
@@ -8,6 +9,7 @@ from unittest.mock import MagicMock, call, patch
 
 from sqlalchemy import Column, Integer, insert
 from sqlalchemy.orm import declarative_base
+from typer import Exit
 
 from datafaker.db_utils import download_table
 from datafaker.utils import (
@@ -109,10 +111,11 @@ class TestDownload(RequiresDBTestCase):
 class TestReadConfig(DatafakerTestCase):
     """Tests for the read_config_file function."""
 
-    def test_warns_of_invalid_config(self) -> None:
-        """Test that we get a warning if the config is invalid."""
+    def test_exits_on_invalid_config(self) -> None:
+        """Test that an invalid config logs an error and exits."""
         with patch("datafaker.utils.logger") as mock_logger:
-            read_config_file(Path("tests/examples/invalid_config.yaml"))
+            with self.assertRaises(Exit):
+                read_config_file(Path("tests/examples/invalid_config.yaml"))
             mock_logger.error.assert_called_with(
                 "The config file is invalid: %s", "'a' is not of type 'integer'"
             )

@@ -1,4 +1,5 @@
 """Entrypoint for the datafaker package."""
+
 import asyncio
 import importlib.metadata
 import io
@@ -46,6 +47,7 @@ from datafaker.utils import (
     conf_logger,
     generators_require_stats,
     get_flag,
+    load_yaml_file,
     logger,
     read_config_file,
 )
@@ -103,28 +105,36 @@ def load_metadata_config(
     :return: A dict representing the ``orm.yaml`` file, with the tables
         the ``config`` says to ignore removed.
     """
-    with orm_file_path.open(encoding="utf-8") as orm_fh:
-        meta_dict = yaml.load(orm_fh, yaml.Loader)
-        if not isinstance(meta_dict, dict):
-            return {}
-        tables_dict = meta_dict.get("tables", {})
-        if config is not None and "tables" in config:
-            tables_config = config["tables"]
-            # Remove ignored tables
-            for name, table_config in tables_config.items():
-                if get_flag(table_config, "ignore"):
-                    tables_dict.pop(name, None)
-            # Remove foreign keys to ignored tables
-            for table_meta in tables_dict.values():
-                for column_meta in table_meta.get("columns", {}).values():
-                    if isinstance(column_meta, dict) and "foreign_keys" in column_meta:
-                        filtered_fks = [
-                            fk
-                            for fk in column_meta["foreign_keys"]
-                            if not should_ignore_fk(tables_config, fk)
-                        ]
-                        column_meta["foreign_keys"] = filtered_fks
-        return meta_dict
+    meta_dict = load_yaml_file(
+        orm_file_path,
+        "ORM file",
+        "Please run make-tables first.",
+        yaml.SafeLoader,
+    )
+    if not isinstance(meta_dict, dict):
+        logger.error(
+            "ORM file '%s' is empty or invalid. Please run make-tables --force to recreate it.",
+            orm_file_path,
+        )
+        raise Exit(1)
+    tables_dict = meta_dict.get("tables", {})
+    if config is not None and "tables" in config:
+        tables_config = config["tables"]
+        # Remove ignored tables
+        for name, table_config in tables_config.items():
+            if get_flag(table_config, "ignore"):
+                tables_dict.pop(name, None)
+        # Remove foreign keys to ignored tables
+        for table_meta in tables_dict.values():
+            for column_meta in table_meta.get("columns", {}).values():
+                if isinstance(column_meta, dict) and "foreign_keys" in column_meta:
+                    filtered_fks = [
+                        fk
+                        for fk in column_meta["foreign_keys"]
+                        if not should_ignore_fk(tables_config, fk)
+                    ]
+                    column_meta["foreign_keys"] = filtered_fks
+    return meta_dict
 
 
 def load_metadata(orm_file_path: Path, config: dict | None = None) -> MetaData:
@@ -261,9 +271,8 @@ def configure_tables(
     logger.debug("Configuring tables in %s.", config_file)
     config = {}
     if config_file.exists():
-        config = yaml.load(
-            config_file.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader
-        )
+        config = load_yaml_file(config_file, "Config file", "", yaml.SafeLoader)
+
     # we don't pass config here so that no tables are ignored
     meta_dict = load_metadata_config(orm_file)
     metadata = dict_to_metadata(meta_dict, None)
@@ -306,9 +315,7 @@ def configure_generators(
     logger.debug("Configuring generators in %s.", config_file)
     config = {}
     if config_file.exists():
-        config = yaml.load(
-            config_file.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader
-        )
+        config = load_yaml_file(config_file, "Config file", "", yaml.SafeLoader)
     meta_dict = load_metadata_config(orm_file)
     metadata = dict_to_metadata(meta_dict, None)
     config_updated = update_config_generators(
@@ -346,9 +353,7 @@ def configure_missing(
     logger.debug("Configuring missingness in %s.", config_file)
     config: dict[str, Any] = {}
     if config_file.exists():
-        config_any = yaml.load(
-            config_file.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader
-        )
+        config_any = load_yaml_file(config_file, "Config file", "", yaml.SafeLoader)
         if isinstance(config_any, dict):
             config = config_any
     meta_dict = load_metadata_config(orm_file, config)
@@ -527,6 +532,8 @@ def create_data(
                 "row" if row_count == 1 else "rows",
             )
         return
+    except Exit:
+        raise
     except RuntimeError as e:
         logger.error(e.args[0])
     except SettingsError as e:
@@ -672,7 +679,7 @@ def validate_config(
     """Validate the format of a config file."""
     logger.debug("Validating config file: %s.", config_file)
 
-    config = yaml.load(config_file.read_text(encoding="UTF-8"), Loader=yaml.SafeLoader)
+    config = load_yaml_file(config_file, "Config file", "", yaml.SafeLoader)
     schema_config = json.loads(CONFIG_SCHEMA_PATH.read_text(encoding="UTF-8"))
     try:
         validate(config, schema_config)

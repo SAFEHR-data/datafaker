@@ -1,4 +1,5 @@
 """Utility functions."""
+
 import ast
 import importlib.util
 import io
@@ -19,6 +20,7 @@ import yaml
 from jsonschema.exceptions import ValidationError
 from jsonschema.validators import validate
 from sqlalchemy.engine import make_url
+from typer import Exit
 
 from datafaker.settings import SettingsError
 
@@ -43,6 +45,38 @@ class Empty(Generic[T]):
         return (x for x in e)
 
 
+def load_yaml_file(
+    path: Path,
+    description: str,
+    fix_hint: str,
+    loader: Any = yaml.SafeLoader,
+) -> Any:
+    """Load a YAML file, exiting with a helpful message if it cannot be read.
+
+    Args:
+        path: The file to load.
+        description: What the file is, for error messages, e.g. "Config file".
+        fix_hint: What the user should do if the file is missing.
+        loader: The PyYAML loader to use.
+
+    Returns:
+        The parsed contents of the file.
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError as exc:
+        logger.error("%s '%s' not found. %s", description, path, fix_hint)
+        raise Exit(1) from exc
+    except (PermissionError, IsADirectoryError) as exc:
+        logger.error("Could not read %s '%s': %s", description, path, exc)
+        raise Exit(1) from exc
+    try:
+        return yaml.load(text, loader)
+    except yaml.YAMLError as exc:
+        logger.error("%s '%s' is not valid YAML: %s", description, path, exc)
+        raise Exit(1) from exc
+
+
 def read_config_file(path: Path) -> dict:
     """Read a config file, warning if it is invalid.
 
@@ -52,8 +86,12 @@ def read_config_file(path: Path) -> dict:
     Returns:
         The config file as a dictionary.
     """
-    with path.open("r", encoding="utf8") as f:
-        config = yaml.safe_load(f)
+    config = load_yaml_file(
+        path,
+        "Config file",
+        "Please run configure-tables first.",
+        yaml.SafeLoader,
+    )
 
     if not isinstance(config, dict):
         logger.error(
@@ -66,6 +104,7 @@ def read_config_file(path: Path) -> dict:
         validate(config, schema_config)
     except ValidationError as e:
         logger.error("The config file is invalid: %s", e.message)
+        raise Exit(1) from e
 
     return config
 
@@ -357,7 +396,7 @@ def get_ignored_table_names(config: Mapping) -> set[str]:
 
 
 def get_columns_assigned(
-    row_generator_config: Mapping[str, Any]
+    row_generator_config: Mapping[str, Any],
 ) -> Generator[str, None, None]:
     """
     Get the columns assigned in a ``row_generators[n]`` stanza.
