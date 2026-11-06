@@ -15,12 +15,12 @@ from collections.abc import Mapping, MutableMapping, MutableSequence, Sequence, 
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Callable, Final, Generator, Generic, Iterable, TypeVar
-from typer import Exit
 
 import yaml
 from jsonschema.exceptions import ValidationError
 from jsonschema.validators import validate
 from sqlalchemy.engine import make_url
+from typer import Exit
 
 from datafaker.settings import SettingsError
 

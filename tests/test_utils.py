@@ -6,10 +6,10 @@ import tempfile
 from importlib import resources
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
-from typer import Exit
 
 from sqlalchemy import Column, Integer, insert
 from sqlalchemy.orm import declarative_base
+from typer import Exit
 
 from datafaker.db_utils import download_table
 from datafaker.utils import (

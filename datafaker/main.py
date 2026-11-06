@@ -47,9 +47,9 @@ from datafaker.utils import (
     conf_logger,
     generators_require_stats,
     get_flag,
+    load_yaml_file,
     logger,
     read_config_file,
-    load_yaml_file,
 )
 
 # pylint: disable=too-many-arguments
@@ -619,7 +619,8 @@ def dump_data(
         default=[],
         help="The tables to dump (default is all non-ignored, non-vocabulary tables)",
     ),
-    output: Path | None = Option(
+    output: Path
+    | None = Option(
         None,
         help=(
             "Output CSV or Parquet file name,"

@@ -2,9 +2,9 @@
 
 import gzip
 import io
+import re
 from collections.abc import Callable, Mapping
 from pathlib import Path
-import re
 from types import ModuleType
 from typing import Any, Iterable, Optional, Union
 
@@ -24,10 +24,10 @@ from sqlalchemy import (
 )
 from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.exc import (
+    ArgumentError,
     IntegrityError,
     NoReferencedTableError,
     NoSuchModuleError,
-    ArgumentError,
     OperationalError,
     ProgrammingError,
 )
@@ -136,9 +136,9 @@ def get_dialect(dsn: str) -> sqlalchemy.engine.interfaces.Dialect:
     """Get the SQLAlchemy dialect from a DSN string."""
     url = sqlalchemy.engine.make_url(dsn)
     backend = url.get_backend_name()
-    dialect_cls: type[sqlalchemy.engine.interfaces.Dialect] = (
-        sqlalchemy.dialects.registry.load(backend)
-    )
+    dialect_cls: type[
+        sqlalchemy.engine.interfaces.Dialect
+    ] = sqlalchemy.dialects.registry.load(backend)
     url.get_backend_name()
     return dialect_cls()
 
