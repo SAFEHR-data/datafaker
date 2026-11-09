@@ -241,7 +241,6 @@ class TestGetDefaultGenerator(DatafakerTestCase):
         self.assertEqual(result.function_call.function_name, "generic.person.password")
 
 
-
 class TestMakeGenerators(GeneratesDBTestCase):
     """Test the make_table_generators function."""
 

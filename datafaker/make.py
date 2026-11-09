@@ -268,6 +268,7 @@ def _numeric_generator(column: Column) -> tuple[str, dict[str, str]]:
         },
     )
 
+
 #  Canonical textual UUID lengths: 36 characters with hyphens (the standard
 #  representation, e.g. "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"), or 32
 #  without. Some databases - notably Snowflake - have no native UUID column
@@ -275,6 +276,7 @@ def _numeric_generator(column: Column) -> tuple[str, dict[str, str]]:
 #  this is the only signal available (from column metadata alone, with no
 #  access to the real data) that such a column actually holds UUIDs.
 _UUID_STRING_LENGTHS = frozenset({32, 36})
+
 
 def _string_generator(column: Column) -> tuple[str, dict[str, str]]:
     """
