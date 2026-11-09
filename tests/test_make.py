@@ -212,6 +212,35 @@ class TestGetDefaultGenerator(DatafakerTestCase):
         assert result is not None
         self.assertIn("integer_number", result.function_call.function_name)
 
+    def test_uuid_length_string_pk_returns_uuid_generator(self) -> None:
+        """A UUID-length String PK (36, hyphenated, or 32, hex-only) uses the UUID generator."""
+        for length in (36, 32):
+            with self.subTest(length=length):
+                table = self._make_table(Column("id", String(length), primary_key=True))
+                result = _get_default_generator(table.c.id)
+                assert result is not None
+                self.assertEqual(
+                    result.function_call.function_name, "generic.cryptographic.uuid"
+                )
+
+    def test_non_pk_uuid_length_string_not_affected(self) -> None:
+        """A UUID-length String column that isn't a PK keeps the default string generator."""
+        table = self._make_table(
+            Column("id", Integer(), primary_key=True),
+            Column("val", String(36)),
+        )
+        result = _get_default_generator(table.c.val)
+        assert result is not None
+        self.assertEqual(result.function_call.function_name, "generic.person.password")
+
+    def test_wrong_length_string_pk_not_affected(self) -> None:
+        """A String PK of a different length is treated as a natural key, not a UUID."""
+        table = self._make_table(Column("id", String(10), primary_key=True))
+        result = _get_default_generator(table.c.id)
+        assert result is not None
+        self.assertEqual(result.function_call.function_name, "generic.person.password")
+
+
 
 class TestMakeGenerators(GeneratesDBTestCase):
     """Test the make_table_generators function."""

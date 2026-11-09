@@ -268,6 +268,13 @@ def _numeric_generator(column: Column) -> tuple[str, dict[str, str]]:
         },
     )
 
+#  Canonical textual UUID lengths: 36 characters with hyphens (the standard
+#  representation, e.g. "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"), or 32
+#  without. Some databases - notably Snowflake - have no native UUID column
+#  type and reflect a UUID primary key as a plain fixed-length string, so
+#  this is the only signal available (from column metadata alone, with no
+#  access to the real data) that such a column actually holds UUIDs.
+_UUID_STRING_LENGTHS = frozenset({32, 36})
 
 def _string_generator(column: Column) -> tuple[str, dict[str, str]]:
     """
@@ -277,6 +284,8 @@ def _string_generator(column: Column) -> tuple[str, dict[str, str]]:
     :return: The name of the generator and its arguments.
     """
     column_size: Optional[int] = getattr(column.type, "length", None)
+    if column.primary_key and column_size in _UUID_STRING_LENGTHS:
+        return ("generic.cryptographic.uuid", {})
     if column_size is None:
         return ("generic.text.color", {})
     return ("generic.person.password", {"length": str(column_size)})
