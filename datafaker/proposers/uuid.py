@@ -27,7 +27,7 @@ from datafaker.dialects import Random
 from datafaker.proposers.base import Proposer, ProposerFactory, get_column_type
 
 # Canonical textual UUID lengths: 36 characters with hyphens (the standard
-# representation, e.g. "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"), or 32 without.
+# representation, e.g. "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"), or 32 without hyphen.
 # Only used as a fallback when no real data is available to check directly.
 UUID_STRING_LENGTHS = frozenset({32, 36})
 
