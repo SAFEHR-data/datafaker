@@ -12,6 +12,8 @@ from sqlalchemy import func, select
 from datafaker.dialects import random_sample
 from datafaker.evaluators.feature_extractors import FeatureExtractor, IdentityExtractor
 
+DEFAULT_SAMPLE_SIZE = 4000
+
 
 @dataclass
 class Distribution:
@@ -43,7 +45,7 @@ class DistributionBuilder(ABC):
         table,
         column,
         extractor: FeatureExtractor = IdentityExtractor(),
-        sample_size=4000,
+        sample_size=DEFAULT_SAMPLE_SIZE,
     ):
         """Initialize the engine/table/column/extractor/sample_size shared by every builder."""
         self.engine = engine
@@ -73,7 +75,7 @@ class HistogramBuilder(DistributionBuilder):
         column,
         bins=10,
         extractor: FeatureExtractor = IdentityExtractor(),
-        sample_size=4000,
+        sample_size=DEFAULT_SAMPLE_SIZE,
     ):
         """Initialize a histogram builder for one column feature."""
         super().__init__(engine, table, column, extractor, sample_size)
