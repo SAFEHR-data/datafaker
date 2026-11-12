@@ -6,12 +6,8 @@ SQLAlchemy's own ``Uuid``/``postgresql.UUID``/``mssql.UNIQUEIDENTIFIER``
 types (``get_column_type`` already normalises the latter two to ``Uuid`` via
 ``as_generic``) are recognised directly; a plain ``String`` *primary key*
 column is checked against a sample of its real values instead, matching each
-one against the canonical UUID pattern. Fixed column length alone is too
-weak a signal: an unrelated natural key can coincidentally share a UUID's
-length, and - the case that actually matters for Snowflake - a ``VARCHAR``/
-``STRING`` column declared with no explicit length still holds genuine UUIDs.
-Length is only used as a last-resort fallback when there is no real data to
-sample at all (e.g. an empty table).
+one against the canonical UUID pattern, with column length used only when
+there is no data to sample.
 """
 
 import re
@@ -129,6 +125,10 @@ class UuidProposerFactory(ProposerFactory):
         if not (column.primary_key and isinstance(column_type, String)):
             return []
         matching_fraction = _sample_uuid_looking_fraction(column, engine)
+        # Prefer sampled data over column length: an unrelated natural key can
+        # coincidentally share a UUID's length, and a Snowflake VARCHAR/STRING
+        # column declared with no explicit length can still hold real UUIDs.
+        # Length is only a last resort, e.g. for an empty table.
         if matching_fraction is not None:
             looks_like_uuid = matching_fraction >= MIN_MATCHING_FRACTION
         else:

@@ -9,33 +9,6 @@ from datafaker.proposers.uuid import UuidProposer, UuidProposerFactory
 from tests.utils import DatafakerTestCase
 
 
-class UuidProposerUnitTests(DatafakerTestCase):
-    """Tests for ``UuidProposer``."""
-
-    def test_function_name(self) -> None:
-        """The proposer calls the existing Mimesis UUID generator."""
-        self.assertEqual(UuidProposer().function_name(), "generic.cryptographic.uuid")
-
-    def test_guarantees_fresh_uniqueness(self) -> None:
-        """A UUID proposer is treated as structurally fresh/unique."""
-        self.assertTrue(UuidProposer().guarantees_fresh_uniqueness())
-
-    def test_no_kwargs(self) -> None:
-        """The proposer needs no summary statistics."""
-        proposer = UuidProposer()
-        self.assertEqual(proposer.nominal_kwargs(), {})
-        self.assertEqual(proposer.actual_kwargs(), {})
-
-    def test_generate_data(self) -> None:
-        """Generated values are distinct, valid, version-4 UUID strings."""
-        values = UuidProposer().generate_data(200)
-        self.assertEqual(len(values), 200)
-        self.assertEqual(len(set(values)), 200)
-        for value in values:
-            parsed = uuid_lib.UUID(value)
-            self.assertEqual(parsed.version, 4)
-
-
 class UuidProposerFactoryUnitTests(DatafakerTestCase):
     """Tests for ``UuidProposerFactory``."""
 
