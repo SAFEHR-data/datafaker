@@ -1,4 +1,5 @@
 """Generator configuration shell."""  # pylint: disable=too-many-lines
+
 import copy
 import functools
 import re
@@ -387,7 +388,7 @@ information about the columns in the current table. Use 'peek',
 
     def _get_column_names(self) -> list[str]:
         """Get the (unqualified) names for all the current columns."""
-        (_, proposer_info) = self._get_table_and_proposer()
+        _, proposer_info = self._get_table_and_proposer()
         return proposer_info.columns if proposer_info else []
 
     def _column_metadata(self) -> list[Column]:
@@ -399,7 +400,7 @@ information about the columns in the current table. Use 'peek',
 
     def set_prompt(self) -> None:
         """Set the prompt according to the current table, column and generator."""
-        (table_name, prop_info) = self._get_table_and_proposer()
+        table_name, prop_info = self._get_table_and_proposer()
         if table_name is None:
             self.prompt = "(generators) "
             return
@@ -666,7 +667,7 @@ information about the columns in the current table. Use 'peek',
         if prop_index is not None:
             return (None, prop_index)
         # The whole thing isn't a column either, so let's split it:
-        (first_part, last_part) = split_column_full_name(target)
+        first_part, last_part = split_column_full_name(target)
         if not first_part:
             # It doesn't split, so that's the end
             self.print(self.ERROR_NO_SUCH_TABLE_OR_COLUMN, last_part)
@@ -687,7 +688,7 @@ information about the columns in the current table. Use 'peek',
 
         :return: True on success.
         """
-        (table_index, prop_index) = self._get_table_and_column(target)
+        table_index, prop_index = self._get_table_and_column(target)
         if prop_index is None:
             return False
         if table_index is not None:
@@ -734,7 +735,7 @@ information about the columns in the current table. Use 'peek',
         self, text: str, _line: str, _begidx: int, _endidx: int
     ) -> list[str]:
         """Completions for the arguments of the ``next`` command."""
-        (first_part, last_part) = split_column_full_name(text)
+        first_part, last_part = split_column_full_name(text)
         if first_part:
             # first_part is table, last_part is column
             table_index = self.get_table_index(first_part)
@@ -789,7 +790,7 @@ information about the columns in the current table. Use 'peek',
 
     def _get_proposer_proposals(self) -> list[Proposer]:
         """
-        Get a list of acceptable proposers, sorted by decreasing fit to the actual data.
+        Get a list of acceptable proposers, sorted by name.
 
         The cached list from the most recent 'propose'/'propose all' is
         reused if still valid for the current table/columns, so that 'set
@@ -800,7 +801,8 @@ information about the columns in the current table. Use 'peek',
             props = everything_factory(self.config, self.metadata).get_proposers(
                 columns, self.sync_engine
             )
-            sorted_props = sorted(props, key=lambda g: g.fit(9999))
+            # sorted_props = sorted(props, key=lambda g: g.fit(9999))
+            sorted_props = sorted(props, key=lambda g: g.name())
             self.proposers = sorted_props
             self.proposers_valid_columns = (
                 self.table_index,
@@ -888,9 +890,9 @@ information about the columns in the current table. Use 'peek',
                 n = int(argument)
                 if 0 < n <= len(props):
                     prop = props[n - 1]
-                    comparison[
-                        f"{n}. {theme.function}{prop.name()}"
-                    ] = prop.generate_data(limit)
+                    comparison[f"{n}. {theme.function}{prop.name()}"] = (
+                        prop.generate_data(limit)
+                    )
                     self._print_values_queried(table_name, n, prop)
         self.print_table_by_columns(comparison)
 
@@ -1334,7 +1336,7 @@ information about the columns in the current table. Use 'peek',
 
     def set_proposer(self, prop: Proposer | None) -> None:
         """Set the current column's generator."""
-        (table, gen_info) = self._get_table_and_proposer()
+        table, gen_info = self._get_table_and_proposer()
         if table is None:
             self.print("Error: no table")
             return
@@ -1578,7 +1580,7 @@ information about the columns in the current table. Use 'peek',
         parse = self.parse_role(arg)
         if parse is None:
             return
-        (column, command) = parse
+        column, command = parse
         if not column:
             cols = self.get_current_columns()
             if len(cols) != 1:
@@ -1587,7 +1589,7 @@ information about the columns in the current table. Use 'peek',
                 )
                 return
             column = list(cols)[0]
-        (table, col) = split_column_full_name(column)
+        table, col = split_column_full_name(column)
         if not table:
             entry = self.get_table()
             if entry is None:

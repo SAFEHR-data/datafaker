@@ -104,9 +104,9 @@ class MimesisProposer(MimesisProposerBase):
         """Get the kwargs (summary statistics) this generator was instantiated with."""
         return {}
 
-    def fit(self, default: float = -1) -> float:
-        """Get this generator's fit against the real data."""
-        return default if self._fit is None else self._fit
+    # def fit(self, default: float = -1) -> float:
+    #     """Get this generator's fit against the real data."""
+    #     return default if self._fit is None else self._fit
 
 
 class MimesisGeneratorTruncated(MimesisProposer):

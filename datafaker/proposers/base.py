@@ -139,14 +139,14 @@ class Proposer(ABC):
     def generate_data(self, count: int) -> list[Any]:
         """Generate ``count`` random data points for this column."""
 
-    def fit(self, default: float = -1) -> float:
-        """
-        Return a value representing how well the distribution fits the real source data.
+    # def fit(self, default: float = -1) -> float:
+    #     """
+    #     Return a value representing how well the distribution fits the real source data.
 
-        0.0 means "perfectly".
-        Returns default if no fitness has been defined.
-        """
-        return default
+    #     0.0 means "perfectly".
+    #     Returns default if no fitness has been defined.
+    #     """
+    #     return default
 
     def guarantees_fresh_uniqueness(self) -> bool:
         """

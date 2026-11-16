@@ -1,4 +1,5 @@
 """Proposers for date intervals."""
+
 import datetime
 from collections.abc import Mapping, Sequence
 from typing import Any
@@ -360,9 +361,9 @@ class DateAfterProposer(Proposer):
             }
         }
 
-    def fit(self, default: float = -1) -> float:
-        """Get this generator's fit against the real data."""
-        return default if self._fit is None else self._fit
+    # def fit(self, default: float = -1) -> float:
+    #     """Get this generator's fit against the real data."""
+    #     return default if self._fit is None else self._fit
 
     def generate_data(self, count: int) -> list[datetime.datetime]:
         """Generate ``count`` random data points for this column."""
@@ -536,9 +537,9 @@ class CopyProposer(Proposer):
         """No source data required."""
         return {}
 
-    def fit(self, default: float = -1) -> float:
-        """Get this generator's fit against the real data."""
-        return default
+    # def fit(self, default: float = -1) -> float:
+    #     """Get this generator's fit against the real data."""
+    #     return default
 
     def generate_data(self, count: int) -> list[Any]:
         """Generate ``count`` random data points for this column."""

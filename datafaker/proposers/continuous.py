@@ -100,11 +100,11 @@ class ContinuousDistributionProposer(Proposer):
             },
         }
 
-    def fit(self, default: float = -1) -> float:
-        """Get this generator's fit against the real data."""
-        if self.buckets is None:
-            return default
-        return self.buckets.fit_from_counts(self.expected_buckets)
+    # def fit(self, default: float = -1) -> float:
+    #     """Get this generator's fit against the real data."""
+    #     if self.buckets is None:
+    #         return default
+    #     return self.buckets.fit_from_counts(self.expected_buckets)
 
 
 class GaussianProposer(ContinuousDistributionProposer):
@@ -290,11 +290,11 @@ class LogNormalProposer(Proposer):
             },
         }
 
-    def fit(self, default: float = -1) -> float:
-        """Get this generator's fit against the real data."""
-        if self.buckets is None:
-            return default
-        return self.buckets.fit_from_counts(self.expected_buckets)
+    # def fit(self, default: float = -1) -> float:
+    #     """Get this generator's fit against the real data."""
+    #     if self.buckets is None:
+    #         return default
+    #     return self.buckets.fit_from_counts(self.expected_buckets)
 
 
 class ContinuousLogDistributionProposerFactory(ContinuousDistributionProposerFactory):
@@ -395,9 +395,9 @@ class MultivariateNormalProposer(Proposer):
             for _ in range(count)
         ]
 
-    def fit(self, default: float = -1) -> float:
-        """Get this generator's fit against the real data."""
-        return default
+    # def fit(self, default: float = -1) -> float:
+    #     """Get this generator's fit against the real data."""
+    #     return default
 
 
 class MultivariateNormalGeneratorFactoryBase(ProposerFactory):
