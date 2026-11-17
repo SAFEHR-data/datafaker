@@ -1,4 +1,5 @@
 """Tests for dialect-correct SQL in generator classes."""
+
 # pylint: disable=protected-access
 import unittest
 import unittest.mock
@@ -121,9 +122,9 @@ class TestBucketsStddevDialect(DatafakerTestCase):
         self.assertEqual(len(executed_stmts), 1)
         compiled = str(
             executed_stmts[0].compile(
-                dialect=mssql.dialect()
-                if dialect_name == "mssql"
-                else postgresql.dialect(),
+                dialect=(
+                    mssql.dialect() if dialect_name == "mssql" else postgresql.dialect()
+                ),
                 compile_kwargs={"literal_binds": True},
             )
         )
@@ -154,7 +155,6 @@ class TestChoiceGeneratorStoredQuery(DatafakerTestCase):
         return ZipfChoiceProposer(
             column=table.c.gender,
             values=["M", "F"],
-            counts=[70, 30],
             sample_count=sample_count,
             suppress_count=suppress_count,
             dialect=dialect,
@@ -544,9 +544,7 @@ class TestContinuousStddevDialect(DatafakerTestCase):
         """LogNormalProposer.select_aggregate_clauses uses STDDEV on PostgreSQL."""
 
         tbl, col = self._make_table()
-        proposer = LogNormalProposer(
-            tbl, col, MagicMock(), 1.0, 0.5, dialect=postgresql.dialect()
-        )
+        proposer = LogNormalProposer(tbl, col, 1.0, 0.5, dialect=postgresql.dialect())
         clause = proposer.select_aggregate_clauses()["logstddev__age"]["clause"]
         self.assert_str_in("STDDEV", clause.upper())
 
@@ -554,9 +552,7 @@ class TestContinuousStddevDialect(DatafakerTestCase):
         """LogNormalProposer.select_aggregate_clauses uses STDEV on MSSQL."""
 
         tbl, col = self._make_table()
-        proposer = LogNormalProposer(
-            tbl, col, MagicMock(), 1.0, 0.5, dialect=mssql.dialect()
-        )
+        proposer = LogNormalProposer(tbl, col, 1.0, 0.5, dialect=mssql.dialect())
         clause = proposer.select_aggregate_clauses()["logstddev__age"]["clause"]
         self.assert_str_in("STDEV", clause.upper())
         self.assert_str_not_in("STDDEV", clause.upper())

@@ -1,4 +1,5 @@
 """Unit tests for datafaker.evaluators.proposal_ranking."""
+
 from typing import Any
 
 from sqlalchemy import Column, MetaData, Table, Text
@@ -230,7 +231,7 @@ class RankProposalsTests(DatafakerTestCase):
     def test_choice_proposer_penalized_by_resampling_on_unique_column(self) -> None:
         """ChoiceProposer's score is discounted by real_uniqueness x copy_fraction."""
         table = Table("t", MetaData(), Column("c", Text()))
-        choice_proposer = UniformChoiceProposer(table.c.c, ["a", "b"], [1, 1])
+        choice_proposer = UniformChoiceProposer(table.c.c, ["a", "b"])
         results = [
             make_result(overall_score=0.0, copy_fraction=1.0, proposer=choice_proposer),
             make_result(overall_score=0.5, copy_fraction=0.0),
@@ -311,7 +312,7 @@ class RankProposalsTests(DatafakerTestCase):
     def test_weak_recommendation_warning_when_best_fit_was_suppressed(self) -> None:
         """A heavily-discounted best-fit candidate triggers the fallback warning."""
         table = Table("t", MetaData(), Column("c", Text()))
-        choice_proposer = UniformChoiceProposer(table.c.c, ["a", "b"], [1, 1])
+        choice_proposer = UniformChoiceProposer(table.c.c, ["a", "b"])
         results = [
             # Fits almost perfectly but is a resampler on a near-unique column:
             # gets discounted to (near) zero.
