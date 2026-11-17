@@ -16,7 +16,7 @@ from sqlalchemy.sql.visitors import (
     replacement_traverse,
     traverse,
 )
-from sqlalchemy.types import Date, DateTime
+from sqlalchemy.types import Date, DateTime, String
 
 T = TypeVar("T")
 
@@ -301,6 +301,177 @@ def compile_sentence_count_mssql(
         f"(CASE WHEN LEN({trimmed}) = 0 THEN 0 ELSE "
         f"LEN({normalized}) - LEN(REPLACE({normalized}, '.', '')) + 1 END)"
     )
+
+
+class StripWhitespace(ColumnElement[str]):  # pylint: disable=too-many-ancestors
+    """Strip leading/trailing whitespace from a text expression.
+
+    Approximates Python's ``str.strip()`` by removing spaces, tabs, line
+    feeds and carriage returns from both ends. (``str.strip()`` also removes
+    some rarer whitespace, such as form feeds and Unicode spaces.)
+    """
+
+    expr: ColumnElement[str]
+    type = String()
+
+    _traverse_internals = [
+        ("expr", InternalTraversal.dp_clauseelement),
+    ]
+
+    def __init__(self, expr: ColumnElement[str]):
+        """Get a clause for ``expr`` with surrounding whitespace removed."""
+        self.expr = expr
+
+    __sa_operate__ = ColumnElement.operate
+
+
+@compiles(StripWhitespace)
+def compile_strip_whitespace(element: StripWhitespace, compiler: Any, **kw: Any) -> str:
+    """Postgres/DuckDB/Snowflake: two-argument TRIM.
+
+    The whitespace characters are built with CHR() rather than written as
+    backslash escapes, because a backslash has no special meaning in a
+    standard SQL string literal (so a backslash-t would trim backslashes
+    and the letter t, not tabs).
+    """
+    e = compiler.process(element.expr, **kw)
+    return f"TRIM({e}, ' ' || CHR(9) || CHR(10) || CHR(13))"
+
+
+@compiles(StripWhitespace, "mssql")
+def compile_strip_whitespace_mssql(
+    element: StripWhitespace, compiler: Any, **kw: Any
+) -> str:
+    """MSSQL equivalent: TRIM(<characters> FROM <expr>)."""
+    e = compiler.process(element.expr, **kw)
+    return f"TRIM(' ' + CHAR(9) + CHAR(10) + CHAR(13) FROM {e})"
+
+
+class AfterCharacter(ColumnElement[str]):  # pylint: disable=too-many-ancestors
+    """The text after the first (or last) occurrence of a character.
+
+    Evaluates to NULL when the character does not occur in the text or when
+    nothing follows it, matching the "yield nothing" behaviour of
+    ``str.partition``/``str.rsplit``-based feature extractors.
+    """
+
+    expr: ColumnElement[str]
+    char: str
+    last: bool
+    type = String()
+
+    _traverse_internals = [
+        ("expr", InternalTraversal.dp_clauseelement),
+        ("char", InternalTraversal.dp_string),
+        ("last", InternalTraversal.dp_boolean),
+    ]
+
+    def __init__(self, expr: ColumnElement[str], char: str, last: bool = False):
+        """
+        Get a clause for the part of ``expr`` after ``char``.
+
+        :param expr: The text expression to search.
+        :param char: The single character to search for.
+        :param last: Split at the last occurrence of ``char`` rather than the
+            first.
+        """
+        if len(char) != 1:
+            raise ValueError(f"AfterCharacter needs a single character, not {char!r}")
+        self.expr = expr
+        self.char = char
+        self.last = last
+
+    __sa_operate__ = ColumnElement.operate
+
+
+@compiles(AfterCharacter)
+def compile_after_character(element: AfterCharacter, compiler: Any, **kw: Any) -> str:
+    """Postgres/DuckDB/Snowflake: POSITION/SUBSTR, or REVERSE/SPLIT_PART for last."""
+    e = compiler.process(element.expr, **kw)
+    c = compiler.render_literal_value(element.char, String())
+    if element.last:
+        after = f"REVERSE(SPLIT_PART(REVERSE({e}), {c}, 1))"
+    else:
+        after = f"SUBSTR({e}, POSITION({c} IN {e}) + 1)"
+    return f"(CASE WHEN POSITION({c} IN {e}) > 0 THEN NULLIF({after}, '') END)"
+
+
+@compiles(AfterCharacter, "mssql")
+def compile_after_character_mssql(
+    element: AfterCharacter, compiler: Any, **kw: Any
+) -> str:
+    """MSSQL equivalent: CHARINDEX/SUBSTRING, or REVERSE/RIGHT for last.
+
+    DATALENGTH (bytes) rather than LEN is used as SUBSTRING's length because
+    LEN ignores trailing spaces; it is always at least the number of
+    characters left. Note that MSSQL treats ``''`` as equal to an
+    all-space string, so an all-space remainder also becomes NULL - this
+    cannot happen when ``expr`` has been through ``StripWhitespace``.
+    """
+    e = compiler.process(element.expr, **kw)
+    c = compiler.render_literal_value(element.char, String())
+    if element.last:
+        after = f"RIGHT({e}, CHARINDEX({c}, REVERSE({e})) - 1)"
+    else:
+        after = f"SUBSTRING({e}, CHARINDEX({c}, {e}) + 1, DATALENGTH({e}))"
+    return f"(CASE WHEN CHARINDEX({c}, {e}) > 0 THEN NULLIF({after}, '') END)"
+
+
+class BeforeCharacter(ColumnElement[str]):  # pylint: disable=too-many-ancestors
+    """The text before the first occurrence of a character.
+
+    Evaluates to NULL when the character does not occur in the text or when
+    nothing precedes it, matching the "yield nothing" behaviour of
+    ``str.partition``-based feature extractors.
+    """
+
+    expr: ColumnElement[str]
+    char: str
+    type = String()
+
+    _traverse_internals = [
+        ("expr", InternalTraversal.dp_clauseelement),
+        ("char", InternalTraversal.dp_string),
+    ]
+
+    def __init__(self, expr: ColumnElement[str], char: str):
+        """
+        Get a clause for the part of ``expr`` before the first ``char``.
+
+        :param expr: The text expression to search.
+        :param char: The single character to search for.
+        """
+        if len(char) != 1:
+            raise ValueError(f"BeforeCharacter needs a single character, not {char!r}")
+        self.expr = expr
+        self.char = char
+
+    __sa_operate__ = ColumnElement.operate
+
+
+@compiles(BeforeCharacter)
+def compile_before_character(element: BeforeCharacter, compiler: Any, **kw: Any) -> str:
+    """Postgres/DuckDB/Snowflake: POSITION/SUBSTR."""
+    e = compiler.process(element.expr, **kw)
+    c = compiler.render_literal_value(element.char, String())
+    before = f"SUBSTR({e}, 1, POSITION({c} IN {e}) - 1)"
+    return f"(CASE WHEN POSITION({c} IN {e}) > 0 THEN NULLIF({before}, '') END)"
+
+
+@compiles(BeforeCharacter, "mssql")
+def compile_before_character_mssql(
+    element: BeforeCharacter, compiler: Any, **kw: Any
+) -> str:
+    """MSSQL equivalent: CHARINDEX/LEFT.
+
+    As with ``AfterCharacter``, MSSQL treats ``''`` as equal to an all-space
+    string, so an all-space prefix also becomes NULL - this cannot happen
+    when ``expr`` has been through ``StripWhitespace``.
+    """
+    e = compiler.process(element.expr, **kw)
+    c = compiler.render_literal_value(element.char, String())
+    before = f"LEFT({e}, CHARINDEX({c}, {e}) - 1)"
+    return f"(CASE WHEN CHARINDEX({c}, {e}) > 0 THEN NULLIF({before}, '') END)"
 
 
 class IsNull(ColumnElement[bool]):  # pylint: disable=too-many-ancestors

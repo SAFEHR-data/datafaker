@@ -8,7 +8,14 @@ from typing import Any
 
 from sqlalchemy import Integer, String, cast, func, literal
 
-from datafaker.dialects import SecondsDifference, SentenceCount, WordCount
+from datafaker.dialects import (
+    AfterCharacter,
+    BeforeCharacter,
+    SecondsDifference,
+    SentenceCount,
+    StripWhitespace,
+    WordCount,
+)
 
 TOKEN = re.compile(r"\w+")
 
@@ -343,6 +350,28 @@ class WeekdayExtractor(FeatureExtractor):
         return (days_since_epoch.cast(Integer) + 3) % 7
 
 
+def _normalised_email_expression(column):
+    """
+    Build the SQL equivalent of the email extractors' ``str(value).strip()``.
+
+    The result is also lowercased: every email extractor lowercases its
+    feature, and lowercasing before or after splitting on ``@``/``.`` gives
+    the same result.
+    """
+    return func.lower(StripWhitespace(column.cast(String)))
+
+
+def _email_domain_expression(column):
+    """
+    Build the SQL equivalent of the email extractors' domain parsing.
+
+    Mirrors ``str(value).strip().partition("@")[2].lower()``: everything
+    after the *first* ``@`` of the stripped, lowercased text, or NULL if
+    there is no ``@`` or nothing follows it.
+    """
+    return AfterCharacter(_normalised_email_expression(column), "@")
+
+
 class EmailLocalPartExtractor(FeatureExtractor):
     """Extract the local part (before ``@``) of an email-like string."""
 
@@ -358,8 +387,8 @@ class EmailLocalPartExtractor(FeatureExtractor):
             yield local_part.lower()
 
     def expression(self, column):
-        """Not implemented: local-part extraction has no SQL equivalent here."""
-        raise NotImplementedError()
+        """Build the SQL expression for the lowercased local part (NULL if none)."""
+        return BeforeCharacter(_normalised_email_expression(column), "@")
 
 
 class EmailDomainExtractor(FeatureExtractor):
@@ -377,8 +406,8 @@ class EmailDomainExtractor(FeatureExtractor):
             yield domain.lower()
 
     def expression(self, column):
-        """Not implemented: domain extraction has no SQL equivalent here."""
-        raise NotImplementedError()
+        """Build the SQL expression for the lowercased domain (NULL if none)."""
+        return _email_domain_expression(column)
 
 
 class EmailTopLevelDomainExtractor(FeatureExtractor):
@@ -399,8 +428,13 @@ class EmailTopLevelDomainExtractor(FeatureExtractor):
             yield tld
 
     def expression(self, column):
-        """Not implemented: TLD extraction has no SQL equivalent here."""
-        raise NotImplementedError()
+        """Build the SQL expression for the lowercased TLD (NULL if none).
+
+        The TLD is everything after the last ``.`` of the domain, so a value
+        whose domain has no ``.`` (or ends in one) gives NULL, as extract()
+        yields nothing for it.
+        """
+        return AfterCharacter(_email_domain_expression(column), ".", last=True)
 
 
 class EmailValidityExtractor(FeatureExtractor):
