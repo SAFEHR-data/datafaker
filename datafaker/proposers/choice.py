@@ -288,9 +288,9 @@ class ValueGatherer:
         cvs: list[dict[str, Any]] = []  # list of dicts with keys "v" and "count"
         values_not_suppressed = []  # All values found more than SUPPRESS_COUNT times
         counts_not_suppressed = []  # The number for each value not suppressed
-        cvs_not_suppressed: list[dict[str, Any]] = (
-            []
-        )  # list of dicts with keys "v" and "count"
+        cvs_not_suppressed: list[
+            dict[str, Any]
+        ] = []  # list of dicts with keys "v" and "count"
         for result in results:
             c = result.f
             if c != 0:

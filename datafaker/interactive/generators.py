@@ -890,9 +890,9 @@ information about the columns in the current table. Use 'peek',
                 n = int(argument)
                 if 0 < n <= len(props):
                     prop = props[n - 1]
-                    comparison[f"{n}. {theme.function}{prop.name()}"] = (
-                        prop.generate_data(limit)
-                    )
+                    comparison[
+                        f"{n}. {theme.function}{prop.name()}"
+                    ] = prop.generate_data(limit)
                     self._print_values_queried(table_name, n, prop)
         self.print_table_by_columns(comparison)
 
