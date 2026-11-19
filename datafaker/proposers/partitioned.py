@@ -340,10 +340,6 @@ class NullPartitionedNormalProposer(Proposer):
         kwargs = self.actual_kwargs()
         return [dist_gen.alternatives(**kwargs) for _ in range(count)]
 
-    def fit(self, default: float = -1) -> float:
-        """Get this generator's fit against the real data."""
-        return default
-
 
 def is_numeric(col: Column) -> bool:
     """Test if this column stores a numeric value."""
