@@ -60,11 +60,6 @@ class DateComponentExtractProposer(Proposer):
         """Return that no data is required from the database."""
         return {}
 
-    # def fit(self, default: float = -1) -> float:
-    #     """Get this generator's fit against the real data."""
-    #     # What should the fit really be?
-    #     return 0.0
-
     def get_based_on_data(self, count: int) -> list[datetime.datetime]:
         """Get the data from the based-on column in the source data."""
         with self._engine.connect() as conn:
