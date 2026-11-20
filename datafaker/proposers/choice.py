@@ -6,11 +6,7 @@ from typing import Any, Sequence, Union
 from sqlalchemy import Column, CursorResult, Engine, desc, func, select
 
 from datafaker.dialects import random_sample
-from datafaker.proposers.base import (
-    Proposer,
-    ProposerFactory,
-    dist_gen,
-)
+from datafaker.proposers.base import Proposer, ProposerFactory, dist_gen
 
 NumericType = Union[int, float]
 
