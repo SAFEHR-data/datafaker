@@ -1,4 +1,5 @@
 """Dialect differences."""
+
 import re
 from collections.abc import Mapping
 from typing import Any, Optional, TypeVar
@@ -518,6 +519,15 @@ def compile_random_mssql(_element: Random, _compiler: Any, **_kw: Any) -> str:
     return "NEWID()"
 
 
+def random_sample(query: Select, n: int | ColumnElement[Any]) -> Select:
+    """Return a random sample of up to n rows of the query.
+
+    The rows are shuffled before limiting, so the sample isn't biased
+    towards the order in which the database happens to store them.
+    """
+    return query.order_by(Random()).limit(n)
+
+
 @compiles(snowflake_types.TIMESTAMP_LTZ)
 def compile_timestampltz_generic(
     _element: snowflake_types.TIMESTAMP_LTZ, compiler: Any, **kw: Any
@@ -531,4 +541,4 @@ def compile_timestampltz_ddb(
     element: snowflake_types.TIMESTAMP_LTZ, compiler: Any, **kw: Any
 ) -> str:
     """Render TIMESTAMP_LTZ as TIMESTAMP_LTZ."""
-    return compiler.process(element, **kw)
+    return compiler.visit_TIMESTAMP_LTZ(element, **kw)

@@ -13,7 +13,7 @@ from sqlalchemy import Column, and_, select
 from sqlalchemy.types import Integer
 
 from datafaker.db_utils import MaybeAsyncEngine, primary_private_fks, table_is_private
-from datafaker.dialects import Random
+from datafaker.dialects import random_sample
 from datafaker.evaluators.column_evaluator import ColumnEvaluator
 from datafaker.evaluators.evaluation_profile import EvaluationProfile
 from datafaker.evaluators.proposal_ranking import (
@@ -1037,12 +1037,8 @@ information about the columns in the current table. Use 'peek',
         table = self.table_metadata()
         columns = [table.columns[c] for c in column_names]
         nonnull_clauses = [col.isnot(None) for col in columns]
-        stmt = (
-            select(*columns)
-            .select_from(table)
-            .where(and_(*nonnull_clauses))
-            .order_by(Random())
-            .limit(count)
+        stmt = random_sample(
+            select(*columns).select_from(table).where(and_(*nonnull_clauses)), count
         )
         with self.sync_engine.connect() as connection:
             result = connection.execute(stmt)
