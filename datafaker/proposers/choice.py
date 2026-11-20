@@ -1,48 +1,18 @@
 """Generator factories for making generators for choices of values."""
 
 import decimal
-import math
-import typing
-from abc import abstractmethod
 from typing import Any, Sequence, Union
 
 from sqlalchemy import Column, CursorResult, Engine, desc, func, select
 
 from datafaker.dialects import random_sample
-from datafaker.proposers.base import (
-    Proposer,
-    ProposerFactory,
-    dist_gen,
-    fit_from_buckets,
-)
+from datafaker.proposers.base import Proposer, ProposerFactory, dist_gen
 
 NumericType = Union[int, float]
 
 # How many distinct values can we have before we consider a
 # choice distribution to be infeasible?
 MAXIMUM_CHOICES = 500
-
-
-def zipf_distribution(total: int, bins: int) -> typing.Generator[int, None, None]:
-    """
-    Get a zipf distribution for a certain number of items.
-
-    :param total: The total number of items to be distributed.
-    :param bins: The total number of bins to distribute the items into.
-    :return: A generator of the number of items in each bin, from the
-    largest to the smallest.
-    """
-    basic_dist = list(map(lambda n: 1 / n, range(1, bins + 1)))
-    bd_remaining = sum(basic_dist)
-    for b in basic_dist:
-        # yield b/bd_remaining of the `total` remaining
-        if bd_remaining == 0:
-            yield 0
-        else:
-            x = math.floor(0.5 + total * b / bd_remaining)
-            bd_remaining -= x * bd_remaining / total
-            total -= x
-            yield x
 
 
 def _choice_stmt(  # pylint: disable=R0913,R0917
@@ -100,7 +70,6 @@ class ChoiceProposer(Proposer):
         self,
         column: Column,
         values: list[Any],
-        counts: list[int],
         sample_count: int | None = None,
         suppress_count: int = 0,
         dialect: Any = None,
@@ -109,8 +78,6 @@ class ChoiceProposer(Proposer):
         super().__init__()
         self.column = column
         self.values = values
-        estimated_counts = self.get_estimated_counts(counts)
-        self._fit = fit_from_buckets(counts, estimated_counts)
 
         extra_comment = " and their counts" if self.STORE_COUNTS else ""
         stmt = _choice_stmt(
@@ -152,10 +119,6 @@ class ChoiceProposer(Proposer):
                 )
                 self._annotation = "sampled and suppressed"
 
-    @abstractmethod
-    def get_estimated_counts(self, counts: list[int]) -> list[int]:
-        """Get the counts that we would expect if this distribution was the correct one."""
-
     def nominal_kwargs(self) -> dict[str, Any]:
         """Get the arguments to be entered into ``config.yaml``."""
         return {
@@ -186,17 +149,9 @@ class ChoiceProposer(Proposer):
             },
         }
 
-    def fit(self, default: float = -1) -> float:
-        """Get this generator's fit against the real data."""
-        return default if self._fit is None else self._fit
-
 
 class ZipfChoiceProposer(ChoiceProposer):
     """Generator producing items in a Zipf distribution."""
-
-    def get_estimated_counts(self, counts: list[int]) -> list[int]:
-        """Get the counts that we would expect if this distribution was the correct one."""
-        return list(zipf_distribution(sum(counts), len(counts)))
 
     def function_name(self) -> str:
         """Get the name of the generator function to call."""
@@ -210,27 +165,8 @@ class ZipfChoiceProposer(ChoiceProposer):
         ]
 
 
-def uniform_distribution(total: int, bins: int) -> typing.Generator[int, None, None]:
-    """
-    Construct a distribution putting ``total`` items uniformly into ``bins`` bins.
-
-    If they don't fit exactly evenly, the earlier bins will have one more
-    item than the later bins so the total is as required.
-    """
-    p = total // bins
-    n = total % bins
-    for _ in range(0, n):
-        yield p + 1
-    for _ in range(n, bins):
-        yield p
-
-
 class UniformChoiceProposer(ChoiceProposer):
     """A proposer producing values, each roughly as frequently as each other."""
-
-    def get_estimated_counts(self, counts: list[int]) -> list[int]:
-        """Get the counts that we would expect if this distribution was the correct one."""
-        return list(uniform_distribution(sum(counts), len(counts)))
 
     def function_name(self) -> str:
         """Get the name of the generator function to call."""
@@ -347,19 +283,16 @@ class ChoiceProposerFactory(ProposerFactory):
                         ZipfChoiceProposer(
                             column,
                             vg.values,
-                            vg.counts,
                             dialect=dialect,
                         ),
                         UniformChoiceProposer(
                             column,
                             vg.values,
-                            vg.counts,
                             dialect=dialect,
                         ),
                         WeightedChoiceProposer(
                             column,
                             vg.cvs,
-                            vg.counts,
                             dialect=dialect,
                         ),
                     ]
@@ -368,21 +301,18 @@ class ChoiceProposerFactory(ProposerFactory):
                         ZipfChoiceProposer(
                             column,
                             vg.values_not_suppressed,
-                            vg.counts_not_suppressed,
                             suppress_count=self.SUPPRESS_COUNT,
                             dialect=dialect,
                         ),
                         UniformChoiceProposer(
                             column,
                             vg.values_not_suppressed,
-                            vg.counts_not_suppressed,
                             suppress_count=self.SUPPRESS_COUNT,
                             dialect=dialect,
                         ),
                         WeightedChoiceProposer(
                             column=column,
                             values=vg.cvs_not_suppressed,
-                            counts=vg.counts_not_suppressed,
                             suppress_count=self.SUPPRESS_COUNT,
                             dialect=dialect,
                         ),
@@ -406,21 +336,18 @@ class ChoiceProposerFactory(ProposerFactory):
                         ZipfChoiceProposer(
                             column,
                             vg.values,
-                            vg.counts,
                             sample_count=self.SAMPLE_COUNT,
                             dialect=dialect,
                         ),
                         UniformChoiceProposer(
                             column,
                             vg.values,
-                            vg.counts,
                             sample_count=self.SAMPLE_COUNT,
                             dialect=dialect,
                         ),
                         WeightedChoiceProposer(
                             column,
                             vg.cvs,
-                            vg.counts,
                             sample_count=self.SAMPLE_COUNT,
                             dialect=dialect,
                         ),
@@ -430,7 +357,6 @@ class ChoiceProposerFactory(ProposerFactory):
                         ZipfChoiceProposer(
                             column,
                             vg.values_not_suppressed,
-                            vg.counts_not_suppressed,
                             sample_count=self.SAMPLE_COUNT,
                             suppress_count=self.SUPPRESS_COUNT,
                             dialect=dialect,
@@ -438,7 +364,6 @@ class ChoiceProposerFactory(ProposerFactory):
                         UniformChoiceProposer(
                             column,
                             vg.values_not_suppressed,
-                            vg.counts_not_suppressed,
                             sample_count=self.SAMPLE_COUNT,
                             suppress_count=self.SUPPRESS_COUNT,
                             dialect=dialect,
@@ -446,7 +371,6 @@ class ChoiceProposerFactory(ProposerFactory):
                         WeightedChoiceProposer(
                             column=column,
                             values=vg.cvs_not_suppressed,
-                            counts=vg.counts_not_suppressed,
                             sample_count=self.SAMPLE_COUNT,
                             suppress_count=self.SUPPRESS_COUNT,
                             dialect=dialect,

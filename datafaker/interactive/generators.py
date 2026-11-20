@@ -790,7 +790,7 @@ information about the columns in the current table. Use 'peek',
 
     def _get_proposer_proposals(self) -> list[Proposer]:
         """
-        Get a list of acceptable proposers, sorted by decreasing fit to the actual data.
+        Get a list of acceptable proposers, sorted by name.
 
         The cached list from the most recent 'propose'/'propose all' is
         reused if still valid for the current table/columns, so that 'set
@@ -801,7 +801,7 @@ information about the columns in the current table. Use 'peek',
             props = everything_factory(self.config, self.metadata).get_proposers(
                 columns, self.sync_engine
             )
-            sorted_props = sorted(props, key=lambda g: g.fit(9999))
+            sorted_props = sorted(props, key=lambda g: g.name())
             self.proposers = sorted_props
             self.proposers_valid_columns = (
                 self.table_index,

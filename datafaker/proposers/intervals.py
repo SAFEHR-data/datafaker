@@ -9,7 +9,6 @@ from sqlalchemy.types import Date, DateTime
 
 from datafaker.dialects import SecondsDifference, StdDev, random_sample
 from datafaker.proposers.base import (
-    Buckets,
     ForeignKeyRelationship,
     Proposer,
     ProposerFactory,
@@ -184,7 +183,6 @@ class DateAfterProposer(Proposer):
         column: Column,
         anchor_related: RelatedColumn,
         engine: Engine,
-        buckets: Buckets | None = None,
     ):
         """
         Initialise a date after proposer.
@@ -196,7 +194,6 @@ class DateAfterProposer(Proposer):
         :param anchor: The anchor column, which must be in the same table as column
          or a related table.
         :param engine: The source database.
-        :param buckets: The buckets for the intervals in the source database.
         """
         super().__init__()
         self._sd = sd
@@ -205,13 +202,6 @@ class DateAfterProposer(Proposer):
         self._column = column
         self._engine = engine
         self._provider = AnchoredProvider(metadata=metadata)
-        if buckets is None:
-            self._fit = None
-            return
-        intervals = self.generate_intervals(400)
-        self._fit = buckets.fit_from_values(
-            [(b - coerce_to_datetime(a, b)).total_seconds() for (a, b) in intervals]
-        )
 
     @classmethod
     def get_query(
@@ -361,10 +351,6 @@ class DateAfterProposer(Proposer):
             }
         }
 
-    def fit(self, default: float = -1) -> float:
-        """Get this generator's fit against the real data."""
-        return default if self._fit is None else self._fit
-
     def generate_data(self, count: int) -> list[datetime.datetime]:
         """Generate ``count`` random data points for this column."""
         return [b for (_, b) in self.generate_intervals(count)]
@@ -416,12 +402,6 @@ class DateAfterProposerFactory(ProposerFactory):
             result = connection.execute(query).first()
             if result is None or result.sd is None:
                 return []
-        buckets = Buckets.make_buckets(
-            engine,
-            column.table,
-            SecondsDifference(column, anchor_related.target),
-            anchor_related,
-        )
         return [
             DateAfterProposer(
                 self._metadata,
@@ -430,7 +410,6 @@ class DateAfterProposerFactory(ProposerFactory):
                 column,
                 anchor_related,
                 engine=engine,
-                buckets=buckets,
             )
         ]
 
@@ -536,10 +515,6 @@ class CopyProposer(Proposer):
     def custom_queries(self) -> dict[str, dict[str, Any]]:
         """No source data required."""
         return {}
-
-    def fit(self, default: float = -1) -> float:
-        """Get this generator's fit against the real data."""
-        return default
 
     def generate_data(self, count: int) -> list[Any]:
         """Generate ``count`` random data points for this column."""

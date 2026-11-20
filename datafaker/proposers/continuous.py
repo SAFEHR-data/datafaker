@@ -29,7 +29,6 @@ from typing_extensions import Self
 from datafaker.dialects import IsNotNull, LogNatural, NullIf, StdDev, random_sample
 from datafaker.proposers.base import (
     Buckets,
-    NumericType,
     Proposer,
     ProposerFactory,
     dist_gen,
@@ -40,8 +39,6 @@ from datafaker.utils import logger
 
 class ContinuousDistributionProposer(Proposer):
     """Base class for generators producing continuous distributions."""
-
-    expected_buckets: Sequence[NumericType] = []
 
     def __init__(
         self,
@@ -100,28 +97,9 @@ class ContinuousDistributionProposer(Proposer):
             },
         }
 
-    def fit(self, default: float = -1) -> float:
-        """Get this generator's fit against the real data."""
-        if self.buckets is None:
-            return default
-        return self.buckets.fit_from_counts(self.expected_buckets)
-
 
 class GaussianProposer(ContinuousDistributionProposer):
     """Generator producing numbers in a Gaussian (normal) distribution."""
-
-    expected_buckets = [
-        0.0227,
-        0.0441,
-        0.0918,
-        0.1499,
-        0.1915,
-        0.1915,
-        0.1499,
-        0.0918,
-        0.0441,
-        0.0227,
-    ]
 
     def function_name(self) -> str:
         """Get the name of the generator function to call."""
@@ -137,19 +115,6 @@ class GaussianProposer(ContinuousDistributionProposer):
 
 class UniformProposer(ContinuousDistributionProposer):
     """Generator producing numbers in a uniform distribution."""
-
-    expected_buckets = [
-        0,
-        0.06698,
-        0.14434,
-        0.14434,
-        0.14434,
-        0.14434,
-        0.14434,
-        0.14434,
-        0.06698,
-        0,
-    ]
 
     def function_name(self) -> str:
         """Get the name of the generator function to call."""
@@ -199,31 +164,11 @@ class ContinuousDistributionProposerFactory(ProposerFactory):
 class LogNormalProposer(Proposer):
     """Generator producing numbers in a log-normal distribution."""
 
-    # R:
-    # > xs<-seq(-2,2,0.5)*sqrt((exp(1)-1)*exp(1))+exp(0.5)
-    # > ys <- plnorm(xs)
-    # > c(ys, 1) - c(0,ys)
-    #  [1] 0.00000000 0.00000000 0.00000000 0.28589471 0.40556775 0.15086088
-    #  [7] 0.06716451 0.03428958 0.01924848 0.03697409
-    expected_buckets = [
-        0,
-        0,
-        0,
-        0.28589471,
-        0.40556775,
-        0.15086088,
-        0.06716451,
-        0.03428958,
-        0.01924848,
-        0.03697409,
-    ]
-
     # pylint: disable=too-many-arguments too-many-positional-arguments
     def __init__(
         self,
         table: Table,
         column: Column,
-        buckets: Buckets,
         logmean: float,
         logstddev: float,
         dialect: Dialect,
@@ -232,7 +177,6 @@ class LogNormalProposer(Proposer):
         super().__init__()
         self.table = table
         self.column = column
-        self.buckets = buckets
         self.logmean = logmean
         self.logstddev = logstddev
         self._dialect = dialect
@@ -290,17 +234,11 @@ class LogNormalProposer(Proposer):
             },
         }
 
-    def fit(self, default: float = -1) -> float:
-        """Get this generator's fit against the real data."""
-        if self.buckets is None:
-            return default
-        return self.buckets.fit_from_counts(self.expected_buckets)
-
 
 class ContinuousLogDistributionProposerFactory(ContinuousDistributionProposerFactory):
     """All generators that want an average and standard deviation of log data."""
 
-    def _get_generators_from_buckets(
+    def _get_generators_from_buckets(  # pylint: disable=unused-argument
         self,
         engine: Engine,
         src_table: Table,
@@ -308,12 +246,12 @@ class ContinuousLogDistributionProposerFactory(ContinuousDistributionProposerFac
         buckets: Buckets,
     ) -> Sequence[Proposer]:
         col = case(
-            (column > 0, func.log(column)),
+            (column > 0, LogNatural(column)),
             else_=null(),
         )
         stmt = select(
             func.avg(col).label("logmean"),
-            func.stddev_samp(col).label("logstddev"),
+            StdDev(col).label("logstddev"),
         ).select_from(src_table)
         with engine.connect() as connection:
             result = connection.execute(stmt).first()
@@ -323,7 +261,6 @@ class ContinuousLogDistributionProposerFactory(ContinuousDistributionProposerFac
             LogNormalProposer(
                 src_table,
                 column,
-                buckets,
                 float(result.logmean),
                 float(result.logstddev),
                 dialect=engine.dialect,
@@ -394,10 +331,6 @@ class MultivariateNormalProposer(Proposer):
             getattr(dist_gen, self._function_name)(self._covariates)
             for _ in range(count)
         ]
-
-    def fit(self, default: float = -1) -> float:
-        """Get this generator's fit against the real data."""
-        return default
 
 
 class MultivariateNormalGeneratorFactoryBase(ProposerFactory):
