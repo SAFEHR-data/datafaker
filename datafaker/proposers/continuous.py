@@ -246,12 +246,12 @@ class ContinuousLogDistributionProposerFactory(ContinuousDistributionProposerFac
         buckets: Buckets,
     ) -> Sequence[Proposer]:
         col = case(
-            (column > 0, func.log(column)),
+            (column > 0, LogNatural(column)),
             else_=null(),
         )
         stmt = select(
             func.avg(col).label("logmean"),
-            func.stddev_samp(col).label("logstddev"),
+            StdDev(col).label("logstddev"),
         ).select_from(src_table)
         with engine.connect() as connection:
             result = connection.execute(stmt).first()
