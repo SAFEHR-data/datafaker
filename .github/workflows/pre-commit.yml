@@ -7,9 +7,8 @@ on:
     branches:
       - main
 env:
-  # This should be the default but we'll be explicit
   PRE_COMMIT_HOME: ~/.caches/pre-commit
-  PYTHON_VERSION: "3.10"
+  PYTHON_VERSION: "3.12"
 jobs:
   clean-check:
     runs-on: ubuntu-latest
