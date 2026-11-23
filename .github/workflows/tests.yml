@@ -6,11 +6,11 @@ on:
   push:
     branches:
       - main
-env:
-  # This should be the default but we'll be explicit
-  PYTHON_VERSION: "3.12"
 jobs:
   unit-tests:
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13", "3.14", "3.15"]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -24,7 +24,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version: ${{ matrix.python-version }}
       # Install poetry into the setup-python interpreter rather than via apt,
       # so it doesn't run on (and build the venv with) the runner's system Python.
       - name: Install poetry
