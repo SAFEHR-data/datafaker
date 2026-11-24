@@ -7,7 +7,7 @@ from sqlalchemy import Connection, MetaData, select
 from datafaker.interactive.base import DbCmd
 from datafaker.proposers.choice import ChoiceProposerFactory
 from tests.test_interactive_generators import MockGeneratorCmd
-from tests.utils import DuckTestDb, GeneratesDBTestCase, MsSqlTestDb
+from tests.utils import DuckDbMixin, GeneratesDBTestCase, MsSqlMixin
 
 
 class ChoiceMeasurementTableStats:
@@ -195,14 +195,9 @@ class GeneratorsChoiceTests(GeneratesDBTestCase):
             self.assertSetEqual(stats.threes, {1, 2, 3, 4, 5})
 
 
-class GeneratorsChoiceTestsDuckDb(GeneratorsChoiceTests):
+class GeneratorsChoiceTestsDuckDb(DuckDbMixin, GeneratorsChoiceTests):
     """As ``GeneratorsChoiceTests`` but with DuckDB."""
 
-    database_type = DuckTestDb
 
-
-class GeneratorsChoiceTestsMsSql(GeneratorsChoiceTests):
+class GeneratorsChoiceTestsMsSql(MsSqlMixin, GeneratorsChoiceTests):
     """As ``GeneratorsChoiceTests`` but with MS Sql."""
-
-    database_type = MsSqlTestDb
-    schema_name = None

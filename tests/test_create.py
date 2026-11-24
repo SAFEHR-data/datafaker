@@ -34,7 +34,7 @@ from datafaker.settings import SettingsError
 from tests.utils import (
     DatafakerTestCase,
     GeneratesDBTestCase,
-    MsSqlTestDb,
+    MsSqlMixin,
     RequiresDBTestCase,
 )
 
@@ -526,8 +526,5 @@ class CreateDataTestCase(RequiresDBTestCase):
         )
 
 
-class CreateDataTestCaseMsSql(CreateDataTestCase):
+class CreateDataTestCaseMsSql(MsSqlMixin, CreateDataTestCase):
     """CreateData but for MSSQL."""
-
-    database_type = MsSqlTestDb
-    schema_name = None

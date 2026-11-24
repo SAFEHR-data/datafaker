@@ -201,6 +201,7 @@ def conf_logger(verbose: bool) -> None:
     """Configure the logger."""
     # Note that this function modifies the global `logger`.
     log_format = "%(message)s"
+    #log_format = "%(name)s %(levelname)s: %(message)s"
 
     # info will always be printed to stdout
     # debug will be printed to stdout only if verbose=True
@@ -221,6 +222,8 @@ def conf_logger(verbose: bool) -> None:
     )
     logging.getLogger("asyncio").setLevel(logging.WARNING)
     logging.getLogger("blib2to3.pgen2.driver").setLevel(logging.WARNING)
+    logging.getLogger("snowflake.connector").setLevel(logging.WARNING)
+    logging.getLogger("botocore").setLevel(logging.WARNING)
 
 
 def get_flag(maybe_dict: Any, key: Any) -> bool:

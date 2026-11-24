@@ -8,7 +8,7 @@ from sqlalchemy.orm import aliased
 
 from datafaker.interactive.base import DbCmd
 from tests.test_interactive_generators import MockGeneratorCmd
-from tests.utils import GeneratesDBTestCase, MsSqlTestDb
+from tests.utils import GeneratesDBTestCase, MsSqlMixin
 
 
 class ConfigureCopyGeneratorsWithDateTests(GeneratesDBTestCase):
@@ -262,8 +262,5 @@ class ConfigureCopyGeneratorsWithDateTests(GeneratesDBTestCase):
 
 
 # Note that this test won't work with DuckDB because it needs foreign keys to work
-class ConfigureCopyGeneratorsWithDateMsSqlTests(ConfigureCopyGeneratorsWithDateTests):
+class ConfigureCopyGeneratorsWithDateMsSqlTests(MsSqlMixin, ConfigureCopyGeneratorsWithDateTests):
     """Test `configure-generators` with `instrument.sql` with MS SQL."""
-
-    database_type = MsSqlTestDb
-    schema_name = None

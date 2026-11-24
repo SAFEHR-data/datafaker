@@ -170,7 +170,7 @@ def create_db_engine(
                     schema_translate_map={None: schema_name}
                 )
             case "snowflake":
-                settings.append(f"USE SCHEMA {schema_name};")
+                settings.append(f'USE SCHEMA "{schema_name}";')
             case _:
                 settings.append(f"SET search_path TO {schema_name};")
     dataset_views: list[str] = []

@@ -1,4 +1,5 @@
 """Tests for the CLI."""
+import logging
 import os
 import shutil
 import tempfile
@@ -10,7 +11,7 @@ from sqlalchemy import create_engine, inspect
 from typer.testing import CliRunner, Result
 
 from datafaker.main import app
-from tests.utils import DuckTestDb, MsSqlTestDb, RequiresDBTestCase
+from tests.utils import DuckDbMixin, MsSqlMixin, RequiresDBTestCase, SnowflakeMixin
 
 # pylint: disable=subprocess-run-check
 
@@ -33,12 +34,14 @@ class DBFunctionalTestCaseBase(RequiresDBTestCase):
     def setUp(self) -> None:
         """Pre-test setup."""
         super().setUp()
-        self.make_destination_database("dst")
+        self.make_destination_database()
+        schema = self.database.get_schema() or self.schema_name
+        dst_schema = self.dst_database.get_schema() or self.dst_schema_name
         self.env = {
             "SRC_DSN": self.dsn,
-            "SRC_SCHEMA": self.schema_name,
+            "SRC_SCHEMA": schema,
             "DST_DSN": self.dst_dsn,
-            "DST_SCHEMA": self.dst_schema_name,
+            "DST_SCHEMA": dst_schema,
         }
         self.runner = CliRunner(
             mix_stderr=False,
@@ -315,6 +318,14 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
     schema_name = "public"
     alt_orm_file_path = Path("my_orm.yaml")
 
+    @classmethod
+    def setUpClass(cls):
+        """Remove extra logging that messes up the tests on Snowflake."""
+        # Remove "using environment variable proxy settings" warning
+        logging.getLogger("snowflake.connector._core").setLevel(logging.ERROR)
+        return super().setUpClass()
+
+
     def test_workflow_maximal_args(self) -> None:
         """Test the CLI workflow runs with optional arguments."""
         completed_process = self.invoke(
@@ -326,10 +337,8 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
         self.assertNoException(completed_process)
         self.assertEqual("", completed_process.stderr)
         self.assertSuccess(completed_process)
-        self.assertEqual(
-            f"Creating {self.alt_orm_file_path}.\n{self.alt_orm_file_path} created.\n",
-            completed_process.stdout,
-        )
+        self.assert_str_in(f"Creating {self.alt_orm_file_path}.", completed_process.stdout)
+        self.assert_str_in(f"{self.alt_orm_file_path} created.", completed_process.stdout)
 
         completed_process = self.invoke(
             "--verbose",
@@ -341,15 +350,15 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
         )
         self.assertEqual("", completed_process.stderr)
         self.assertSuccess(completed_process)
-        self.assertEqual(
-            f"Creating {self.stats_file_path}.\n"
-            "Executing query count_names\n"
-            "Executing query avg_person_id\n"
-            "Executing query count_opt_outs\n"
-            "Executing query auto__hospital_visit__visit_type_concept_id\n"
-            f"{self.stats_file_path} created.\n",
-            completed_process.stdout,
-        )
+        for s in [
+            f"Creating {self.stats_file_path}.\n",
+            "Executing query count_names\n",
+            "Executing query avg_person_id\n",
+            "Executing query count_opt_outs\n",
+            "Executing query auto__hospital_visit__visit_type_concept_id\n",
+            f"{self.stats_file_path} created.\n"
+        ]:
+            self.assert_str_in(s, completed_process.stdout)
 
         completed_process = self.invoke(
             "--verbose",
@@ -366,7 +375,7 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
                 "Downloading vocabulary table empty_vocabulary",
                 "Downloading vocabulary table mitigation_type",
             },
-            set(completed_process.stdout.split("\n")) - {""},
+            self.get_output(completed_process),
         )
 
         completed_process = self.invoke(
@@ -377,9 +386,9 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
         )
         self.assertEqual("", completed_process.stderr)
         self.assertSuccess(completed_process)
-        self.assertEqual(
-            "Creating tables.\nTables created.\n",
-            completed_process.stdout,
+        self.assertSetEqual(
+            {"Creating tables.", "Tables created."},
+            self.get_output(completed_process),
         )
 
         completed_process = self.invoke(
@@ -390,8 +399,8 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
         )
         self.assertEqual("", completed_process.stderr)
         self.assertSuccess(completed_process)
-        if self.dsn.startswith("duckdb:"):
-            # DuckDB does not seem to know about constraints
+        if self.dsn.startswith("duckdb:") or self.dsn.startswith("snowflake:"):
+            # DuckDB and Snowflake do not seem to know about constraints
             constraint_messages = set()
         else:
             constraint_messages = {
@@ -414,7 +423,7 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
                 "Loading vocabulary table concept_type",
                 "5 tables loaded.",
             },
-            set(completed_process.stdout.split("\n")) - {""},
+            self.get_output(completed_process),
         )
 
         completed_process = self.invoke(
@@ -447,7 +456,7 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
                 "test_entity: 2 rows created.",
                 "",
             },
-            set(completed_process.stdout.split("\n")),
+            self.get_output(completed_process),
         )
 
         completed_process = self.invoke(
@@ -458,7 +467,7 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
             f"--config-file={self.config_file_path}",
         )
         self.assertEqual("", completed_process.stderr)
-        self.assertEqual(
+        self.assertSetEqual(
             {
                 "Truncating non-vocabulary tables.",
                 'Truncating table "hospital_visit".',
@@ -470,7 +479,7 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
                 'Truncating table "data_type_test".',
                 "Non-vocabulary tables truncated.",
             },
-            set(completed_process.stdout.split("\n")) - {""},
+            self.get_output(completed_process),
         )
 
         completed_process = self.invoke(
@@ -493,7 +502,7 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
                 'Truncating vocabulary table "empty_vocabulary".',
                 "Vocabulary tables truncated.",
             },
-            set(completed_process.stdout.split("\n")) - {""},
+            self.get_output(completed_process),
         )
 
         completed_process = self.invoke(
@@ -505,9 +514,9 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
         )
         self.assertEqual("", completed_process.stderr)
         self.assertSuccess(completed_process)
-        self.assertEqual(
-            "Dropping tables.\nTables dropped.\n",
-            completed_process.stdout,
+        self.assertSetEqual(
+            {"Dropping tables.", "Tables dropped."},
+            self.get_output(completed_process),
         )
 
     def test_story_incorrect_name(self) -> None:
@@ -576,14 +585,13 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
         self.assertReturnCode(completed_process, 1)
 
 
-class DuckDbFunctionalTestCase(DBFunctionalTestCase):
+class DuckDbFunctionalTestCase(DuckDbMixin, DBFunctionalTestCase):
     """End-to-end tests for the DuckDB workflow."""
 
-    database_type = DuckTestDb
 
-
-class MsSqlFunctionalTestCase(DBFunctionalTestCase):
+class MsSqlFunctionalTestCase(MsSqlMixin, DBFunctionalTestCase):
     """End-to-end tests for the MsSql workflow."""
 
-    schema_name = None
-    database_type = MsSqlTestDb
+
+class SnowflakeFunctionalTestCase(SnowflakeMixin, DBFunctionalTestCase):
+    """End-to-end tests for Snowflake."""

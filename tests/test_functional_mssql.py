@@ -25,7 +25,7 @@ from sqlalchemy.schema import CreateTable
 
 from datafaker.make import make_src_stats, make_tables_file
 from datafaker.proposers.choice import ZipfChoiceProposer  # noqa: PLC0415
-from tests.utils import DatafakerTestCase, GeneratesDBTestCase, MsSqlTestDb
+from tests.utils import DatafakerTestCase, GeneratesDBTestCase, MsSqlMixin
 
 _EXPECTED_TABLES = frozenset(
     {"manufacturer", "model", "string", "player", "signature_model"}
@@ -37,13 +37,11 @@ _EXPECTED_TABLES = frozenset(
 # ---------------------------------------------------------------------------
 
 
-class MSSQLFunctionalTestCase(GeneratesDBTestCase):
+class MSSQLFunctionalTestCase(MsSqlMixin, GeneratesDBTestCase):
     """End-to-end tests exercising the full datafaker pipeline against SQL Server."""
 
-    database_type = MsSqlTestDb
     dump_file_path = "instrument.sql"
     database_name = "instrument"
-    schema_name = None
     dst_schema_name = "dst"
 
     def setUp(self) -> None:

@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from datafaker.dialects import SecondsDifference, StdDev
 from datafaker.interactive.base import DbCmd
 from datafaker.interactive.generators import GeneratorCmd
-from tests.utils import DuckTestDb, GeneratesDBTestCase, MsSqlTestDb, TestDbCmdMixin
+from tests.utils import DuckDbMixin, GeneratesDBTestCase, MsSqlMixin, TestDbCmdMixin
 
 
 class MockGeneratorCmd(GeneratorCmd, TestDbCmdMixin):
@@ -108,17 +108,12 @@ class ConfigureGeneratorsWithSrc2Tests(GeneratesDBTestCase):
         self.assertAlmostEqual(src_result.sd, dst_result.sd, delta=src_result.sd * 0.5)
 
 
-class ConfigureGeneratorsWithSrc2DuckDbTests(ConfigureGeneratorsWithSrc2Tests):
+class ConfigureGeneratorsWithSrc2DuckDbTests(DuckDbMixin, ConfigureGeneratorsWithSrc2Tests):
     """Test `configure-generators` with `src2.dump` with DuckDB."""
 
-    database_type = DuckTestDb
 
-
-class ConfigureGeneratorsWithSrc2MsSqlTests(ConfigureGeneratorsWithSrc2Tests):
+class ConfigureGeneratorsWithSrc2MsSqlTests(MsSqlMixin, ConfigureGeneratorsWithSrc2Tests):
     """Test `configure-generators` with `src2.dump` with MS SQL."""
-
-    database_type = MsSqlTestDb
-    schema_name = None
 
 
 class ConfigureGeneratorsWithInstrumentsTests(GeneratesDBTestCase):
@@ -213,12 +208,10 @@ class ConfigureGeneratorsWithInstrumentsTests(GeneratesDBTestCase):
 
 # Note that this test won't work with DuckDB because it needs foreign keys to work
 class ConfigureGeneratorsWithInstrumentsMsSqlTests(
-    ConfigureGeneratorsWithInstrumentsTests
+    MsSqlMixin,
+    ConfigureGeneratorsWithInstrumentsTests,
 ):
     """Test `configure-generators` with `instrument.sql` with MS SQL."""
-
-    database_type = MsSqlTestDb
-    schema_name = None
 
 
 class ConfigureGeneratorsWithDateTests(GeneratesDBTestCase):
@@ -350,8 +343,5 @@ class ConfigureGeneratorsWithDateTests(GeneratesDBTestCase):
 
 
 # Note that this test won't work with DuckDB because it needs foreign keys to work
-class ConfigureGeneratorsWithDateMsSqlTests(ConfigureGeneratorsWithDateTests):
+class ConfigureGeneratorsWithDateMsSqlTests(MsSqlMixin, ConfigureGeneratorsWithDateTests):
     """Test `configure-generators` with `date.sql` with MS SQL."""
-
-    database_type = MsSqlTestDb
-    schema_name = None

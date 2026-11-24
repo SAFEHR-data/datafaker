@@ -12,9 +12,9 @@ from datafaker.main import app
 from datafaker.settings import Settings, SettingsError
 from tests.utils import (
     DatafakerTestCase,
-    DuckTestDb,
+    DuckDbMixin,
     GeneratesDBTestCase,
-    MsSqlTestDb,
+    MsSqlMixin,
     get_test_settings,
 )
 
@@ -561,13 +561,9 @@ class TestsCliCreate(GeneratesDBTestCase):
         self.assertSuccess(result)
 
 
-class TestCliCreateDuckDb(TestsCliCreate):
+class TestCliCreateDuckDb(DuckDbMixin, TestsCliCreate):
     """Tests that use the CLI to generate output in a DuckDB database."""
 
-    database_type = DuckTestDb
 
-
-class TestCliCreateMsSql(TestsCliCreate):
+class TestCliCreateMsSql(MsSqlMixin, TestsCliCreate):
     """Tests that use the CLI to generate output in an MS Sql database."""
-
-    database_type = MsSqlTestDb

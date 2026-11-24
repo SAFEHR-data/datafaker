@@ -9,16 +9,19 @@ import sys
 import time
 import traceback
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from collections.abc import MutableSequence, Sequence, Set
 from functools import lru_cache
 from importlib import resources
 from pathlib import Path
+from pytest import mark
 from subprocess import run
 from tempfile import mkdtemp, mkstemp
 from typing import Any, Mapping
 from unittest import SkipTest, TestCase
 
 import duckdb
+import parsy
 import sqlalchemy
 import testing.postgresql
 import yaml
@@ -40,8 +43,8 @@ from datafaker.interactive.base import DbCmd
 from datafaker.make import make_src_stats, make_tables_file
 from datafaker.serialize_metadata import dict_to_metadata, metadata_to_dict
 from datafaker.theme import ThemeEntry, set_active_theme
-from datafaker.utils import T
-
+from datafaker.utils import T, logger
+from tests import create_snowflake_schema, drop_snowflake_schema, execute_snowflake_bulk_insert, execute_snowflake_sql, get_snowflake_dsn
 
 @lru_cache(1)
 def get_test_settings(
@@ -95,13 +98,13 @@ class TestDatabaseBase(ABC):
     def run_sql(self, sql_file: Path) -> None:
         """Run the provided SQL file on the test database."""
 
-    def create_empty(  # pylint: disable=unused-argument
-        self,
-        name: str,
-        schema_name: str | None,
-    ) -> None:
+    def get_schema(self) -> str | None:
+        """Get the schema of this database, if it is necessary."""
+        return None
+
+    def create_empty(self) -> None:
         """Create an empty database and return the DSN string."""
-        dsn = self.get_dsn(name)
+        dsn = self.get_dsn("dst")
         create_database(dsn)
 
 
@@ -248,11 +251,7 @@ class DuckTestDb(TestDatabaseBase):
         duckdb_con.execute(sanitized)
         duckdb_con.close()
 
-    def create_empty(  # pylint: disable=unused-argument
-        self,
-        name: str,
-        schema_name: str | None,
-    ) -> None:
+    def create_empty(self) -> None:
         """
         The standard SQLAlchemy database creation tool doesn't work for DuckDB.
 
@@ -388,17 +387,15 @@ END"""
                 if sql:
                     conn.execute(sql)
 
-    def create_empty(self, name: str, schema_name: str | None) -> None:
-        """Drop (if exists) and create a fresh SQL Server database named ``name``."""
+    def create_empty(self) -> None:
+        """Drop (if exists) and create a fresh SQL Server database named ``dst``."""
         import pyodbc  # noqa: F401 pylint: disable=import-outside-toplevel
 
-        qname = self.prefix + name
+        qname = self.prefix + "dst"
         instructions = [
             f"CREATE DATABASE [{qname}]",
             f"USE [{qname}]",
         ]
-        if schema_name:
-            instructions.append(f"CREATE SCHEMA [{schema_name}]")
         self._drop_databases_then([qname], instructions)
         self.db_names.append(qname)
 
@@ -459,6 +456,161 @@ END"""
             self.db_names,
             self._GO_RE.split(sql),
         )
+
+
+def _floating_point():
+    """Get a parser for a floating-point number."""
+    return parsy.regex(r"-?[0-9]+(?:\.[0-9]+)?(?:e[\+\-]?[0-9]+)?").map(float)
+
+
+def _stringi(m: str):
+    """Get a case-insensitive parser for a string (returns ``m``)."""
+    return parsy.string(m, transform=lambda s: s.upper())
+
+
+def _boolean_value():
+    """Get a parser for boolean values."""
+    return _stringi("TRUE").result(True) | _stringi("FALSE").result(False)
+
+
+@parsy.generate("SQL string")
+def _string_value():
+    """Parse for SQL string values."""
+    yield parsy.string("'")
+    chars = yield (parsy.string("''").result("'") | parsy.test_char(lambda c: c != "'", "not '")).many()
+    yield parsy.string("'")
+    return "".join(chars)
+
+
+def _sql_literal():
+    """Get a parser for a literal value."""
+    return _floating_point() | _stringi("NULL").result(None) | _boolean_value() | _string_value
+
+
+@parsy.generate("INSERT INTO clause")
+def _insert_into():
+    """Parse INSERT INTO table VALUES (u, v, w)"""
+    yield parsy.string("INSERT INTO ")
+    table_name = yield parsy.regex("[A-Za-z_][A-Za-z0-9_.]*")
+    yield parsy.string(" VALUES ")
+    arguments = yield (parsy.string("(") >> _sql_literal().sep_by(parsy.string(", "))) << parsy.string(")")
+    return (table_name, arguments)
+
+
+class SnowflakeTestDb(TestDatabaseBase):
+    """Test Snowflake database."""
+
+    _SQL_REMOVALS_RE = re.compile(
+        r"^(CREATE DATABASE .*;)|(\\.*)|(ALTER [^;]*;)|(\bUSING\s+btree)|(\-\-.*$)", re.MULTILINE
+    )
+    # Postgres' default stupid time format, ignoring time zone for now
+    _TIME_FORMAT_RE = re.compile(
+        r"'([A-Z][a-z]+ \d+ \d\d:\d\d:\d\d \d\d\d\d) ([A-Z+\-0-9:]+)'"
+    )
+    _EOL_RE = re.compile(r";$", re.MULTILINE)
+    _PUBLIC_SCHEMA = re.compile(r"(\s)public\.")
+    _CREATE_TABLE = re.compile(r"\bCREATE[ \r\n\t]+TABLE[ \r\n\t]+([a-zA-Z_0-9.]+)[ \r\n\t]*\(([^;]*)\)")
+    _TABLE_COLUMNS = re.compile(r"(?:^|,)[ \r\n\t]*([A-Za-z0-9_]+)[ \r\n\t]+")
+    _INSERT_INTO = re.compile(r"INSERT[ \r\n\t]+INTO[ \r\n\t]+([A-Za-z0-9_]+)[ \r\n\t]+VALUES[ \r\n\t]+\(([^;]*)\)")
+
+    @classmethod
+    def skip(cls) -> str | None:
+        """Return None if Snowflake is specified in the environment."""
+        dsn = get_snowflake_dsn()
+        if dsn:
+            return None
+        return (
+            "Skipping Snowflake because the following"
+            + " environment variables are not set: "
+            + ", ".join([
+                s for s in [
+                    "SNOWFLAKE_DATABASE",
+                    "SNOWFLAKE_ROLE",
+                    "SNOWFLAKE_WAREHOUSE",
+                    "SNOWFLAKE_USER",
+                ]
+            ])
+        )
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Initialize SnowflakeTestDb"""
+        super().__init__(*args, **kwargs)
+        random_part = "".join(random.choice(string.ascii_letters) for _ in range(8))
+        time_part = time.strftime("%Y%m%d", time.gmtime())
+        self._schema_name: str | None= f"test{random_part}_{time_part}"
+        create_snowflake_schema(self._schema_name)
+
+    def open(self) -> None:
+        """Start the test database"""
+        self.close()
+        create_snowflake_schema(self._schema_name)
+
+    def close(self) -> None:
+        """Tear down the test database."""
+        if self._schema_name is not None:
+            drop_snowflake_schema(self._schema_name)
+            self._schema_name = None
+
+    def get_dsn(self, database_name: str | None) -> str:
+        """Get the DSN for the test database."""
+        return get_snowflake_dsn(self._schema_name)
+
+    def run_sql(self, sql_file: Path) -> None:
+        """Run all the SQL commands in ``sql_file`` on the database."""
+        print("opening SQL file")
+        with sql_file.open() as sql_fh:
+            sql = sql_fh.read()
+        # Remove Postgresisms that Snowflake doesn't understand
+        sanitized2 = re.sub(self._SQL_REMOVALS_RE, "", sql)
+        # remove public. from all objects
+        sanitized1 = self._PUBLIC_SCHEMA.sub("\\1", sanitized2)
+        # Convert time formats
+        sanitized = re.sub(
+            self._TIME_FORMAT_RE,
+            lambda tf: time.strftime(
+                f"(TIMESTAMPTZ '%Y-%m-%d %H:%M:%S {tf.group(2)}')",
+                time.strptime(tf.group(1), "%B %d %H:%M:%S %Y"),
+            ),
+            sanitized1,
+        )
+        commands: list[str] = []
+        table_column_list: dict[str, list[str]] = {}
+        table_to_data: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for line1 in self._EOL_RE.split(sanitized):
+            line = line1.strip()
+            if create_table := self._CREATE_TABLE.search(line):
+                table_name, table_defn = create_table.groups()
+                table_column_list[table_name] = self._TABLE_COLUMNS.findall(table_defn)
+                commands.append(line)
+            elif self._INSERT_INTO.search(line):
+                try:
+                    (table_name, values) = _insert_into.parse(line)
+                    if column_list := table_column_list.get(table_name):
+                        value_map = {
+                            col_name: values[i]
+                            for i, col_name in enumerate(column_list[:len(values)])
+                        }
+                        table_to_data[table_name].append(value_map)
+                    else:
+                        logger.warning("Unexpected number of values: %s", line)
+                except parsy.ParseError as e:
+                    logger.warning("Could not parse INSERT INTO: %s", line)
+            elif line:
+                commands.append(line)
+        print("about to run it")
+        execute_snowflake_sql(commands)
+        print("about to populate")
+        for table_name, data in table_to_data.items():
+            execute_snowflake_bulk_insert(table_name, data)
+        print("ran it")
+
+    def get_schema(self) -> str | None:
+        """Get the schema of this database."""
+        return self._schema_name
+
+    def create_empty(self) -> None:
+        """Do nothing, we just use the empty schema ``open`` made in the test database."""
+        return
 
 
 class DatafakerTestCase(TestCase):
@@ -528,6 +680,14 @@ class DatafakerTestCase(TestCase):
             errors.append(f"Process unexpectedly produced error text:\n{result.stderr}")
         if errors:
             self.fail("\n".join(errors))
+
+    def get_output(self, result: Any) -> set[str]:
+        """Get all the lines output to stdout, having removed any superfluous lines."""
+        return {
+            line
+            for line in result.stdout.split("\n")
+            if line and not line.startswith("Going to open:") and not line.startswith("A browser window should have opened") and not line.startswith("Initiating login request")
+        }
 
     def assertFailure(self, result: Any) -> None:  # pylint: disable=invalid-name
         """Give details for a subprocess result and raise if the result isn't bad."""
@@ -656,7 +816,6 @@ class RequiresDBTestCase(
         self.metadata = MetaData()
         self.engine: MaybeAsyncEngine
         self.sync_engine: Engine
-        self.dst_name: str | None = None
         self.dst_database: TestDatabaseBase | None = None
         self.dst_metadata = MetaData()
         self.dst_engine: Engine | None = None
@@ -665,7 +824,7 @@ class RequiresDBTestCase(
     def dst_dsn(self) -> str:
         """Get the database connection string."""
         assert self.dst_database is not None
-        return self.dst_database.get_dsn(self.dst_name)
+        return self.dst_database.get_dsn("dst")
 
     def _create_engine(self) -> None:
         assert self.database is not None
@@ -686,7 +845,9 @@ class RequiresDBTestCase(
         if self.dump_file_path is not None:
             self.database.run_sql(self.get_abs_example_dir() / self.dump_file_path)
         self._create_engine()
-        self.metadata.reflect(self.sync_engine)
+        print("engine created")
+        self.metadata.reflect(self.sync_engine, schema=self.database.get_schema())
+        print("set up")
 
     def sql(self, sql: str) -> None:
         """
@@ -716,14 +877,13 @@ class RequiresDBTestCase(
             )
         )
 
-    def make_destination_database(self, name: str) -> None:
+    def make_destination_database(self) -> None:
         """Make an empty destination database."""
-        self.dst_name = name
         if self.dst_database is None:
             self.dst_database = self.database_type()
         else:
             self.dst_database.open()
-        self.dst_database.create_empty(name, self.dst_schema_name)
+        self.dst_database.create_empty()
         self._create_engine_dst()
 
     def tearDown(self) -> None:
@@ -766,7 +926,7 @@ class GeneratesDBTestCase(RequiresDBTestCase):
         with os.fdopen(self.orm_fd, "w", encoding="utf-8") as orm_fh:
             orm_fh.write(make_tables_file(self.dsn, self.schema_name, False))
         # Create a separate empty destination database
-        self.make_destination_database("dst")
+        self.make_destination_database()
 
     def set_configuration(self, config: Mapping[str, Any]) -> None:
         """Accepts a configuration file, writes it out."""
@@ -890,3 +1050,22 @@ class TestDbCmdMixin(DbCmd):
         if roles == [""]:
             return set()
         return set(roles)
+
+
+class DuckDbMixin:
+    """RequiresDBTestCase mixin for DuckDB."""
+    database_type = DuckTestDb
+
+
+@mark.mssql
+class MsSqlMixin:
+    """RequiresDBTestCase mixin for MsSql."""
+    schema_name: str = None
+    database_type = MsSqlTestDb
+
+
+@mark.snowflake
+class SnowflakeMixin:
+    """RequiresDBTestCase mixin for Snowflake."""
+    schema_name: str = None
+    database_type = SnowflakeTestDb

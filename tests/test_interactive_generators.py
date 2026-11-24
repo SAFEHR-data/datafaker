@@ -9,9 +9,10 @@ from sqlalchemy import select
 from datafaker.interactive.base import DbCmd
 from datafaker.interactive.generators import GeneratorCmd
 from tests.utils import (
+    DuckDbMixin,
     DuckTestDb,
     GeneratesDBTestCase,
-    MsSqlTestDb,
+    MsSqlMixin,
     RequiresDBTestCase,
     TestDbCmdMixin,
 )
@@ -785,14 +786,9 @@ class GeneratorTests(GeneratesDBTestCase):
             self.assert_are_truncated_to(rows, 20)
 
 
-class GeneratorTestsDuckDb(GeneratorTests):
+class GeneratorTestsDuckDb(DuckDbMixin, GeneratorTests):
     """As ``GeneratorTests`` but with DuckDB."""
 
-    database_type = DuckTestDb
 
-
-class GeneratorTestsMsSql(GeneratorTests):
+class GeneratorTestsMsSql(MsSqlMixin, GeneratorTests):
     """As ``GeneratorTests`` but with MSSql."""
-
-    database_type = MsSqlTestDb
-    schema_name = None

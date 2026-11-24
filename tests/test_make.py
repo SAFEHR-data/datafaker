@@ -31,7 +31,7 @@ from datafaker.make import (
 from tests.utils import (
     DatafakerTestCase,
     GeneratesDBTestCase,
-    MsSqlTestDb,
+    MsSqlMixin,
     PostgresTestDb,
     RequiresDBTestCase,
 )
@@ -147,10 +147,8 @@ class TestSerialize(DatafakerTestCase):
         )
 
 
-class TestSerializeMsSql(TestSerialize):
+class TestSerializeMsSql(MsSqlMixin, TestSerialize):
     """Unit tests for serialize_metadata with an MS SQL database."""
-
-    database_type = MsSqlTestDb
 
 
 class TestGetDefaultGenerator(DatafakerTestCase):

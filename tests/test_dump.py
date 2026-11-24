@@ -11,7 +11,7 @@ from typer.testing import CliRunner
 
 from datafaker.dump import CsvTableWriter, get_parquet_table_writer
 from datafaker.main import app
-from tests.utils import DatafakerTestCase, DuckTestDb, MsSqlTestDb, RequiresDBTestCase
+from tests.utils import DatafakerTestCase, DuckTestDb, DuckDbMixin, MsSqlMixin, RequiresDBTestCase
 
 
 class DumpTests(RequiresDBTestCase):
@@ -84,17 +84,12 @@ class DumpTests(RequiresDBTestCase):
         )
 
 
-class DumpTestsDuckDb(DumpTests):
+class DumpTestsDuckDb(DuckDbMixin, DumpTests):
     """DumpTests against DuckDB."""
 
-    database_type = DuckTestDb
 
-
-class DumpTestsMsSql(DumpTests):
+class DumpTestsMsSql(MsSqlMixin, DumpTests):
     """DumpTests against MS Sql."""
-
-    database_type = MsSqlTestDb
-    schema_name = None
 
 
 class EndToEndParquetTestCase(DatafakerTestCase):
