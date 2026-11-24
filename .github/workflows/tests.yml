@@ -54,7 +54,7 @@ jobs:
           - install-deps
       - name: Run tests
         shell: bash
-        run: poetry run python -m pytest -rs --cov --cov-report=json
+        run: poetry run python -m pytest -rs --cov=datafaker --cov-report=json
       - name: Upload coverage report
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a53 # v7.1.1
         with:
