@@ -34,8 +34,6 @@ extensions: list[str] = [
     "sphinxcontrib.mermaid",
 ]
 
-autodoc_mock_imports: list[str] = ["typer", "pydantic", "sqlalchemy"]
-
 templates_path: list[str] = ["_templates"]
 exclude_patterns: list[str] = []
 
