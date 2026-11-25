@@ -41,7 +41,7 @@ jobs:
           name: docs
           path: docs/build/html
   publish:
-    needs: docs
+    needs: build
     permissions:
       contents: write
     # only publish on pushes to main or when manually triggered via workflow_dispatch
