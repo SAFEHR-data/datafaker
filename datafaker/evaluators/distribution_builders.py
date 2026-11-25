@@ -1,15 +1,14 @@
 """Build real/synthetic value distributions for statistical fidelity scoring."""
 
-import statistics
 from abc import ABC, abstractmethod
 from bisect import bisect_right
 from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import Float, cast, func, select
 
-from datafaker.dialects import random_sample
+from datafaker.dialects import StdDev, random_sample
 from datafaker.evaluators.feature_extractors import FeatureExtractor, IdentityExtractor
 
 DEFAULT_SAMPLE_SIZE = 4000
@@ -93,35 +92,27 @@ class HistogramBuilder(DistributionBuilder):
         feature_expr = self.extractor.expression(self.column)
 
         #
-        # Read a bounded, randomly-ordered sample of values for computing
-        # statistics (mean/stddev), rather than pulling the entire column
-        # into memory. Random ordering matters: an unordered LIMIT returns
-        # whatever the DB naturally returns first (often insertion order),
-        # which can systematically bias this sample for a column whose
-        # value correlates with row order (e.g. a "rental_date" column
-        # inserted roughly chronologically) - and since this is the "real"
-        # side of every fidelity comparison, that bias directly skews which
-        # generator looks like the better fit.
+        # Mean and (sample) standard deviation, computed exactly over the
+        # full table in one aggregate query - it returns a single row, so it
+        # needs no sample_size cap. The feature is cast to a float first:
+        # MSSQL's AVG of an integer expression is integer-truncated, and
+        # Postgres' AVG of an integer returns NUMERIC (a Python Decimal).
+        # AVG/STDDEV ignore NULLs, as the Python side ignores None features;
+        # STDDEV (Postgres/DuckDB) and STDEV (MSSQL) are both the sample
+        # standard deviation, like statistics.stdev, and are NULL for a
+        # single value.
         #
+        float_expr = cast(feature_expr, Float)
         with self.engine.connect() as conn:
-            values = (
-                conn.execute(
-                    random_sample(
-                        select(feature_expr).select_from(self.table),
-                        self.sample_size,
-                    )
-                )
-                .scalars()
-                .all()
-            )
+            mean, stddev = conn.execute(
+                select(func.avg(float_expr), StdDev(float_expr)).select_from(self.table)
+            ).one()
 
-        values = [float(v) for v in values if v is not None]
-
-        if not values:
+        if mean is None:
             return Distribution({})
 
-        self.mean = statistics.mean(values)
-        self.stddev = statistics.stdev(values) if len(values) > 1 else 0.0
+        self.mean = float(mean)
+        self.stddev = 0.0 if stddev is None else float(stddev)
 
         width = 0.5 if self.stddev == 0 else self.stddev / 2
         self.edges = [
@@ -145,8 +136,8 @@ class HistogramBuilder(DistributionBuilder):
         #
         # SQL histogram, computed exactly over the full table (this is a
         # bounded, server-side aggregate query - it returns at most `bins`
-        # rows - so it doesn't need the sample_size cap that applies to the
-        # raw-value pulls above).
+        # rows - so, like the mean/stddev query above, it needs no
+        # sample_size cap).
         #
         with self.engine.connect() as conn:
             # Compute the bucket expression once, in an inner subquery, and
@@ -168,8 +159,7 @@ class HistogramBuilder(DistributionBuilder):
                 ).group_by(inner.c.bucket)
             ).all()
 
-        # total must come from this same full-table query, not from the
-        # (possibly sampled) `values` above, so the probabilities sum to 1.
+        # total must come from this same query, so the probabilities sum to 1.
         total = sum(count for bucket, count in rows if bucket is not None)
 
         if total == 0:
@@ -219,15 +209,58 @@ class CategoryBuilder(DistributionBuilder):
     """Build a categorical distribution over a discrete feature's values."""
 
     def build_from_table(self):
-        """Build the real column's categorical distribution."""
-        counter = Counter()
+        """
+        Build the real column's categorical distribution.
+
+        Counts are computed exactly over the full table with a SQL
+        ``GROUP BY`` on the extractor's ``expression()``. Extractors with no
+        SQL equivalent (``expression()`` raises ``NotImplementedError``,
+        which includes every extractor that can yield several features per
+        value, such as character bigrams) fall back to extracting features
+        in Python from a random sample of ``sample_size`` rows.
+        """
+        try:
+            feature_expr = self.extractor.expression(self.column)
+        except NotImplementedError:
+            counter = self._count_features_in_sample()
+        else:
+            counter = self._count_features_in_sql(feature_expr)
+
+        total = sum(counter.values())
+        if total == 0:
+            return Distribution({})
+
+        return Distribution({k: v / total for k, v in counter.items()})
+
+    def _count_features_in_sql(self, feature_expr) -> Counter:
+        """Count each non-NULL feature value over the full table."""
+        with self.engine.connect() as conn:
+            # Group by a column of a subquery rather than the expression
+            # itself, as MSSQL requires (see HistogramBuilder above). This
+            # returns one row per distinct feature value.
+            inner = (
+                select(feature_expr.label("feature")).select_from(self.table).subquery()
+            )
+            rows = conn.execute(
+                select(
+                    inner.c.feature,
+                    func.count().label("count"),  # pylint: disable=not-callable
+                )
+                .where(inner.c.feature.is_not(None))
+                .group_by(inner.c.feature)
+            ).all()
+        return Counter(dict(rows))
+
+    def _count_features_in_sample(self) -> Counter:
+        """Count features extracted in Python from a sample of the column."""
+        counter: Counter = Counter()
 
         with self.engine.connect() as conn:
             # Bounded, randomly-ordered sample rather than the entire column,
             # so this scales to large tables (matches the synthetic sample
             # size for a fair, like-for-like comparison) without an
             # unordered LIMIT biasing the "real" distribution toward
-            # whatever the DB returns first (see HistogramBuilder above).
+            # whatever the DB returns first (often insertion order).
             rows = conn.execute(
                 random_sample(
                     select(self.column).select_from(self.table),
@@ -243,11 +276,7 @@ class CategoryBuilder(DistributionBuilder):
                         continue
                     counter[feature] += 1
 
-        total = sum(counter.values())
-        if total == 0:
-            return Distribution({})
-
-        return Distribution({k: v / total for k, v in counter.items()})
+        return counter
 
     def build_from_values(self, values):
         """Build the synthetic sample's categorical distribution."""

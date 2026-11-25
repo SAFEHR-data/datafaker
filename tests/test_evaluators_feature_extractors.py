@@ -452,10 +452,10 @@ class EmailTopLevelDomainExtractorTests(DatafakerTestCase):
         self.assertEqual([], list(self.extractor.extract("not-an-email")))
 
 
-# Values covering every branch of the email extractors' Python parsing:
+# Values covering every branch of the text extractors' Python parsing:
 # surrounding whitespace, case, a missing/leading/trailing/repeated '@',
-# domains with no '.', a trailing '.', and an empty TLD.
-EMAIL_EDGE_CASES = [
+# domains with no '.', a trailing '.', an empty TLD, and one-letter values.
+TEXT_EDGE_CASES = [
     None,
     "",
     "   ",
@@ -474,16 +474,21 @@ EMAIL_EDGE_CASES = [
     "x@y.z.",
     "First.Last+tag@Example.com",
     " @x.com",
+    "Alice",
+    " Bob ",
+    "x",
+    "\tZed\n",
 ]
 
 
-class EmailExpressionParityMixin:
+class TextExpressionParityMixin:
     """
-    The email extractors' SQL expressions must agree with extract().
+    The text extractors' SQL expressions must agree with extract().
 
-    Once real-data distributions are built in SQL (#144), any disagreement
-    would make real and synthetic data look different even when they are
-    identical. ``None`` from SQL stands for extract() yielding nothing.
+    CategoryBuilder computes real-data distributions in SQL with these
+    expressions, but synthetic ones in Python with extract(), so any
+    disagreement would make real and synthetic data look different even
+    when they are identical. ``None`` from SQL stands for extract() yielding nothing.
     """
 
     sync_engine: Engine
@@ -497,32 +502,34 @@ class EmailExpressionParityMixin:
             return conn.execute(select(expr)).scalar_one()
 
     def test_expressions_match_extract(self) -> None:
-        """Each email extractor's SQL agrees with extract() on every edge case."""
+        """Each text extractor's SQL agrees with extract() on every edge case."""
         for extractor in (
+            FirstLetterExtractor(),
+            LastLetterExtractor(),
             EmailLocalPartExtractor(),
             EmailDomainExtractor(),
             EmailTopLevelDomainExtractor(),
         ):
-            for value in EMAIL_EDGE_CASES:
+            for value in TEXT_EDGE_CASES:
                 with self.subTest(extractor=type(extractor).__name__, value=value):
                     expected = next(iter(extractor.extract(value)), None)
                     self.assertEqual(expected, self._sql_feature(extractor, value))
 
 
-class EmailExpressionDuckDbTests(EmailExpressionParityMixin, RequiresDBTestCase):
-    """Email SQL expression parity on DuckDB."""
+class TextExpressionDuckDbTests(TextExpressionParityMixin, RequiresDBTestCase):
+    """Text SQL expression parity on DuckDB."""
 
     database_type = DuckTestDb
 
 
-class EmailExpressionPostgresTests(EmailExpressionParityMixin, RequiresDBTestCase):
-    """Email SQL expression parity on Postgres."""
+class TextExpressionPostgresTests(TextExpressionParityMixin, RequiresDBTestCase):
+    """Text SQL expression parity on Postgres."""
 
     database_type = PostgresTestDb
 
 
-class EmailExpressionMsSqlTests(EmailExpressionParityMixin, RequiresDBTestCase):
-    """Email SQL expression parity on MSSQL (skipped if no server is reachable)."""
+class TextExpressionMsSqlTests(TextExpressionParityMixin, RequiresDBTestCase):
+    """Text SQL expression parity on MSSQL (skipped if no server is reachable)."""
 
     database_type = MsSqlTestDb
 

@@ -1,4 +1,6 @@
 """Unit tests for datafaker.evaluators.distribution_builders."""
+import statistics
+
 from sqlalchemy import Column, Integer, MetaData, String, Table, create_engine
 
 from datafaker.evaluators.distribution_builders import (
@@ -7,6 +9,7 @@ from datafaker.evaluators.distribution_builders import (
     HistogramBuilder,
 )
 from datafaker.evaluators.feature_extractors import (
+    CharacterBigramExtractor,
     FirstLetterExtractor,
     LengthExtractor,
 )
@@ -95,6 +98,31 @@ class HistogramBuilderBuildFromTableTests(DatafakerTestCase):
         dist = builder.build_from_table()
         self.assertAlmostEqual(1.0, sum(dist.probabilities.values()))
 
+    def test_mean_and_stddev_are_exact_over_the_full_table(self) -> None:
+        """
+        Mean/stddev cover every row, not a sample_size sample, and skip NULLs.
+
+        They match statistics.mean/stdev (the sample standard deviation).
+        """
+        ages = [20 + (i * 7) % 31 for i in range(100)]
+        engine, table = _make_duckdb_table(
+            [{"age": age, "name": "x"} for age in ages] + [{"age": None, "name": "x"}]
+        )
+        builder = HistogramBuilder(engine, table, table.c.age, sample_size=5)
+        builder.build_from_table()
+        assert builder.mean is not None and builder.stddev is not None
+        self.assertAlmostEqual(statistics.mean(ages), builder.mean)
+        self.assertAlmostEqual(statistics.stdev(ages), builder.stddev)
+
+    def test_single_row_has_zero_stddev(self) -> None:
+        """SQL's sample stddev of one value is NULL; it is treated as 0."""
+        engine, table = _make_duckdb_table([{"age": 42, "name": "x"}])
+        builder = HistogramBuilder(engine, table, table.c.age, sample_size=1000)
+        dist = builder.build_from_table()
+        self.assertAlmostEqual(1.0, sum(dist.probabilities.values()))
+        self.assertEqual(42.0, builder.mean)
+        self.assertEqual(0.0, builder.stddev)
+
 
 class HistogramBuilderBuildFromValuesTests(DatafakerTestCase):
     """Test case for HistogramBuilder.build_from_values."""
@@ -163,6 +191,37 @@ class CategoryBuilderBuildFromTableTests(DatafakerTestCase):
         self.assertEqual({"a", "b"}, dist.vocabulary)
         self.assertAlmostEqual(2 / 3, dist.probability("a"))
         self.assertAlmostEqual(1 / 3, dist.probability("b"))
+
+    def test_counts_are_exact_over_the_full_table(self) -> None:
+        """
+        SQL-capable extractors count every row, not a sample_size sample.
+
+        Values with no feature (NULL, or blank for FirstLetterExtractor) are
+        left out, as extract() yields nothing for them.
+        """
+        names = ["Alice"] * 30 + ["bob"] * 10 + [" Carol"] * 60 + [None, "  "]
+        engine, table = _make_duckdb_table([{"age": 0, "name": n} for n in names])
+        builder = CategoryBuilder(
+            engine, table, table.c.name, extractor=FirstLetterExtractor(), sample_size=5
+        )
+        dist = builder.build_from_table()
+        self.assertEqual({"a": 0.3, "b": 0.1, "c": 0.6}, dist.probabilities)
+
+    def test_extractor_without_sql_falls_back_to_python_sampling(self) -> None:
+        """An extractor whose expression() is not implemented still works."""
+        engine, table = _make_duckdb_table(
+            [{"age": 0, "name": n} for n in ["abc", "abd"] * 5]
+        )
+        builder = CategoryBuilder(
+            engine,
+            table,
+            table.c.name,
+            extractor=CharacterBigramExtractor(),
+            sample_size=1000,
+        )
+        dist = builder.build_from_table()
+        self.assertAlmostEqual(1.0, sum(dist.probabilities.values()))
+        self.assertAlmostEqual(0.5, dist.probability("ab"))
 
 
 class CategoryBuilderBuildFromValuesTests(DatafakerTestCase):

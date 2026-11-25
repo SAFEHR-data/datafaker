@@ -93,8 +93,13 @@ class FirstLetterExtractor(FeatureExtractor):
             yield value[0].lower()
 
     def expression(self, column):
-        """Build the SQL expression for the column's first letter."""
-        return func.lower(func.substr(cast(column, String), 1, 1))
+        """Build the SQL expression for the first letter (NULL if blank).
+
+        Strips whitespace first, as extract() does, so leading spaces are not
+        counted as the first letter.
+        """
+        stripped = StripWhitespace(cast(column, String))
+        return func.nullif(func.lower(func.left(stripped, 1)), "")
 
 
 class LastLetterExtractor(FeatureExtractor):
@@ -111,8 +116,14 @@ class LastLetterExtractor(FeatureExtractor):
             yield value[-1]
 
     def expression(self, column):
-        """Build the SQL expression for the column's last letter."""
-        return func.lower(func.substr(cast(column, String), -1, 1))
+        """Build the SQL expression for the last letter (NULL if blank).
+
+        Uses RIGHT rather than SUBSTR with a negative start: Postgres'
+        SUBSTR(x, -1, 1) is an empty string, and MSSQL has no SUBSTR.
+        Strips whitespace first, as extract() does.
+        """
+        stripped = StripWhitespace(cast(column, String))
+        return func.nullif(func.lower(func.right(stripped, 1)), "")
 
 
 class LengthExtractor(FeatureExtractor):
