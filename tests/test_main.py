@@ -1,4 +1,5 @@
 """Tests for the main module."""
+
 import os
 from pathlib import Path
 from typing import Any
@@ -87,8 +88,8 @@ class TestCLI(DatafakerTestCase):
             ]
         )
 
-    @patch("datafaker.main.Path")
-    @patch("datafaker.main.make_tables_file")
+    @patch("datafaker.cli.configure.Path")
+    @patch("datafaker.cli.configure.make_tables_file")
     @patch("datafaker.settings.get_settings")
     def test_make_tables(
         self,
@@ -121,8 +122,8 @@ class TestCLI(DatafakerTestCase):
         )
         self.assertSuccess(result)
 
-    @patch("datafaker.main.Path")
-    @patch("datafaker.main.logger")
+    @patch("datafaker.cli.configure.Path")
+    @patch("datafaker.cli.configure.logger")
     def test_make_tables_errors_if_file_exists(
         self, mock_logger: MagicMock, mock_path: MagicMock
     ) -> None:
@@ -161,8 +162,8 @@ class TestCLI(DatafakerTestCase):
             catch_exceptions=False,
         )
 
-    @patch("datafaker.main.make_tables_file")
-    @patch("datafaker.main.Path")
+    @patch("datafaker.cli.configure.make_tables_file")
+    @patch("datafaker.cli.configure.Path")
     @patch("datafaker.settings.get_settings")
     def test_make_tables_with_force_enabled(
         self,
@@ -201,7 +202,7 @@ class TestCLI(DatafakerTestCase):
                 )
                 self.assertSuccess(result)
 
-    @patch("datafaker.main.Path")
+    @patch("datafaker.cli.configure.Path")
     @patch("datafaker.settings.get_settings")
     def test_incorrect_dialect_causes_nice_error_message(
         self,
@@ -226,7 +227,7 @@ class TestCLI(DatafakerTestCase):
         )
         self.assertIs(type(result.exception), SystemExit)
 
-    @patch("datafaker.main.Path")
+    @patch("datafaker.cli.configure.Path")
     @patch("datafaker.settings.get_settings")
     def test_invalid_host_causes_nice_error_message(
         self,
@@ -251,7 +252,7 @@ class TestCLI(DatafakerTestCase):
         )
         self.assertIs(type(result.exception), SystemExit)
 
-    @patch("datafaker.main.Path")
+    @patch("datafaker.cli.configure.Path")
     @patch("datafaker.settings.get_settings")
     def test_incorrect_dsn_causes_nice_error_message(
         self,
@@ -401,7 +402,7 @@ class TestCliOutput(DatafakerTestCase):
         )
         self.assertSuccess(result)
 
-    @patch("datafaker.main.make_src_stats")
+    @patch("datafaker.cli.configure.make_src_stats")
     @patch("datafaker.settings.get_settings")
     def test_make_stats(
         self,
@@ -429,7 +430,7 @@ class TestCliOutput(DatafakerTestCase):
         output = self.load_yaml(output_path)
         self.assertDictEqual(output, {"a": 1})
 
-    @patch("datafaker.main.logger")
+    @patch("datafaker.cli.configure.logger")
     def test_make_stats_errors_if_file_exists(
         self,
         mock_logger: MagicMock,
@@ -469,7 +470,7 @@ class TestCliOutput(DatafakerTestCase):
             catch_exceptions=False,
         )
 
-    @patch("datafaker.main.make_src_stats")
+    @patch("datafaker.cli.configure.make_src_stats")
     @patch("datafaker.settings.get_settings")
     def test_make_stats_with_force_enabled(
         self,
