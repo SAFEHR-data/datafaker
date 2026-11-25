@@ -1,4 +1,8 @@
-"""CLI sub commands to configure generation and extract source data and metadata."""
+"""
+CLI subcommands to configure generation and extract source data and metadata.
+
+All commands here belong to the "Configure and Extract" rich help panel in the CLI.
+"""
 
 import asyncio
 from pathlib import Path

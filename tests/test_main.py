@@ -25,9 +25,9 @@ runner = CliRunner(mix_stderr=False)
 class TestCLI(DatafakerTestCase):
     """Tests for the command-line interface."""
 
-    @patch("datafaker.main.create_db_tables")
-    @patch("datafaker.main.read_config_file")
-    @patch("datafaker.main.load_metadata_for_output")
+    @patch("datafaker.cli.create.create_db_tables")
+    @patch("datafaker.cli.create.read_config_file")
+    @patch("datafaker.cli.create.load_metadata_for_output")
     def test_create_tables(
         self, mock_load_meta: MagicMock, _mock_config: MagicMock, mock_create: MagicMock
     ) -> None:
@@ -44,11 +44,11 @@ class TestCLI(DatafakerTestCase):
         mock_create.assert_called_once_with(mock_load_meta.return_value)
         self.assertSuccess(result)
 
-    @patch("datafaker.main.sorted_non_vocabulary_tables")
-    @patch("datafaker.main.logger")
-    @patch("datafaker.main.create_db_data")
-    @patch("datafaker.main.load_metadata_for_output")
-    @patch("datafaker.main.read_config_file")
+    @patch("datafaker.cli.create.sorted_non_vocabulary_tables")
+    @patch("datafaker.cli.create.logger")
+    @patch("datafaker.cli.create.create_db_data")
+    @patch("datafaker.cli.create.load_metadata_for_output")
+    @patch("datafaker.cli.create.read_config_file")
     # pylint: disable=too-many-arguments too-many-positional-arguments
     def test_create_data(
         self,
@@ -377,10 +377,10 @@ class TestCliOutput(DatafakerTestCase):
         with open(file_name, "r", encoding="utf-8") as fh:
             return yaml.load(fh, yaml.SafeLoader)
 
-    @patch("datafaker.main.read_config_file")
-    @patch("datafaker.main.dict_to_metadata")
-    @patch("datafaker.main.load_metadata_config")
-    @patch("datafaker.main.create_db_vocab")
+    @patch("datafaker.cli.create.read_config_file")
+    @patch("datafaker.cli.create.dict_to_metadata")
+    @patch("datafaker.cli.create.load_metadata_config")
+    @patch("datafaker.cli.create.create_db_vocab")
     def test_create_vocab(
         self,
         mock_create: MagicMock,
