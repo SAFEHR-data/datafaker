@@ -213,8 +213,40 @@ def compile_stddev_mssql(element: StdDev, compiler: Any, **kw: Any) -> str:
     return f"STDEV({e})"
 
 
+# Whitespace that StripWhitespace and the text-count expressions strip from
+# both ends, matching Python's str.strip() for the common cases. The
+# characters are built with CHR()/CHAR() because a backslash has no special
+# meaning in a standard SQL string literal: '\t' would mean a backslash and
+# the letter t, not a tab.
+_WHITESPACE_CHARS = "' ' || CHR(9) || CHR(10) || CHR(13)"
+_WHITESPACE_CHARS_MSSQL = "' ' + CHAR(9) + CHAR(10) + CHAR(13)"
+
+
+def _stripped_or_null(e: str) -> str:
+    """Build SQL for ``e`` with surrounding whitespace removed, or NULL if blank."""
+    return f"NULLIF(TRIM({e}, {_WHITESPACE_CHARS}), '')"
+
+
+def _count_matches(e: str, pattern: str) -> str:
+    """
+    Build SQL counting the non-overlapping matches of ``pattern`` in ``e``.
+
+    Works on both Postgres and DuckDB, which share no regex-count function
+    (Postgres' regexp_count needs version 15+; DuckDB has none). Every match
+    is replaced by ``x`` and then everything except ``x`` is deleted, so the
+    length left is the number of matches. ``pattern`` must only match text
+    containing a word character, so no ``x`` survives outside a match.
+    """
+    marked = f"REGEXP_REPLACE({e}, '{pattern}', 'x', 'g')"
+    return f"LENGTH(REGEXP_REPLACE({marked}, '[^x]', '', 'g'))"
+
+
 class WordCount(ColumnElement[int]):  # pylint: disable=too-many-ancestors
-    """Count whitespace-separated words in a text expression."""
+    """Count the words (runs of word characters) in a text expression.
+
+    NULL for NULL or blank text, as ``WordCountExtractor.extract()`` yields
+    nothing for those.
+    """
 
     expr: ColumnElement[str]
 
@@ -223,7 +255,7 @@ class WordCount(ColumnElement[int]):  # pylint: disable=too-many-ancestors
     ]
 
     def __init__(self, expr: ColumnElement[str]):
-        """Get a clause for the number of whitespace-separated words in ``expr``."""
+        """Get a clause for the number of words in ``expr``."""
         self.expr = expr
 
     __sa_operate__ = ColumnElement.operate
@@ -231,31 +263,35 @@ class WordCount(ColumnElement[int]):  # pylint: disable=too-many-ancestors
 
 @compiles(WordCount)
 def compile_word_count(element: WordCount, compiler: Any, **kw: Any) -> str:
-    """Exact word count via regexp_split_to_array (Postgres/DuckDB)."""
+    r"""Postgres/DuckDB: count the matches of ``\w+``, like Python's TOKEN."""
     e = compiler.process(element.expr, **kw)
-    return f"array_length(regexp_split_to_array(trim({e}), '\\s+'), 1)"
+    return _count_matches(_stripped_or_null(e), "\\w+")
 
 
 @compiles(WordCount, "mssql")
 def compile_word_count_mssql(element: WordCount, compiler: Any, **kw: Any) -> str:
     """MSSQL equivalent: approximate word count via space-counting.
 
-    No regex/array-split support, so approximate word count as (space
-    count in the trimmed text) + 1. This overcounts by one per run of 2+
-    consecutive spaces relative to the exact regex-based count used on
-    Postgres/DuckDB, but there is no T-SQL primitive for a real
-    whitespace-run split.
+    No regex support, so approximate word count as (space count in the
+    trimmed text) + 1. Relative to the exact count on Postgres/DuckDB, this
+    overcounts by one per run of 2+ consecutive spaces or per stand-alone
+    punctuation "word" (e.g. the "-" in "a - b"), and ignores tabs and
+    line breaks between words.
     """
     e = compiler.process(element.expr, **kw)
-    trimmed = f"TRIM({e})"
+    trimmed = f"TRIM({_WHITESPACE_CHARS_MSSQL} FROM {e})"
     return (
-        f"(CASE WHEN LEN({trimmed}) = 0 THEN 0 ELSE "
+        f"(CASE WHEN LEN({trimmed}) = 0 THEN NULL ELSE "
         f"LEN({trimmed}) - LEN(REPLACE({trimmed}, ' ', '')) + 1 END)"
     )
 
 
 class SentenceCount(ColumnElement[int]):  # pylint: disable=too-many-ancestors
-    """Count '.'/'!'/'?'-delimited sentences in a text expression."""
+    """Count the '.'/'!'/'?'-delimited sentences that contain a word.
+
+    NULL for NULL or blank text, as ``SentenceCountExtractor.extract()``
+    yields nothing for those.
+    """
 
     expr: ColumnElement[str]
 
@@ -272,11 +308,14 @@ class SentenceCount(ColumnElement[int]):  # pylint: disable=too-many-ancestors
 
 @compiles(SentenceCount)
 def compile_sentence_count(element: SentenceCount, compiler: Any, **kw: Any) -> str:
-    """Exact sentence count via regexp_split_to_array (Postgres/DuckDB)."""
+    r"""Postgres/DuckDB: count the '.'/'!'/'?'-delimited pieces with a word.
+
+    Matches ``SentenceCountExtractor.extract()``, which splits on
+    ``[.!?]+`` and counts the pieces containing ``\w``: each match of
+    ``[^.!?]*\w[^.!?]*`` is exactly one such piece.
+    """
     e = compiler.process(element.expr, **kw)
-    return (
-        f"array_length(regexp_split_to_array(trim({e}, ' .!?\\t\\n\\r'), '[.!?]+'), 1)"
-    )
+    return _count_matches(_stripped_or_null(e), "[^.!?]*\\w[^.!?]*")
 
 
 @compiles(SentenceCount, "mssql")
@@ -288,17 +327,17 @@ def compile_sentence_count_mssql(
     No regex support, so approximate sentence count by normalizing '!'/'?'
     to '.' and counting '.' characters, after trimming whitespace and
     sentence-enders from both ends (so a leading/trailing sentence-ender
-    doesn't add a spurious segment, matching the Postgres/DuckDB
-    behaviour). This overcounts by one per run of 2+ consecutive delimiter
-    characters (e.g. "Wow!!") relative to the exact regex-based count, but
-    there is no T-SQL primitive for regex-run splitting.
+    doesn't add a spurious segment). Relative to the exact count on
+    Postgres/DuckDB, this overcounts by one per run of 2+ consecutive
+    delimiter characters (e.g. "Wow!!") or per piece with no word in it.
     """
     e = compiler.process(element.expr, **kw)
-    trim_chars = "' .!?' + CHAR(9) + CHAR(10) + CHAR(13)"
-    trimmed = f"TRIM({trim_chars} FROM {e})"
+    blank_check = f"TRIM({_WHITESPACE_CHARS_MSSQL} FROM {e})"
+    trimmed = f"TRIM('.!?' + {_WHITESPACE_CHARS_MSSQL} FROM {e})"
     normalized = f"REPLACE(REPLACE({trimmed}, '!', '.'), '?', '.')"
     return (
-        f"(CASE WHEN LEN({trimmed}) = 0 THEN 0 ELSE "
+        f"(CASE WHEN LEN({blank_check}) = 0 THEN NULL "
+        f"WHEN LEN({trimmed}) = 0 THEN 0 ELSE "
         f"LEN({normalized}) - LEN(REPLACE({normalized}, '.', '')) + 1 END)"
     )
 
@@ -327,15 +366,9 @@ class StripWhitespace(ColumnElement[str]):  # pylint: disable=too-many-ancestors
 
 @compiles(StripWhitespace)
 def compile_strip_whitespace(element: StripWhitespace, compiler: Any, **kw: Any) -> str:
-    """Postgres/DuckDB/Snowflake: two-argument TRIM.
-
-    The whitespace characters are built with CHR() rather than written as
-    backslash escapes, because a backslash has no special meaning in a
-    standard SQL string literal (so a backslash-t would trim backslashes
-    and the letter t, not tabs).
-    """
+    """Postgres/DuckDB/Snowflake: two-argument TRIM (see _WHITESPACE_CHARS)."""
     e = compiler.process(element.expr, **kw)
-    return f"TRIM({e}, ' ' || CHR(9) || CHR(10) || CHR(13))"
+    return f"TRIM({e}, {_WHITESPACE_CHARS})"
 
 
 @compiles(StripWhitespace, "mssql")
@@ -344,7 +377,7 @@ def compile_strip_whitespace_mssql(
 ) -> str:
     """MSSQL equivalent: TRIM(<characters> FROM <expr>)."""
     e = compiler.process(element.expr, **kw)
-    return f"TRIM(' ' + CHAR(9) + CHAR(10) + CHAR(13) FROM {e})"
+    return f"TRIM({_WHITESPACE_CHARS_MSSQL} FROM {e})"
 
 
 class AfterCharacter(ColumnElement[str]):  # pylint: disable=too-many-ancestors

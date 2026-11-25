@@ -515,7 +515,7 @@ class WordCountExtractor(FeatureExtractor):
     def expression(self, column):
         """Build the SQL expression for the column's word count."""
         # Cast column to text to handle tsvector columns (e.g. fulltext)
-        # where regexp_split_to_array may not accept the tsvector type
+        # where the regex functions may not accept the tsvector type
         # directly. WordCount compiles to an exact regexp-based count on
         # Postgres/DuckDB and a string-function approximation on MSSQL
         # (which has no regex support) - see dialects.py.
@@ -541,7 +541,7 @@ class SentenceCountExtractor(FeatureExtractor):
     def expression(self, column):
         """Build the SQL expression for the column's sentence count."""
         # Cast column to text to handle tsvector columns (e.g. fulltext)
-        # where regexp_split_to_array may not accept the tsvector type
+        # where the regex functions may not accept the tsvector type
         # directly. SentenceCount compiles to an exact regexp-based count
         # on Postgres/DuckDB and a string-function approximation on MSSQL
         # (which has no regex support) - see dialects.py.

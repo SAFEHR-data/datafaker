@@ -660,3 +660,83 @@ class SentenceCountExtractorTests(DatafakerTestCase):
     def test_blank_string_yields_nothing(self) -> None:
         """An empty/whitespace-only string produces no features."""
         self.assertEqual([], list(self.extractor.extract("   ")))
+
+
+# Text covering the ways the old regexp_split_to_array SQL disagreed with
+# extract(): whitespace after the last sentence-ender, pieces with no word,
+# text with no words at all, blank text, and non-space whitespace.
+COUNT_EDGE_CASES = [
+    None,
+    "",
+    "   ",
+    "Hi there! How are you? I am fine.",
+    "Hello there...",
+    "Done.\n",
+    "\tWait.\r\n",
+    "Hi. . Bye",
+    "...",
+    "Wow!! Great.",
+    "a - b",
+    "tnt",
+    "one\ttwo\nthree",
+    "no punctuation at all",
+    "snake_case and 42 numbers.",
+]
+
+
+class CountExpressionParityMixin:
+    """
+    WordCount/SentenceCount SQL must agree with extract().
+
+    HistogramBuilder computes the real-data distribution with these
+    expressions but the synthetic one with extract(), so any disagreement
+    makes identical data look different. ``None`` from SQL stands for
+    extract() yielding nothing. MSSQL is not covered: it has no regex
+    support, so its expressions are documented approximations.
+    """
+
+    sync_engine: Engine
+    assertEqual: Any
+    subTest: Any
+
+    def test_expressions_match_extract(self) -> None:
+        """Word and sentence counts in SQL match extract() on every edge case."""
+        for extractor in (WordCountExtractor(), SentenceCountExtractor()):
+            for value in COUNT_EDGE_CASES:
+                with self.subTest(extractor=type(extractor).__name__, value=value):
+                    expected = next(iter(extractor.extract(value)), None)
+                    expr = extractor.expression(literal(value, String))
+                    with self.sync_engine.connect() as conn:
+                        actual = conn.execute(select(expr)).scalar_one()
+                    self.assertEqual(expected, actual)
+
+
+class CountExpressionDuckDbTests(CountExpressionParityMixin, RequiresDBTestCase):
+    """Word/sentence count SQL parity on DuckDB."""
+
+    database_type = DuckTestDb
+
+
+class CountExpressionPostgresTests(CountExpressionParityMixin, RequiresDBTestCase):
+    """Word/sentence count SQL parity on Postgres."""
+
+    database_type = PostgresTestDb
+
+
+class CountExpressionMsSqlCompileTests(DatafakerTestCase):
+    """The MSSQL approximations, checked without a server."""
+
+    def test_blank_text_is_null_and_whitespace_uses_char(self) -> None:
+        """
+        Blank text gives NULL, as extract() yields nothing for it.
+
+        Tabs/line breaks are written with CHAR(), not backslash escapes,
+        which T-SQL string literals do not support.
+        """
+        column = Column("text", String)
+        for extractor in (WordCountExtractor(), SentenceCountExtractor()):
+            with self.subTest(extractor=type(extractor).__name__):
+                sql = str(extractor.expression(column).compile(dialect=mssql.dialect()))
+                self.assertIn("= 0 THEN NULL", sql)
+                self.assertIn("CHAR(9)", sql)
+                self.assertNotIn("\\", sql)
