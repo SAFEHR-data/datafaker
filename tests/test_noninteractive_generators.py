@@ -52,7 +52,7 @@ class NonInteractiveTests(RequiresDBTestCase):
         update_config_generators(
             DbCmd.Settings(
                 self.dsn,
-                self.schema_name,
+                self.schema,
                 config,
                 self.metadata,
                 None,
@@ -96,7 +96,7 @@ class NonInteractiveTests(RequiresDBTestCase):
         update_config_generators(
             DbCmd.Settings(
                 self.dsn,
-                self.schema_name,
+                self.schema,
                 config,
                 self.metadata,
                 None,
@@ -167,7 +167,7 @@ class NonInteractiveTests(RequiresDBTestCase):
         update_config_generators(
             DbCmd.Settings(
                 self.dsn,
-                self.schema_name,
+                self.schema,
                 config,
                 self.metadata,
                 None,

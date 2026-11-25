@@ -11,7 +11,13 @@ from typer.testing import CliRunner
 
 from datafaker.dump import CsvTableWriter, get_parquet_table_writer
 from datafaker.main import app
-from tests.utils import DatafakerTestCase, DuckTestDb, DuckDbMixin, MsSqlMixin, RequiresDBTestCase
+from tests.utils import (
+    DatafakerTestCase,
+    DuckDbMixin,
+    DuckTestDb,
+    MsSqlMixin,
+    RequiresDBTestCase,
+)
 
 
 class DumpTests(RequiresDBTestCase):
@@ -43,7 +49,7 @@ class DumpTests(RequiresDBTestCase):
     def test_dump_data_csv(self) -> None:
         """Test dump-data for CSV output."""
         outdir = Path(tempfile.mkdtemp("dump"))
-        writer = CsvTableWriter(self.metadata, self.dsn, self.schema_name)
+        writer = CsvTableWriter(self.metadata, self.dsn, self.schema)
         table_name = "manufacturer"
         writer.write(self.metadata.tables[table_name], outdir)
         table_path = outdir / f"{table_name}.csv"
@@ -64,7 +70,7 @@ class DumpTests(RequiresDBTestCase):
     def test_dump_data_parquet(self) -> None:
         """Test dump-data for Parquet output."""
         outdir = Path(tempfile.mkdtemp("dump"))
-        writer = get_parquet_table_writer(self.metadata, self.dsn, self.schema_name)
+        writer = get_parquet_table_writer(self.metadata, self.dsn, self.schema)
         table_name = "manufacturer"
         writer.write(self.metadata.tables[table_name], outdir)
         table_path = outdir / f"{table_name}.parquet"

@@ -1,4 +1,4 @@
-"""Utilities for testing."""
+"""Utilities for testing."""  # pylint: disable=too-many-lines
 import asyncio
 import os
 import random
@@ -14,10 +14,9 @@ from collections.abc import MutableSequence, Sequence, Set
 from functools import lru_cache
 from importlib import resources
 from pathlib import Path
-from pytest import mark
 from subprocess import run
 from tempfile import mkdtemp, mkstemp
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 from unittest import SkipTest, TestCase
 
 import duckdb
@@ -26,8 +25,11 @@ import sqlalchemy
 import testing.postgresql
 import yaml
 from prettytable import PrettyTable
-from sqlalchemy import Engine, MetaData, create_engine
+from pytest import mark
+from sqlalchemy import Engine, MetaData, create_engine, insert, text
 from sqlalchemy.engine import make_url
+from sqlalchemy.orm import Session
+from sqlalchemy.schema import CreateSchema, DropSchema
 from sqlalchemy_utils import create_database
 
 from datafaker import settings
@@ -44,7 +46,7 @@ from datafaker.make import make_src_stats, make_tables_file
 from datafaker.serialize_metadata import dict_to_metadata, metadata_to_dict
 from datafaker.theme import ThemeEntry, set_active_theme
 from datafaker.utils import T, logger
-from tests import create_snowflake_schema, drop_snowflake_schema, execute_snowflake_bulk_insert, execute_snowflake_sql, get_snowflake_dsn
+
 
 @lru_cache(1)
 def get_test_settings(
@@ -473,27 +475,41 @@ def _boolean_value():
     return _stringi("TRUE").result(True) | _stringi("FALSE").result(False)
 
 
-@parsy.generate("SQL string")
+def generate(s: str):
+    """Return a ty friendly parsy generate decorator."""
+    return lambda fn: parsy.generate(fn).desc(s)  # pylint: disable=no-member
+
+
+@generate("SQL string")
 def _string_value():
     """Parse for SQL string values."""
     yield parsy.string("'")
-    chars = yield (parsy.string("''").result("'") | parsy.test_char(lambda c: c != "'", "not '")).many()
+    chars = yield (
+        parsy.string("''").result("'") | parsy.test_char(lambda c: c != "'", "not '")
+    ).many()
     yield parsy.string("'")
     return "".join(chars)
 
 
 def _sql_literal():
     """Get a parser for a literal value."""
-    return _floating_point() | _stringi("NULL").result(None) | _boolean_value() | _string_value
+    return (
+        _floating_point()
+        | _stringi("NULL").result(None)
+        | _boolean_value()
+        | _string_value
+    )
 
 
-@parsy.generate("INSERT INTO clause")
+@generate("INSERT INTO clause")
 def _insert_into():
     """Parse INSERT INTO table VALUES (u, v, w)"""
     yield parsy.string("INSERT INTO ")
     table_name = yield parsy.regex("[A-Za-z_][A-Za-z0-9_.]*")
     yield parsy.string(" VALUES ")
-    arguments = yield (parsy.string("(") >> _sql_literal().sep_by(parsy.string(", "))) << parsy.string(")")
+    arguments = yield (
+        parsy.string("(") >> _sql_literal().sep_by(parsy.string(", "))
+    ) << parsy.string(")")
     return (table_name, arguments)
 
 
@@ -501,7 +517,8 @@ class SnowflakeTestDb(TestDatabaseBase):
     """Test Snowflake database."""
 
     _SQL_REMOVALS_RE = re.compile(
-        r"^(CREATE DATABASE .*;)|(\\.*)|(ALTER [^;]*;)|(\bUSING\s+btree)|(\-\-.*$)", re.MULTILINE
+        r"^(CREATE DATABASE .*;)|(\\.*)|(ALTER [^;]*;)|(\bUSING\s+btree)|(\-\-.*$)",
+        re.MULTILINE,
     )
     # Postgres' default stupid time format, ignoring time zone for now
     _TIME_FORMAT_RE = re.compile(
@@ -509,53 +526,105 @@ class SnowflakeTestDb(TestDatabaseBase):
     )
     _EOL_RE = re.compile(r";$", re.MULTILINE)
     _PUBLIC_SCHEMA = re.compile(r"(\s)public\.")
-    _CREATE_TABLE = re.compile(r"\bCREATE[ \r\n\t]+TABLE[ \r\n\t]+([a-zA-Z_0-9.]+)[ \r\n\t]*\(([^;]*)\)")
+    _CREATE_TABLE = re.compile(
+        r"\bCREATE[ \r\n\t]+TABLE[ \r\n\t]+([a-zA-Z_0-9.]+)[ \r\n\t]*\(([^;]*)\)"
+    )
     _TABLE_COLUMNS = re.compile(r"(?:^|,)[ \r\n\t]*([A-Za-z0-9_]+)[ \r\n\t]+")
-    _INSERT_INTO = re.compile(r"INSERT[ \r\n\t]+INTO[ \r\n\t]+([A-Za-z0-9_]+)[ \r\n\t]+VALUES[ \r\n\t]+\(([^;]*)\)")
+    _INSERT_INTO = re.compile(
+        r"INSERT[ \r\n\t]+INTO[ \r\n\t]+([A-Za-z0-9_]+)[ \r\n\t]+VALUES[ \r\n\t]+\(([^;]*)\)"
+    )
+
+    _snowflake_engine: Engine | None = None
+
+    @classmethod
+    def get_snowflake_dsn(cls) -> str | None:
+        """Get a Snowflake DSN, or None if the environment variables are not set."""
+        return os.environ.get("SNOWFLAKE_TEST_DSN")
 
     @classmethod
     def skip(cls) -> str | None:
         """Return None if Snowflake is specified in the environment."""
-        dsn = get_snowflake_dsn()
+        dsn = cls.get_snowflake_dsn()
         if dsn:
             return None
-        return (
-            "Skipping Snowflake because the following"
-            + " environment variables are not set: "
-            + ", ".join([
-                s for s in [
-                    "SNOWFLAKE_DATABASE",
-                    "SNOWFLAKE_ROLE",
-                    "SNOWFLAKE_WAREHOUSE",
-                    "SNOWFLAKE_USER",
-                ]
-            ])
-        )
+        return "Skipping Snowflake because the environment variables SNOWFLAKE_TEST_DSN is not set."
+
+    @classmethod
+    def setup(cls) -> None:
+        """Set up the class."""
+        cls.final()
+        dsn = cls.get_snowflake_dsn()
+        if dsn is not None:
+            cls._snowflake_engine = create_engine(
+                dsn,
+                paramstyle="qmark",
+                connect_args={
+                    "paramstyle": "qmark",
+                    "CLIENT_STAGE_ARRAY_BINDING_THRESHOLD": 65536,
+                },
+            )
+
+    @classmethod
+    def final(cls) -> None:
+        """Clean up the class."""
+        if cls._snowflake_engine is not None:
+            cls._snowflake_engine.dispose()
+            cls._snowflake_engine = None
+
+    def execute_snowflake(self, commands: Iterable[Any]) -> bool:
+        """Execute commands on the test Snowflake database."""
+        if not self._snowflake_engine:
+            return False
+        with Session(self._snowflake_engine, autoflush=False) as session:
+            for command in commands:
+                session.execute(command)
+        return True
+
+    def execute_snowflake_sql(self, sqls: Iterable[str]) -> bool:
+        """Execute SQL statements on the test Snowflake database."""
+        return self.execute_snowflake(text(sql) for sql in sqls)
+
+    def execute_snowflake_bulk_insert(
+        self, table_name: str, data: list[dict[str, Any]]
+    ) -> bool:
+        """Insert the data specified into the table specified."""
+        if not self._snowflake_engine or not data:
+            return False
+        metadata = MetaData()
+        metadata.reflect(self._snowflake_engine)
+        logger.info("Writing data to table %s", table_name)
+        with Session(self._snowflake_engine) as session:
+            session.execute(insert(metadata.tables[table_name]), data)
+            session.commit()
+        return True
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         """Initialize SnowflakeTestDb"""
         super().__init__(*args, **kwargs)
         random_part = "".join(random.choice(string.ascii_letters) for _ in range(8))
         time_part = time.strftime("%Y%m%d", time.gmtime())
-        self._schema_name: str | None= f"test{random_part}_{time_part}"
-        create_snowflake_schema(self._schema_name)
+        self._schema_name: str | None = f"test{random_part}_{time_part}"
+        self._open_schema_name: str | None = None
+        self.open()
 
     def open(self) -> None:
         """Start the test database"""
         self.close()
-        create_snowflake_schema(self._schema_name)
+        assert self._schema_name
+        self.execute_snowflake([CreateSchema(self._schema_name)])
+        self._open_schema_name = self._schema_name
 
     def close(self) -> None:
         """Tear down the test database."""
-        if self._schema_name is not None:
-            drop_snowflake_schema(self._schema_name)
-            self._schema_name = None
+        if self._open_schema_name is not None:
+            self.execute_snowflake([DropSchema(self._open_schema_name)])
+            self._open_schema_name = None
 
     def get_dsn(self, database_name: str | None) -> str:
         """Get the DSN for the test database."""
-        return get_snowflake_dsn(self._schema_name)
+        return self.get_snowflake_dsn() or ""
 
-    def run_sql(self, sql_file: Path) -> None:
+    def run_sql(self, sql_file: Path) -> None:  # pylint: disable=too-many-locals
         """Run all the SQL commands in ``sql_file`` on the database."""
         print("opening SQL file")
         with sql_file.open() as sql_fh:
@@ -588,21 +657,19 @@ class SnowflakeTestDb(TestDatabaseBase):
                     if column_list := table_column_list.get(table_name):
                         value_map = {
                             col_name: values[i]
-                            for i, col_name in enumerate(column_list[:len(values)])
+                            for i, col_name in enumerate(column_list[: len(values)])
                         }
                         table_to_data[table_name].append(value_map)
                     else:
                         logger.warning("Unexpected number of values: %s", line)
                 except parsy.ParseError as e:
                     logger.warning("Could not parse INSERT INTO: %s", line)
+                    logger.debug(e)
             elif line:
                 commands.append(line)
-        print("about to run it")
-        execute_snowflake_sql(commands)
-        print("about to populate")
+        self.execute_snowflake_sql(commands)
         for table_name, data in table_to_data.items():
-            execute_snowflake_bulk_insert(table_name, data)
-        print("ran it")
+            self.execute_snowflake_bulk_insert(table_name, data)
 
     def get_schema(self) -> str | None:
         """Get the schema of this database."""
@@ -623,7 +690,7 @@ class DatafakerTestCase(TestCase):
     database_name: str | None = None
     use_temporary_cwd = False
     copy_files: list[str] = []
-    copy_from_directory: Path = Path(".")
+    copy_from_directory: Path | None = None
 
     def get_abs_example_dir(self) -> Path:
         """Get an absolute path to the examples directory."""
@@ -639,12 +706,13 @@ class DatafakerTestCase(TestCase):
         if self.use_temporary_cwd:
             self.start_dir = os.getcwd()
             self.working_dir = mkdtemp("test")
-            from_dir = resources.files(sys.modules["tests"]) / str(
-                self.copy_from_directory
-            )
-            for cf in self.copy_files:
-                with resources.as_file(from_dir / cf) as cff:
-                    shutil.copy(cff, self.working_dir)
+            if self.copy_from_directory is not None:
+                from_dir = resources.files(sys.modules["tests"]) / str(
+                    self.copy_from_directory
+                )
+                for cf in self.copy_files:
+                    with resources.as_file(from_dir / cf) as cff:
+                        shutil.copy(cff, self.working_dir)
             os.chdir(self.working_dir)
 
     def tearDown(self) -> None:
@@ -686,7 +754,10 @@ class DatafakerTestCase(TestCase):
         return {
             line
             for line in result.stdout.split("\n")
-            if line and not line.startswith("Going to open:") and not line.startswith("A browser window should have opened") and not line.startswith("Initiating login request")
+            if line
+            and not line.startswith("Going to open:")
+            and not line.startswith("A browser window should have opened")
+            and not line.startswith("Initiating login request")
         }
 
     def assertFailure(self, result: Any) -> None:  # pylint: disable=invalid-name
@@ -821,6 +892,13 @@ class RequiresDBTestCase(
         self.dst_engine: Engine | None = None
 
     @property
+    def schema(self) -> str | None:
+        """Get the schema name if it exists."""
+        if self.database is None:
+            return None
+        return self.database.get_schema()
+
+    @property
     def dst_dsn(self) -> str:
         """Get the database connection string."""
         assert self.dst_database is not None
@@ -830,7 +908,7 @@ class RequiresDBTestCase(
         assert self.database is not None
         self.engine = create_db_engine(
             self.database.get_dsn(self.database_name),
-            schema_name=self.schema_name,
+            schema_name=self.schema,
             use_asyncio=self.use_asyncio,
         )
         self.sync_engine = get_sync_engine(self.engine)
@@ -845,9 +923,7 @@ class RequiresDBTestCase(
         if self.dump_file_path is not None:
             self.database.run_sql(self.get_abs_example_dir() / self.dump_file_path)
         self._create_engine()
-        print("engine created")
-        self.metadata.reflect(self.sync_engine, schema=self.database.get_schema())
-        print("set up")
+        self.metadata.reflect(self.sync_engine, schema=self.schema)
 
     def sql(self, sql: str) -> None:
         """
@@ -924,7 +1000,7 @@ class GeneratesDBTestCase(RequiresDBTestCase):
         # Generate the `orm.yaml` from the database
         (self.orm_fd, self.orm_file_path) = mkstemp(".yaml", "orm_", text=True)
         with os.fdopen(self.orm_fd, "w", encoding="utf-8") as orm_fh:
-            orm_fh.write(make_tables_file(self.dsn, self.schema_name, False))
+            orm_fh.write(make_tables_file(self.dsn, self.schema, False))
         # Create a separate empty destination database
         self.make_destination_database()
 
@@ -942,7 +1018,7 @@ class GeneratesDBTestCase(RequiresDBTestCase):
         """
         loop = asyncio.new_event_loop()
         src_stats = loop.run_until_complete(
-            make_src_stats(self.dsn, config, self.schema_name)
+            make_src_stats(self.dsn, config, self.schema)
         )
         loop.close()
         (self.stats_fd, self.stats_file_path) = mkstemp(
@@ -1009,6 +1085,7 @@ class TestDbCmdMixin(DbCmd):
         self.column_items: MutableSequence[Sequence[str]] = []
         self.columns: Mapping[str, Sequence[Any]] = {}
 
+    # pylint: disable=redefined-outer-name
     def print(self, text: str, *args: Any, **kwargs: Any) -> None:
         """Capture the printed message."""
         self.messages.append((text, args, kwargs))
@@ -1054,18 +1131,21 @@ class TestDbCmdMixin(DbCmd):
 
 class DuckDbMixin:
     """RequiresDBTestCase mixin for DuckDB."""
+
     database_type = DuckTestDb
 
 
 @mark.mssql
 class MsSqlMixin:
     """RequiresDBTestCase mixin for MsSql."""
-    schema_name: str = None
+
+    schema_name = None
     database_type = MsSqlTestDb
 
 
 @mark.snowflake
 class SnowflakeMixin:
     """RequiresDBTestCase mixin for Snowflake."""
-    schema_name: str = None
+
+    schema_name = None
     database_type = SnowflakeTestDb

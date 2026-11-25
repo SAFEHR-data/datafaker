@@ -15,6 +15,7 @@ from tests.utils import (
     DuckDbMixin,
     GeneratesDBTestCase,
     MsSqlMixin,
+    SnowflakeMixin,
     get_test_settings,
 )
 
@@ -567,3 +568,7 @@ class TestCliCreateDuckDb(DuckDbMixin, TestsCliCreate):
 
 class TestCliCreateMsSql(MsSqlMixin, TestsCliCreate):
     """Tests that use the CLI to generate output in an MS Sql database."""
+
+
+class TestCliCreateSnowflake(SnowflakeMixin, TestsCliCreate):
+    """Tests that use the CLI to generate output in a Snowflake database."""

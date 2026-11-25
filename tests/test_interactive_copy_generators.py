@@ -8,7 +8,7 @@ from sqlalchemy.orm import aliased
 
 from datafaker.interactive.base import DbCmd
 from tests.test_interactive_generators import MockGeneratorCmd
-from tests.utils import GeneratesDBTestCase, MsSqlMixin
+from tests.utils import GeneratesDBTestCase, MsSqlMixin, SnowflakeMixin
 
 
 class ConfigureCopyGeneratorsWithDateTests(GeneratesDBTestCase):
@@ -22,7 +22,7 @@ class ConfigureCopyGeneratorsWithDateTests(GeneratesDBTestCase):
     def _get_cmd(self, config: MutableMapping[str, Any]) -> MockGeneratorCmd:
         """Get the command we are using for this test case."""
         return MockGeneratorCmd(
-            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
+            DbCmd.Settings(self.dsn, self.schema, config, self.metadata, None)
         )
 
     def test_same_table_copy(self) -> None:
@@ -262,5 +262,13 @@ class ConfigureCopyGeneratorsWithDateTests(GeneratesDBTestCase):
 
 
 # Note that this test won't work with DuckDB because it needs foreign keys to work
-class ConfigureCopyGeneratorsWithDateMsSqlTests(MsSqlMixin, ConfigureCopyGeneratorsWithDateTests):
+class ConfigureCopyGeneratorsWithDateMsSqlTests(
+    MsSqlMixin, ConfigureCopyGeneratorsWithDateTests
+):
+    """Test `configure-generators` with `instrument.sql` with MS SQL."""
+
+
+class ConfigureCopyGeneratorsWithDateSnowflakeTests(
+    SnowflakeMixin, ConfigureCopyGeneratorsWithDateTests
+):
     """Test `configure-generators` with `instrument.sql` with MS SQL."""

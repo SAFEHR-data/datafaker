@@ -7,7 +7,7 @@ from sqlalchemy import Connection, MetaData, select
 from datafaker.interactive.base import DbCmd
 from datafaker.proposers.choice import ChoiceProposerFactory
 from tests.test_interactive_generators import MockGeneratorCmd
-from tests.utils import DuckDbMixin, GeneratesDBTestCase, MsSqlMixin
+from tests.utils import DuckDbMixin, GeneratesDBTestCase, MsSqlMixin, SnowflakeMixin
 
 
 class ChoiceMeasurementTableStats:
@@ -40,7 +40,7 @@ class GeneratorsChoiceTests(GeneratesDBTestCase):
 
     def _get_cmd(self, config: MutableMapping[str, Any]) -> MockGeneratorCmd:
         return MockGeneratorCmd(
-            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
+            DbCmd.Settings(self.dsn, self.schema, config, self.metadata, None)
         )
 
     def _propose(self, gc: MockGeneratorCmd) -> dict[str, tuple[int, str, list[str]]]:
@@ -201,3 +201,7 @@ class GeneratorsChoiceTestsDuckDb(DuckDbMixin, GeneratorsChoiceTests):
 
 class GeneratorsChoiceTestsMsSql(MsSqlMixin, GeneratorsChoiceTests):
     """As ``GeneratorsChoiceTests`` but with MS Sql."""
+
+
+class GeneratorsChoiceTestsSnowflake(SnowflakeMixin, GeneratorsChoiceTests):
+    """As ``GeneratorsChoiceTests`` but with Snowflake."""

@@ -722,7 +722,7 @@ def make_tables_file(
     meta_dict = metadata_to_dict(metadata, schema_name, engine, parquet_dir)
     inspector = sqlalchemy.inspect(engine)
     if hasattr(inspector, "get_view_names"):
-        view_names = set(inspector.get_view_names())
+        view_names = set(inspector.get_view_names(schema=schema_name))
     else:
         view_names = set()
 

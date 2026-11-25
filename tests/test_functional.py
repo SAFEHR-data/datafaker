@@ -35,11 +35,10 @@ class DBFunctionalTestCaseBase(RequiresDBTestCase):
         """Pre-test setup."""
         super().setUp()
         self.make_destination_database()
-        schema = self.database.get_schema() or self.schema_name
-        dst_schema = self.dst_database.get_schema() or self.dst_schema_name
+        dst_schema = self.schema or self.dst_schema_name
         self.env = {
             "SRC_DSN": self.dsn,
-            "SRC_SCHEMA": schema,
+            "SRC_SCHEMA": self.schema,
             "DST_DSN": self.dst_dsn,
             "DST_SCHEMA": dst_schema,
         }
@@ -325,7 +324,6 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
         logging.getLogger("snowflake.connector._core").setLevel(logging.ERROR)
         return super().setUpClass()
 
-
     def test_workflow_maximal_args(self) -> None:
         """Test the CLI workflow runs with optional arguments."""
         completed_process = self.invoke(
@@ -337,8 +335,12 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
         self.assertNoException(completed_process)
         self.assertEqual("", completed_process.stderr)
         self.assertSuccess(completed_process)
-        self.assert_str_in(f"Creating {self.alt_orm_file_path}.", completed_process.stdout)
-        self.assert_str_in(f"{self.alt_orm_file_path} created.", completed_process.stdout)
+        self.assert_str_in(
+            f"Creating {self.alt_orm_file_path}.", completed_process.stdout
+        )
+        self.assert_str_in(
+            f"{self.alt_orm_file_path} created.", completed_process.stdout
+        )
 
         completed_process = self.invoke(
             "--verbose",
@@ -356,7 +358,7 @@ class DBFunctionalTestCase(DBFunctionalTestCaseBase):
             "Executing query avg_person_id\n",
             "Executing query count_opt_outs\n",
             "Executing query auto__hospital_visit__visit_type_concept_id\n",
-            f"{self.stats_file_path} created.\n"
+            f"{self.stats_file_path} created.\n",
         ]:
             self.assert_str_in(s, completed_process.stdout)
 

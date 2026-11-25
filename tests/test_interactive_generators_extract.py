@@ -19,7 +19,7 @@ class ExtractDateComponentTests(GeneratesDBTestCase):
     def _get_cmd(self, config: MutableMapping[str, Any]) -> MockGeneratorCmd:
         """Get the configure-generators object as our command."""
         return MockGeneratorCmd(
-            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
+            DbCmd.Settings(self.dsn, self.schema, config, self.metadata, None)
         )
 
     def _propose(self, gc: MockGeneratorCmd) -> dict[str, tuple[int, str, list[str]]]:

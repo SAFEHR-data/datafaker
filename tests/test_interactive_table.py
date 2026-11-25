@@ -28,7 +28,7 @@ class ConfigureTablesTests(RequiresDBTestCase):
         return MockTableCmd(
             DbCmd.Settings(
                 self.dsn,
-                self.schema_name,
+                self.schema,
                 config,
                 self.metadata,
                 None,
@@ -400,7 +400,7 @@ class ConfigureTablesInstrumentsTests(ConfigureTablesTests):
             },
         }
         with MockTableCmd(
-            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
+            DbCmd.Settings(self.dsn, self.schema, config, self.metadata, None)
         ) as tc:
             tc.do_next("manufacturer")
             tc.do_vocabulary("")
@@ -444,7 +444,7 @@ class ConfigureTablesInstrumentsTests(ConfigureTablesTests):
             },
         }
         with MockTableCmd(
-            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
+            DbCmd.Settings(self.dsn, self.schema, config, self.metadata, None)
         ) as tc:
             tc.do_next("signature_model")
             tc.do_empty("")
@@ -561,7 +561,7 @@ class TrickyTests(ConfigureTablesTests):
         with MockTableCmd(
             DbCmd.Settings(
                 self.dsn,
-                self.schema_name,
+                self.schema,
                 config={},
                 metadata=self.metadata,
                 parquet_dir=None,

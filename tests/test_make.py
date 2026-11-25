@@ -34,6 +34,7 @@ from tests.utils import (
     MsSqlMixin,
     PostgresTestDb,
     RequiresDBTestCase,
+    SnowflakeMixin,
 )
 
 
@@ -57,11 +58,20 @@ class TestSerialize(DatafakerTestCase):
         self.database.run_sql(self.get_abs_example_dir() / "date.sql")
         self.engine = create_db_engine(self.database.get_dsn("date_tables"), None)
 
+    def tearDown(self) -> None:
+        self.database.close()
+        super().tearDown()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.database_type.final()
+        return super().tearDownClass()
+
     def test_metadata_to_dict(self) -> None:
         """Test metadata_to_dict."""
         orm_yaml = make_tables_file(
             self.database.get_dsn("date_tables"),
-            schema_name=None,
+            schema_name=self.database.get_schema(),
             views_to_tables=False,
             parquet_dir=None,
             engine=get_sync_engine(self.engine),
@@ -83,7 +93,7 @@ class TestSerialize(DatafakerTestCase):
         """Test views_to_tables."""
         orm_yaml = make_tables_file(
             self.database.get_dsn("date_tables"),
-            schema_name=None,
+            schema_name=self.database.get_schema(),
             views_to_tables=True,
             parquet_dir=None,
             engine=get_sync_engine(self.engine),
@@ -104,7 +114,7 @@ class TestSerialize(DatafakerTestCase):
         """Test views_to_tables with foreign keys and primary keys guessed."""
         orm_yaml = make_tables_file(
             self.database.get_dsn("date_tables"),
-            schema_name=None,
+            schema_name=self.database.get_schema(),
             views_to_tables=True,
             parquet_dir=None,
             engine=get_sync_engine(self.engine),
@@ -119,7 +129,7 @@ class TestSerialize(DatafakerTestCase):
         parquet_dir = self.get_abs_example_dir() / "duckdb" / "date"
         orm_yaml = make_tables_file(
             self.database.get_dsn("date_tables"),
-            schema_name=None,
+            schema_name=self.database.get_schema(),
             views_to_tables=True,
             parquet_dir=parquet_dir,
             engine=get_sync_engine(self.engine),
@@ -149,6 +159,10 @@ class TestSerialize(DatafakerTestCase):
 
 class TestSerializeMsSql(MsSqlMixin, TestSerialize):
     """Unit tests for serialize_metadata with an MS SQL database."""
+
+
+class TestSerializeSnowflake(SnowflakeMixin, TestSerialize):
+    """Unit tests for serialize_metadata with a Snowflake database."""
 
 
 class TestGetDefaultGenerator(DatafakerTestCase):
@@ -362,14 +376,14 @@ class TestMakeStats(RequiresDBTestCase):
     def test_make_stats_no_asyncio_schema(self) -> None:
         """Test that make_src_stats works when explicitly naming a schema."""
         src_stats = asyncio.get_event_loop().run_until_complete(
-            make_src_stats(self.dsn, self.config, self.schema_name)
+            make_src_stats(self.dsn, self.config, self.schema)
         )
         self.check_make_stats_output(src_stats)
 
     def test_make_stats_no_asyncio(self) -> None:
         """Test that make_src_stats works using the example configuration."""
         src_stats = asyncio.get_event_loop().run_until_complete(
-            make_src_stats(self.dsn, self.config, self.schema_name)
+            make_src_stats(self.dsn, self.config, self.schema)
         )
         self.check_make_stats_output(src_stats)
 
@@ -381,7 +395,7 @@ class TestMakeStats(RequiresDBTestCase):
         asyncio.set_event_loop(loop)
         config_asyncio = {**self.config, "use-asyncio": True}
         src_stats = asyncio.get_event_loop().run_until_complete(
-            make_src_stats(self.dsn, config_asyncio, self.schema_name)
+            make_src_stats(self.dsn, config_asyncio, self.schema)
         )
         self.check_make_stats_output(src_stats)
 
@@ -412,7 +426,7 @@ class TestMakeStats(RequiresDBTestCase):
             ]
         }
         src_stats = asyncio.get_event_loop().run_until_complete(
-            make_src_stats(self.dsn, config, self.schema_name)
+            make_src_stats(self.dsn, config, self.schema)
         )
         self.assertEqual(src_stats[query_name1]["results"], [])
         self.assertEqual(src_stats[query_name2]["results"], [])

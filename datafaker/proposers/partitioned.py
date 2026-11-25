@@ -450,7 +450,9 @@ class NullPartitionedNormalProposerFactory(MultivariateNormalProposerFactory):
         delkeys: set[str] = set()
         for table_name, column_name in named_tables:
             if table_name not in metadata.tables:
-                logger.warning("Configured table %s not present in database.")
+                logger.warning(
+                    "Configured table %s not present in database.", table_name
+                )
                 delkeys.add(table_name)
             elif column_name not in metadata.tables[table_name].columns:
                 logger.warning(

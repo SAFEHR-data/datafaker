@@ -36,6 +36,7 @@ from tests.utils import (
     GeneratesDBTestCase,
     MsSqlMixin,
     RequiresDBTestCase,
+    SnowflakeMixin,
 )
 
 
@@ -62,7 +63,7 @@ class TestCreate(GeneratesDBTestCase):
             }
             self.set_configuration(config)
             meta_dict = metadata_to_dict(
-                self.metadata, self.schema_name, self.sync_engine, None
+                self.metadata, self.schema, self.sync_engine, None
             )
             create_db_tables(self.metadata)
             create_db_vocab(self.metadata, meta_dict, config, Path("./tests/examples"))
@@ -428,7 +429,7 @@ class CreateDataTestCase(RequiresDBTestCase):
             }
         }
         metadata = dict_to_metadata(orm, config)
-        create_db_tables_into(metadata, self.dsn, self.schema_name)
+        create_db_tables_into(metadata, self.dsn, self.schema)
         generate_count = 4
         row_counts = create_db_data_into(
             sorted_non_vocabulary_tables(metadata, config),
@@ -436,7 +437,7 @@ class CreateDataTestCase(RequiresDBTestCase):
             None,
             generate_count,
             self.dsn,
-            self.schema_name,
+            self.schema,
             metadata,
         )
         with self.sync_engine.connect() as connection:
@@ -481,7 +482,7 @@ class CreateDataTestCase(RequiresDBTestCase):
             }
         }
         metadata = dict_to_metadata(orm, config)
-        create_db_tables_into(metadata, self.dsn, self.schema_name)
+        create_db_tables_into(metadata, self.dsn, self.schema)
         self.assertRaises(
             RuntimeError,
             create_db_data_into,
@@ -490,7 +491,7 @@ class CreateDataTestCase(RequiresDBTestCase):
             None,
             2,
             self.dsn,
-            self.schema_name,
+            self.schema,
             metadata,
         )
 
@@ -512,7 +513,7 @@ class CreateDataTestCase(RequiresDBTestCase):
             }
         }
         metadata = dict_to_metadata(orm, config)
-        create_db_tables_into(metadata, self.dsn, self.schema_name)
+        create_db_tables_into(metadata, self.dsn, self.schema)
         self.assertRaises(
             SettingsError,
             create_db_data_into,
@@ -521,10 +522,14 @@ class CreateDataTestCase(RequiresDBTestCase):
             None,
             1,
             self.dsn,
-            self.schema_name,
+            self.schema,
             metadata,
         )
 
 
 class CreateDataTestCaseMsSql(MsSqlMixin, CreateDataTestCase):
     """CreateData but for MSSQL."""
+
+
+class CreateDataTestCaseSnowflake(SnowflakeMixin, CreateDataTestCase):
+    """CreateData but for Snowflake."""

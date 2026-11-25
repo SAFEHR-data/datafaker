@@ -9,7 +9,7 @@ from sqlalchemy import Connection, MetaData, insert, select
 from datafaker.interactive.base import DbCmd
 from datafaker.proposers import NullPartitionedNormalProposerFactory
 from tests.test_interactive_generators import MockGeneratorCmd
-from tests.utils import GeneratesDBTestCase, MsSqlMixin
+from tests.utils import GeneratesDBTestCase, MsSqlMixin, SnowflakeMixin
 
 
 @dataclass
@@ -142,7 +142,7 @@ class NullPartitionedTests(GeneratesDBTestCase):
     def _get_cmd(self, config: MutableMapping[str, Any]) -> MockGeneratorCmd:
         """Get the configure-generators object as our command."""
         return MockGeneratorCmd(
-            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
+            DbCmd.Settings(self.dsn, self.schema, config, self.metadata, None)
         )
 
     def _propose(self, gc: MockGeneratorCmd) -> dict[str, tuple[int, str, list[str]]]:
@@ -550,3 +550,7 @@ class NullPartitionedTests(GeneratesDBTestCase):
 
 class NullPartitionedMsSqlTests(MsSqlMixin, NullPartitionedTests):
     """NullPartitionedTests but for MS SQL."""
+
+
+class NullPartitionedSnowflakeTests(SnowflakeMixin, NullPartitionedTests):
+    """NullPartitionedTests but for Snowflake."""

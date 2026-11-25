@@ -14,6 +14,7 @@ from tests.utils import (
     GeneratesDBTestCase,
     MsSqlMixin,
     RequiresDBTestCase,
+    SnowflakeMixin,
     TestDbCmdMixin,
 )
 
@@ -53,7 +54,7 @@ class ConfigureGeneratorsTests(RequiresDBTestCase):
     def _get_cmd(self, config: MutableMapping[str, Any]) -> MockGeneratorCmd:
         """Get the command we are using for this test case."""
         return MockGeneratorCmd(
-            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
+            DbCmd.Settings(self.dsn, self.schema, config, self.metadata, None)
         )
 
     def test_null_configuration(self) -> None:
@@ -665,7 +666,7 @@ class GeneratorTests(GeneratesDBTestCase):
     def _get_cmd(self, config: MutableMapping[str, Any]) -> MockGeneratorCmd:
         """We are using configure-generators."""
         return MockGeneratorCmd(
-            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
+            DbCmd.Settings(self.dsn, self.schema, config, self.metadata, None)
         )
 
     def test_set_null(self) -> None:
@@ -792,3 +793,7 @@ class GeneratorTestsDuckDb(DuckDbMixin, GeneratorTests):
 
 class GeneratorTestsMsSql(MsSqlMixin, GeneratorTests):
     """As ``GeneratorTests`` but with MSSql."""
+
+
+class GeneratorTestsSnowflake(SnowflakeMixin, GeneratorTests):
+    """As ``GeneratorTests`` but with Snowflake."""

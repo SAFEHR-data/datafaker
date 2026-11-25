@@ -41,8 +41,7 @@ An in-memory DuckDB database can be used as an empty database that you can augme
 Snowflake
 ^^^^^^^^^
 
-Currently experimental support. If the input database includes the type ``TIMEZONE_LTZ`` (or equivalent)
-then the output database must also be a Snowflake database.
+Currently experimental support.
 
 Other
 ^^^^^

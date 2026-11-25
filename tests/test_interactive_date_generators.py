@@ -11,7 +11,13 @@ from sqlalchemy import func, select
 from datafaker.dialects import SecondsDifference, StdDev
 from datafaker.interactive.base import DbCmd
 from datafaker.interactive.generators import GeneratorCmd
-from tests.utils import DuckDbMixin, GeneratesDBTestCase, MsSqlMixin, TestDbCmdMixin
+from tests.utils import (
+    DuckDbMixin,
+    GeneratesDBTestCase,
+    MsSqlMixin,
+    SnowflakeMixin,
+    TestDbCmdMixin,
+)
 
 
 class MockGeneratorCmd(GeneratorCmd, TestDbCmdMixin):
@@ -46,7 +52,7 @@ class ConfigureGeneratorsWithSrc2Tests(GeneratesDBTestCase):
     def _get_cmd(self, config: MutableMapping[str, Any]) -> MockGeneratorCmd:
         """Get the command we are using for this test case."""
         return MockGeneratorCmd(
-            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
+            DbCmd.Settings(self.dsn, self.schema, config, self.metadata, None)
         )
 
     def _get_config(self) -> dict[Any, Any]:
@@ -108,11 +114,21 @@ class ConfigureGeneratorsWithSrc2Tests(GeneratesDBTestCase):
         self.assertAlmostEqual(src_result.sd, dst_result.sd, delta=src_result.sd * 0.5)
 
 
-class ConfigureGeneratorsWithSrc2DuckDbTests(DuckDbMixin, ConfigureGeneratorsWithSrc2Tests):
+class ConfigureGeneratorsWithSrc2DuckDbTests(
+    DuckDbMixin, ConfigureGeneratorsWithSrc2Tests
+):
     """Test `configure-generators` with `src2.dump` with DuckDB."""
 
 
-class ConfigureGeneratorsWithSrc2MsSqlTests(MsSqlMixin, ConfigureGeneratorsWithSrc2Tests):
+class ConfigureGeneratorsWithSrc2MsSqlTests(
+    MsSqlMixin, ConfigureGeneratorsWithSrc2Tests
+):
+    """Test `configure-generators` with `src2.dump` with MS SQL."""
+
+
+class ConfigureGeneratorsWithSrc2SnowflakeTests(
+    SnowflakeMixin, ConfigureGeneratorsWithSrc2Tests
+):
     """Test `configure-generators` with `src2.dump` with MS SQL."""
 
 
@@ -127,7 +143,7 @@ class ConfigureGeneratorsWithInstrumentsTests(GeneratesDBTestCase):
     def _get_cmd(self, config: MutableMapping[str, Any]) -> MockGeneratorCmd:
         """Get the command we are using for this test case."""
         return MockGeneratorCmd(
-            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
+            DbCmd.Settings(self.dsn, self.schema, config, self.metadata, None)
         )
 
     # pylint: disable=too-many-locals
@@ -214,6 +230,13 @@ class ConfigureGeneratorsWithInstrumentsMsSqlTests(
     """Test `configure-generators` with `instrument.sql` with MS SQL."""
 
 
+class ConfigureGeneratorsWithInstrumentsSnowflakeTests(
+    SnowflakeMixin,
+    ConfigureGeneratorsWithInstrumentsTests,
+):
+    """Test `configure-generators` with `instrument.sql` with Snowflake."""
+
+
 class ConfigureGeneratorsWithDateTests(GeneratesDBTestCase):
     """Test `configure-generators` with the `date.sql` database."""
 
@@ -225,7 +248,7 @@ class ConfigureGeneratorsWithDateTests(GeneratesDBTestCase):
     def _get_cmd(self, config: MutableMapping[str, Any]) -> MockGeneratorCmd:
         """Get the command we are using for this test case."""
         return MockGeneratorCmd(
-            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
+            DbCmd.Settings(self.dsn, self.schema, config, self.metadata, None)
         )
 
     # pylint: disable=too-many-locals
@@ -343,5 +366,7 @@ class ConfigureGeneratorsWithDateTests(GeneratesDBTestCase):
 
 
 # Note that this test won't work with DuckDB because it needs foreign keys to work
-class ConfigureGeneratorsWithDateMsSqlTests(MsSqlMixin, ConfigureGeneratorsWithDateTests):
+class ConfigureGeneratorsWithDateMsSqlTests(
+    MsSqlMixin, ConfigureGeneratorsWithDateTests
+):
     """Test `configure-generators` with `date.sql` with MS SQL."""

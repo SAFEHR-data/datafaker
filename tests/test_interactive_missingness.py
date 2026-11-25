@@ -34,7 +34,7 @@ class ConfigureMissingnessTests(RequiresDBTestCase):
     def _get_cmd(self, config: MutableMapping[str, Any]) -> MockMissingnessCmd:
         """We are using configure-missingness."""
         return MockMissingnessCmd(
-            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
+            DbCmd.Settings(self.dsn, self.schema, config, self.metadata, None)
         )
 
     def test_set_missingness_to_sampled(self) -> None:
@@ -92,7 +92,7 @@ class ConfigureMissingnessTestsWithGeneration(GeneratesDBTestCase):
 
     def _get_cmd(self, config: MutableMapping[str, Any]) -> MockMissingnessCmd:
         return MockMissingnessCmd(
-            DbCmd.Settings(self.dsn, self.schema_name, config, self.metadata, None)
+            DbCmd.Settings(self.dsn, self.schema, config, self.metadata, None)
         )
 
     def test_create_with_missingness(self) -> None:

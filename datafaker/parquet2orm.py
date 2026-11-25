@@ -3,6 +3,7 @@ import glob
 import re
 from abc import ABC
 from collections.abc import Generator, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -98,15 +99,16 @@ def add_guessed_keys(tables_conf: dict[str, Any], table_names: set[str]):
         primaries = set()
         for column_name, column_conf in columns.items():
             ctype = get_property(column_conf, "type", "INTEGER")
-            if ctype in KEY_TYPES:
-                if guesser.is_likely_primary(table_name, column_name):
-                    primaries.add(column_name)
-                    column_conf["primary"] = True
-                    column_conf["nullable"] = False
-                elif (
-                    guess := guesser.get_likely_foreign_key_target(column_name)
-                ) and guess[0] != table_name:
-                    column_conf["foreign_keys"] = [f"{guess[0]}.{guess[1]}"]
+            if ctype in KEY_TYPES and guesser.is_likely_primary(
+                table_name, column_name
+            ):
+                primaries.add(column_name)
+                column_conf["primary"] = True
+                column_conf["nullable"] = False
+            elif (
+                guess := guesser.get_likely_foreign_key_target(column_name, ctype)
+            ) and guess[0] != table_name:
+                column_conf["foreign_keys"] = [f"{guess[0]}.{guess[1]}"]
             if column_name == "id":
                 column_conf["primary"] = True
                 column_conf["nullable"] = False
@@ -151,6 +153,16 @@ def _get_words(s: str) -> set[str]:
     return {w.lower() for w in _word_split_re.split(decamel)}
 
 
+@dataclass
+class _ColumnMatchInfo:
+    """Information to help matching a potential foreign key to a particular column."""
+
+    table_name: str
+    column_name: str
+    words: set[str]
+    column_type: str
+
+
 class _ColumnGuesser:
     """Guesses foreign key targets."""
 
@@ -161,21 +173,27 @@ class _ColumnGuesser:
         :param tables: The "tables" key from the orm.yaml structure.
         """
         # List of triples (table_name, column_name, list_of_words_in_table_and_column_name)
-        self.tn_cn_words: list[tuple[str, str, set[str]]] = []
+        self.tn_cn_words: list[_ColumnMatchInfo] = []
         # Dict from table name to the words in that table name
         self.tn2words: dict[str, set[str]] = {}
         for name, table_conf in tables.items():
             table_words = _get_words(name)
             self.tn2words[name] = table_words
             columns = get_property(table_conf, "columns", {})
-            for column in columns.keys():
+            for column, column_config in columns.items():
                 self.tn_cn_words.append(
-                    (name, column, table_words | _get_words(column))
+                    _ColumnMatchInfo(
+                        name,
+                        column,
+                        table_words | _get_words(column),
+                        column_config.get("type", ""),
+                    )
                 )
 
     def get_likely_foreign_key_target(
         self,
         column_name: str,
+        column_type: str,
     ) -> tuple[str, str] | None:
         """
         Get a foreign key target string if the name suggests it might be.
@@ -187,20 +205,21 @@ class _ColumnGuesser:
         our_words = _get_words(column_name)
         max_overlaps_so_far = (1, len(our_words) - 1, 0)
         best_so_far: tuple[str, str] | None = None
-        for tn, cn, cws in self.tn_cn_words:
-            # A triple: (overlap of column name with table name,
-            # overlap of column name with column and table name,
-            # negative how many words are left over)
+        for match_info in self.tn_cn_words:
+            cws = match_info.words
+            tn = match_info.table_name
             goodness = (
                 len(our_words.intersection(self.tn2words[tn])),
                 len(our_words.intersection(cws)),
                 -len(cws.difference(our_words)),
             )
+            if match_info.column_type == column_type:
+                goodness *= 10
             # More overlap with table name is better.
             # Same overlap with table name but more overlap with column name is also better.
             if max_overlaps_so_far < goodness:
                 max_overlaps_so_far = goodness
-                best_so_far = (tn, cn)
+                best_so_far = (tn, match_info.column_name)
         return best_so_far
 
     def is_likely_primary(self, table_name, column_name) -> bool:

@@ -201,7 +201,7 @@ def conf_logger(verbose: bool) -> None:
     """Configure the logger."""
     # Note that this function modifies the global `logger`.
     log_format = "%(message)s"
-    #log_format = "%(name)s %(levelname)s: %(message)s"
+    # log_format = "%(name)s %(levelname)s: %(message)s"
 
     # info will always be printed to stdout
     # debug will be printed to stdout only if verbose=True

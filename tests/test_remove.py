@@ -55,7 +55,7 @@ class RemoveThingsTestCase(RequiresDBTestCase):
         )
         meta_dict = metadata_to_dict(
             self.metadata,
-            self.schema_name,
+            self.schema,
             self.sync_engine,
             parquet_dir=None,
         )

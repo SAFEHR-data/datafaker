@@ -528,7 +528,7 @@ def compile_timestampltz_generic(
 
 @compiles(snowflake_types.TIMESTAMP_LTZ, "snowflake")
 def compile_timestampltz_ddb(
-    element: snowflake_types.TIMESTAMP_LTZ, compiler: Any, **kw: Any
+    _element: snowflake_types.TIMESTAMP_LTZ, _compiler: Any, **_kw: Any
 ) -> str:
     """Render TIMESTAMP_LTZ as TIMESTAMP_LTZ."""
     return "TIMESTAMP_LTZ"

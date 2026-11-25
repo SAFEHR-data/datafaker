@@ -53,6 +53,41 @@ or outside:
 poetry run pytest -rs
 ```
 
+We can run tests matching a certain string with the `-k` flag:
+
+```bash
+poetry run pytest -rs -k workflow
+```
+
+### Running MsSQL tests
+
+You need to start an MS SQL Server (or similar) and set up the `MSSQL_TEST_DSN`
+environment variable to point to the server. The default for `MSSQL_TEST_DSN`
+points to the docker container that `docker-compose.yaml` sets up, so the simplest
+way to run the MsSQL tests is:
+
+```bash
+docker compose up -d
+poetry run pytest -rs -m mssql
+docker compose down
+```
+
+The `-m mssql` parameter selects only the MsSQL tests, you can omit it if you want to
+run all the tests including MsSQL tests.
+
+### Running the Snowflake tests
+
+You need access to a Snowflake instance, and then you can set up
+`SNOWFLAKE_TEST_DSN` to point to it. There is no free way to run a Snowflake
+compatible instance, sadly. To run only the Snowflake tests we can use the
+`-m snowflake` argument:
+
+```bash
+SNOWFLAKE_TEST_DSN="snowflake://NAME%40DOMAIN@ACCOUNT/DB?warehouse=WAREHOUSE&role=ROLE&authenticator=externalbrowser" poetry run pytest -rs -m snowflake
+```
+
+For some values of `NAME`, `DOMAIN`, `ACCOUNT`, `WAREHOUSE` and `ROLE`.
+
 ## Building documentation locally
 
 ```bash

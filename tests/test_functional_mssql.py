@@ -51,9 +51,7 @@ class MSSQLFunctionalTestCase(MsSqlMixin, GeneratesDBTestCase):
         (self.orm_fd, self.orm_file_path) = mkstemp(".yaml", "orm_", text=True)
         with os.fdopen(self.orm_fd, "w", encoding="utf-8") as fh:
             fh.write(
-                make_tables_file(
-                    self.dsn, self.schema_name, False, engine=self.sync_engine
-                )
+                make_tables_file(self.dsn, self.schema, False, engine=self.sync_engine)
             )
 
     def tearDown(self) -> None:
@@ -98,7 +96,7 @@ class MSSQLFunctionalTestCase(MsSqlMixin, GeneratesDBTestCase):
         loop = asyncio.new_event_loop()
         try:
             src_stats = loop.run_until_complete(
-                make_src_stats(self.dsn, {}, self.schema_name)
+                make_src_stats(self.dsn, {}, self.schema)
             )
         finally:
             loop.close()
