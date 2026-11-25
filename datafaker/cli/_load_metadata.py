@@ -1,3 +1,5 @@
+"""Load metadata from a source database."""
+
 from pathlib import Path
 from typing import Any
 

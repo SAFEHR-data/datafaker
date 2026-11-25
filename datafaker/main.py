@@ -1,6 +1,5 @@
 """Entrypoint for the datafaker package."""
 
-import asyncio
 import importlib.metadata
 import io
 import json

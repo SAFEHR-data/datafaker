@@ -1,3 +1,5 @@
+"""CLI sub commands to configure generation and extract source data and metadata."""
+
 import asyncio
 from pathlib import Path
 from typing import Any, Optional
@@ -7,7 +9,11 @@ from typer import Exit, Option
 
 from datafaker.cli._defaults import CONFIG_FILENAME, ORM_FILENAME, STATS_FILENAME
 from datafaker.cli._load_metadata import load_metadata, load_metadata_config
-from datafaker.interactive import update_config_generators, update_missingness
+from datafaker.interactive import (
+    update_config_generators,
+    update_config_tables,
+    update_missingness,
+)
 from datafaker.interactive.base import DbCmd
 from datafaker.make import make_src_stats, make_tables_file, make_vocabulary_tables
 from datafaker.serialize_metadata import dict_to_metadata

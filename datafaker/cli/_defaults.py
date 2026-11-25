@@ -1,3 +1,5 @@
+"""Default file names for the datafaker CLI."""
+
 from typing import Final
 
 ORM_FILENAME: Final[str] = "orm.yaml"
