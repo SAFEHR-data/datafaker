@@ -303,9 +303,9 @@ class TestCLI(DatafakerTestCase):
 
         self.assertEqual(1, result.exit_code)
 
-    @patch("datafaker.main.remove_db_data")
-    @patch("datafaker.main.read_config_file")
-    @patch("datafaker.main.load_metadata_for_output")
+    @patch("datafaker.cli.remove.remove_db_data")
+    @patch("datafaker.cli.remove.read_config_file")
+    @patch("datafaker.cli.remove.load_metadata_for_output")
     def test_remove_data(
         self,
         mock_meta: MagicMock,
@@ -323,10 +323,10 @@ class TestCLI(DatafakerTestCase):
             mock_meta.return_value, mock_config.return_value
         )
 
-    @patch("datafaker.main.read_config_file")
-    @patch("datafaker.main.remove_db_vocab")
-    @patch("datafaker.main.load_metadata_config")
-    @patch("datafaker.main.dict_to_metadata")
+    @patch("datafaker.cli.remove.read_config_file")
+    @patch("datafaker.cli.remove.remove_db_vocab")
+    @patch("datafaker.cli.remove.load_metadata_config")
+    @patch("datafaker.cli.remove.dict_to_metadata")
     def test_remove_vocab(
         self,
         mock_d2m: MagicMock,
@@ -348,9 +348,9 @@ class TestCLI(DatafakerTestCase):
             mock_read_config.return_value,
         )
 
-    @patch("datafaker.main.remove_db_tables")
-    @patch("datafaker.main.load_metadata_for_output")
-    @patch("datafaker.main.read_config_file")
+    @patch("datafaker.cli.remove.remove_db_tables")
+    @patch("datafaker.cli.remove.load_metadata_for_output")
+    @patch("datafaker.cli.remove.read_config_file")
     def test_remove_tables(
         self, _: MagicMock, mock_meta: MagicMock, mock_remove: MagicMock
     ) -> None:
