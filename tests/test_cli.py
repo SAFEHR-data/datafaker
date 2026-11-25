@@ -1,4 +1,4 @@
-"""Tests for the main module."""
+"""Tests for the command-line interface."""
 
 import os
 from pathlib import Path
