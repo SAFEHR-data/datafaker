@@ -317,7 +317,8 @@ def dump_data(
         default=[],
         help="The tables to dump (default is all non-ignored, non-vocabulary tables)",
     ),
-    output: Path | None = Option(
+    output: Path
+    | None = Option(
         None,
         help=(
             "Output CSV or Parquet file name,"
