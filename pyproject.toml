@@ -2,7 +2,9 @@
 name = "datafaker"
 version = "0.5.4"
 description = "Generates fake SQL data"
-authors = [{name = "Tim Band", email = "3266052+tim-band@users.noreply.github.com"}]
+authors = [
+    { name = "Tim Band", email = "3266052+tim-band@users.noreply.github.com" },
+]
 license = "MIT"
 readme = "README.md"
 classifiers = [
@@ -12,7 +14,7 @@ classifiers = [
     "Topic :: Utilities",
 ]
 requires-python = ">=3.10,<3.14"
-urls = {Homepage = "https://github.com/SAFEHR-data/datafaker"}
+urls = { Homepage = "https://github.com/SAFEHR-data/datafaker" }
 dependencies = [
     "pydantic[dotenv]>=1.10.2,<2.0.0",
     "pyodbc>=5.0.0,<6.0.0",
@@ -72,12 +74,18 @@ dev = [
 extras = ["tqdm>=4.65.0,<5.0.0"]
 
 [build-system]
-requires = ["poetry-core>=2.0.0"]
+requires = ["poetry-core>=2.2.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.isort]
 profile = "black"
 
 [tool.esbonio.sphinx]
-buildCommand = ["sphinx-build", "-b", "html", "docs/source", "docs/esbonio-build"]
+buildCommand = [
+    "sphinx-build",
+    "-b",
+    "html",
+    "docs/source",
+    "docs/esbonio-build",
+]
 pythonCommand = ["poetry", "run", "python"]

@@ -19,7 +19,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install poetry
-        run: python -m pip install "poetry>=2.0"
+        run: python -m pip install "poetry>=2.2"
       - name: Check poetry version
         run: python -m poetry --version
       - name: Install datafaker
@@ -55,4 +55,4 @@ jobs:
       - name: Upgrade pip
         run: python -m pip install --upgrade pip
       - name: Install datafaker
-run: python -m pip install .
+        run: python -m pip install .
