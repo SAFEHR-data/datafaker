@@ -6,11 +6,11 @@ on:
   push:
     branches:
       - main
-env:
-  # This should be the default but we'll be explicit
-  PYTHON_VERSION: "3.12"
 jobs:
   unit-tests:
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -24,7 +24,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version: ${{ matrix.python-version }}
       # Install poetry into the setup-python interpreter rather than via apt,
       # so it doesn't run on (and build the venv with) the runner's system Python.
       - name: Install poetry
@@ -54,4 +54,9 @@ jobs:
           - install-deps
       - name: Run tests
         shell: bash
-        run: poetry run python -m pytest -rs
+        run: poetry run python -m pytest -rs --cov=datafaker --cov-report=json
+      - name: Upload coverage report
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a53 # v7.1.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.json
