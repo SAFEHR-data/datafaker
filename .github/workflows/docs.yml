@@ -4,11 +4,13 @@ on:
   push:
     branches:
       - main
+  pull_request:
+  # ^ also run the doc build as a check on pull requests (but don't publish)
   workflow_dispatch:
 env:
   PYTHON_VERSION: "3.12"
 jobs:
-  docs:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -33,6 +35,24 @@ jobs:
         working-directory: ./docs
         run: |
           poetry run make html
+      - name: Upload docs artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: docs
+          path: docs/build/html
+  publish:
+    needs: build
+    permissions:
+      contents: write
+    # only publish on pushes to main or when manually triggered via workflow_dispatch
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download docs artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: docs
+          path: docs/build/html
       - name: Publish docs on github Pages
         uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4.1.0
         with:
