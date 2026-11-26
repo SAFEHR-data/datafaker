@@ -13,7 +13,7 @@ classifiers = [
     "Topic :: Database",
     "Topic :: Utilities",
 ]
-requires-python = ">=3.10,<3.14"
+requires-python = ">=3.11,<3.15"
 urls = { Homepage = "https://github.com/SAFEHR-data/datafaker" }
 dependencies = [
     "pydantic[dotenv]>=1.10.2,<2.0.0",
@@ -70,6 +70,7 @@ dev = [
     "sphinxcontrib-napoleon>=0.7,<0.8.0",
     "sphinxcontrib-mermaid==2.0.3",
     "pytest>=9.0.3,<10.0.0",
+    "pytest-cov",
 ]
 extras = ["tqdm>=4.65.0,<5.0.0"]
 

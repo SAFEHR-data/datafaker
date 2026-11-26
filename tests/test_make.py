@@ -1,4 +1,5 @@
 """Tests for the main module."""
+
 import asyncio
 import tempfile
 from pathlib import Path
@@ -363,26 +364,20 @@ class TestMakeStats(RequiresDBTestCase):
 
     def test_make_stats_no_asyncio_schema(self) -> None:
         """Test that make_src_stats works when explicitly naming a schema."""
-        src_stats = asyncio.get_event_loop().run_until_complete(
-            make_src_stats(self.dsn, self.config, self.schema_name)
-        )
+        src_stats = asyncio.run(make_src_stats(self.dsn, self.config, self.schema_name))
         self.check_make_stats_output(src_stats)
 
     def test_make_stats_no_asyncio(self) -> None:
         """Test that make_src_stats works using the example configuration."""
-        src_stats = asyncio.get_event_loop().run_until_complete(
-            make_src_stats(self.dsn, self.config, self.schema_name)
-        )
+        src_stats = asyncio.run(make_src_stats(self.dsn, self.config, self.schema_name))
         self.check_make_stats_output(src_stats)
 
     def test_make_stats_asyncio(self) -> None:
         """Test that make_src_stats errors if we use asyncio when some of the queries
         also use snsql.
         """
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
         config_asyncio = {**self.config, "use-asyncio": True}
-        src_stats = asyncio.get_event_loop().run_until_complete(
+        src_stats = asyncio.run(
             make_src_stats(self.dsn, config_asyncio, self.schema_name)
         )
         self.check_make_stats_output(src_stats)
@@ -413,9 +408,7 @@ class TestMakeStats(RequiresDBTestCase):
                 },
             ]
         }
-        src_stats = asyncio.get_event_loop().run_until_complete(
-            make_src_stats(self.dsn, config, self.schema_name)
-        )
+        src_stats = asyncio.run(make_src_stats(self.dsn, config, self.schema_name))
         self.assertEqual(src_stats[query_name1]["results"], [])
         self.assertEqual(src_stats[query_name2]["results"], [])
         debug_template = "src-stats query %s returned no results"
@@ -451,7 +444,7 @@ class TestMakeStatsParquet(DatafakerTestCase):
 
     def test_make_stats_parquet(self) -> None:
         """Test that make stats can access parquet if we want it to."""
-        src_stats = asyncio.get_event_loop().run_until_complete(
+        src_stats = asyncio.run(
             make_src_stats(
                 "duckdb:///:memory:",
                 {
