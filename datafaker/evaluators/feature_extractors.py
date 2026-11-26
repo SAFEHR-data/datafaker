@@ -8,7 +8,14 @@ from typing import Any
 
 from sqlalchemy import Integer, String, cast, func, literal
 
-from datafaker.dialects import SecondsDifference, SentenceCount, WordCount
+from datafaker.dialects import (
+    AfterCharacter,
+    BeforeCharacter,
+    SecondsDifference,
+    SentenceCount,
+    StripWhitespace,
+    WordCount,
+)
 
 TOKEN = re.compile(r"\w+")
 
@@ -86,8 +93,13 @@ class FirstLetterExtractor(FeatureExtractor):
             yield value[0].lower()
 
     def expression(self, column):
-        """Build the SQL expression for the column's first letter."""
-        return func.lower(func.substr(cast(column, String), 1, 1))
+        """Build the SQL expression for the first letter (NULL if blank).
+
+        Strips whitespace first, as extract() does, so leading spaces are not
+        counted as the first letter.
+        """
+        stripped = StripWhitespace(cast(column, String))
+        return func.nullif(func.lower(func.left(stripped, 1)), "")
 
 
 class LastLetterExtractor(FeatureExtractor):
@@ -104,8 +116,14 @@ class LastLetterExtractor(FeatureExtractor):
             yield value[-1]
 
     def expression(self, column):
-        """Build the SQL expression for the column's last letter."""
-        return func.lower(func.substr(cast(column, String), -1, 1))
+        """Build the SQL expression for the last letter (NULL if blank).
+
+        Uses RIGHT rather than SUBSTR with a negative start: Postgres'
+        SUBSTR(x, -1, 1) is an empty string, and MSSQL has no SUBSTR.
+        Strips whitespace first, as extract() does.
+        """
+        stripped = StripWhitespace(cast(column, String))
+        return func.nullif(func.lower(func.right(stripped, 1)), "")
 
 
 class LengthExtractor(FeatureExtractor):
@@ -343,6 +361,28 @@ class WeekdayExtractor(FeatureExtractor):
         return (days_since_epoch.cast(Integer) + 3) % 7
 
 
+def _normalised_email_expression(column):
+    """
+    Build the SQL equivalent of the email extractors' ``str(value).strip()``.
+
+    The result is also lowercased: every email extractor lowercases its
+    feature, and lowercasing before or after splitting on ``@``/``.`` gives
+    the same result.
+    """
+    return func.lower(StripWhitespace(column.cast(String)))
+
+
+def _email_domain_expression(column):
+    """
+    Build the SQL equivalent of the email extractors' domain parsing.
+
+    Mirrors ``str(value).strip().partition("@")[2].lower()``: everything
+    after the *first* ``@`` of the stripped, lowercased text, or NULL if
+    there is no ``@`` or nothing follows it.
+    """
+    return AfterCharacter(_normalised_email_expression(column), "@")
+
+
 class EmailLocalPartExtractor(FeatureExtractor):
     """Extract the local part (before ``@``) of an email-like string."""
 
@@ -358,8 +398,8 @@ class EmailLocalPartExtractor(FeatureExtractor):
             yield local_part.lower()
 
     def expression(self, column):
-        """Not implemented: local-part extraction has no SQL equivalent here."""
-        raise NotImplementedError()
+        """Build the SQL expression for the lowercased local part (NULL if none)."""
+        return BeforeCharacter(_normalised_email_expression(column), "@")
 
 
 class EmailDomainExtractor(FeatureExtractor):
@@ -377,8 +417,8 @@ class EmailDomainExtractor(FeatureExtractor):
             yield domain.lower()
 
     def expression(self, column):
-        """Not implemented: domain extraction has no SQL equivalent here."""
-        raise NotImplementedError()
+        """Build the SQL expression for the lowercased domain (NULL if none)."""
+        return _email_domain_expression(column)
 
 
 class EmailTopLevelDomainExtractor(FeatureExtractor):
@@ -399,8 +439,13 @@ class EmailTopLevelDomainExtractor(FeatureExtractor):
             yield tld
 
     def expression(self, column):
-        """Not implemented: TLD extraction has no SQL equivalent here."""
-        raise NotImplementedError()
+        """Build the SQL expression for the lowercased TLD (NULL if none).
+
+        The TLD is everything after the last ``.`` of the domain, so a value
+        whose domain has no ``.`` (or ends in one) gives NULL, as extract()
+        yields nothing for it.
+        """
+        return AfterCharacter(_email_domain_expression(column), ".", last=True)
 
 
 class EmailValidityExtractor(FeatureExtractor):
@@ -470,7 +515,7 @@ class WordCountExtractor(FeatureExtractor):
     def expression(self, column):
         """Build the SQL expression for the column's word count."""
         # Cast column to text to handle tsvector columns (e.g. fulltext)
-        # where regexp_split_to_array may not accept the tsvector type
+        # where the regex functions may not accept the tsvector type
         # directly. WordCount compiles to an exact regexp-based count on
         # Postgres/DuckDB and a string-function approximation on MSSQL
         # (which has no regex support) - see dialects.py.
@@ -496,7 +541,7 @@ class SentenceCountExtractor(FeatureExtractor):
     def expression(self, column):
         """Build the SQL expression for the column's sentence count."""
         # Cast column to text to handle tsvector columns (e.g. fulltext)
-        # where regexp_split_to_array may not accept the tsvector type
+        # where the regex functions may not accept the tsvector type
         # directly. SentenceCount compiles to an exact regexp-based count
         # on Postgres/DuckDB and a string-function approximation on MSSQL
         # (which has no regex support) - see dialects.py.

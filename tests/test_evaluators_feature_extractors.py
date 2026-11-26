@@ -1,8 +1,21 @@
 """Unit tests for datafaker.evaluators.feature_extractors."""
 from datetime import date, datetime, timedelta, timezone
+from typing import Any
 
-from sqlalchemy import Column, Date, MetaData, Table, create_engine, select
+from sqlalchemy import (
+    Column,
+    Date,
+    Engine,
+    MetaData,
+    String,
+    Table,
+    create_engine,
+    literal,
+    select,
+)
+from sqlalchemy.dialects import mssql, postgresql
 
+from datafaker.dialects import AfterCharacter, BeforeCharacter
 from datafaker.evaluators.feature_extractors import (
     CharacterBigramExtractor,
     CharacterExtractor,
@@ -11,6 +24,7 @@ from datafaker.evaluators.feature_extractors import (
     EmailLocalPartExtractor,
     EmailTopLevelDomainExtractor,
     EmailValidityExtractor,
+    FeatureExtractor,
     FirstLetterExtractor,
     IdentityExtractor,
     LastLetterExtractor,
@@ -24,7 +38,13 @@ from datafaker.evaluators.feature_extractors import (
     WordCountExtractor,
     WordExtractor,
 )
-from tests.utils import DatafakerTestCase
+from tests.utils import (
+    DatafakerTestCase,
+    DuckTestDb,
+    MsSqlTestDb,
+    PostgresTestDb,
+    RequiresDBTestCase,
+)
 
 
 class IdentityExtractorTests(DatafakerTestCase):
@@ -432,6 +452,146 @@ class EmailTopLevelDomainExtractorTests(DatafakerTestCase):
         self.assertEqual([], list(self.extractor.extract("not-an-email")))
 
 
+# Values covering every branch of the text extractors' Python parsing:
+# surrounding whitespace, case, a missing/leading/trailing/repeated '@',
+# domains with no '.', a trailing '.', an empty TLD, and one-letter values.
+TEXT_EDGE_CASES = [
+    None,
+    "",
+    "   ",
+    "bob",
+    "bob@",
+    "@example.com",
+    "alice@example.com",
+    " Bob@Example.COM ",
+    "\talice@mail.example.co.uk\r\n",
+    "a@b@c.org",
+    "a@localhost",
+    "a@b.",
+    "a@.com",
+    "a@b..c",
+    "a@ b.c",
+    "x@y.z.",
+    "First.Last+tag@Example.com",
+    " @x.com",
+    "Alice",
+    " Bob ",
+    "x",
+    "\tZed\n",
+]
+
+
+class TextExpressionParityMixin:
+    """
+    The text extractors' SQL expressions must agree with extract().
+
+    CategoryBuilder computes real-data distributions in SQL with these
+    expressions, but synthetic ones in Python with extract(), so any
+    disagreement would make real and synthetic data look different even
+    when they are identical. ``None`` from SQL stands for extract() yielding nothing.
+    """
+
+    sync_engine: Engine
+    assertEqual: Any
+    subTest: Any
+
+    def _sql_feature(self, extractor: FeatureExtractor, value: str | None) -> Any:
+        """Evaluate ``extractor.expression()`` on one value in the database."""
+        expr = extractor.expression(literal(value, String))
+        with self.sync_engine.connect() as conn:
+            return conn.execute(select(expr)).scalar_one()
+
+    def test_expressions_match_extract(self) -> None:
+        """Each text extractor's SQL agrees with extract() on every edge case."""
+        for extractor in (
+            FirstLetterExtractor(),
+            LastLetterExtractor(),
+            EmailLocalPartExtractor(),
+            EmailDomainExtractor(),
+            EmailTopLevelDomainExtractor(),
+        ):
+            for value in TEXT_EDGE_CASES:
+                with self.subTest(extractor=type(extractor).__name__, value=value):
+                    expected = next(iter(extractor.extract(value)), None)
+                    self.assertEqual(expected, self._sql_feature(extractor, value))
+
+
+class TextExpressionDuckDbTests(TextExpressionParityMixin, RequiresDBTestCase):
+    """Text SQL expression parity on DuckDB."""
+
+    database_type = DuckTestDb
+
+
+class TextExpressionPostgresTests(TextExpressionParityMixin, RequiresDBTestCase):
+    """Text SQL expression parity on Postgres."""
+
+    database_type = PostgresTestDb
+
+
+class TextExpressionMsSqlTests(TextExpressionParityMixin, RequiresDBTestCase):
+    """Text SQL expression parity on MSSQL (skipped if no server is reachable)."""
+
+    database_type = MsSqlTestDb
+
+
+class EmailExpressionCompileTests(DatafakerTestCase):
+    """Dialect-specific SQL for the email expressions, checked without a server."""
+
+    def _email_sql(self, dialect: Any) -> str:
+        """Compile the local part, domain and TLD expressions together."""
+        column = Column("email", String)
+        expr = select(
+            EmailLocalPartExtractor().expression(column),
+            EmailDomainExtractor().expression(column),
+            EmailTopLevelDomainExtractor().expression(column),
+        )
+        return str(expr.compile(dialect=dialect))
+
+    def test_dialect_specific_sql(self) -> None:
+        """MSSQL uses CHARINDEX/LEFT/RIGHT; Postgres/DuckDB use POSITION/SPLIT_PART."""
+        mssql_sql = self._email_sql(mssql.dialect())
+        self.assertIn("LEFT(", mssql_sql)  # local part
+        self.assertIn("CHARINDEX('@'", mssql_sql)  # local part and domain
+        self.assertIn("CHARINDEX('.', REVERSE(", mssql_sql)  # TLD
+        self.assertNotIn("POSITION", mssql_sql)
+        self.assertNotIn("SPLIT_PART", mssql_sql)
+
+        postgres_sql = self._email_sql(postgresql.dialect())
+        self.assertIn("POSITION('@' IN", postgres_sql)  # local part and domain
+        self.assertIn("SPLIT_PART(REVERSE(", postgres_sql)  # TLD
+        self.assertNotIn("CHARINDEX", postgres_sql)
+
+    def test_character_expressions_are_safe_to_cache_and_build(self) -> None:
+        """
+        Cache keys include ``char``/``last``; only single characters are accepted.
+
+        SQLAlchemy caches compiled SQL by each element's traversal
+        internals, so leaving ``char``/``last`` out would let one expression
+        silently reuse another's compiled SQL. Multi-character separators
+        are rejected because the REVERSE-based "last" form would break.
+        """
+        column = Column("email", String)
+        variants = [
+            AfterCharacter(column, "@"),
+            AfterCharacter(column, "."),
+            AfterCharacter(column, "@", last=True),
+            BeforeCharacter(column, "@"),
+            BeforeCharacter(column, "."),
+        ]
+        # pylint: disable=protected-access
+        keys = []
+        for variant in variants:
+            cache_key = variant._generate_cache_key()
+            assert cache_key is not None, f"{variant!r} should be cacheable"
+            keys.append(cache_key.key)
+        self.assertEqual(len(variants), len(set(keys)))
+
+        with self.assertRaises(ValueError):
+            AfterCharacter(column, "@@")
+        with self.assertRaises(ValueError):
+            BeforeCharacter(column, "@@")
+
+
 class EmailValidityExtractorTests(DatafakerTestCase):
     """Test case for EmailValidityExtractor."""
 
@@ -500,3 +660,83 @@ class SentenceCountExtractorTests(DatafakerTestCase):
     def test_blank_string_yields_nothing(self) -> None:
         """An empty/whitespace-only string produces no features."""
         self.assertEqual([], list(self.extractor.extract("   ")))
+
+
+# Text covering the ways the old regexp_split_to_array SQL disagreed with
+# extract(): whitespace after the last sentence-ender, pieces with no word,
+# text with no words at all, blank text, and non-space whitespace.
+COUNT_EDGE_CASES = [
+    None,
+    "",
+    "   ",
+    "Hi there! How are you? I am fine.",
+    "Hello there...",
+    "Done.\n",
+    "\tWait.\r\n",
+    "Hi. . Bye",
+    "...",
+    "Wow!! Great.",
+    "a - b",
+    "tnt",
+    "one\ttwo\nthree",
+    "no punctuation at all",
+    "snake_case and 42 numbers.",
+]
+
+
+class CountExpressionParityMixin:
+    """
+    WordCount/SentenceCount SQL must agree with extract().
+
+    HistogramBuilder computes the real-data distribution with these
+    expressions but the synthetic one with extract(), so any disagreement
+    makes identical data look different. ``None`` from SQL stands for
+    extract() yielding nothing. MSSQL is not covered: it has no regex
+    support, so its expressions are documented approximations.
+    """
+
+    sync_engine: Engine
+    assertEqual: Any
+    subTest: Any
+
+    def test_expressions_match_extract(self) -> None:
+        """Word and sentence counts in SQL match extract() on every edge case."""
+        for extractor in (WordCountExtractor(), SentenceCountExtractor()):
+            for value in COUNT_EDGE_CASES:
+                with self.subTest(extractor=type(extractor).__name__, value=value):
+                    expected = next(iter(extractor.extract(value)), None)
+                    expr = extractor.expression(literal(value, String))
+                    with self.sync_engine.connect() as conn:
+                        actual = conn.execute(select(expr)).scalar_one()
+                    self.assertEqual(expected, actual)
+
+
+class CountExpressionDuckDbTests(CountExpressionParityMixin, RequiresDBTestCase):
+    """Word/sentence count SQL parity on DuckDB."""
+
+    database_type = DuckTestDb
+
+
+class CountExpressionPostgresTests(CountExpressionParityMixin, RequiresDBTestCase):
+    """Word/sentence count SQL parity on Postgres."""
+
+    database_type = PostgresTestDb
+
+
+class CountExpressionMsSqlCompileTests(DatafakerTestCase):
+    """The MSSQL approximations, checked without a server."""
+
+    def test_blank_text_is_null_and_whitespace_uses_char(self) -> None:
+        """
+        Blank text gives NULL, as extract() yields nothing for it.
+
+        Tabs/line breaks are written with CHAR(), not backslash escapes,
+        which T-SQL string literals do not support.
+        """
+        column = Column("text", String)
+        for extractor in (WordCountExtractor(), SentenceCountExtractor()):
+            with self.subTest(extractor=type(extractor).__name__):
+                sql = str(extractor.expression(column).compile(dialect=mssql.dialect()))
+                self.assertIn("= 0 THEN NULL", sql)
+                self.assertIn("CHAR(9)", sql)
+                self.assertNotIn("\\", sql)
