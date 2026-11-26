@@ -1,6 +1,8 @@
 # datafaker
 
 ![Python versions 3.11-3.14](https://img.shields.io/badge/python-3.11--3.14-green)
+[![unit test action](https://github.com/SAFEHR-data/datafaker/actions/workflows/tests.yml/badge.svg)](https://github.com/SAFEHR-data/datafaker/actions/workflows/tests.yml)
+[![codecov](https://codecov.io/gh/SAFEHR-data/datafaker/graph/badge.svg?token=0YS7NADCSH)](https://codecov.io/gh/SAFEHR-data/datafaker)
 
 Synthetic data for SQL databases
 
