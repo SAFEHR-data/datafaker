@@ -1,4 +1,5 @@
 """Functions to make a module of generator classes."""
+
 import asyncio
 import decimal
 import inspect
@@ -848,8 +849,12 @@ async def make_src_stats(
         use_asyncio=use_asyncio,
         parquet_dir=parquet_dir,
     )
-    async with DbConnection(engine) as db_conn:
-        return await make_src_stats_connection(config, db_conn)
+    try:
+        async with DbConnection(engine) as db_conn:
+            return await make_src_stats_connection(config, db_conn)
+    finally:
+        if isinstance(engine, AsyncEngine):
+            await engine.dispose()
 
 
 async def make_src_stats_connection(
