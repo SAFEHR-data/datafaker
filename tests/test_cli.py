@@ -1,4 +1,5 @@
-"""Tests for the main module."""
+"""Tests for the command-line interface."""
+
 import os
 from pathlib import Path
 from typing import Any
@@ -24,9 +25,9 @@ runner = CliRunner(mix_stderr=False)
 class TestCLI(DatafakerTestCase):
     """Tests for the command-line interface."""
 
-    @patch("datafaker.main.create_db_tables")
-    @patch("datafaker.main.read_config_file")
-    @patch("datafaker.main.load_metadata_for_output")
+    @patch("datafaker.cli.create.create_db_tables")
+    @patch("datafaker.cli.create.read_config_file")
+    @patch("datafaker.cli.create.load_metadata_for_output")
     def test_create_tables(
         self, mock_load_meta: MagicMock, _mock_config: MagicMock, mock_create: MagicMock
     ) -> None:
@@ -43,11 +44,11 @@ class TestCLI(DatafakerTestCase):
         mock_create.assert_called_once_with(mock_load_meta.return_value)
         self.assertSuccess(result)
 
-    @patch("datafaker.main.sorted_non_vocabulary_tables")
-    @patch("datafaker.main.logger")
-    @patch("datafaker.main.create_db_data")
-    @patch("datafaker.main.load_metadata_for_output")
-    @patch("datafaker.main.read_config_file")
+    @patch("datafaker.cli.create.sorted_non_vocabulary_tables")
+    @patch("datafaker.cli.create.logger")
+    @patch("datafaker.cli.create.create_db_data")
+    @patch("datafaker.cli.create.load_metadata_for_output")
+    @patch("datafaker.cli.create.read_config_file")
     # pylint: disable=too-many-arguments too-many-positional-arguments
     def test_create_data(
         self,
@@ -87,8 +88,8 @@ class TestCLI(DatafakerTestCase):
             ]
         )
 
-    @patch("datafaker.main.Path")
-    @patch("datafaker.main.make_tables_file")
+    @patch("datafaker.cli.configure.Path")
+    @patch("datafaker.cli.configure.make_tables_file")
     @patch("datafaker.settings.get_settings")
     def test_make_tables(
         self,
@@ -121,8 +122,8 @@ class TestCLI(DatafakerTestCase):
         )
         self.assertSuccess(result)
 
-    @patch("datafaker.main.Path")
-    @patch("datafaker.main.logger")
+    @patch("datafaker.cli.configure.Path")
+    @patch("datafaker.cli.configure.logger")
     def test_make_tables_errors_if_file_exists(
         self, mock_logger: MagicMock, mock_path: MagicMock
     ) -> None:
@@ -161,8 +162,8 @@ class TestCLI(DatafakerTestCase):
             catch_exceptions=False,
         )
 
-    @patch("datafaker.main.make_tables_file")
-    @patch("datafaker.main.Path")
+    @patch("datafaker.cli.configure.make_tables_file")
+    @patch("datafaker.cli.configure.Path")
     @patch("datafaker.settings.get_settings")
     def test_make_tables_with_force_enabled(
         self,
@@ -201,7 +202,7 @@ class TestCLI(DatafakerTestCase):
                 )
                 self.assertSuccess(result)
 
-    @patch("datafaker.main.Path")
+    @patch("datafaker.cli.configure.Path")
     @patch("datafaker.settings.get_settings")
     def test_incorrect_dialect_causes_nice_error_message(
         self,
@@ -226,7 +227,7 @@ class TestCLI(DatafakerTestCase):
         )
         self.assertIs(type(result.exception), SystemExit)
 
-    @patch("datafaker.main.Path")
+    @patch("datafaker.cli.configure.Path")
     @patch("datafaker.settings.get_settings")
     def test_invalid_host_causes_nice_error_message(
         self,
@@ -251,7 +252,7 @@ class TestCLI(DatafakerTestCase):
         )
         self.assertIs(type(result.exception), SystemExit)
 
-    @patch("datafaker.main.Path")
+    @patch("datafaker.cli.configure.Path")
     @patch("datafaker.settings.get_settings")
     def test_incorrect_dsn_causes_nice_error_message(
         self,
@@ -302,9 +303,9 @@ class TestCLI(DatafakerTestCase):
 
         self.assertEqual(1, result.exit_code)
 
-    @patch("datafaker.main.remove_db_data")
-    @patch("datafaker.main.read_config_file")
-    @patch("datafaker.main.load_metadata_for_output")
+    @patch("datafaker.cli.remove.remove_db_data")
+    @patch("datafaker.cli.remove.read_config_file")
+    @patch("datafaker.cli.remove.load_metadata_for_output")
     def test_remove_data(
         self,
         mock_meta: MagicMock,
@@ -322,10 +323,10 @@ class TestCLI(DatafakerTestCase):
             mock_meta.return_value, mock_config.return_value
         )
 
-    @patch("datafaker.main.read_config_file")
-    @patch("datafaker.main.remove_db_vocab")
-    @patch("datafaker.main.load_metadata_config")
-    @patch("datafaker.main.dict_to_metadata")
+    @patch("datafaker.cli.remove.read_config_file")
+    @patch("datafaker.cli.remove.remove_db_vocab")
+    @patch("datafaker.cli.remove.load_metadata_config")
+    @patch("datafaker.cli.remove.dict_to_metadata")
     def test_remove_vocab(
         self,
         mock_d2m: MagicMock,
@@ -347,9 +348,9 @@ class TestCLI(DatafakerTestCase):
             mock_read_config.return_value,
         )
 
-    @patch("datafaker.main.remove_db_tables")
-    @patch("datafaker.main.load_metadata_for_output")
-    @patch("datafaker.main.read_config_file")
+    @patch("datafaker.cli.remove.remove_db_tables")
+    @patch("datafaker.cli.remove.load_metadata_for_output")
+    @patch("datafaker.cli.remove.read_config_file")
     def test_remove_tables(
         self, _: MagicMock, mock_meta: MagicMock, mock_remove: MagicMock
     ) -> None:
@@ -376,10 +377,10 @@ class TestCliOutput(DatafakerTestCase):
         with open(file_name, "r", encoding="utf-8") as fh:
             return yaml.load(fh, yaml.SafeLoader)
 
-    @patch("datafaker.main.read_config_file")
-    @patch("datafaker.main.dict_to_metadata")
-    @patch("datafaker.main.load_metadata_config")
-    @patch("datafaker.main.create_db_vocab")
+    @patch("datafaker.cli.create.read_config_file")
+    @patch("datafaker.cli.create.dict_to_metadata")
+    @patch("datafaker.cli.create.load_metadata_config")
+    @patch("datafaker.cli.create.create_db_vocab")
     def test_create_vocab(
         self,
         mock_create: MagicMock,
@@ -401,7 +402,7 @@ class TestCliOutput(DatafakerTestCase):
         )
         self.assertSuccess(result)
 
-    @patch("datafaker.main.make_src_stats")
+    @patch("datafaker.cli.configure.make_src_stats")
     @patch("datafaker.settings.get_settings")
     def test_make_stats(
         self,
@@ -429,7 +430,7 @@ class TestCliOutput(DatafakerTestCase):
         output = self.load_yaml(output_path)
         self.assertDictEqual(output, {"a": 1})
 
-    @patch("datafaker.main.logger")
+    @patch("datafaker.cli.configure.logger")
     def test_make_stats_errors_if_file_exists(
         self,
         mock_logger: MagicMock,
@@ -469,7 +470,7 @@ class TestCliOutput(DatafakerTestCase):
             catch_exceptions=False,
         )
 
-    @patch("datafaker.main.make_src_stats")
+    @patch("datafaker.cli.configure.make_src_stats")
     @patch("datafaker.settings.get_settings")
     def test_make_stats_with_force_enabled(
         self,

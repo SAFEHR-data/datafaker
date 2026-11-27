@@ -20,6 +20,29 @@ datafaker.main module
    :undoc-members:
    :show-inheritance:
 
+datafaker.cli module
+-----------------------
+
+.. automodule:: datafaker.cli.configure
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: datafaker.cli.create
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: datafaker.cli.inspect
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: datafaker.cli.remove
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 datafaker.make module
 -----------------------
 
