@@ -7,8 +7,8 @@ All commands here belong to the "Remove Destination Data" rich help panel in the
 from pathlib import Path
 from typing import Optional
 
+import typer
 from sqlalchemy.exc import InternalError
-from typer import Exit, Option
 
 from datafaker.cli._defaults import CONFIG_FILENAME, ORM_FILENAME
 from datafaker.cli._load_metadata import load_metadata_config, load_metadata_for_output
@@ -18,17 +18,17 @@ from datafaker.utils import logger, read_config_file
 
 
 def remove_data(
-    orm_file: Path = Option(
+    orm_file: Path = typer.Option(
         ORM_FILENAME,
         help="The name of the ORM yaml file",
         dir_okay=False,
     ),
-    config_file: Optional[Path] = Option(
+    config_file: Optional[Path] = typer.Option(
         CONFIG_FILENAME,
         help="The configuration file",
         dir_okay=False,
     ),
-    yes: bool = Option(
+    yes: bool = typer.Option(
         False, "--yes", prompt="Are you sure?", help="Just remove, don't ask first"
     ),
 ) -> None:
@@ -44,17 +44,17 @@ def remove_data(
 
 
 def remove_vocab(
-    orm_file: Path = Option(
+    orm_file: Path = typer.Option(
         ORM_FILENAME,
         help="The name of the ORM yaml file",
         dir_okay=False,
     ),
-    config_file: Optional[Path] = Option(
+    config_file: Optional[Path] = typer.Option(
         CONFIG_FILENAME,
         help="The configuration file",
         dir_okay=False,
     ),
-    yes: bool = Option(
+    yes: bool = typer.Option(
         False, "--yes", prompt="Are you sure?", help="Just remove, don't ask first"
     ),
 ) -> None:
@@ -71,22 +71,22 @@ def remove_vocab(
 
 
 def remove_tables(
-    orm_file: Path = Option(
+    orm_file: Path = typer.Option(
         ORM_FILENAME,
         help="The name of the ORM yaml file",
         dir_okay=False,
     ),
-    config_file: Path = Option(
+    config_file: Path = typer.Option(
         CONFIG_FILENAME,
         help="The configuration file",
         dir_okay=False,
     ),
     # pylint: disable=redefined-builtin
-    all: bool = Option(
+    all: bool = typer.Option(
         False,
         help="Don't use the ORM file, delete all tables in the destination schema",
     ),
-    yes: bool = Option(
+    yes: bool = typer.Option(
         False, "--yes", prompt="Are you sure?", help="Just remove, don't ask first"
     ),
 ) -> None:
@@ -106,7 +106,7 @@ def remove_tables(
             except InternalError as exc:
                 logger.error("Failed to drop tables: %s", exc)
                 logger.error("Please try again using the --all option.")
-                raise Exit(1) from exc
+                raise typer.Exit(1) from exc
         logger.debug("Tables dropped.")
     else:
         logger.info("Would remove tables if called with --yes.")

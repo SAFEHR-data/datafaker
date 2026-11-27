@@ -3,9 +3,9 @@
 from pathlib import Path
 from typing import Any
 
+import typer
 import yaml
 from sqlalchemy import MetaData
-from typer import Exit
 
 from datafaker.serialize_metadata import dict_to_metadata, should_ignore_fk
 from datafaker.utils import get_flag, load_yaml_file, logger
@@ -34,7 +34,7 @@ def load_metadata_config(
             "ORM file '%s' is empty or invalid. Please run make-tables --force to recreate it.",
             orm_file_path,
         )
-        raise Exit(1)
+        raise typer.Exit(1)
     tables_dict = meta_dict.get("tables", {})
     if config is not None and "tables" in config:
         tables_config = config["tables"]

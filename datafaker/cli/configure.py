@@ -8,8 +8,8 @@ import asyncio
 from pathlib import Path
 from typing import Any, Optional
 
+import typer
 import yaml
-from typer import Exit, Option
 
 from datafaker.cli._defaults import CONFIG_FILENAME, ORM_FILENAME, STATS_FILENAME
 from datafaker.cli._load_metadata import load_metadata, load_metadata_config
@@ -29,15 +29,17 @@ def _check_file_non_existence(file_path: Path) -> None:
     """Check that a given file does not exist. Exit with an error message if it does."""
     if file_path.exists():
         logger.error("%s should not already exist. Exiting...", file_path)
-        raise Exit(1)
+        raise typer.Exit(1)
 
 
 def make_tables(
-    orm_file: Path = Option(ORM_FILENAME, help="Path to write the ORM yaml file to"),
-    force: bool = Option(
+    orm_file: Path = typer.Option(
+        ORM_FILENAME, help="Path to write the ORM yaml file to"
+    ),
+    force: bool = typer.Option(
         False, "--force", "-f", help="Overwrite any existing orm yaml file."
     ),
-    parquet_dir: Optional[Path] = Option(
+    parquet_dir: Optional[Path] = typer.Option(
         None,
         help=(
             "Directory of Parquet files to consider part of the database."
@@ -49,7 +51,7 @@ def make_tables(
         file_okay=False,
         dir_okay=True,
     ),
-    views_to_tables: bool = Option(
+    views_to_tables: bool = typer.Option(
         False,
         help=("Generate all views as tables in the synthetic version."),
     ),
@@ -76,24 +78,24 @@ def make_tables(
 
 
 def make_vocab(
-    orm_file: Path = Option(
+    orm_file: Path = typer.Option(
         ORM_FILENAME,
         help="The name of the ORM yaml file",
         dir_okay=False,
     ),
-    config_file: Optional[Path] = Option(
+    config_file: Optional[Path] = typer.Option(
         CONFIG_FILENAME,
         help="The configuration file",
         dir_okay=False,
     ),
-    force: bool = Option(
+    force: bool = typer.Option(
         False,
         "--force/--no-force",
         "-f/+f",
         help="Overwrite any existing vocabulary file.",
     ),
-    compress: bool = Option(False, help="Compress file to .gz"),
-    only: list[str] = Option([], help="Only download this table."),
+    compress: bool = typer.Option(False, help="Compress file to .gz"),
+    only: list[str] = typer.Option([], help="Only download this table."),
 ) -> None:
     """Make files of vocabulary tables.
 
@@ -114,12 +116,12 @@ def make_vocab(
 
 
 def configure_tables(
-    config_file: Path = Option(
+    config_file: Path = typer.Option(
         CONFIG_FILENAME,
         help="Path to write the configuration file to",
         dir_okay=False,
     ),
-    orm_file: Path = Option(
+    orm_file: Path = typer.Option(
         ORM_FILENAME,
         help="The name of the ORM yaml file",
         dir_okay=False,
@@ -150,17 +152,17 @@ def configure_tables(
 
 
 def configure_generators(
-    config_file: Path = Option(
+    config_file: Path = typer.Option(
         CONFIG_FILENAME,
         help="Path of the configuration file to alter",
         dir_okay=False,
     ),
-    orm_file: Path = Option(
+    orm_file: Path = typer.Option(
         ORM_FILENAME,
         help="The name of the ORM yaml file",
         dir_okay=False,
     ),
-    spec: Path = Option(
+    spec: Path = typer.Option(
         None,
         help=(
             "CSV file (headerless) with fields table-name,"
@@ -194,12 +196,12 @@ def configure_generators(
 
 
 def configure_missing(
-    config_file: Path = Option(
+    config_file: Path = typer.Option(
         CONFIG_FILENAME,
         help="Path to write the configuration file to",
         dir_okay=False,
     ),
-    orm_file: Path = Option(
+    orm_file: Path = typer.Option(
         ORM_FILENAME,
         help="The name of the ORM yaml file",
         dir_okay=False,
@@ -230,18 +232,18 @@ def configure_missing(
 
 
 def make_stats(
-    orm_file: Path = Option(
+    orm_file: Path = typer.Option(
         ORM_FILENAME,
         help="The name of the ORM yaml file",
         dir_okay=False,
     ),
-    config_file: Optional[Path] = Option(
+    config_file: Optional[Path] = typer.Option(
         CONFIG_FILENAME,
         help="The configuration file",
         dir_okay=False,
     ),
-    stats_file: Path = Option(STATS_FILENAME),
-    force: bool = Option(
+    stats_file: Path = typer.Option(STATS_FILENAME),
+    force: bool = typer.Option(
         False, "--force", "-f", help="Overwrite any existing vocabulary file."
     ),
 ) -> None:

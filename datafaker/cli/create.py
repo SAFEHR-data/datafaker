@@ -7,7 +7,7 @@ All commands here belong to the "Create Synthetic Database" rich help panel in t
 from pathlib import Path
 from typing import Optional
 
-from typer import Exit, Option
+import typer
 
 from datafaker.cli._defaults import CONFIG_FILENAME, ORM_FILENAME, STATS_FILENAME
 from datafaker.cli._load_metadata import load_metadata_config, load_metadata_for_output
@@ -19,12 +19,12 @@ from datafaker.utils import generators_require_stats, logger, read_config_file
 
 
 def create_tables(
-    orm_file: Path = Option(
+    orm_file: Path = typer.Option(
         ORM_FILENAME,
         help="The name of the ORM yaml file",
         dir_okay=False,
     ),
-    config_file: Optional[Path] = Option(
+    config_file: Optional[Path] = typer.Option(
         CONFIG_FILENAME,
         help="The configuration file",
         dir_okay=False,
@@ -46,12 +46,12 @@ def create_tables(
 
 
 def create_vocab(
-    orm_file: Path = Option(
+    orm_file: Path = typer.Option(
         ORM_FILENAME,
         help="The name of the ORM yaml file",
         dir_okay=False,
     ),
-    config_file: Path = Option(
+    config_file: Path = typer.Option(
         CONFIG_FILENAME,
         help="The configuration file",
         dir_okay=False,
@@ -72,16 +72,16 @@ def create_vocab(
 
 
 def create_data(
-    orm_file: Path = Option(
+    orm_file: Path = typer.Option(
         ORM_FILENAME,
         help="The name of the ORM yaml file",
         dir_okay=False,
     ),
-    config_file: Optional[Path] = Option(
+    config_file: Optional[Path] = typer.Option(
         CONFIG_FILENAME,
         help="The configuration file",
     ),
-    stats_file: Optional[Path] = Option(
+    stats_file: Optional[Path] = typer.Option(
         None,
         help=(
             "Statistics file (output of make-stats); default is src-stats.yaml if the "
@@ -90,7 +90,9 @@ def create_data(
         show_default=False,
         dir_okay=False,
     ),
-    num_passes: int = Option(1, help="Number of passes (rows or stories) to make"),
+    num_passes: int = typer.Option(
+        1, help="Number of passes (rows or stories) to make"
+    ),
 ) -> None:
     """Populate the schema in the target directory with synthetic data.
 
@@ -136,10 +138,10 @@ def create_data(
                 "row" if row_count == 1 else "rows",
             )
         return
-    except Exit:
+    except typer.Exit:
         raise
     except RuntimeError as e:
         logger.error(e.args[0])
     except SettingsError as e:
         logger.error(str(e))
-    raise Exit(1)
+    raise typer.Exit(1)
