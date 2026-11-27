@@ -58,6 +58,15 @@ app.command(rich_help_panel="Configure and Extract")(configure.configure_tables)
 app.command(rich_help_panel="Configure and Extract")(configure.configure_generators)
 app.command(rich_help_panel="Configure and Extract")(configure.configure_missing)
 app.command(rich_help_panel="Configure and Extract")(configure.make_stats)
+
+app.command(rich_help_panel="Create Synthetic Database")(create.create_tables)
+app.command(rich_help_panel="Create Synthetic Database")(create.create_vocab)
+app.command(rich_help_panel="Create Synthetic Database")(create.create_data)
+
+app.command(rich_help_panel="Inspect and Export")(inspect.dump_data)
+app.command(rich_help_panel="Inspect and Export")(inspect.validate_config)
+app.command(rich_help_panel="Inspect and Export")(inspect.list_tables)
+
 app.command(rich_help_panel="Remove Destination Data")(remove.remove_data)
 app.command(rich_help_panel="Remove Destination Data")(remove.remove_vocab)
 app.command(rich_help_panel="Remove Destination Data")(remove.remove_tables)
