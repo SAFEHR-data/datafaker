@@ -12,6 +12,7 @@ With docker-compose:
     docker compose up -d mssql
     # wait ~30 s for SQL Server to start
 """
+
 import asyncio
 import os
 from tempfile import mkstemp
@@ -50,7 +51,7 @@ class MSSQLFunctionalTestCase(GeneratesDBTestCase):
         super().setUp()
 
         # Write orm.yaml so generate_data() has the file it expects.
-        (self.orm_fd, self.orm_file_path) = mkstemp(".yaml", "orm_", text=True)
+        self.orm_fd, self.orm_file_path = mkstemp(".yaml", "orm_", text=True)
         with os.fdopen(self.orm_fd, "w", encoding="utf-8") as fh:
             fh.write(
                 make_tables_file(
@@ -126,7 +127,6 @@ class MSSQLFunctionalTestCase(GeneratesDBTestCase):
         proposer = ZipfChoiceProposer(
             column=table.c.name,
             values=["Blender", "Gibbs"],
-            counts=[5, 5],
             sample_count=2,
             dialect=dialect,
         )

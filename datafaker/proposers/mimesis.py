@@ -6,11 +6,9 @@ from typing import Any, Union
 import mimesis
 import mimesis.locales
 from sqlalchemy import Column, Engine, cast, extract, func, select
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.types import Date, DateTime, Integer, Numeric, String, Time
 
 from datafaker.proposers.base import (
-    Buckets,
     Proposer,
     ProposerError,
     ProposerFactory,
@@ -68,30 +66,6 @@ class MimesisProposerBase(Proposer):
 class MimesisProposer(MimesisProposerBase):
     """A generator using Mimesis."""
 
-    def __init__(
-        self,
-        function_name: str,
-        value_fn: Callable[[Any], float] | None = None,
-        buckets: Buckets | None = None,
-    ):
-        """
-        Initialise a generator using Mimesis.
-
-        :param function_name: is relative to 'generic', for example 'person.name'.
-        :param value_fn: Function to convert generator output to floats, if needed. The values
-        thus produced are compared against the buckets to estimate the fit.
-        :param buckets: The distribution of string lengths in the real data. If this is None
-        then the fit method will return None.
-        """
-        super().__init__(function_name)
-        if buckets is None:
-            self._fit = None
-            return
-        samples = self.generate_data(400)
-        if value_fn:
-            samples = [value_fn(s) for s in samples]
-        self._fit = buckets.fit_from_values(samples)
-
     def function_name(self) -> str:
         """Get the name of the generator function to call."""
         return self._name
@@ -104,10 +78,6 @@ class MimesisProposer(MimesisProposerBase):
         """Get the kwargs (summary statistics) this generator was instantiated with."""
         return {}
 
-    def fit(self, default: float = -1) -> float:
-        """Get this generator's fit against the real data."""
-        return default if self._fit is None else self._fit
-
 
 class MimesisGeneratorTruncated(MimesisProposer):
     """A string generator using Mimesis that must fit within a certain number of characters."""
@@ -116,12 +86,10 @@ class MimesisGeneratorTruncated(MimesisProposer):
         self,
         function_name: str,
         length: int,
-        value_fn: Callable[[Any], float] | None = None,
-        buckets: Buckets | None = None,
     ):
         """Initialise a MimesisGeneratorTruncated."""
         self._length = length
-        super().__init__(function_name, value_fn, buckets)
+        super().__init__(function_name)
 
     def function_name(self) -> str:
         """Get the name of the generator function to call."""
@@ -320,32 +288,10 @@ class MimesisStringProposerFactory(ProposerFactory):
         column_type = get_column_type(column)
         if not isinstance(column_type, String):
             return []
-        try:
-            buckets = Buckets.make_buckets(
-                engine,
-                column.table,
-                func.length(column),
-            )
-            fitness_fn = len
-        except SQLAlchemyError:
-            # Some column types that appear to be strings (such as enums)
-            # cannot have their lengths measured. In this case we cannot
-            # detect fitness using lengths.
-            buckets = None
-            fitness_fn = None
         length = column_type.length
         if length:
-            return self._get_generators_with(
-                MimesisGeneratorTruncated,
-                length=length,
-                value_fn=fitness_fn,
-                buckets=buckets,
-            )
-        return self._get_generators_with(
-            MimesisProposer,
-            value_fn=fitness_fn,
-            buckets=buckets,
-        )
+            return self._get_generators_with(MimesisGeneratorTruncated, length=length)
+        return self._get_generators_with(MimesisProposer)
 
 
 class MimesisFloatProposerFactory(ProposerFactory):

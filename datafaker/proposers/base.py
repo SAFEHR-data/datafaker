@@ -139,15 +139,6 @@ class Proposer(ABC):
     def generate_data(self, count: int) -> list[Any]:
         """Generate ``count`` random data points for this column."""
 
-    def fit(self, default: float = -1) -> float:
-        """
-        Return a value representing how well the distribution fits the real source data.
-
-        0.0 means "perfectly".
-        Returns default if no fitness has been defined.
-        """
-        return default
-
     def guarantees_fresh_uniqueness(self) -> bool:
         """
         Whether this proposer is structurally guaranteed never to collide.
@@ -301,13 +292,6 @@ class ProposerFactory(ABC):
         """Get the proposers appropriate to these columns."""
 
 
-def fit_from_buckets(xs: Sequence[NumericType], ys: Sequence[NumericType]) -> float:
-    """Calculate the fit by comparing a pair of lists of buckets."""
-    sum_diff_squared = sum(map(lambda t, a: (t - a) * (t - a), xs, ys))
-    count = len(ys)
-    return sum_diff_squared / (count * count)
-
-
 class ForeignKeyRelationship:
     """How a table is related."""
 
@@ -406,51 +390,12 @@ class Buckets:
     # pylint: disable=too-many-arguments too-many-positional-arguments
     def __init__(
         self,
-        engine: Engine,
-        table: Table | Join,
-        column: Any,
         mean: float,
         stddev: float,
-        count: int,
-        anchor_relation: RelatedColumn | None = None,
     ):
         """Initialise a Buckets object."""
         self.mean = mean
         self.stddev = stddev
-        query = self._get_bucket_query(table, column, anchor_relation)
-        with engine.connect() as connection:
-            raw_buckets = connection.execute(query.group_by("b"))
-            self.buckets: Sequence[int] = [0] * 10
-            for rb in raw_buckets:
-                try:
-                    x = float(rb.b)
-                    if x.is_integer():
-                        bucket = min(9, max(0, int(x) + 1))
-                        self.buckets[bucket] += rb.f / count
-                except TypeError:
-                    # We get a type error if there are no rows returned at all
-                    # because rb.b is None in this case.
-                    # We could just test for None explicitly, but this way
-                    # catches errors if SQLAlchemy returns something that
-                    # isn't a number for some other unknown reason.
-                    pass
-
-    def _get_bucket_query(
-        self,
-        table: Table | Join,
-        column: Any,
-        anchor_relation: RelatedColumn | None = None,
-    ) -> Any:
-        """Make the query for half-sd buckets."""
-        bottom = self.mean - 2 * self.stddev
-        width = self.stddev / 2
-        query = select(
-            func.count(column).label("f"),  # pylint: disable=not-callable
-            ((func.floor(column) - bottom) / width).label("b"),
-        ).select_from(table)
-        if anchor_relation is not None:
-            query = anchor_relation.add_join_to_query(query)
-        return query
 
     @classmethod
     def make_buckets(
@@ -488,32 +433,13 @@ class Buckets:
                 return None
         try:
             buckets = cls(
-                engine,
-                table,
-                column,
                 result.mean,
                 result.stddev,
-                getattr(result, "count"),
-                anchor_relation,
             )
         except DatabaseError as exc:
             logger.debug("Failed to instantiate Buckets object: %s", exc)
             return None
         return buckets
-
-    def fit_from_counts(self, bucket_counts: Sequence[float]) -> float:
-        """Figure out the fit from bucket counts from the generator distribution."""
-        return fit_from_buckets(self.buckets, bucket_counts)
-
-    def fit_from_values(self, values: list[float]) -> float:
-        """Figure out the fit from samples from the generator distribution."""
-        buckets = [0] * 10
-        x = self.mean - 2 * self.stddev
-        w = self.stddev / 2
-        for v in values:
-            b = min(9, max(0, int((v - x) / w)))
-            buckets[b] += 1
-        return self.fit_from_counts(buckets)
 
 
 class MultiProposerFactory(ProposerFactory):
