@@ -213,7 +213,9 @@ class ValueGatherer:
     from the suppressed values.
     """
 
-    def __init__(self, results: CursorResult, suppress_count: int = 0) -> None:
+    def __init__(
+        self, results: CursorResult | Sequence[Any], suppress_count: int = 0
+    ) -> None:
         """Initialise a ValueGatherer."""
         values = []  # All values found
         counts = []  # The number or each value
@@ -252,6 +254,15 @@ class ChoiceProposerFactory(ProposerFactory):
 
     SAMPLE_COUNT = MAXIMUM_CHOICES
     SUPPRESS_COUNT = 7
+
+    # If a random sample of SAMPLE_COUNT rows is already at least this
+    # fraction distinct, skip the exact stmt_count GROUP BY below (see
+    # get_proposers). By the birthday problem, even if true cardinality
+    # sat exactly at MAXIMUM_CHOICES, collisions in a same-sized sample
+    # would be expected to pull its distinct fraction down to ~63%
+    # (1 - 1/e), not this high - so this is a conservative trigger that
+    # only fires when cardinality is genuinely far over the cap.
+    EXACT_SKIP_SAMPLE_DISTINCT_RATIO = 0.9
 
     def get_proposers(  # pylint: disable=too-many-locals
         self, columns: list[Column], engine: Engine
@@ -322,7 +333,8 @@ class ChoiceProposerFactory(ProposerFactory):
             ).subquery("_inner")
             stmt_sample = (
                 select(
-                    inner.c.v, func.count(inner.c.v).label("f")  # pylint: disable=E1102
+                    inner.c.v,
+                    func.count(inner.c.v).label("f"),  # pylint: disable=E1102
                 )  # pylint: disable=E1102
                 .select_from(inner)
                 .group_by(inner.c.v)
