@@ -254,7 +254,7 @@ def make_stats(
     config = read_config_file(config_file) if config_file is not None else {}
     meta_dict = load_metadata_config(orm_file, config)
 
-    src_stats = asyncio.get_event_loop().run_until_complete(
+    src_stats = asyncio.run(
         make_src_stats(
             get_source_dsn(),
             config,
